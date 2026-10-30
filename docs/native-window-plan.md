@@ -451,7 +451,7 @@ Command flags, commands and test files named in a Done when that don't exist
 yet are created by that box. Each graphics run takes the gpu lease as
 `headless --render` does.
 
-- **W1 Native window seam, host and pacing probe** ([wisp#105](https://github.com/tompassarelli/wisp/issues/105)). It adds:
+- **W1 Native window seam, host and pacing probe** (built; [wisp#105](https://github.com/tompassarelli/wisp/issues/105)). It adds:
   - the `window/` workspace with the `wisp-window` cdylib and its Bun
     binding;
   - `play --standalone --window native`, which opens a window, reads the

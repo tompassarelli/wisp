@@ -1,0 +1,11 @@
+[workspace]
+resolver = "2"
+members = ["wisp-window"]
+
+[workspace.package]
+edition = "2021"
+license = "MIT"
+publish = false
+
+[profile.release]
+debug = false

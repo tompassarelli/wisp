@@ -15,6 +15,11 @@ declares (wisp:docs/architecture.md, "Where things live").
   `Session.present`, `confirmedFrame` and `pending` give way to
   `presentFrame`, `confirmedFrame` and `localRow` (wisp#96,
   wisp:docs/netcode.md).
+- `wisp/scripts/wisp/standalone` takes `window: "native"` in `StandaloneOptions`
+  and exports `standaloneWindowArgument` for a game's `--window chrome|native`
+  flag; `bun wisp window probe` measures the window (wisp#105,
+  wisp:docs/play.md, "Native window").
+
 - `wisp/src/netcode/codec`, `frameRing`, `ledger`, `message`, `session` and
   `wire` export the generic rollback netcode Battlecraft proved: `RowCodec`,
   the per-player `FrameRing`, the `InputLedger` (including players who left),

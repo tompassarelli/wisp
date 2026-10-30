@@ -15,6 +15,7 @@ import { type NetListening, type NetRole, type NetSession, runNetPeer } from "..
 import { captureScene, sceneWithUnits, RenderFailure, type HeadlessRenderProject } from "../render/headlessRender";
 import { browserBundle } from "../render/browserBundle";
 import { createSoundResolver } from "../render/standaloneSound";
+import { openNativePlayer } from "../window/nativePlay";
 import type { StandaloneFrame, StandaloneInput } from "../render/standaloneFrames";
 
 export type { StandaloneFrame, StandaloneInput } from "../render/standaloneFrames";
@@ -50,7 +51,11 @@ export interface StandaloneGame {
 
 type StandaloneNet = { readonly host: { readonly port: number; readonly relay?: string } } | { readonly join: string };
 
+export type StandaloneWindow = "chrome" | "native";
+
 export interface StandaloneOptions {
+  /** `native` opens wisp-window (wisp:docs/native-window-plan.md); `chrome` is today's page. */
+  readonly window?: StandaloneWindow;
   readonly script?: string;
   readonly frames?: number;
   readonly out?: string;
@@ -107,10 +112,9 @@ export const openStandalone = (game: StandaloneGame, options: StandaloneOptions 
   const sounds = createSoundResolver(game.render.readAsset);
   const assets = new Map<string, Promise<Uint8Array | undefined>>();
   const completion = yield* Deferred.make<Readonly<Record<string, unknown>>, RenderFailure>();
-  const javascript = yield* attempt(() => browserBundle(join(import.meta.dir, "../browser/standalone.ts")));
+  const javascript = options.window === "native" ? "" : yield* attempt(() => browserBundle(join(import.meta.dir, "../browser/standalone.ts")));
   if (options.out !== undefined) yield* attempt(() => mkdir(options.out!, { recursive: true }));
-  const step = (body: string) => Effect.gen(function*() {
-    const input = yield* decode(Schema.fromJsonString(Input), body);
+  const advance = (input: StandaloneInput) => {
     const start = performance.now();
     session.step(input);
     const frame = session.frame?.() ?? session.client.frame;
@@ -122,9 +126,24 @@ export const openStandalone = (game: StandaloneGame, options: StandaloneOptions 
     const scene = sceneWithUnits(game.render, captureScene(session.client, { visibleOnly: !capture }));
     const cues = session.client.soundLog.slice(soundOffset);
     soundOffset = session.client.soundLog.length;
-    if (capture && options.out !== undefined) yield* attempt(() => Bun.write(join(options.out!, `p${scene.client}-frame-${frame}.json`), JSON.stringify(scene)));
-    return { scene: { ...scene, frame, units: [], effects: scene.effects.filter((effect) => effect.alpha > 0 && effect.scale > 0 && !effect.flat), ui: scene.ui.filter((element) => element.visible && element.alpha > 0) },
+    const frameOf = { scene: { ...scene, frame, units: [], effects: scene.effects.filter((effect) => effect.alpha > 0 && effect.scale > 0 && !effect.flat), ui: scene.ui.filter((element) => element.visible && element.alpha > 0) },
       sounds: cues, step: steps, frame, ...(checksum === undefined ? {} : { checksum }), capture, done, serverMs: performance.now() - start } satisfies StandaloneFrame;
+    return { frame: frameOf, saved: capture ? scene : undefined };
+  };
+  const step = (body: string) => Effect.gen(function*() {
+    const { frame, saved } = advance(yield* decode(Schema.fromJsonString(Input), body));
+    if (saved !== undefined && options.out !== undefined) yield* attempt(() => Bun.write(join(options.out!, `p${saved.client}-frame-${frame.frame}.json`), JSON.stringify(saved)));
+    return frame;
+  });
+  const finish = (result: Readonly<Record<string, unknown>>) => Effect.gen(function*() {
+    if (options.out !== undefined) {
+      const out = options.out;
+      if (recordChecksums) yield* attempt(() => Bun.write(join(out, "checksums.jsonl"), checksums.map((row) => JSON.stringify(row)).join("\n") + "\n"));
+      yield* attempt(() => Bun.write(join(out, "standalone.json"), JSON.stringify({ ...result, steps, capturesMissing: [...captures] }, null, 2) + "\n"));
+    }
+    if (result.error !== undefined) yield* Deferred.fail(completion, failed(String(result.error)));
+    else if (captures.size > 0) yield* Deferred.fail(completion, failed(`capture frames not reached: ${[...captures].join(", ")}`));
+    else yield* Deferred.succeed(completion, result);
   });
   const handle = (request: Request, server: Bun.Server<undefined>) => Effect.gen(function*() {
     const url = new URL(request.url);
@@ -158,15 +177,7 @@ export const openStandalone = (game: StandaloneGame, options: StandaloneOptions 
       return new Response("saved");
     }
     if (url.pathname === "/complete" && request.method === "POST") {
-      const result = yield* decode(Completion, yield* attempt(() => request.text()));
-      if (options.out !== undefined) {
-        const out = options.out;
-        if (recordChecksums) yield* attempt(() => Bun.write(join(out, "checksums.jsonl"), checksums.map((row) => JSON.stringify(row)).join("\n") + "\n"));
-        yield* attempt(() => Bun.write(join(out, "standalone.json"), JSON.stringify({ ...result, steps, capturesMissing: [...captures] }, null, 2) + "\n"));
-      }
-      if (result.error !== undefined) yield* Deferred.fail(completion, failed(result.error));
-      else if (captures.size > 0) yield* Deferred.fail(completion, failed(`capture frames not reached: ${[...captures].join(", ")}`));
-      else yield* Deferred.succeed(completion, result);
+      yield* finish(yield* decode(Completion, yield* attempt(() => request.text())));
       return new Response("saved");
     }
     return new Response("not found", { status: 404 });
@@ -182,7 +193,11 @@ export const openStandalone = (game: StandaloneGame, options: StandaloneOptions 
       }).catch(() => undefined);
     },
   }, fetch: (request, server) => run(handle(request, server)) })), (open) => Effect.promise(() => open.stop(true)));
-  return { url: `http://127.0.0.1:${server.port}/`, completed: Deferred.await(completion) };
+  return {
+    url: `http://127.0.0.1:${server.port}/`, completed: Deferred.await(completion),
+    /** What the native window drives in place of the page: the scene before the first step, one step, and the end of the run. */
+    native: { prepare: () => ({ scene: sceneWithUnits(game.render, captureScene(session.client)), models: game.render.preloadModels ?? [], step: steps }), advance: (input: StandaloneInput) => advance(input).frame, finish },
+  };
 });
 
 const openWindow = (game: StandaloneGame, options: StandaloneOptions, url: string) => Effect.gen(function*() {
@@ -200,6 +215,15 @@ const openWindow = (game: StandaloneGame, options: StandaloneOptions, url: strin
     ),
   };
 });
+
+type OpenedStandalone = Effect.Success<ReturnType<typeof openStandalone>>;
+
+/** The player's window, in the chosen kind: Chrome showing the page the player serves, or the native window the player drives. */
+const openPlayerWindow = (game: StandaloneGame, options: StandaloneOptions, player: OpenedStandalone) => {
+  if (options.window !== "native") return openWindow(game, options, player.url);
+  if ((options.captureFrames ?? []).length > 0) return Effect.fail(failed("the native window can't capture frames yet; use --window chrome"));
+  return openNativePlayer(player.native, { title: game.title, width: game.render.width ?? 1280, height: game.render.height ?? 720, scripted: options.script !== undefined });
+};
 
 const printSummary = (result: Readonly<Record<string, unknown>> | void) => {
   if (result === undefined) return;
@@ -257,7 +281,7 @@ const runNetStandalone = (game: StandaloneGame, options: StandaloneOptions, net:
       return { client: session.client, paced: true, step: session.input, checksum: session.checksum, frame: session.frame, ...(session.finished === undefined ? {} : { finished: session.finished }), close: session.close };
     },
   }, options);
-  const { closed } = yield* openWindow(game, options, player.url);
+  const { closed } = yield* openPlayerWindow(game, options, player);
   const ended = Fiber.join(peer).pipe(Effect.tap((report) => Effect.sync(() => console.error(`net: ${JSON.stringify(report)}`))));
   const outcome = yield* Effect.raceFirst(
     Effect.all([player.completed, ended], { concurrency: "unbounded" }).pipe(Effect.map(([result]) => result)),
@@ -273,9 +297,18 @@ export const runStandalone = (game: StandaloneGame, options: StandaloneOptions =
   if (options.gpuLease !== false) yield* requireGpuLease();
   if (options.net !== undefined) return yield* runNetStandalone(game, options, options.net);
   const player = yield* openStandalone(game, options);
-  const { closed } = yield* openWindow(game, options, player.url);
+  const { closed } = yield* openPlayerWindow(game, options, player);
   printSummary(yield* Effect.raceFirst(player.completed, closed));
 })).pipe(Effect.provide(BunServices.layer));
+
+/** Reads `--window chrome|native` from a play command's arguments; the rest come back untouched. */
+export function standaloneWindowArgument(args: readonly string[]): { readonly window?: StandaloneWindow; readonly rest: readonly string[] } | string {
+  const at = args.indexOf("--window");
+  if (at < 0) return { rest: args };
+  const value = args[at + 1];
+  if (value !== "chrome" && value !== "native") return "--window needs chrome or native";
+  return { window: value, rest: [...args.slice(0, at), ...args.slice(at + 2)] };
+}
 
 /** Reads `--host [--port N | --relay REGION]` or `--join CODE|ADDRESS:PORT` from a play command's arguments; the rest come back untouched. */
 export function standaloneNetArguments(args: readonly string[]): { readonly net?: StandaloneNet; readonly rest: readonly string[] } | string {

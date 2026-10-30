@@ -124,6 +124,12 @@ responsibility = "Rust relay workspace: wire format, relay and agent cores, seed
 may_use = []
 
 [[module]]
+name = "window"
+paths = ["window/**"]
+responsibility = "Rust native window workspace: the wisp-window library that owns the window, the keyboard sample, the render thread and the present loop behind a C ABI Bun loads."
+may_use = []
+
+[[module]]
 name = "native"
 paths = ["native/**"]
 responsibility = "C map packer, the Lua32 headers and the prebuilt Windows tools."

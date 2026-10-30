@@ -238,6 +238,45 @@ machine-capacity lease where the helper is installed, naming the lease command
 to rerun it under ([Rendered frames and sound cues](headless.md#rendered-frames-and-sound-cues)).
 `gpuLease: false` in `StandaloneOptions` skips that check for a player run, which holds no lease.
 
+
+### Native window
+
+`play --standalone --window native` opens `wisp-window` (the Rust library in
+`window/`, planned in [native-window-plan.md](native-window-plan.md)) instead of
+Chrome, and `chrome` stays the default. A game reads the flag with
+`standaloneWindowArgument` and passes `window` in the options of
+`runStandalone`. Bun loads the library with `bun:ffi` from
+`WISP_WINDOW_LIBRARY`, else beside the executable, else `window/target/release`
+(build it with `cd window && cargo build --release`). The library runs the
+window and a render thread; the render thread acquires the next `Fifo` image,
+samples the held keys and wakes Bun with a `threadsafe` `JSCallback`. Bun steps
+the map once and gives the scene back as JSON in one call, and the render thread
+draws it. Box W1 draws only a clear colour and the step as 24 lit squares, and it
+shows the loading and ready text in the window's title. The scene is parsed in
+the library on every frame, so the cost of encoding and parsing it is measured
+before the renderer is ported. Keyboard only: pads, sound, captures and
+`--headless` stay with Chrome (`--capture-frames` with the native window is
+refused). `standalone.json` keeps the page's fields and adds `adapter`,
+`backend`, `presentMode`, `desiredMaximumFrameLatency`, `wakeMs`, `encodeMs`,
+`parseMs`, `sampleToPresentMs` and `missedScenes`; `presentedMs` is the interval
+between two images the display handed back. Closing the window ends the session.
+
+`bun wisp window probe [--frames N] [--out DIR]` runs the sample map's scene
+through the production player and window on a display, for N frames after 30
+warm-up frames, and writes `probe.json` with p50, p95, p99 and max for the wake
+(Rust sample to Bun handling), the step, the scene (encode plus parse), the
+`readAsset` calls, the present interval and the collection pauses. The pauses
+come from JavaScriptCore's collector log (`BUN_JSC_logGC`), because Bun 1.3.13
+reports no `gc` entries to `PerformanceObserver`; the run is a child process so
+its stderr can carry the log. It builds the library when it is missing.
+A process opens one native window, because winit builds one event loop per
+process. Measured on the private desktop's NVIDIA adapter (30 October 2026): the
+wake p99 is 0.7 ms when the machine is quiet and 3 to 4 ms under other load, the
+scene p99 under 1.6 ms, the present interval p95 17.5 to 18 ms, and Bun
+collects about once per frame while the sample map steps (650 collections in 630
+frames, p50 about 1 ms, max 6 to 60 ms), so the probe's collection-pause figure
+is the open item of box W1.
+
 ### Assets from a player's own files
 
 A player has no source tree or private asset store: the map is the `.w3x` they

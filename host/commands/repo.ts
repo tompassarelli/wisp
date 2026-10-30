@@ -30,6 +30,10 @@ runMainCli("bun wisp", {
     })),
   },
   farm: { usage: "test [--ref REF] [--wait]   (the full suites on GitHub's free runners: docs/farm.md)", load: async () => (await import("./farm")).farm },
+  window: {
+    usage: "probe [--frames N] [--out DIR]   (the native window's seam and pacing: docs/native-window-plan.md)",
+    load: async () => (await import("./window")).makeWindow(join(root, "examples/sample/scripts/standalone.ts")),
+  },
   headless: {
     usage: "audio-acceptance [--sound-cues FILE] [--json]   (map sound/music calls: docs/audio.md)",
     load: async () => (await import("./headless")).makeHeadless(async () => ({
