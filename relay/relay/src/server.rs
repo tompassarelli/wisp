@@ -15,6 +15,7 @@ use relay_proto::Micros;
 
 use crate::game_room::GameRoom;
 use crate::path::{bind, Path};
+use crate::results::{self, Report};
 use crate::room::{Body, Clocked, Room, Slot};
 
 mod members;
@@ -36,6 +37,7 @@ pub struct Config {
     pub max_rooms: usize,
     pub slot_bytes: u64,
     pub game_timing: LobbyTiming,
+    pub region: String,
 }
 
 impl Default for Config {
@@ -52,6 +54,7 @@ impl Default for Config {
             max_rooms: 128,
             slot_bytes: 256 << 20,
             game_timing: HOST_TIMING,
+            region: "unknown".to_string(),
         }
     }
 }
@@ -84,6 +87,7 @@ pub struct Server {
     creations: HashMap<IpAddr, (Micros, u32)>,
     stats: Stats,
     log: Vec<String>,
+    results: Vec<String>,
     sends: Option<Vec<Line>>,
 }
 
@@ -99,6 +103,7 @@ impl Server {
             creations: HashMap::new(),
             stats: Stats::default(),
             log: Vec::new(),
+            results: Vec::new(),
             sends: None,
         }
     }
@@ -120,6 +125,10 @@ impl Server {
 
     pub fn take_log(&mut self) -> Vec<String> {
         std::mem::take(&mut self.log)
+    }
+
+    pub fn take_results(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.results)
     }
 
     pub fn record_sends(&mut self) {
@@ -173,7 +182,7 @@ impl Server {
             .values()
             .filter_map(|r| match &r.body {
                 Body::Clocked(c) => Some(c),
-                Body::Peer => None,
+                Body::Peer(_) => None,
             })
             .map(|c| {
                 let turns = match (c.started, c.full_at) {
@@ -196,14 +205,14 @@ impl Server {
             Some(KIND_PEER) => self.on_peer(now, from, bytes, out),
             Some(k) if k > KIND_UP => {
                 if let Ok(c) = control::decode(bytes) {
-                    self.on_control(now, from, c, out);
+                    self.on_control(now, from, c, bytes.len() as u64, out);
                 }
             }
             _ => {}
         }
     }
 
-    fn on_control(&mut self, now: Micros, from: Peer, c: Control, out: &mut Out) {
+    fn on_control(&mut self, now: Micros, from: Peer, c: Control, bytes_len: u64, out: &mut Out) {
         match c {
             Control::Create {
                 cookie,
@@ -246,6 +255,7 @@ impl Server {
             }
             Control::Verify { token, cookie } => self.on_verify(now, from, token, cookie),
             Control::Leave { token } => self.on_leave(now, token),
+            Control::Result { token, winner, checksum, rtt_ms } => self.on_result(now, from, token, Report { winner, checksum, rtt_ms }, bytes_len, out),
             _ => {}
         }
     }
@@ -301,7 +311,7 @@ impl Server {
         slots[0].joined_by = Some((from, request));
         let seed = self.fresh_id() as u32 & 0x7fff_ffff;
         let body = if peer {
-            Body::Peer
+            Body::Peer(vec![None; players as usize])
         } else {
             Body::Clocked(Clocked {
                 relay: Relay::new(self.cadence.clone(), &tokens, now),
@@ -330,7 +340,7 @@ impl Server {
         };
         let steps = match room.body {
             Body::Clocked(_) => self.cfg.steps_ms.clone(),
-            Body::Peer => Vec::new(),
+            Body::Peer(_) => Vec::new(),
         };
         if let Some(i) = room
             .slots
@@ -423,6 +433,9 @@ impl Server {
             self.tokens.remove(&slot.token);
         }
         self.stats.rooms_closed += 1;
+        if let Body::Peer(reports) = &room.body {
+            self.results.extend(results::line(id, &self.cfg.region, reports));
+        }
         if let Body::Clocked(c) = &room.body {
             if c.started {
                 self.log.push(c.report(id, now, &self.cadence));

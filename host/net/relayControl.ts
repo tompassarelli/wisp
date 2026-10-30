@@ -16,15 +16,23 @@ export type RelayControl =
   | { readonly type: "leave"; readonly token: bigint }
   | { readonly type: "refused"; readonly request: bigint; readonly reason: Refusal }
   | { readonly type: "peer"; readonly token: bigint; readonly payload: Uint8Array }
-  | { readonly type: "relayed"; readonly from: number; readonly payload: Uint8Array };
+  | { readonly type: "relayed"; readonly from: number; readonly payload: Uint8Array }
+  | { readonly type: "result"; readonly token: bigint; readonly winner: number; readonly checksum: number; readonly rtt: number };
 
-const KINDS = { create: 3, join: 4, challenge: 5, room: 6, verify: 7, leave: 8, refused: 9, createPeer: 13, peer: 14, relayed: 15 } as const;
+const KINDS = { create: 3, join: 4, challenge: 5, room: 6, verify: 7, leave: 8, refused: 9, createPeer: 13, peer: 14, relayed: 15, result: 16 } as const;
 
 class Writer {
   readonly bytes: number[] = [MAGIC, VERSION];
   u8(value: number): this {
     this.bytes.push(value);
     return this;
+  }
+  u16(value: number): this {
+    this.bytes.push(value & 255, (value >>> 8) & 255);
+    return this;
+  }
+  u32(value: number): this {
+    return this.u16(value & 0xffff).u16(value >>> 16);
   }
   u64(value: bigint): this {
     for (let shift = 0n; shift < 64n; shift += 8n) this.bytes.push(Number((value >> shift) & 255n));
@@ -67,6 +75,9 @@ export function encodeControl(message: RelayControl): Uint8Array {
     case "relayed":
       out.u8(message.from).raw(message.payload);
       break;
+    case "result":
+      out.u64(message.token).u8(message.winner).u32(message.checksum).u16(message.rtt);
+      break;
   }
   return Uint8Array.from(out.bytes);
 }
@@ -79,6 +90,12 @@ class Reader {
     if (value === undefined) throw new Error("short");
     this.at += 1;
     return value;
+  }
+  u16(): number {
+    return this.u8() | (this.u8() << 8);
+  }
+  u32(): number {
+    return (this.u16() | (this.u16() << 16)) >>> 0;
   }
   u64(): bigint {
     let value = 0n;
@@ -138,6 +155,9 @@ function decodeBody(kind: number, r: Reader): RelayControl {
       break;
     case KINDS.relayed:
       message = { type: "relayed", from: r.u8(), payload: r.rest() };
+      break;
+    case KINDS.result:
+      message = { type: "result", token: r.u64(), winner: r.u8(), checksum: r.u32(), rtt: r.u16() };
       break;
     default:
       throw new Error("kind");

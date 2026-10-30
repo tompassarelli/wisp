@@ -199,3 +199,118 @@ fn peer_room_creation_counts_against_the_address_rate_limit() {
     let out = say(&mut s, 0, host, &Control::CreatePeer { cookie, request: 99, players: 2 });
     assert_eq!(reply(&out, host), Control::Refused { request: 99, reason: Refusal::RateLimited });
 }
+
+fn report(m: &Member, winner: u8, checksum: u32, rtt_ms: u16) -> Control {
+    Control::Result { token: m.token, winner, checksum, rtt_ms }
+}
+
+fn close_all(s: &mut Server, now: Micros, members: &[Member]) {
+    for m in members {
+        say(s, now, m.addr, &Control::Leave { token: m.token });
+    }
+}
+
+#[test]
+fn peer_room_result_line_records_both_reports_of_a_finished_room() {
+    let cfg = Config { region: "us-west".to_string(), ..Config::default() };
+    let mut s = Server::new(cfg);
+    let (room, members) = room_of(&mut s, 2);
+    assert!(say(&mut s, 5, members[0].addr, &report(&members[0], 1, 0xdead_beef, 34)).is_empty());
+    assert!(say(&mut s, 6, members[1].addr, &report(&members[1], 1, 0xdead_beef, 36)).is_empty());
+    assert!(s.take_results().is_empty());
+    close_all(&mut s, 7, &members);
+    assert_eq!(
+        s.take_results(),
+        vec![format!("result room {room:016x} region us-west players 2 verdict agree slot0 winner=1 checksum=deadbeef rtt=34 slot1 winner=1 checksum=deadbeef rtt=36")]
+    );
+    assert!(s.take_results().is_empty());
+}
+
+#[test]
+fn peer_room_result_line_marks_a_disagreement_in_winner_or_checksum_but_not_in_rtt() {
+    let mut s = Server::new(Config::default());
+    let (_, members) = room_of(&mut s, 2);
+    say(&mut s, 1, members[0].addr, &report(&members[0], 0, 7, 20));
+    say(&mut s, 1, members[1].addr, &report(&members[1], 0, 7, 90));
+    close_all(&mut s, 2, &members);
+    assert!(s.take_results()[0].contains("verdict agree"));
+
+    let (_, members) = room_of(&mut s, 2);
+    say(&mut s, 1, members[0].addr, &report(&members[0], 0, 7, 20));
+    say(&mut s, 1, members[1].addr, &report(&members[1], 1, 7, 20));
+    close_all(&mut s, 2, &members);
+    assert!(s.take_results()[0].contains("verdict disagree"));
+
+    let (_, members) = room_of(&mut s, 2);
+    say(&mut s, 1, members[0].addr, &report(&members[0], 0, 7, 20));
+    say(&mut s, 1, members[1].addr, &report(&members[1], 0, 8, 20));
+    close_all(&mut s, 2, &members);
+    assert!(s.take_results()[0].contains("verdict disagree"));
+}
+
+#[test]
+fn peer_room_result_line_marks_missing_reports_and_skips_a_room_with_none() {
+    let mut s = Server::new(Config::default());
+    let (room, members) = room_of(&mut s, 3);
+    say(&mut s, 1, members[0].addr, &report(&members[0], 2, 9, 40));
+    say(&mut s, 1, members[2].addr, &report(&members[2], 2, 9, 41));
+    close_all(&mut s, 2, &members);
+    assert_eq!(
+        s.take_results(),
+        vec![format!("result room {room:016x} region unknown players 3 verdict incomplete slot0 winner=2 checksum=00000009 rtt=40 slot1 missing slot2 winner=2 checksum=00000009 rtt=41")]
+    );
+
+    let (_, members) = room_of(&mut s, 2);
+    say(&mut s, 1, members[0].addr, &report(&members[0], 1, 1, 1));
+    say(&mut s, 1, members[1].addr, &report(&members[1], 0, 1, 1));
+    let (_, quiet) = room_of(&mut s, 2);
+    close_all(&mut s, 2, &quiet);
+    assert!(s.take_results().is_empty());
+    close_all(&mut s, 2, &members);
+    assert!(s.take_results()[0].contains("verdict disagree"));
+}
+
+#[test]
+fn peer_room_result_line_is_written_when_an_idle_room_closes() {
+    let cfg = Config::default();
+    let idle = cfg.idle_us;
+    let mut s = Server::new(cfg);
+    let (_, members) = room_of(&mut s, 2);
+    say(&mut s, 10, members[1].addr, &report(&members[1], 1, 3, 50));
+    let mut out = Vec::new();
+    s.poll(10 + idle - 1, &mut out);
+    assert!(s.take_results().is_empty());
+    s.poll(10 + idle, &mut out);
+    let lines = s.take_results();
+    assert_eq!(lines.len(), 1);
+    assert!(lines[0].contains("verdict incomplete slot0 missing slot1 winner=1"));
+}
+
+#[test]
+fn peer_room_result_keeps_the_first_report_of_a_slot_and_ignores_unverified_and_departed_senders() {
+    let mut s = Server::new(Config::default());
+    let (_, members) = room_of(&mut s, 2);
+    say(&mut s, 1, members[0].addr, &report(&members[0], 1, 5, 30));
+    say(&mut s, 2, members[0].addr, &report(&members[0], 0, 6, 31));
+
+    let moved = addr(2, 4000);
+    let out = say(&mut s, 3, moved, &report(&members[1], 0, 6, 31));
+    assert!(matches!(reply(&out, moved), Control::Challenge { .. }));
+
+    say(&mut s, 4, addr(7, 7), &Control::Result { token: 99, winner: 1, checksum: 5, rtt_ms: 1 });
+    say(&mut s, 5, members[1].addr, &Control::Leave { token: members[1].token });
+    say(&mut s, 6, members[1].addr, &report(&members[1], 1, 5, 30));
+    say(&mut s, 7, members[0].addr, &Control::Leave { token: members[0].token });
+    let lines = s.take_results();
+    assert_eq!(lines.len(), 1);
+    assert!(lines[0].contains("verdict incomplete slot0 winner=1 checksum=00000005 rtt=30 slot1 missing"), "{}", lines[0]);
+}
+
+#[test]
+fn peer_room_result_is_not_forwarded_to_other_members() {
+    let mut s = Server::new(Config::default());
+    let (_, members) = room_of(&mut s, 3);
+    let out = say(&mut s, 1, members[0].addr, &report(&members[0], 1, 5, 30));
+    assert!(out.is_empty());
+    assert_eq!(s.stats().forwarded, 0);
+}

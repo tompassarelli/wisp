@@ -10,6 +10,7 @@ pub const KIND_REFUSED: u8 = 9;
 pub const KIND_CREATE_PEER: u8 = 13;
 pub const KIND_PEER: u8 = 14;
 pub const KIND_RELAYED: u8 = 15;
+pub const KIND_RESULT: u8 = 16;
 
 pub const PEER_HEADER: usize = 3 + 8;
 pub const MIN_PEERS: u8 = 2;
@@ -94,6 +95,12 @@ pub enum Control {
         from: u8,
         payload: Vec<u8>,
     },
+    Result {
+        token: u64,
+        winner: u8,
+        checksum: u32,
+        rtt_ms: u16,
+    },
 }
 
 pub fn kind(buf: &[u8]) -> Option<u8> {
@@ -123,6 +130,7 @@ fn kind_of(c: &Control) -> u8 {
         Control::CreatePeer { .. } => KIND_CREATE_PEER,
         Control::Peer { .. } => KIND_PEER,
         Control::Relayed { .. } => KIND_RELAYED,
+        Control::Result { .. } => KIND_RESULT,
     }
 }
 
@@ -185,6 +193,17 @@ fn put_body(c: &Control, out: &mut Vec<u8>) {
             out.push(*from);
             out.extend_from_slice(payload);
         }
+        Control::Result {
+            token,
+            winner,
+            checksum,
+            rtt_ms,
+        } => {
+            put(*token, 8, out);
+            out.push(*winner);
+            put(*checksum as u64, 4, out);
+            put(*rtt_ms as u64, 2, out);
+        }
     }
 }
 
@@ -207,6 +226,12 @@ impl Reader<'_> {
     }
     fn u8(&mut self) -> Result<u8, WireError> {
         Ok(self.take(1)?[0])
+    }
+    fn u32(&mut self) -> Result<u32, WireError> {
+        Ok(u32::from_le_bytes(self.take(4)?.try_into().unwrap()))
+    }
+    fn u16(&mut self) -> Result<u16, WireError> {
+        Ok(u16::from_le_bytes(self.take(2)?.try_into().unwrap()))
     }
     fn u64(&mut self) -> Result<u64, WireError> {
         Ok(u64::from_le_bytes(self.take(8)?.try_into().unwrap()))
@@ -269,6 +294,12 @@ fn decode_body(kind: u8, r: &mut Reader) -> Result<Control, WireError> {
             from: r.u8()?,
             payload: r.rest(),
         },
+        KIND_RESULT => Control::Result {
+            token: r.u64()?,
+            winner: r.u8()?,
+            checksum: r.u32()?,
+            rtt_ms: r.u16()?,
+        },
         _ => return Err(WireError::Kind),
     })
 }
@@ -322,6 +353,12 @@ mod tests {
                 cookie: 11,
             },
             Control::Leave { token: 12 },
+            Control::Result {
+                token: 14,
+                winner: 1,
+                checksum: 0xdead_beef,
+                rtt_ms: 34,
+            },
             Control::Refused {
                 request: 13,
                 reason: Refusal::RateLimited,
@@ -388,6 +425,7 @@ mod tests {
             "refused" => Control::Refused { request: n("request"), reason: vector_refusal(f["reason"]) },
             "peer" => Control::Peer { token: n("token"), payload: unhex(f["payload"]) },
             "relayed" => Control::Relayed { from: b("from"), payload: unhex(f["payload"]) },
+            "result" => Control::Result { token: n("token"), winner: b("winner"), checksum: n("checksum") as u32, rtt_ms: n("rtt") as u16 },
             other => panic!("unknown vector type {other}"),
         }
     }

@@ -5,6 +5,7 @@ use relay_proto::Micros;
 
 use crate::game_room::GameRoom;
 use crate::path::{Out, Path, Peer};
+use crate::results::Report;
 
 pub const REPORT_US: Micros = 5_000_000;
 
@@ -28,7 +29,7 @@ pub(crate) struct Clocked {
 #[derive(Debug)]
 pub(crate) enum Body {
     Clocked(Clocked),
-    Peer,
+    Peer(Vec<Option<Report>>),
 }
 
 #[derive(Debug)]

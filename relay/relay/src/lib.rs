@@ -1,5 +1,6 @@
 pub mod game_room;
 mod path;
+mod results;
 mod room;
 pub mod send_log;
 pub mod server;

@@ -7,7 +7,7 @@ use relay::send_log::SendLog;
 use relay::tcp::{self, Limits};
 use relay::{Config, Server};
 
-const USAGE: &str = "usage: relay [--bind ADDR] [--steps 8|17,17,16] [--lobby-ms N] [--idle-s N] [--rooms-per-minute N] [--max-rooms N] [--slot-mib N] [--tcp-idle-ms N] [--send-log FILE] [--once]";
+const USAGE: &str = "usage: relay [--bind ADDR] [--steps 8|17,17,16] [--lobby-ms N] [--idle-s N] [--rooms-per-minute N] [--max-rooms N] [--slot-mib N] [--tcp-idle-ms N] [--region NAME] [--send-log FILE] [--once]";
 
 struct Options {
     bind: String,
@@ -46,6 +46,7 @@ fn parse(args: &[String]) -> Result<Options, String> {
             "--max-rooms" => cfg.max_rooms = number()? as usize,
             "--slot-mib" => cfg.slot_bytes = (number()? as u64) << 20,
             "--tcp-idle-ms" => limits.idle = Duration::from_millis(number()?.max(1) as u64),
+            "--region" => cfg.region = value.clone(),
             "--send-log" => send_log = Some(value.clone()),
             _ => return Err(format!("unknown flag {flag}")),
         }

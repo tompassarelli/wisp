@@ -31,7 +31,7 @@ describe("relay control vectors", () => {
 
   test("[boundary] the vectors cover every message type and every refusal", () => {
     const types = new Set(vectors.map(({ message }) => message.type));
-    expect([...types].sort()).toEqual(["challenge", "create", "createPeer", "join", "leave", "peer", "refused", "relayed", "room", "verify"]);
+    expect([...types].sort()).toEqual(["challenge", "create", "createPeer", "join", "leave", "peer", "refused", "relayed", "result", "room", "verify"]);
     const reasons = vectors.flatMap(({ message }) => (message.type === "refused" ? [message.reason] : []));
     expect(new Set(reasons)).toEqual(new Set(REFUSALS));
   });

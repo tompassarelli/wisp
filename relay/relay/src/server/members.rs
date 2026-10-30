@@ -2,6 +2,7 @@ use relay_proto::control::{self, Control};
 use relay_proto::Micros;
 
 use crate::path::{bind, Out, Path, Peer};
+use crate::results::Report;
 use crate::room::Body;
 use crate::server::Server;
 
@@ -48,7 +49,7 @@ impl Server {
         let cookie = self.cookie(from, now);
         let room = self.rooms.get_mut(&id).unwrap();
         let slot = &mut room.slots[index];
-        if !matches!(room.body, Body::Peer) || slot.left || slot.joined_by.is_none() {
+        if !matches!(room.body, Body::Peer(_)) || slot.left || slot.joined_by.is_none() {
             return;
         }
         room.heard = now;
@@ -67,5 +68,32 @@ impl Server {
         room.forward(index, &payload, out);
         room.relayed += out[before..].iter().map(|(_, b)| b.len() as u64).sum::<u64>();
         self.stats.forwarded += (out.len() - before) as u64;
+    }
+}
+
+impl Server {
+    pub(super) fn on_result(&mut self, now: Micros, from: Peer, token: u64, report: Report, bytes_len: u64, out: &mut Out) {
+        let Some(&(id, index)) = self.tokens.get(&token) else {
+            return;
+        };
+        let cookie = self.cookie(from, now);
+        let room = self.rooms.get_mut(&id).unwrap();
+        let slot = &mut room.slots[index];
+        let Body::Peer(reports) = &mut room.body else {
+            return;
+        };
+        if slot.left || slot.joined_by.is_none() {
+            return;
+        }
+        room.heard = now;
+        let path = bind(&mut slot.path, from, &mut self.stats.rebinds);
+        if !path.verified {
+            path.received += bytes_len;
+            if path.challenge(cookie, now, self.cfg.challenge_gap_us, out) {
+                self.stats.challenges += 1;
+            }
+            return;
+        }
+        reports[index].get_or_insert(report);
     }
 }

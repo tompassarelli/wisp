@@ -37,6 +37,9 @@ pub(crate) fn tick(server: &mut Server, t: Micros, once: bool, idle_us: Micros, 
     for line in server.take_log() {
         println!("{:.3} {line}", t as f64 / 1e6);
     }
+    for line in server.take_results() {
+        println!("{line}");
+    }
     if once && server.rooms() == 0 && (server.stats().rooms_closed > 0 || t >= idle_us) {
         return Ok(None);
     }

@@ -20,3 +20,5 @@ peer token=18 payload= hex=57010e1200000000000000
 peer token=18446744073709551615 payload=00ff7f80 hex=57010effffffffffffffff00ff7f80
 relayed from=0 payload= hex=57010f00
 relayed from=3 payload=00ff7f80 hex=57010f0300ff7f80
+result token=19 winner=1 checksum=3735928559 rtt=34 hex=570110130000000000000001efbeadde2200
+result token=18446744073709551615 winner=255 checksum=0 rtt=65535 hex=570110ffffffffffffffffff00000000ffff

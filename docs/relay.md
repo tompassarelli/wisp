@@ -1687,6 +1687,36 @@ byte for byte, to the other members.
   is about 27 MB in and, resent, 54 MB out of the relay: about 18,000 matches
   per TB of its traffic.
 
+## Peer room results (box G1, wisp#104)
+
+A stub for collecting match results; it is not a ladder. Reports come from
+the clients alone and are easy to forge, so the line proves only that a
+result can be collected (wisp:docs/online-plan.md, "4. Ladder (stub)").
+
+- **Report.** A member sends `Result` (kind 16: token, winner slot as a byte,
+  the final confirmed checksum as a `u32`, the measured round trip in
+  milliseconds as a `u16`; 18 bytes). It passes the same address check as a
+  datagram: from an unverified address it only draws a `Challenge`. The
+  relay answers nothing and forwards nothing. A slot's first report stands;
+  later ones, and reports from a member that has left, are ignored. A
+  client sends it before `Leave`, and may resend it, since UDP can drop it.
+- **Line.** When a peer room closes (every member left, idle, or over its
+  byte budget) and at least one member reported, the relay prints one line
+  to stdout, without the timestamp the other lines carry:
+  `result room ID region NAME players N verdict V slot0 winner=W checksum=HEX rtt=MS slot1 missing ...`.
+  `grep '^result '` collects them. `--region NAME` sets the region (default
+  `unknown`). A room with no report prints nothing.
+- **Verdict.** `agree` when every member reported the same winner and
+  checksum (the round trips differ by design); `disagree` when any two
+  reports differ in winner or checksum, even if another is missing;
+  `incomplete` when the reports present agree but a member's is missing,
+  shown as `slotN missing`.
+- **Test.** `cd relay && cargo test -p relay peer_room_result`; the packet
+  is also in relay/relay-proto/vectors/control.txt, checked by
+  `cargo test -p relay-proto peer_room` and `bun test test/relayVectors.test.ts`.
+  host/net/relayControl.ts has the codec; the standalone window does not send
+  it yet.
+
 ## Reaching players (box R0)
 
 Box R0 tried every route that public sources name, all from outside the
