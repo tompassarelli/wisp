@@ -29,6 +29,15 @@ export const capacityQueued = (line: string) => /"decision":"QUEUED","reason":"(
 /** The newest reason the capacity helper printed for keeping a native start in its queue. */
 export const lastQueued = (stderr: string) => stderr.split("\n").map(capacityQueued).findLast((reason) => reason !== undefined);
 
+/** Whether the newest decision the capacity helper printed still keeps the start in its queue. */
+export const waitingForCapacity = (stderr: string) => [...stderr.matchAll(/"decision":"([A-Z]+)"/g)].at(-1)?.[1] === "QUEUED";
+
+/** Where a pair start stands: a pair fault once its clients have had `readyMs` since its admission or since one of them last waited in the capacity helper's queue, since a GPU slot is the host's capacity and not the pair's; the host's capacity once `boundMs` have passed since its admission. */
+export const readiness = (clock: { readonly admittedAt: number; readonly lastWaitAt?: number | undefined; readonly now: number; readonly readyMs: number; readonly boundMs: number }) => {
+  if (clock.now - Math.max(clock.admittedAt, clock.lastWaitAt ?? 0) > clock.readyMs) return "pair fault";
+  return clock.now - clock.admittedAt > clock.boundMs ? "host capacity" : "waiting";
+};
+
 /** Why a native start given `waitSeconds` in the capacity helper's queue exited deferred, from what the helper printed. */
 export function unadmitted(stderr: string, waitSeconds: number) {
   const deferred = capacityDeferral(stderr);

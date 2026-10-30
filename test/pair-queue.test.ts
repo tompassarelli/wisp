@@ -6,7 +6,7 @@ import { Effect } from "effect";
 import { PEER_STATE_SCRIPT, localHolder, parseIdle, parsePeerState, poolablePairs } from "../host/commands/lanQueue";
 import { markOf } from "../host/lan/claim";
 import { readHealth, recordFailure, recordPassed } from "../host/lan/pairHealth";
-import { claimFile, writeJson } from "../host/lan/pool";
+import { claimFile, exeOf, missingClients, retailOf, writeJson } from "../host/lan/pool";
 import { type QueueWorld, expireIdle, nextFree, queueStatus, releasePair, takePair } from "../host/lan/pairQueue";
 
 const world = (overrides: Partial<QueueWorld> = {}): QueueWorld => ({
@@ -145,15 +145,14 @@ const inStateHome = async (body: () => Promise<void>) => {
   }
 };
 
-test("[scenario] a pair whose pool failed twice in a row to start is listed unhealthy and skipped by lease take until its health check passes", () => inStateHome(async () => {
+test("[scenario] a pair whose pool failed to start is listed unhealthy and skipped by lease take until a start passes on it", () => inStateHome(async () => {
   const state = world({ hosts: [{ name: "gex45", pairs: [7, 15], available: true }], health: ({ pair }) => readHealth(pair) });
-  recordFailure(7, "lan7a never reached character selection");
   expect(nextFree(state, [])).toEqual({ host: "gex45", pair: 7 });
   recordFailure(7, "lan7a isn't running");
   expect(await take(state, "capture-a", 101)).toEqual({ host: "gex45", pair: 15 });
   await expect(take(state, "capture-b", 102, 1)).rejects.toThrow("no free pair within 1 s");
   expect(queueStatus(state).health).toEqual([
-    { host: "gex45", pair: 7, healthy: false, failures: 2, problem: "lan7a isn't running" },
+    { host: "gex45", pair: 7, healthy: false, failures: 1, problem: "lan7a isn't running" },
     { host: "gex45", pair: 15, healthy: true, failures: 0 },
   ]);
   recordPassed(7);
@@ -175,4 +174,19 @@ test("[scenario] the peer reports each recorded pair's start failures", async ()
   writeFileSync(join(root, "wisp/lan/pair-4/health.json"), JSON.stringify({ failures: 2, problem: "lan4b isn't running", at: "" }, null, 2));
   const peer = parsePeerState(await Bun.$`sh -c ${PEER_STATE_SCRIPT}`.env({ ...process.env, XDG_STATE_HOME: root, XDG_DATA_HOME: join(root, "data") }).text());
   expect([...peer.failures]).toEqual([[4, 2]]);
+});
+
+test("[scenario] a pair whose client install the disk reclaim removed is missing that client, so neither the queue nor a pool start uses it", () => {
+  const previous = process.env["XDG_DATA_HOME"];
+  process.env["XDG_DATA_HOME"] = mkdtempSync(join(tmpdir(), "wisp-pair-data-"));
+  try {
+    for (const name of ["lan9a", "lan9b", "lan4a"]) {
+      mkdirSync(join(retailOf(name), "x86_64"), { recursive: true });
+      writeFileSync(exeOf(name), "");
+    }
+    expect([missingClients(9), missingClients(4), missingClients(4, true), missingClients(5)]).toEqual([[], ["lan4b"], [], ["lan5a", "lan5b"]]);
+  } finally {
+    if (previous === undefined) delete process.env["XDG_DATA_HOME"];
+    else process.env["XDG_DATA_HOME"] = previous;
+  }
 });

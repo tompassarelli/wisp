@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { hostname, tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { Effect } from "effect";
 import { type QueueWorld, queueStatus, takePair } from "../host/lan/pairQueue";
 
@@ -36,6 +36,11 @@ const sandbox = () => {
     WISP_TEST_BUN: process.execPath,
     PLAYTEST_STATE: join(folder, ".local/state/playtest/state.json"),
   };
+  for (let pair = poolPair; pair < poolPair + 16; pair++) for (const side of ["a", "b"]) {
+    const exe = join(env.XDG_DATA_HOME, "wisp/lan/clients", `lan${pair}${side}`, "pfx/drive_c/Program Files (x86)/Warcraft III/_retail_/x86_64/Warcraft III.exe");
+    mkdirSync(dirname(exe), { recursive: true });
+    writeFileSync(exe, "");
+  }
   const marked = () => readdirSync("/proc").filter((entry) => /^\d+$/.test(entry)).filter((pid) => {
     try {
       return readFileSync(`/proc/${pid}/environ`, "latin1").split("\0").includes(`WISP_TEST_MARK=${mark}`);
@@ -132,8 +137,12 @@ test("[boundary] lan pool: playtest admits one pair, refuses held and racing pai
     custody.stdin.end();
     expect(await custody.exited).toBe(0);
   }
+  const page = join(box.env.XDG_DATA_HOME, "wisp/lan/clients", `lan${poolPair}a`, "pfx/drive_c/Program Files (x86)/Warcraft III/_retail_/webui/index.html");
+  mkdirSync(dirname(page), { recursive: true });
+  writeFileSync(page, `<meta name="wisp" content="menu page" />\n<script>var report = "http://127.0.0.1:47124";</script>\n`);
   const runner = pool(box, {});
   await until(() => existsSync(join(box.env.XDG_STATE_HOME, "wisp/lan", `pair-${poolPair}`, "clients.json")), 30, "the ready pool pair");
+  expect(readFileSync(page, "utf8")).toContain(`"http://127.0.0.1:${47200 + poolPair * 2}"`);
   expect(box.activeDesktops()).toEqual(["a", "b"]);
   expect(claimOf(box, poolPair)?.pid).toBe(runner.pid);
   const locked = Bun.spawn(["flock", "--exclusive", "--nonblock", join(pairDirectory, "pool.lock"), "true"], { env: box.env, stdout: "pipe", stderr: "pipe" });

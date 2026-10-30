@@ -6,7 +6,7 @@ import * as BunServices from "@effect/platform-bun/BunServices";
 import { Effect } from "effect";
 import { ChildProcess } from "effect/process";
 import { type LaunchRequest, admittedRunner, launchCommand } from "../host/play/linuxLaunch";
-import { clientAdmitted } from "../host/lan/admission";
+import { clientAdmitted, readiness, waitingForCapacity } from "../host/lan/admission";
 
 test("a client launch waits in the capacity helper's queue for its admission, then exits within its own limit", async () => {
   const request: LaunchRequest = {
@@ -46,4 +46,17 @@ test("[scenario] a pool client's launch counts as started only once the capacity
   expect(said).toEqual(["lan0a: waiting in the capacity helper's queue (DEFER_GPU_CLIENTS)"]);
   writeFileSync(errFile, `${JSON.stringify({ decision: "QUEUED", reason: "DEFER_QUEUED" })}\n`);
   expect(await Effect.runPromise(clientAdmitted("lan0a", errFile, Effect.succeed(false), () => undefined))).toBe(false);
+});
+
+test("[scenario] a pair start charges its clients' lateness to the pair only after 10 minutes free of any wait for a GPU slot, and the host's capacity past that bound", () => {
+  const queued = JSON.stringify({ decision: "QUEUED", reason: "DEFER_GPU_CLIENTS" }), reserved = JSON.stringify({ decision: "RESERVED", reason: "RUN" });
+  expect([queued, `${queued}\n${reserved}`, `${reserved}\npressure-vessel-wrap: W: ...`, ""].map(waitingForCapacity)).toEqual([true, false, false, false]);
+  const minute = 60_000, clock = { admittedAt: 0, readyMs: 10 * minute, boundMs: 40 * minute };
+  expect([
+    readiness({ ...clock, now: 9 * minute }),
+    readiness({ ...clock, now: 11 * minute }),
+    readiness({ ...clock, lastWaitAt: 8 * minute, now: 11 * minute }),
+    readiness({ ...clock, lastWaitAt: 8 * minute, now: 19 * minute }),
+    readiness({ ...clock, lastWaitAt: 41 * minute, now: 41 * minute }),
+  ]).toEqual(["waiting", "pair fault", "waiting", "pair fault", "host capacity"]);
 });

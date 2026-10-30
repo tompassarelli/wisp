@@ -3,8 +3,8 @@ import { join } from "node:path";
 import { Option, Schema } from "effect";
 import { pairDirectory, writeJson } from "./pool";
 
-/** A pair whose pool failed this many times in a row to start its clients or a game is skipped by `wisp lan lease take` until `wisp lan check` passes on it. */
-const UNHEALTHY_AFTER = 2;
+/** A pair whose pool failed to start its clients or a game is skipped by `wisp lan lease take` until a start, such as `wisp lan check`, passes on it; waits for the host's capacity aren't failures. */
+const UNHEALTHY_AFTER = 1;
 
 const HealthJson = Schema.Struct({ failures: Schema.Int, problem: Schema.optionalKey(Schema.String), at: Schema.String });
 type PairHealth = typeof HealthJson.Type;

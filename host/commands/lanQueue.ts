@@ -7,7 +7,7 @@ import { LanFailure } from "../lan/join";
 import { type Lease, type QueueHost, type QueueWorld, expireIdle, queueStatus, releasePair, slotKey, takePair } from "../lan/pairQueue";
 import { orphaned } from "../lan/claim";
 import { readHealth } from "../lan/pairHealth";
-import { agentSocket, alive, dataRoot, installOf, readClaim, stateRoot } from "../lan/pool";
+import { agentSocket, alive, dataRoot, installOf, missingClients, readClaim, stateRoot } from "../lan/pool";
 import { lanPoolSupported } from "../os/warcraft/builds";
 import { buildOf } from "../os/warcraft/sharedStorage";
 
@@ -71,6 +71,7 @@ const peerState = (name: string) => Effect.promise(async () => {
 }).pipe(Effect.orElseSucceed(() => undefined));
 
 const localPoolable = (pair: number) => {
+  if (missingClients(pair).length > 0) return false;
   try {
     const version = buildOf(installOf(`lan${pair}a`));
     return version !== undefined && lanPoolSupported(version);

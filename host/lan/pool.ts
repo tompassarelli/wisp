@@ -78,6 +78,9 @@ export const exeOf = (name: string) => join(retailOf(name), "x86_64/Warcraft III
 export const documentsOf = (name: string) => documentsFolder(prefixOf(name));
 export const pairDirectory = (pair: number) => join(stateRoot(), `pair-${pair}`);
 
+/** Pair K's clients with no Warcraft III install, such as those the host's disk reclaim removed from a pair left idle. */
+export const missingClients = (pair: number, network = false) => pairSides(network).map((side) => clientName(pair, side)).filter((name) => !existsSync(exeOf(name)));
+
 export const claimFile = (pair: number) => join(pairDirectory(pair), "claim.json");
 
 export const readClaim = (pair: number) => readClaimAt(claimFile(pair));

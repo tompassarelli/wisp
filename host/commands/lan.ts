@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { userInfo } from "node:os";
 import * as BunServices from "@effect/platform-bun/BunServices";
@@ -13,16 +13,17 @@ import { LanFailure } from "../lan/join";
 import { markOf, orphaned } from "../lan/claim";
 import { type Custodian, holdPair, sessionEnded, sessionProcess } from "../lan/custody";
 import { lanPluginProblem } from "../lan/plugin";
-import { recordFailure, recordPassed } from "../lan/pairHealth";
+import { recordPassed } from "../lan/pairHealth";
 import { RELEASE_AFTER_SECONDS, poolEnds } from "../lan/poolRelease";
 import { ensurePackager } from "../compile/mapBuild";
 import {
-  PAIR_SIDES, agentFile, agentPidFile, agentSocket, alive, clientName, lanPlayRefusal, mapPackager, networkFlagProblem, pairClients, pairSides, pairDirectory, pairEntryFile, pairsHeldBy, readClaim, livePairs, poolClientsFile, poolFile, poolHolder, poolOwners, playtestPairRefusal, readPool, reportPort, stopAgent, stopPairScopes, writeJson, writePoolClients, wrongUser,
+  PAIR_SIDES, agentFile, agentSocket, alive, clientName, lanPlayRefusal, mapPackager, networkFlagProblem, pairClients, pairSides, pairDirectory, pairEntryFile, pairsHeldBy, readClaim, livePairs, poolClientsFile, poolFile, poolHolder, poolOwners, playtestPairRefusal, readPool, reportPort, stopAgent, stopPairScopes, writeJson, writePoolClients, wrongUser,
 } from "../lan/pool";
 import { PROFILES, desktopSize } from "../os/warcraft/clientProfiles";
 import { DEFAULT_BUILD, profileFor } from "../os/warcraft/builds";
 import { setupClient } from "../lan/setup";
-import { admissionFile, deferredExit, lastQueued, unadmitted } from "../lan/admission";
+import { deferredExit, lastQueued, unadmitted } from "../lan/admission";
+import { AgentStatus, clearLastStart, clientsRunning, outlivedStop, pairFault } from "../lan/pairStart";
 
 const SESSION = join(import.meta.dir, "../lan/pairSession.ts");
 
@@ -83,10 +84,8 @@ const capacityHelper = (args: readonly string[]) => {
   return given !== undefined ? Effect.succeed(given) : skillScript("machine-capacity", "scripts/machine-capacity.mjs");
 };
 
-const AdmissionRefusal = Schema.fromJsonString(Schema.Struct({ reason: Schema.String }));
 const AgentFile = Schema.fromJsonString(Schema.Struct({ runs: Schema.optionalKey(Schema.Struct({ a: Schema.optionalKey(Schema.String), b: Schema.optionalKey(Schema.String) })) }));
 const AgentProcess = Schema.fromJsonString(Schema.Struct({ pid: Schema.Int, network: Schema.optionalKey(Schema.Boolean), runs: Schema.Struct({ a: Schema.String }) }));
-const AgentStatus = Schema.Struct({ clients: Schema.Array(Schema.Struct({ name: Schema.String, pid: Schema.optional(Schema.Int) })) });
 
 const readJson = <A>(file: string, schema: Schema.Decoder<A>) => Effect.try({
   try: () => readFileSync(file, "utf8"),
@@ -96,23 +95,7 @@ const readJson = <A>(file: string, schema: Schema.Decoder<A>) => Effect.try({
   Effect.mapError((failure) => (failure instanceof LanFailure ? failure : new LanFailure({ problem: `${file}: ${failure.message}` }))),
 );
 
-const clientsReady = (pair: number, network: boolean) => Effect.tryPromise({
-  try: () => fetch("http://pair/status", { unix: agentSocket(pair) }).then((response) => response.json()),
-  catch: () => undefined,
-}).pipe(
-  Effect.flatMap(Schema.decodeUnknownEffect(AgentStatus)),
-  Effect.map((status) => status.clients.length === pairSides(network).length && status.clients.every(({ pid }) => pid !== undefined)),
-  Effect.orElseSucceed(() => false),
-);
-
-const READY = "10 minutes";
-
-const outlivedStop = (name: string, lease: string) => Console.log(`${name} outlived its stop (lease ${lease}); killing its scope`);
-
 const RESERVED = /"decision":"RESERVED"/;
-
-/** Fails a pair start with `problem`, counted against the pair's health since it is the pair's own fault rather than the host's capacity. */
-const pairFault = (pair: number, problem: string) => Effect.sync(() => recordFailure(pair, problem)).pipe(Effect.andThen(Effect.fail(new LanFailure({ problem }))));
 
 const DECISION_GRACE_SECONDS = 60;
 
@@ -120,14 +103,7 @@ const startPair = (pair: number, custody: { readonly custodian: Custodian; reado
   const directory = pairDirectory(pair);
   const sessionErr = join(directory, "session.err");
   const started = Effect.gen(function*() {
-    mkdirSync(directory, { recursive: true });
-    rmSync(agentSocket(pair), { force: true });
-    rmSync(agentFile(pair), { force: true });
-    rmSync(agentPidFile(pair), { force: true });
-    const outlived = yield* stopPairScopes(pair, outlivedStop);
-    if (outlived.length > 0) return yield* new LanFailure({ problem: `${outlived.join(" and ")} from its last start outlived the stop of ${outlived.length === 1 ? "its" : "their"} capacity scope` });
-    rmSync(admissionFile(directory), { force: true });
-    rmSync(sessionErr, { force: true });
+    yield* clearLastStart(pair, network);
 
     const scope = yield* Scope.fork(yield* Effect.scope);
     return yield* Effect.gen(function*() {
@@ -161,15 +137,7 @@ const startPair = (pair: number, custody: { readonly custodian: Custodian; reado
         onTimeout: () => Effect.fail(new LanFailure({ problem: `the capacity helper neither admitted nor deferred it within ${decided} s; see ${sessionErr}` })),
       });
 
-      const step = Effect.gen(function*() {
-        if (existsSync(admissionFile(directory))) return yield* new LanFailure({ problem: `the capacity helper deferred a game inside it (${(yield* readJson(admissionFile(directory), AdmissionRefusal)).reason})` });
-        yield* ended;
-        return yield* clientsReady(pair, network);
-      });
-      yield* pollUntil(step, {
-        until: (ready) => ready, every: "1 second", within: READY,
-        onTimeout: () => pairFault(pair, `its clients weren't both running within ${READY} of its admission; see ${directory}`),
-      });
+      yield* clientsRunning(pair, network, waitSeconds, ended);
       return { ...session.handle, stop: Scope.close(scope, Exit.void) };
     }).pipe(Scope.provide(scope), Effect.onError((cause) => Scope.close(scope, Exit.failCause(cause))));
   });
