@@ -3,3 +3,6 @@
 test/fixtures/tone.ogg	generated	ffmpeg -f lavfi -i sine=frequency=440:sample_rate=48000:duration=0.1 -c:a libvorbis -q:a 4 tone.ogg (wisp:docs/asset-ingestion.md)
 window/wisp-window/tests/fixtures/rig.mdl	generated	authored by hand for the pose test; test/window/poseFixtures.ts parses it with the vendored war3-model (wisp:docs/native-window-plan.md, box W3)
 window/wisp-window/tests/fixtures/rig.mdx	generated	bun test/window/poseFixtures.ts converts rig.mdl with the vendored war3-model generateMDX
+test/render/models/blend.mdl	original	hand-written MDL text for the render compare scenes (wisp:test/render/models.json, wisp#121)
+test/render/models/checker.mdl	original	hand-written MDL text for the render compare scenes (wisp:test/render/models.json, wisp#121)
+test/render/models/pyramid.mdl	original	hand-written MDL text for the render compare scenes (wisp:test/render/models.json, wisp#121)
