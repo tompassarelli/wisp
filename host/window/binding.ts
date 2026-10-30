@@ -19,9 +19,10 @@ const symbols = {
   wisp_window_open_error: { args: ["ptr", "usize"], returns: "usize" },
   wisp_window_start: { args: ["ptr"], returns: "void" },
   wisp_window_status: { args: ["ptr", "ptr", "usize"], returns: "void" },
-  wisp_window_submit: { args: ["ptr", "ptr", "usize", "f64"], returns: "void" },
+  wisp_window_start_baseline: { args: ["ptr"], returns: "void" },
+  wisp_window_submit: { args: ["ptr", "ptr", "usize", "f64", "u32"], returns: "void" },
+  wisp_window_next_event: { args: ["ptr", "ptr", "u32"], returns: "u32" },
   wisp_window_metric: { args: ["ptr", "u32", "ptr", "usize"], returns: "usize" },
-  wisp_window_missed_scenes: { args: ["ptr"], returns: "f64" },
   wisp_window_info: { args: ["ptr", "ptr", "usize"], returns: "usize" },
   wisp_window_error: { args: ["ptr", "ptr", "usize"], returns: "usize" },
   wisp_window_vocabulary: { args: ["ptr", "usize"], returns: "usize" },
@@ -42,6 +43,13 @@ export interface NativeWindowOptions {
   readonly onWake: OnWake;
 }
 
+/** One input sample the render thread took at a display frame: its number, when it was taken on the library's clock and the held buttons as a bit mask. */
+export interface InputSample {
+  readonly frame: number;
+  readonly sampleNs: number;
+  readonly mask: number;
+}
+
 export interface WindowInfo {
   readonly adapter: string;
   readonly backend: string;
@@ -49,15 +57,20 @@ export interface WindowInfo {
   readonly desiredMaximumFrameLatency: number;
 }
 
-/** What the thread that steps the game needs from an open window: the scene in, the status and the measured series out. Any thread can hold one. */
+/** What the thread that steps the game needs from an open window: the samples and scenes, the status and the measured series. Any thread can hold one. */
 export interface WindowView {
   readonly handle: number;
+  /** Starts the frames; until then the window shows its loading state and takes no samples. The thread that steps the game calls it once its frame loop is ready. */
+  start(): void;
+  /** Starts the frames with no game: the render thread submits a canned scene at each sample point, which measures the display path alone. */
+  startBaseline(): void;
   status(text: string): void;
-  /** Encodes `scene` into one buffer the view reuses and hands it to the render thread. */
-  submit(scene: string, step: number): void;
+  /** The oldest queued sample without waiting, or undefined when there is none; call it until it returns undefined to take every sample in order. */
+  nextSample(): InputSample | undefined;
+  /** Encodes `scene` into one buffer the view reuses and hands it to the render thread as the answer to the sample numbered `frame`. */
+  submit(scene: string, step: number, frame: number): void;
   /** One of the library's per-frame series, in milliseconds. */
   metric(name: string): Float64Array;
-  missedScenes(): number;
   info(): WindowInfo;
   error(): string | undefined;
   /** The names of the buttons set in a wake's mask. */
@@ -67,8 +80,6 @@ export interface WindowView {
 }
 
 export interface NativeWindow extends WindowView {
-  /** Starts the frame wakes; until then the window shows its loading state. */
-  start(): void;
   /** Stops the library's threads, then releases the callback and the library; the wake is never called after it returns. */
   close(): void;
 }
@@ -92,16 +103,20 @@ const viewOf = (library: Library, handle: Pointer, vocabulary: { buttons: string
   const encoder = new TextEncoder();
   // A fresh array per frame reports external memory to the collector, which then collects every frame; one reused buffer keeps the pause count to what the frame allocates.
   let sceneBuffer = new Uint8Array(64 * 1024);
+  const sample = new Float64Array(3);
   return {
     handle: handle as number,
+    start: () => call.wisp_window_start(handle),
+    startBaseline: () => call.wisp_window_start_baseline(handle),
     status: (text) => { const bytes = Buffer.from(text); call.wisp_window_status(handle, bytes, bytes.length); },
-    submit: (scene, step) => {
+    nextSample: () => (call.wisp_window_next_event(handle, sample, 0) === 0 ? undefined : { frame: sample[0]!, sampleNs: sample[1]!, mask: sample[2]! }),
+    submit: (scene, step, frame) => {
       let written = encoder.encodeInto(scene, sceneBuffer);
       while (written.read < scene.length) {
         sceneBuffer = new Uint8Array(sceneBuffer.length * 2);
         written = encoder.encodeInto(scene, sceneBuffer);
       }
-      call.wisp_window_submit(handle, sceneBuffer, written.written, step);
+      call.wisp_window_submit(handle, sceneBuffer, written.written, step, frame);
     },
     metric: (name) => {
       const which = vocabulary.metrics.indexOf(name);
@@ -110,7 +125,6 @@ const viewOf = (library: Library, handle: Pointer, vocabulary: { buttons: string
       call.wisp_window_metric(handle, which, values, count);
       return values;
     },
-    missedScenes: () => call.wisp_window_missed_scenes(handle),
     info: () => JSON.parse(textFrom((out, capacity) => call.wisp_window_info(handle, out, capacity)) || "{}") as WindowInfo,
     error: () => textFrom((out, capacity) => call.wisp_window_error(handle, out, capacity)) || undefined,
     buttons: (mask) => vocabulary.buttons.filter((_, bit) => (mask >> bit & 1) === 1),
@@ -143,7 +157,6 @@ export function openNativeWindow(options: NativeWindowOptions): NativeWindow {
   }
   return {
     ...viewOf(library, handle as Pointer, vocabulary),
-    start: () => call.wisp_window_start(handle),
     close: () => {
       if (closed) return;
       closed = true;

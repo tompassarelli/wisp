@@ -5,15 +5,15 @@ import { parseArgs } from "node:util";
 import { Effect, Schema } from "effect";
 import { type Command, UsageFailure, describeCause } from "../cli/command";
 import { windowLibraryBuild, windowLibraryPath } from "../window/binding";
-import { type ProbeSamples, probeReport } from "../window/probe";
+import { type ProbeSamples, measureBaseline, probeReport } from "../window/probe";
 import { GC_LOG_BEGIN, GC_LOG_END, firstHeap, gcPausesByHeap } from "../window/stats";
 
 class WindowFailure extends Schema.TaggedError<WindowFailure, { readonly brand: unique symbol }>()("WindowFailure", { problem: Schema.String }) {
   override get message() { return this.problem; }
 }
 
-const WARMUP_FRAMES = 30;
-const USAGE = "probe [--frames N] [--out DIR]   (wisp:docs/native-window-plan.md, box W1)";
+const WARMUP_FRAMES = 120;
+const USAGE = "probe [--baseline] [--frames N] [--out DIR]   (wisp:docs/native-window-plan.md, boxes W1 and W1b)";
 
 const attempt = <A>(run: () => Promise<A>) => Effect.tryPromise({ try: run, catch: (cause) => new WindowFailure({ problem: describeCause(cause) }) });
 
@@ -24,10 +24,10 @@ const buildLibrary = () => Effect.gen(function*() {
   if (build !== 0) return yield* new WindowFailure({ problem: `cargo build for wisp-window exited ${build}` });
 });
 
-/** `window probe`: runs a game's scene through the native window for N frames and writes the wake, step, scene, collection, asset-read and present percentiles. */
+/** `window probe`: runs a game's scene through the native window for N frames and writes the gated present counts with the wake, step, scene, collection, asset-read and present percentiles beside them; `--baseline` runs the render loop with no game. */
 export const makeWindow = (gameModule: string): Command => (args) => Effect.gen(function*() {
   const { values, positionals } = yield* Effect.try({
-    try: () => parseArgs({ args: [...args], allowPositionals: true, options: { frames: { type: "string" }, out: { type: "string" } } }),
+    try: () => parseArgs({ args: [...args], allowPositionals: true, options: { frames: { type: "string" }, out: { type: "string" }, baseline: { type: "boolean" } } }),
     catch: (cause) => new UsageFailure({ problem: describeCause(cause) }),
   });
   const frames = Number(values.frames ?? 600);
@@ -35,6 +35,12 @@ export const makeWindow = (gameModule: string): Command => (args) => Effect.gen(
   const out = resolve(values.out ?? "build/window-probe");
   yield* attempt(() => mkdir(out, { recursive: true }));
   yield* buildLibrary();
+  if (values.baseline === true) {
+    const baseline = yield* measureBaseline("Wisp Sample · window baseline", frames, WARMUP_FRAMES).pipe(Effect.mapError((cause) => new WindowFailure({ problem: describeCause(cause) })));
+    yield* attempt(() => writeFile(join(out, "probe.json"), JSON.stringify(baseline, null, 2) + "\n"));
+    console.log(JSON.stringify(baseline));
+    return;
+  }
   const rawPath = join(out, "samples.json"), logPath = join(out, "gc.log");
   const child = yield* attempt(async () => {
     const run = Bun.spawn([process.execPath, join(import.meta.dir, "../window/probeChild.ts"), gameModule, "sampleGame", "Wisp Sample · window probe", String(frames), String(WARMUP_FRAMES), rawPath], {

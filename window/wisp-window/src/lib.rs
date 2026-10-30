@@ -5,14 +5,17 @@
 
 mod clock;
 mod draw;
+mod frame;
 mod host;
 mod input;
 mod metrics;
+mod sync;
 
 use std::ffi::{c_char, c_void};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::ptr;
 use std::slice;
+use std::time::Duration;
 
 use host::{Host, Wake};
 
@@ -88,6 +91,19 @@ pub unsafe extern "C" fn wisp_window_start(handle: *mut c_void) {
     })
 }
 
+/// Starts the frames with no game: the render thread submits a canned scene at each sample point, which measures the display path alone.
+///
+/// # Safety
+/// `handle` comes from `wisp_window_open` and is not yet closed.
+#[no_mangle]
+pub unsafe extern "C" fn wisp_window_start_baseline(handle: *mut c_void) {
+    guard((), || {
+        if let Some(host) = host(handle) {
+            host.start_baseline();
+        }
+    })
+}
+
 /// Shows `text` as the window's status line (its title for now).
 ///
 /// # Safety
@@ -101,16 +117,31 @@ pub unsafe extern "C" fn wisp_window_status(handle: *mut c_void, status: *const 
     })
 }
 
-/// Hands the render thread the scene for the frame it woke Bun for.
+/// Hands the render thread the scene for the sample with frame number `frame`.
 ///
 /// # Safety
 /// `handle` is live and `scene` points to `length` readable bytes.
 #[no_mangle]
-pub unsafe extern "C" fn wisp_window_submit(handle: *mut c_void, scene: *const u8, length: usize, step: f64) {
+pub unsafe extern "C" fn wisp_window_submit(handle: *mut c_void, scene: *const u8, length: usize, step: f64, frame: u32) {
     guard((), || {
         if let (Some(host), false) = (host(handle), scene.is_null()) {
-            host.submit(slice::from_raw_parts(scene, length), step as u64);
+            host.submit(slice::from_raw_parts(scene, length), step as u64, frame);
         }
+    })
+}
+
+/// Takes the oldest queued sample into `out` as (frame, sampleNs, buttons) and returns 1, or returns 0 when there is none within `timeout_ms`; a zero timeout never waits.
+///
+/// # Safety
+/// `handle` is live and `out` has room for three f64s.
+#[no_mangle]
+pub unsafe extern "C" fn wisp_window_next_event(handle: *mut c_void, out: *mut f64, timeout_ms: u32) -> u32 {
+    guard(0, || {
+        let Some(sample) = host(handle).and_then(|host| host.next_sample(Duration::from_millis(timeout_ms as u64))) else { return 0 };
+        if !out.is_null() {
+            ptr::copy_nonoverlapping([sample.frame as f64, sample.sampled_ns as f64, sample.buttons as f64].as_ptr(), out, 3);
+        }
+        1
     })
 }
 
@@ -128,15 +159,6 @@ pub unsafe extern "C" fn wisp_window_metric(handle: *mut c_void, which: u32, out
         }
         series.len()
     })
-}
-
-/// How many frames ran without a scene arriving within the wait.
-///
-/// # Safety
-/// `handle` is live.
-#[no_mangle]
-pub unsafe extern "C" fn wisp_window_missed_scenes(handle: *mut c_void) -> f64 {
-    guard(0.0, || host(handle).map_or(0.0, |host| host.missed_scenes() as f64))
 }
 
 /// The adapter, backend and present mode as JSON; returns its full length.

@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import type { StandaloneFrame, StandaloneInput } from "../render/standaloneFrames";
-import type { WindowView } from "./binding";
+import type { InputSample, WindowView } from "./binding";
 import { spread } from "./stats";
 
 /** What `openStandalone` gives a window that drives the session itself: the scene before the first step, one step, and the end of the run. */
@@ -31,7 +31,8 @@ export interface FrameSeries {
 }
 
 export interface FrameLoop {
-  tick(sampleNs: number, handledNs: number, mask: number): void;
+  /** A wake from the render thread: records its latency, then steps every queued sample in order. */
+  wake(sampleNs: number, handledNs: number): void;
   /** Ends the run with `error` shown in the window, or with the figures when it is undefined. */
   complete(error?: string): void;
   /** Stops any figure still pending from reading the window, which is about to close. */
@@ -58,8 +59,8 @@ export function createFrameLoop(player: NativePlayer, window: WindowView, option
         gpu: window.info().adapter, ...window.info(), isolated: false, startupMs: options.startupMs, prepared: { models: prepared.models.length, step: prepared.step },
         frames: series.frames.length, elapsedMs, fps: series.frames.length * 1000 / elapsedMs,
         frameMs: spread(series.frames), intervalMs: spread(series.intervals), presentedMs: spread(Array.from(window.metric("presentedMs"))),
-        requestMs: spread(series.steps), renderMs: spread(Array.from(window.metric("drawMs"))), sampleToPresentMs: spread(Array.from(window.metric("sampleToPresentMs"))),
-        wakeMs: spread(series.wakes), dispatchMs: spread(series.dispatches), encodeMs: spread(series.encodes), parseMs: spread(Array.from(window.metric("parseMs"))), missedScenes: window.missedScenes(),
+        requestMs: spread(series.steps), renderMs: spread(Array.from(window.metric("drawMs"))), inputToPresentMs: spread(Array.from(window.metric("inputToPresentMs"))),
+        wakeMs: spread(series.wakes), dispatchMs: spread(series.dispatches), encodeMs: spread(series.encodes), parseMs: spread(Array.from(window.metric("parseMs"))),
         audioEvents: 0, audioReadyEvents: 0, audioPlayed: 0, audioDecodedAssets: 0, missingSounds: [] as string[],
         ...options.extraResult?.(series),
       };
@@ -67,32 +68,35 @@ export function createFrameLoop(player: NativePlayer, window: WindowView, option
     }))));
   };
 
+  const step = (sample: InputSample) => {
+    const began = performance.now();
+    if (firstFrameAt === 0) firstFrameAt = began;
+    series.dispatches.push((window.nowNs() - sample.sampleNs) / 1e6);
+    if (previous !== 0) series.intervals.push(began - previous);
+    previous = began;
+    try {
+      const input: StandaloneInput = options.scripted ? { buttons: [], axisX: 0, axisY: 0 } : { buttons: window.buttons(sample.mask), axisX: 0, axisY: 0 };
+      const frame = player.advance(input);
+      const stepped = performance.now();
+      window.submit(JSON.stringify(frame.scene), frame.step, sample.frame);
+      const submitted = performance.now();
+      series.steps.push(stepped - began);
+      series.encodes.push(submitted - stepped);
+      series.frames.push(submitted - began);
+      options.afterFrame?.(series.frames.length);
+      if (frame.done) complete();
+    } catch (cause) {
+      complete(thrown(cause));
+    }
+  };
+
   return {
     series,
     complete,
     dispose: () => { disposed = true; ended = true; },
-    tick(sampleNs, handledNs, mask) {
-      if (ended) return;
-      const began = performance.now();
-      if (firstFrameAt === 0) firstFrameAt = began;
+    wake(sampleNs, handledNs) {
       series.wakes.push((handledNs - sampleNs) / 1e6);
-      series.dispatches.push((window.nowNs() - sampleNs) / 1e6);
-      if (previous !== 0) series.intervals.push(began - previous);
-      previous = began;
-      try {
-        const input: StandaloneInput = options.scripted ? { buttons: [], axisX: 0, axisY: 0 } : { buttons: window.buttons(mask), axisX: 0, axisY: 0 };
-        const frame = player.advance(input);
-        const stepped = performance.now();
-        window.submit(JSON.stringify(frame.scene), frame.step);
-        const submitted = performance.now();
-        series.steps.push(stepped - began);
-        series.encodes.push(submitted - stepped);
-        series.frames.push(submitted - began);
-        options.afterFrame?.(series.frames.length);
-        if (frame.done) complete();
-      } catch (cause) {
-        complete(thrown(cause));
-      }
+      for (let sample = window.nextSample(); sample !== undefined && !ended; sample = window.nextSample()) step(sample);
     },
   };
 }

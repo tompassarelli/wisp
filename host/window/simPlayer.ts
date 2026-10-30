@@ -53,7 +53,6 @@ export const openSimPlayer = (options: SimPlayerOptions) => Effect.gen(function*
   window.status(`${options.title} · loading game…`);
   worker.postMessage({ type: "attach", handle: window.handle });
   window.status(`${options.title} · ${options.scripted ? "scripted run" : NATIVE_HELP}`);
-  window.start();
   return {
     startupMs: performance.now() - opened,
     completed: Effect.tryPromise({ try: () => completed.promise, catch: (cause) => new RenderFailure({ cause }) }).pipe(

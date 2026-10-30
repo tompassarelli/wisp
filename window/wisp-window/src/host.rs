@@ -1,7 +1,7 @@
 use std::panic::{catch_unwind, AssertUnwindSafe};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering};
 use std::sync::mpsc;
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
@@ -14,8 +14,10 @@ use winit::window::{Window, WindowId};
 
 use crate::clock::now_ns;
 use crate::draw::Gpu;
+use crate::frame::{Clock, FrameLoop, Mailbox, Mode, Sample, Seam, Submission, Surface};
 use crate::input::Held;
-use crate::metrics::{ms, Metrics};
+use crate::metrics::Metrics;
+use crate::sync::lock;
 
 /// Why Bun is being woken: a frame to step, the window going away, or the library failing.
 pub const WAKE_FRAME: u32 = 0;
@@ -24,7 +26,6 @@ pub const WAKE_ERROR: u32 = 2;
 
 pub type Wake = extern "C" fn(kind: u32, frame: u32, sample_ns: f64, buttons: u32);
 
-const SCENE_WAIT: Duration = Duration::from_millis(100);
 const WINDOW_WAIT: Duration = Duration::from_secs(10);
 
 enum Command {
@@ -32,30 +33,19 @@ enum Command {
     Exit,
 }
 
-struct Submission {
-    bytes: Vec<u8>,
-    step: u64,
-}
-
 struct Shared {
     held: Held,
-    running: AtomicBool,
+    mode: AtomicU8,
     closed: AtomicBool,
-    stopping: AtomicBool,
     size: AtomicU64,
-    scene: Mutex<Option<Submission>>,
-    arrived: Condvar,
-    metrics: Mutex<Metrics>,
+    mailbox: Arc<Mailbox>,
+    metrics: Arc<Mutex<Metrics>>,
     info: Mutex<String>,
     error: Mutex<Option<String>>,
 }
 
 fn pack(size: PhysicalSize<u32>) -> u64 {
     (size.width as u64) << 32 | size.height as u64
-}
-
-fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
-    mutex.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 pub struct Host {
@@ -154,13 +144,11 @@ impl Host {
     pub fn open(title: &str, width: u32, height: u32, wake: Wake) -> Result<Self, String> {
         let shared = Arc::new(Shared {
             held: Held::default(),
-            running: AtomicBool::new(false),
+            mode: AtomicU8::new(Mode::Loading as u8),
             closed: AtomicBool::new(false),
-            stopping: AtomicBool::new(false),
             size: AtomicU64::new(0),
-            scene: Mutex::new(None),
-            arrived: Condvar::new(),
-            metrics: Mutex::new(Metrics::default()),
+            mailbox: Arc::new(Mailbox::default()),
+            metrics: Arc::new(Mutex::new(Metrics::default())),
             info: Mutex::new(String::new()),
             error: Mutex::new(None),
         });
@@ -198,24 +186,27 @@ impl Host {
     }
 
     pub fn start(&self) {
-        self.shared.running.store(true, Ordering::Release);
+        self.shared.mode.store(Mode::Game as u8, Ordering::Release);
+    }
+
+    pub fn start_baseline(&self) {
+        self.shared.mode.store(Mode::Baseline as u8, Ordering::Release);
     }
 
     pub fn set_status(&self, text: &str) {
         let _ = self.proxy.send_event(Command::Status(text.to_string()));
     }
 
-    pub fn submit(&self, bytes: &[u8], step: u64) {
-        *lock(&self.shared.scene) = Some(Submission { bytes: bytes.to_vec(), step });
-        self.shared.arrived.notify_one();
+    pub fn submit(&self, bytes: &[u8], step: u64, frame: u32) {
+        self.shared.mailbox.submit(Submission { bytes: bytes.to_vec(), step, frame });
+    }
+
+    pub fn next_sample(&self, timeout: Duration) -> Option<Sample> {
+        self.shared.mailbox.next_sample(timeout)
     }
 
     pub fn metric(&self, which: u32) -> Vec<f64> {
         lock(&self.shared.metrics).series(which).to_vec()
-    }
-
-    pub fn missed_scenes(&self) -> u64 {
-        lock(&self.shared.metrics).missed_scenes
     }
 
     pub fn info(&self) -> String {
@@ -228,8 +219,7 @@ impl Host {
 
     /// Stops both threads and waits for them, so the wake callback is never called again once this returns.
     pub fn close(mut self) {
-        self.shared.stopping.store(true, Ordering::Release);
-        self.shared.arrived.notify_all();
+        self.shared.mailbox.stop();
         let _ = self.proxy.send_event(Command::Exit);
         if let Some(thread) = self.render_thread.take() {
             let _ = thread.join();
@@ -237,6 +227,66 @@ impl Host {
         if let Some(thread) = self.window_thread.take() {
             let _ = thread.join();
         }
+    }
+}
+
+struct WindowSurface {
+    gpu: Gpu,
+    window: Arc<Window>,
+    shared: Arc<Shared>,
+}
+
+impl Surface for WindowSurface {
+    type Image = wgpu::SurfaceTexture;
+
+    fn acquire(&mut self) -> Option<Self::Image> {
+        let size = self.shared.size.load(Ordering::Acquire);
+        self.gpu.resize((size >> 32) as u32, size as u32);
+        let image = self.gpu.acquire();
+        if image.is_none() {
+            thread::sleep(Duration::from_millis(4));
+        }
+        image
+    }
+
+    fn draw(&self, image: &Self::Image, step: u64) {
+        self.gpu.draw(image, step);
+    }
+
+    fn present(&self, image: Self::Image) {
+        self.window.pre_present_notify();
+        self.gpu.present(image);
+    }
+}
+
+struct LibraryClock;
+
+impl Clock for LibraryClock {
+    fn now_ns(&self) -> u64 {
+        now_ns()
+    }
+}
+
+struct WakeSeam {
+    shared: Arc<Shared>,
+    wake: Wake,
+}
+
+impl Seam for WakeSeam {
+    fn buttons(&self) -> u32 {
+        self.shared.held.sample()
+    }
+
+    fn wake(&self, sample: &Sample) {
+        (self.wake)(WAKE_FRAME, sample.frame, sample.sampled_ns as f64, sample.buttons);
+    }
+}
+
+fn mode_of(shared: &Shared) -> Mode {
+    match shared.mode.load(Ordering::Acquire) {
+        1 => Mode::Game,
+        2 => Mode::Baseline,
+        _ => Mode::Loading,
     }
 }
 
@@ -248,7 +298,7 @@ fn render_loop(shared: Arc<Shared>, windows: mpsc::Receiver<Arc<Window>>, wake: 
         wake(WAKE_ERROR, 0, 0.0, 0);
         return;
     };
-    let mut gpu = match Gpu::new(window.clone()) {
+    let gpu = match Gpu::new(window.clone()) {
         Ok(gpu) => gpu,
         Err(error) => {
             *lock(&shared.error) = Some(error);
@@ -258,73 +308,24 @@ fn render_loop(shared: Arc<Shared>, windows: mpsc::Receiver<Arc<Window>>, wake: 
         }
     };
     *lock(&shared.info) = format!("{{\"adapter\":{:?},\"backend\":{:?},\"presentMode\":\"Fifo\",\"desiredMaximumFrameLatency\":1}}", gpu.adapter, gpu.backend);
-    let (mut frame, mut step, mut previous_acquire) = (0u32, 0u64, None::<u64>);
-    while !shared.stopping.load(Ordering::Acquire) {
+    let surface = WindowSurface { gpu, window, shared: shared.clone() };
+    let mut frames = FrameLoop::new(surface, LibraryClock, shared.mailbox.clone(), shared.metrics.clone());
+    let seam = WakeSeam { shared: shared.clone(), wake };
+    while !shared.mailbox.is_stopping() {
         if shared.closed.load(Ordering::Acquire) {
-            wake(WAKE_CLOSED, frame, 0.0, 0);
+            wake(WAKE_CLOSED, 0, 0.0, 0);
             wait_for_stop(&shared);
             return;
         }
-        let size = shared.size.load(Ordering::Acquire);
-        gpu.resize((size >> 32) as u32, size as u32);
-        let asked = now_ns();
-        let Some(texture) = gpu.acquire() else {
-            thread::sleep(Duration::from_millis(4));
-            continue;
-        };
-        let acquired = now_ns();
-        let mut parse = None;
-        let mut sampled = acquired;
-        if shared.running.load(Ordering::Acquire) {
-            sampled = now_ns();
-            *lock(&shared.scene) = None;
-            wake(WAKE_FRAME, frame, sampled as f64, shared.held.sample());
-            frame += 1;
-            match wait_for_scene(&shared) {
-                Some(submission) => {
-                    let began = now_ns();
-                    let valid = serde_json::from_slice::<serde_json::Value>(&submission.bytes).is_ok();
-                    parse = Some(ms(began, now_ns()));
-                    if valid {
-                        step = submission.step;
-                    } else {
-                        *lock(&shared.error) = Some("the scene was not JSON".into());
-                    }
-                }
-                None => lock(&shared.metrics).missed_scenes += 1,
-            }
+        frames.frame(mode_of(&shared), &seam);
+        if let Some(problem) = frames.problem.take() {
+            *lock(&shared.error) = Some(problem);
         }
-        let drawing = now_ns();
-        gpu.draw(&texture, step);
-        let drawn = now_ns();
-        window.pre_present_notify();
-        gpu.present(texture);
-        let presented = now_ns();
-        let mut metrics = lock(&shared.metrics);
-        if let Some(before) = previous_acquire {
-            metrics.presented_ms.push(ms(before, acquired));
-        }
-        metrics.acquire_ms.push(ms(asked, acquired));
-        if let Some(parse) = parse {
-            metrics.parse_ms.push(parse);
-            metrics.sample_to_present_ms.push(ms(sampled, presented));
-        }
-        metrics.draw_ms.push(ms(drawing, drawn));
-        previous_acquire = Some(acquired);
     }
 }
 
 fn wait_for_stop(shared: &Arc<Shared>) {
-    while !shared.stopping.load(Ordering::Acquire) {
+    while !shared.mailbox.is_stopping() {
         thread::sleep(Duration::from_millis(5));
     }
-}
-
-fn wait_for_scene(shared: &Arc<Shared>) -> Option<Submission> {
-    let guard = lock(&shared.scene);
-    let (mut guard, _) = shared
-        .arrived
-        .wait_timeout_while(guard, SCENE_WAIT, |scene| scene.is_none() && !shared.stopping.load(Ordering::Acquire))
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    guard.take()
 }

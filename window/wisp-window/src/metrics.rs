@@ -1,27 +1,37 @@
-/// What the render thread measured, one sample per frame (or per submitted scene), read back by Bun at the end of a run.
-#[derive(Default)]
-pub struct Metrics {
-    pub presented_ms: Vec<f64>,
-    pub acquire_ms: Vec<f64>,
-    pub parse_ms: Vec<f64>,
-    pub draw_ms: Vec<f64>,
-    pub sample_to_present_ms: Vec<f64>,
-    pub missed_scenes: u64,
+#[derive(Clone, Copy)]
+pub enum Series {
+    Presented,
+    Acquire,
+    Parse,
+    Draw,
+    InputToPresent,
+    MissedPresents,
+    MissedPresentsAfterLateScene,
+    LateScenes,
+    DroppedSamples,
 }
 
-/// The metric series `wisp_window_metric` serves, by the number Bun asks for.
-pub const SERIES: [&str; 5] = ["presentedMs", "acquireMs", "parseMs", "drawMs", "sampleToPresentMs"];
+/// The metric series `wisp_window_metric` serves, by the number Bun asks for, in `Series` order. The last four hold a 1 for each frame that counted and a 0 for each that did not.
+pub const SERIES: [&str; 9] =
+    ["presentedMs", "acquireMs", "parseMs", "drawMs", "inputToPresentMs", "missedPresents", "missedPresentsAfterLateScene", "lateScenes", "droppedSamples"];
+
+/// What the render thread measured, one sample per frame, read back by Bun at the end of a run.
+#[derive(Default)]
+pub struct Metrics {
+    series: [Vec<f64>; 9],
+}
 
 impl Metrics {
+    pub fn push(&mut self, which: Series, value: f64) {
+        self.series[which as usize].push(value);
+    }
+
+    pub fn flag(&mut self, which: Series, set: bool) {
+        self.push(which, if set { 1.0 } else { 0.0 });
+    }
+
     pub fn series(&self, which: u32) -> &[f64] {
-        match which {
-            0 => &self.presented_ms,
-            1 => &self.acquire_ms,
-            2 => &self.parse_ms,
-            3 => &self.draw_ms,
-            4 => &self.sample_to_present_ms,
-            _ => &[],
-        }
+        self.series.get(which as usize).map_or(&[], Vec::as_slice)
     }
 }
 

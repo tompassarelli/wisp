@@ -23,8 +23,8 @@ export const openNativePlayer = (player: NativePlayer, options: NativePlayOption
     Effect.try({
       try: () => openNativeWindow({
         ...options,
-        onWake: (kind, _frame, sampleNs, mask, handledNs) => {
-          if (kind === WAKE_FRAME) loop?.tick(sampleNs, handledNs, mask);
+        onWake: (kind, _frame, sampleNs, _mask, handledNs) => {
+          if (kind === WAKE_FRAME) loop?.wake(sampleNs, handledNs);
           else if (kind === WAKE_ERROR) loop?.complete(window.error() ?? "the window failed");
           else closing.resolve();
         },

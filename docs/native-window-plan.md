@@ -789,7 +789,7 @@ yet are created by that box. Each graphics run takes the gpu lease as
   Done when (restated in "Seam (revised)"; W1b meets it):
   `cd ~/code/wisp/main && bun wisp window probe --frames 600 --out build/window-probe && jq -e '.missedPresents == 0 and .lateScenes <= 6 and .droppedSamples == 0' build/window-probe/probe.json`
 - **W1b The render thread owns the frame: scene deadline and missed presents**
-  ([wisp#116](https://github.com/tompassarelli/wisp/issues/116)). It
+  ([wisp#116](https://github.com/tompassarelli/wisp/issues/116)) (built). It
   builds "Who owns the frame" behind today's wake:
   - the frame loop behind a surface and clock it can be tested against, and
     the late-scene test with its fake surface;

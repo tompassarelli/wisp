@@ -249,26 +249,34 @@ Chrome, and `chrome` stays the default. A game reads the flag with
 `WISP_WINDOW_LIBRARY`, else beside the executable, else `window/target/release`
 (build it with `cd window && cargo build --release`). The library runs the
 window and a render thread; the render thread acquires the next `Fifo` image,
-samples the held keys and wakes Bun with a `threadsafe` `JSCallback`. With
+samples the held keys onto a queue of 8 and wakes Bun with a `threadsafe` `JSCallback`; Bun takes the queued samples in order with `wisp_window_next_event`, a non-blocking take. With
 `nativeGame` in the options (the module path and export name that a worker
 thread imports the game from, because a game object cannot cross threads) the
 main thread only passes each wake to a worker thread through shared memory, and
 the worker steps the map once and gives the scene back as JSON in one call, so
 the game's garbage collections never delay a wake; a networked run, or a call
-without `nativeGame`, steps on the main thread. The render thread draws the
-scene. Box W1 draws only a clear colour and the step as 24 lit squares, and it
+without `nativeGame`, steps on the main thread. The render thread waits for each sample's scene until the scene deadline
+(the frame's acquire plus the measured frame time T, minus 4 ms), draws the newest
+scene that has arrived and redraws the last one when none has, so a late game
+never makes a present miss its vblank; a scene that missed its deadline is
+counted in `lateScenes` and drawn on a later frame. Box W1 draws only a clear colour and the step as 24 lit squares, and it
 shows the loading and ready text in the window's title. The scene is parsed in
 the library on every frame, so the cost of encoding and parsing it is measured
 before the renderer is ported. Keyboard only: pads, sound, captures and
 `--headless` stay with Chrome (`--capture-frames` with the native window is
 refused). `standalone.json` keeps the page's fields and adds `adapter`,
 `backend`, `presentMode`, `desiredMaximumFrameLatency`, `wakeMs`, `encodeMs`,
-`parseMs`, `sampleToPresentMs` and `missedScenes`; `presentedMs` is the interval
-between two images the display handed back. Closing the window ends the session.
+`parseMs`, `inputToPresentMs` (the present time minus the sample time of the scene
+drawn), `missedPresents` (an acquire interval over 1.5 T, with
+`missedPresentsAfterLateScene` for those that follow a late scene), `lateScenes`
+and `droppedSamples`; `presentedMs` is the interval between two images the
+display handed back. Closing the window ends the session.
 
-`bun wisp window probe [--frames N] [--out DIR]` runs the sample map's scene
-through the production player and window on a display, for N frames after 30
-warm-up frames, and writes `probe.json` with p50, p95, p99 and max for the wake
+`bun wisp window probe [--baseline] [--frames N] [--out DIR]` runs the sample map's scene
+through the production player and window on a display, for N frames after 120
+warm-up frames, and writes `probe.json` with the counts `missedPresents`,
+`lateScenes` and `droppedSamples` and a `gates` object that holds their bounds
+(0, at most 6 and 0), and beside them p50, p95, p99 and max for the wake
 (Rust sample to Bun handling), the step, the scene (encode plus parse), the
 `readAsset` calls, the present interval and the collection pauses. The pauses
 come from JavaScriptCore's collector log (`BUN_JSC_logGC`), because Bun 1.3.13
@@ -279,8 +287,8 @@ process. Measured on the private desktop's NVIDIA adapter (30 October 2026): the
 wake p99 is 0.7 ms when the machine is quiet and 3 to 4 ms under other load, the
 scene p99 under 1.6 ms, the present interval p95 17.5 to 18 ms, and Bun
 collects about once per frame while the sample map steps (650 collections in 630
-frames, p50 about 1 ms, max 6 to 60 ms), so the probe's collection-pause figure
-is the open item of box W1.
+frames, p50 about 1 ms, max 6 to 60 ms); the scene deadline, not the collection
+count, is what keeps a present on time (box W1b).
 
 ### Assets from a player's own files
 

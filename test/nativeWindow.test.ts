@@ -13,7 +13,7 @@ test("[spec docs/play.md] --window picks chrome or the native window and leaves 
 });
 
 // winit builds one event loop per process, so a process opens one native window.
-test.skipIf(!hasDisplay)("[spec docs/native-window-plan.md] a scene Bun never hands back counts as missed, and closing the window mid-frame returns promptly with no wake after", async () => {
+test.skipIf(!hasDisplay)("[spec docs/native-window-plan.md] a scene Bun never hands back counts as late, and closing the window mid-frame returns promptly with no wake after", async () => {
   const woken: string[] = [];
   const midFrame = Promise.withResolvers<void>();
   const window = openNativeWindow({
@@ -25,7 +25,7 @@ test.skipIf(!hasDisplay)("[spec docs/native-window-plan.md] a scene Bun never ha
   });
   window.start();
   await midFrame.promise;
-  expect(window.missedScenes()).toBeGreaterThanOrEqual(1);
+  expect(window.metric("lateScenes").some((late) => late === 1)).toBe(true);
   const began = performance.now();
   window.close();
   expect(performance.now() - began).toBeLessThan(1000);
