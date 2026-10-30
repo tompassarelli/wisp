@@ -17,7 +17,11 @@ map-pack extract-list MAP.w3x LIST
 Each line of `LIST` is `FILE<TAB>ARCHIVE_NAME`. One process opens the archive
 once, adds or extracts every line, and closes it once. Later lines win, so
 generated files listed after the imports keep precedence. A full file table
-is doubled and the add retried, as often as the list needs. The build then
+is doubled and the add retried, as often as the list needs. A list that
+replaced an existing entry compacts the archive before closing it (about 1 s
+for a 70 MB map), because StormLib leaves a replaced entry's old bytes in
+place: a cached asset archive patched build after build carried 4.4 MB of them
+into Smashcraft's 72 MB map (smashcraft#832). The build then
 extracts every entry the same way and compares it byte for byte with its
 source file.
 

@@ -52,7 +52,7 @@ static long readLine(char **line, size_t *capacity, FILE *stream) {
     return (long)length;
 }
 
-static int eachListed(HANDLE archive, const char *list, bool replace) {
+static int eachListed(HANDLE archive, const char *list, bool replace, bool *replaced) {
     FILE *lines = fopen(list, "r");
     if (lines == NULL) {
         fprintf(stderr, "Cannot open entry list %s\n", list);
@@ -74,6 +74,7 @@ static int eachListed(HANDLE archive, const char *list, bool replace) {
             break;
         }
         *tab = '\0';
+        if (replace && SFileHasFile(archive, tab + 1)) *replaced = true;
         bool ok = replace ? addEntry(archive, line, tab + 1) : SFileExtractFile(archive, tab + 1, line, SFILE_OPEN_FROM_MPQ);
         if (!ok) {
             fprintf(stderr, "Cannot %s %s (%u)\n", replace ? "replace" : "extract", tab + 1, GetLastError());
@@ -107,7 +108,13 @@ int main(int argc, char **argv) {
     }
     int status;
     if (listed) {
-        status = eachListed(archive, argv[3], replace);
+        bool replaced = false;
+        status = eachListed(archive, argv[3], replace, &replaced);
+        /* A replaced entry leaves its old bytes in the archive until it is compacted. */
+        if (status == 0 && replaced && !SFileCompactArchive(archive, NULL, false)) {
+            fprintf(stderr, "Cannot compact map archive (%u)\n", GetLastError());
+            status = 1;
+        }
     } else {
         const char *archiveName = argc == 5 ? argv[4] : "war3map.lua";
         bool ok = replace ? addEntry(archive, argv[3], archiveName) : SFileExtractFile(archive, archiveName, argv[3], SFILE_OPEN_FROM_MPQ);
