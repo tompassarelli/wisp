@@ -14,7 +14,7 @@ class PackageFailure extends Schema.TaggedError<PackageFailure, { readonly brand
 const attempt = <A>(run: () => Promise<A>) => Effect.tryPromise({ try: run, catch: cause => new PackageFailure({ cause }) }).pipe(Effect.uninterruptible);
 
 const root = resolve(import.meta.dir, "../..");
-const packagePaths = ["host", "plugins", "src", "native", "docs", "builds", "vendor", "relay", "README.md", "CHANGELOG.md", "LICENSE", "AGENTS.md", "typescript-toolchain.lock", "tsconfig.library.json"];
+const packagePaths = ["host", "plugins", "src", "native", "docs", "builds", "vendor", "relay", "window", "README.md", "CHANGELOG.md", "LICENSE", "AGENTS.md", "typescript-toolchain.lock", "tsconfig.library.json"];
 
 async function copyTree(source: string, destination: string): Promise<void> {
   await mkdir(destination, { recursive: true });
@@ -71,7 +71,7 @@ export const packageProgram = (output: string, revision?: string) => Effect.scop
     for (const path of packagePaths) {
       const source = join(root, path);
       const destination = join(staging, path);
-      if (["host", "plugins", "src", "native", "docs", "builds", "vendor", "relay"].includes(path)) await copyTree(source, destination);
+      if (["host", "plugins", "src", "native", "docs", "builds", "vendor", "relay", "window"].includes(path)) await copyTree(source, destination);
       else await copyFile(source, destination);
     }
     await writeEditorPlugin(join(staging, "plugins/number-rules-service.cjs"));

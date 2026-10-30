@@ -526,6 +526,21 @@ and Smashcraft's player build takes it from there. Whether
 executable is checked in W7; shipping it beside is the default either way.
 Publishing remains Tom's call, made when smashcraft#807 is next.
 
+### Where a consumer gets the library (wisp#130)
+
+A game that vendors Wisp's package has no checkout, so the package ships `window/`'s
+source and the player finds or builds the library itself. `windowLibraryPath()`
+(wisp:host/window/binding.ts) takes `WISP_WINDOW_LIBRARY`, else the library beside the
+executable, else `window/target/release` in a checkout, else the build in
+`~/.cache/wisp/window/HASH/release/`, where HASH covers the Cargo files, the flake and
+the crate's source and assets. `play --standalone --window native` and `window probe` first run
+`prepareWindowLibrary` (wisp:host/window/library.ts): when nothing exists at that path it runs
+`cargo build --release --locked` there with `CARGO_TARGET_DIR` set to the cache folder, once per
+revision of the source. On Linux with nix the command runs in `window/flake.nix`'s dev shell, which
+gives the toolchain and cmake and puts the Wayland, X11, xkbcommon, udev, Vulkan and GL store
+paths into the library's RUNPATH (`RUSTFLAGS`), so the process needs no `LD_LIBRARY_PATH`.
+On Windows cargo builds with the runner's toolchain and no runtime libraries are needed.
+
 ### Migration order
 
 `--window native` is added beside the Chrome window, which stays the default

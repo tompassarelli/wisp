@@ -93,7 +93,7 @@ jobs:
   # artifact. Skipped while window/ does not exist.
   window:
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     defaults:
       run:
         shell: bash
@@ -134,3 +134,10 @@ jobs:
             window/target/release/wisp_window.dll
             ${{ runner.temp }}/window-embed/embed.json
             ${{ runner.temp }}/window-probe
+      - name: With no library in the checkout the probe builds one into the cache and opens it (wisp#130)
+        if: steps.crate.outputs.present == 'true'
+        run: |
+          rm window/target/release/wisp_window.dll
+          bun wisp window probe --frames 60 --out "$RUNNER_TEMP/window-probe-cache"
+          cache=$(bun -e 'import { cacheHome } from "./host/os/xdg"; console.log(cacheHome())')
+          ls "$cache"/wisp/window/*/release/wisp_window.dll

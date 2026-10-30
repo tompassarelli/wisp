@@ -1,10 +1,9 @@
-import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { Effect, Schema } from "effect";
 import { type Command, UsageFailure, describeCause } from "../cli/command";
-import { windowLibraryBuild, windowLibraryPath } from "../window/binding";
+import { prepareWindowLibrary } from "../window/binding";
 import { type ProbeSamples, measureBaseline, probeReport } from "../window/probe";
 import { GC_LOG_BEGIN, GC_LOG_END, firstHeap, gcPausesByHeap } from "../window/stats";
 
@@ -17,13 +16,6 @@ const USAGE = "probe [--baseline] [--frames N] [--out DIR]   (wisp:docs/native-w
 
 const attempt = <A>(run: () => Promise<A>) => Effect.tryPromise({ try: run, catch: (cause) => new WindowFailure({ problem: describeCause(cause) }) });
 
-const buildLibrary = () => Effect.gen(function*() {
-  if (existsSync(windowLibraryPath())) return;
-  console.log("building wisp-window (cargo build --release)");
-  const build = yield* attempt(() => Bun.spawn(["cargo", "build", "--release", "--manifest-path", windowLibraryBuild.manifest], { stdout: "inherit", stderr: "inherit" }).exited);
-  if (build !== 0) return yield* new WindowFailure({ problem: `cargo build for wisp-window exited ${build}` });
-});
-
 /** `window probe`: runs a game's scene through the native window for N frames and writes the gated present counts with the wake, step, scene, collection, asset-read and present percentiles beside them; `--baseline` runs the render loop with no game. */
 export const makeWindow = (gameModule: string): Command => (args) => Effect.gen(function*() {
   const { values, positionals } = yield* Effect.try({
@@ -34,7 +26,7 @@ export const makeWindow = (gameModule: string): Command => (args) => Effect.gen(
   if (positionals[0] !== "probe" || positionals.length !== 1 || !Number.isSafeInteger(frames) || frames < 1) return yield* new UsageFailure({ problem: USAGE });
   const out = resolve(values.out ?? "build/window-probe");
   yield* attempt(() => mkdir(out, { recursive: true }));
-  yield* buildLibrary();
+  yield* prepareWindowLibrary.pipe(Effect.mapError((cause) => new WindowFailure({ problem: cause.message })));
   if (values.baseline === true) {
     const baseline = yield* measureBaseline("Wisp Sample · window baseline", frames, WARMUP_FRAMES).pipe(Effect.mapError((cause) => new WindowFailure({ problem: describeCause(cause) })));
     yield* attempt(() => writeFile(join(out, "probe.json"), JSON.stringify(baseline, null, 2) + "\n"));

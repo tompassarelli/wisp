@@ -1,17 +1,22 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { type Pointer, dlopen } from "bun:ffi";
+import { Effect } from "effect";
+import { buildWindowLibrary, cachedWindowLibrary } from "./library";
 
 const root = join(import.meta.dir, "../..");
+const windowDirectory = join(root, "window");
 const libraryFile = process.platform === "win32" ? "wisp_window.dll" : "libwisp_window.so";
 
-/** The `wisp-window` library beside the player executable, else `WISP_WINDOW_LIBRARY`, else the release build in this checkout. */
+/** `WISP_WINDOW_LIBRARY`, else the library beside the player executable, else the release build in this checkout, else the build of this package's `window/` source in the user cache (`prepareWindowLibrary` makes it). */
 export function windowLibraryPath(): string {
   const beside = join(process.execPath, "..", libraryFile);
-  return process.env.WISP_WINDOW_LIBRARY ?? (existsSync(beside) ? beside : join(root, "window/target/release", libraryFile));
+  const checkout = join(root, "window/target/release", libraryFile);
+  return process.env.WISP_WINDOW_LIBRARY ?? (existsSync(beside) ? beside : existsSync(checkout) ? checkout : cachedWindowLibrary(windowDirectory, libraryFile));
 }
 
-export const windowLibraryBuild = { manifest: join(root, "window/Cargo.toml"), path: windowLibraryPath };
+/** `windowLibraryPath()`, built first from this package's `window/` source when it is not there and `WISP_WINDOW_LIBRARY` is unset. */
+export const prepareWindowLibrary = Effect.suspend(() => process.env.WISP_WINDOW_LIBRARY === undefined ? buildWindowLibrary(windowLibraryPath(), windowDirectory) : Effect.succeed(windowLibraryPath()));
 
 const symbols = {
   wisp_window_now_ns: { args: [], returns: "f64" },

@@ -246,8 +246,9 @@ The window a person plays opens without a lease, and `gpuLease: false` in `Stand
 Chrome, and `chrome` stays the default. A game reads the flag with
 `standaloneWindowArgument` and passes `window` in the options of
 `runStandalone`. Bun loads the library with `bun:ffi` from
-`WISP_WINDOW_LIBRARY`, else beside the executable, else `window/target/release`
-(build it with `cd window && cargo build --release`). The library runs the
+`WISP_WINDOW_LIBRARY`, else beside the executable, else `window/target/release`, else
+the build of the package's `window/` source in `~/.cache/wisp/window`, which the command builds on
+its first run ([Where a consumer gets the library](native-window-plan.md#where-a-consumer-gets-the-library-wisp130)). The library runs the
 window and a render thread; the render thread acquires the next `Fifo` image and
 samples the held keys onto a queue of 8. The game's thread takes the samples in
 order with `wisp_window_next_event`, which blocks on a Rust condvar until one is

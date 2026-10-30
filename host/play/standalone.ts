@@ -16,6 +16,7 @@ import { type NetListening, type NetRole, type NetSession, runNetPeer } from "..
 import { captureScene, sceneWithUnits, RenderFailure, type HeadlessRenderProject } from "../render/headlessRender";
 import { browserBundle } from "../render/browserBundle";
 import { createSoundResolver } from "../render/standaloneSound";
+import { prepareWindowLibrary } from "../window/binding";
 import { openSimPlayer } from "../window/simPlayer";
 import type { NativeGameModule } from "../window/simProtocol";
 import type { StandaloneFrame, StandaloneInput } from "../render/standaloneFrames";
@@ -299,6 +300,7 @@ const runNativeStandalone = (game: StandaloneGame, options: StandaloneOptions) =
   if (options.net !== undefined) return yield* failed("the native window can't play over --net until the netcode moves onto it (wisp#107); use --window chrome");
   if (options.nativeGame === undefined) return yield* failed("the native window needs nativeGame, the module and export a worker thread imports the game from");
   if ((options.captureFrames ?? []).length > 0) return yield* failed("the native window can't capture frames yet; use --window chrome");
+  yield* prepareWindowLibrary.pipe(Effect.mapError((cause) => failed(cause.message)));
   const sim = yield* openSimPlayer({ title: game.title, width: game.render.width ?? 1280, height: game.render.height ?? 720, scripted: options.script !== undefined, game: options.nativeGame, standalone: options });
   printSummary(yield* Effect.raceFirst(sim.completed, sim.closed));
 });

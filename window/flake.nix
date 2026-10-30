@@ -17,6 +17,7 @@
         packages = [ (pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml) pkgs.pkg-config pkgs.cmake ];
         buildInputs = [ pkgs.udev pkgs.libxkbcommon ];
         LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath runtimeLibraries;
+        RUSTFLAGS = "-C link-arg=-Wl,-rpath,${pkgs.lib.makeLibraryPath runtimeLibraries}";
       };
     };
 }
