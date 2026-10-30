@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use winit::window::Window;
 
-use crate::capture;
+use crate::{adapter, capture};
 use crate::present::PresentSetting;
 use crate::surface_target::SurfaceTarget;
 use crate::render::{fitted, DrawScene, Renderer};
@@ -93,13 +93,7 @@ impl Gpu {
         let size = window.inner_size();
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
         let surface = instance.create_surface(SurfaceTarget::new(window)).map_err(|e| format!("surface: {e}"))?;
-        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-            power_preference: wgpu::PowerPreference::HighPerformance,
-            compatible_surface: Some(&surface),
-            force_fallback_adapter: false,
-            apply_limit_buckets: false,
-        }))
-        .map_err(|e| format!("adapter: {e}"))?;
+        let adapter = adapter::pick(&instance, Some(&surface))?;
         let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())).map_err(|e| format!("device: {e}"))?;
         let mut config = surface.get_default_config(&adapter, size.width.max(1), size.height.max(1)).ok_or("surface not supported by the adapter")?;
         let formats = surface.get_capabilities(&adapter).formats;
@@ -280,26 +274,9 @@ impl Gpu {
             return;
         }
         let (width, height) = (self.config.width, self.config.height);
-        let row = (width * 4).next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
-        let buffer = self.device.create_buffer(&wgpu::BufferDescriptor { label: Some("capture"), size: (row * height) as u64, usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ, mapped_at_creation: false });
-        let mut encoder = self.device.create_command_encoder(&Default::default());
-        encoder.copy_texture_to_buffer(
-            texture.as_image_copy(),
-            wgpu::TexelCopyBufferInfo { buffer: &buffer, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(row), rows_per_image: Some(height) } },
-            wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
-        );
-        self.queue.submit([encoder.finish()]);
-        buffer.slice(..).map_async(wgpu::MapMode::Read, |_| ());
-        let _ = self.device.poll(wgpu::PollType::wait_indefinitely());
-        let Ok(mapped) = buffer.slice(..).get_mapped_range() else { return };
         let bgra = matches!(self.config.format, wgpu::TextureFormat::Bgra8Unorm | wgpu::TextureFormat::Bgra8UnormSrgb);
-        let mut rgba = Vec::with_capacity((width * height * 4) as usize);
-        for line in mapped.chunks(row as usize).take(height as usize) {
-            for pixel in line[..(width * 4) as usize].chunks(4) {
-                rgba.extend_from_slice(&if bgra { [pixel[2], pixel[1], pixel[0], 255] } else { [pixel[0], pixel[1], pixel[2], 255] });
-            }
-        }
-        let _ = capture::write(&capture.path, width, height, &rgba);
+        let Some(picture) = capture::read_picture(&self.device, &self.queue, texture, (width, height), bgra) else { return };
+        let _ = capture::write(&capture.path, picture.width, picture.height, &picture.rgba);
     }
 }
 

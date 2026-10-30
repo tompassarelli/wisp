@@ -62,6 +62,35 @@ pub fn write(path: &Path, width: u32, height: u32, rgba: &[u8]) -> std::io::Resu
     std::fs::write(path, png(width, height, rgba))
 }
 
+pub struct Picture {
+    pub width: u32,
+    pub height: u32,
+    pub rgba: Vec<u8>,
+}
+
+pub fn read_picture(device: &wgpu::Device, queue: &wgpu::Queue, texture: &wgpu::Texture, size: (u32, u32), bgra: bool) -> Option<Picture> {
+    let (width, height) = size;
+    let row = (width * 4).next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
+    let buffer = device.create_buffer(&wgpu::BufferDescriptor { label: Some("capture"), size: (row * height) as u64, usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ, mapped_at_creation: false });
+    let mut encoder = device.create_command_encoder(&Default::default());
+    encoder.copy_texture_to_buffer(
+        texture.as_image_copy(),
+        wgpu::TexelCopyBufferInfo { buffer: &buffer, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(row), rows_per_image: Some(height) } },
+        wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+    );
+    queue.submit([encoder.finish()]);
+    buffer.slice(..).map_async(wgpu::MapMode::Read, |_| ());
+    let _ = device.poll(wgpu::PollType::wait_indefinitely());
+    let mapped = buffer.slice(..).get_mapped_range().ok()?;
+    let mut rgba = Vec::with_capacity((width * height * 4) as usize);
+    for line in mapped.chunks(row as usize).take(height as usize) {
+        for pixel in line[..(width * 4) as usize].chunks(4) {
+            rgba.extend_from_slice(&if bgra { [pixel[2], pixel[1], pixel[0], 255] } else { [pixel[0], pixel[1], pixel[2], 255] });
+        }
+    }
+    Some(Picture { width, height, rgba })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

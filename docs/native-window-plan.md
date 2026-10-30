@@ -75,6 +75,24 @@ names, a C compiler, cmake for SDL3, pkg-config, and the libudev and libxkbcommo
 evdev driver and winit use, and puts the Wayland, X11 and Vulkan runtime libraries on
 `LD_LIBRARY_PATH` for `bun wisp window probe`.
 
+gex45 (RTX PRO 4000) is the GPU host for the window's GPU tests, so they stay
+off the laptop's GPU and CPU while someone plays. `WISP_GPU=NAME` picks the
+adapter whose name contains NAME and fails naming the adapters found when none
+does (it also applies to the window itself); without it the high-performance
+adapter is used. From a checkout on gex45:
+
+```
+cd window && CARGO_TARGET_DIR=$HOME/.cache/cargo-target/wisp-window WISP_GPU=NVIDIA nix develop --command cargo test -p wisp-window
+```
+
+The `offscreen` tests draw with no window or surface and print the adapter they
+ran on (`-- --nocapture` shows `adapter: NVIDIA RTX PRO 4000 Blackwell SFF
+Edition (Vulkan, DiscreteGpu)`). The shared target directory outlives lane
+worktrees: the first build there took 7 min 45 s and a rebuild after an edit
+took 5.9 s. gex45 has no C compiler outside the dev shell, so cargo runs only
+inside `nix develop`. A windowed run (`wisp window probe`) goes in a private
+desktop, which renders on the same GPU.
+
 As first built, each frame the render thread sampled input and woke Bun
 through a `threadsafe` `JSCallback` that carried the input. Bun ran one step
 and handed back the scene with one FFI call that passed a pointer and a
