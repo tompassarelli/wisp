@@ -900,7 +900,18 @@ Players' machines differ and rollback needs a steady frame, so every costly rend
   High | 4.04 ms | 4.69 ms | 9.74 ms
   Ultra | 3.97 ms | 4.57 ms | 9.08 ms
 
-  Low is inside the 8.3 ms budget by 5 ms. Ultra costs no more than High because the keys that would make it dearer (volumetrics, 8x MSAA, refractive water, 4096 shadows) are not read yet; Low pays less than High only through bloom and ambient occlusion, the two keys that act today.
+  The same sweep on gex45's RTX PRO 4000 (Blackwell, Vulkan, private desktop, window 2878x1892; the machine's CPU pressure was 63% from other work):
+
+  Preset | p50 | p95 | max
+  --- | --- | --- | ---
+  Low | 1.19 ms | 2.21 ms | 4.20 ms
+  Medium | 1.08 ms | 1.62 ms | 2.19 ms
+  High | 1.57 ms | 2.30 ms | 3.36 ms
+  Ultra | 1.49 ms | 2.09 ms | 3.13 ms
+
+  The four captures of each run differ from each other and are not committed (21 MB each).
+
+  On the 890M Low is inside the 8.3 ms budget by 5 ms. Ultra costs no more than High because the keys that would make it dearer (volumetrics, 8x MSAA, refractive water, 4096 shadows) are not read yet; Low pays less than High only through bloom and ambient occlusion, the two keys that act today.
 
 ## Remaster at load
 
