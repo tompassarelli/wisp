@@ -49,7 +49,10 @@ export const makeWindow = (gameModule: string): Command => (args) => Effect.gen(
     return run.exited;
   });
   const log = yield* attempt(() => readFile(logPath, "utf8"));
-  if (child !== 0) return yield* new WindowFailure({ problem: `the probe window run exited ${child}\n${log.split("\n").filter((line) => !line.startsWith("[GC")).slice(-12).join("\n")}` });
+  if (child !== 0) {
+    const failure = yield* attempt(async () => (JSON.parse(await readFile(rawPath, "utf8")) as { failure?: string }).failure).pipe(Effect.orElseSucceed(() => undefined));
+    return yield* new WindowFailure({ problem: `the probe window run exited ${child}${failure === undefined ? "" : `: ${failure}`}\n${log.split("\n").filter((line) => !line.startsWith("[GC")).slice(-12).join("\n")}` });
+  }
   const measured = log.slice(log.indexOf(GC_LOG_BEGIN), log.indexOf(GC_LOG_END));
   const samples = JSON.parse(yield* attempt(() => readFile(rawPath, "utf8"))) as ProbeSamples;
   const report = probeReport(samples, gcPausesByHeap(measured), firstHeap(log));

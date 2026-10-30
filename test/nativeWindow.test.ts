@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { adoptNativeWindow, openNativeWindow, windowLibraryPath } from "../host/window/binding";
 import { standaloneWindowArgument } from "../host/play/standalone";
 
@@ -28,4 +29,15 @@ test.skipIf(!hasDisplay)("[spec docs/native-window-plan.md] a scene Bun never ha
   lent.submit("{}", 1, 99);
   expect(lent.metric("lateScenes").length).toBeGreaterThan(0);
   lent.release();
+});
+
+test.skipIf(!existsSync(windowLibraryPath()))("[spec docs/native-window-plan.md] a window that fails to open reaches the host as an error text", async () => {
+  const script = `import { openNativeWindow } from "./host/window/binding";
+try { openNativeWindow({ title: "forced failure", width: 320, height: 200 }); } catch (cause) { console.log(String(cause)); }`;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const run = Bun.spawn([process.execPath, "-e", script], { cwd: join(import.meta.dir, ".."), env: { ...process.env, WISP_WINDOW_FORCE_OPEN_FAILURE: "1" }, stdout: "pipe", stderr: "pipe" });
+    const [out, status] = await Promise.all([new Response(run.stdout).text(), run.exited]);
+    expect(out).toContain("the window didn't open: forced open failure");
+    expect(status).toBe(0);
+  }
 });

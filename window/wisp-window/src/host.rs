@@ -181,6 +181,9 @@ impl Host {
             let app_shared = shared.clone();
             let title = title.to_string();
             guarded(&shared, move || {
+                if std::env::var_os("WISP_WINDOW_FORCE_OPEN_FAILURE").is_some() {
+                    panic!("forced open failure (WISP_WINDOW_FORCE_OPEN_FAILURE)");
+                }
                 let mut builder = EventLoop::<Command>::with_user_event();
                 any_thread(&mut builder);
                 let event_loop = match builder.build() {
@@ -197,7 +200,7 @@ impl Host {
                 let _ = event_loop.run_app(&mut app);
             })
         };
-        let Some(proxy) = proxy_out.recv().map_err(|_| "window thread ended".to_string())? else {
+        let Ok(Some(proxy)) = proxy_out.recv() else {
             let _ = window_thread.join();
             return Err(lock(&shared.error).clone().unwrap_or_else(|| "no event loop".into()));
         };
