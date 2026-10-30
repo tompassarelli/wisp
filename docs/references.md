@@ -108,3 +108,26 @@ adopted for the follow-up box, which ships its notice.
   ports its parsing, interpolation, skinning and material behaviour,
   including Wisp's patches, to Rust. Keep its copyright and MIT notice in the
   ported files' crate and in the player build's notices.
+
+## Researched, not used ([game-api-plan.md](game-api-plan.md#what-extension-engines-were-asked-for))
+
+Read on 31 October 2026 for API facts and feature requests only. Nothing is
+copied, linked or shipped, and Wisp's code derives from none of them.
+
+- Warcraft III: Community Edition 0.3.2 (MindWorX, TriggerHappy, Tasyen,
+  Vasilii Filippov, BogdanW3, lizreu, Zed), no licence,
+  https://github.com/Warcraft-III-Community-Edition/W3CE and
+  https://www.hiveworkshop.com/threads/warcraft-iii-community-edition.346600/.
+  Native names and signatures were read from `Scripts/common.j` in the
+  release's `W3CE.mpq`, without running any of its programs. The issues were
+  read in all states. The archive and its files stay out of every
+  repository.
+- W3CE Discord #community-edition, as Tom's screenshots of 31 October 2026.
+  Release, test realm, antivirus and save facts, recorded without quoting.
+- Embedded JAPI documentation (PhoenixZeng), no root licence,
+  https://github.com/PhoenixZeng/embedded-japi-vue-press. The topic list
+  only.
+- KKAPI developer docs (https://create.kkdzpt.com/kkapidoc/, platform
+  documentation) and YDWE (GPL-3.0, https://github.com/actboy168/YDWE), as
+  recorded in [prior-art.md](prior-art.md). No code is taken, and no
+  GPL-3.0 derivation.

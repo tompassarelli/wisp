@@ -662,6 +662,212 @@ Not required:
 - frames with a colour but no texture;
 - any other family.
 
+## What extension engines were asked for
+
+Research, 31 October 2026. Warcraft III extension engines are years of map
+makers asking for what the stock game cannot do. This section classifies
+those requests against the families above. It ranks them by how much each one
+speeds up making a game in Wisp (hot reload, fast iteration, fewer
+workarounds) and by what Smashcraft and later Wisp games need. Only facts
+about the APIs and the requests are recorded. No source licenses its code to
+Wisp (W3CE has no licence, YDWE is GPL-3.0, and the KKAPI and JAPI docs are
+platform documentation), so nothing here is copied from them.
+
+Sources:
+
+- **W3CE 0.3.2 natives.** Read from `Scripts/common.j` inside `W3CE.mpq`,
+  in the release Tom downloaded (W3CE-v0.3.2.zip, files dated 16 October
+  2026). The archive was read with smpq, and no executable was run. Against
+  the stock `common.1.29.2.j` shipped in the same archive, it declares 518
+  more natives: 225 `Ce*`, 206 `Blz*` from later retail patches, and 87
+  others (field converters, minimap icons, command-button effects,
+  checkpoints, depth of field). The `Ce*` natives come in 11 groups, with
+  the three instance-field groups listed as one:
+  - damage event (12): several damage types, attack flags, ranged, attack, damage
+    and weapon type;
+  - frames (85): creation with a create context, texture coordinates,
+    border and tile size, alpha mode, layer and control style, position and
+    size reads, parent, click, slider value, tooltip, cursor cage, a model in
+    a frame, and the hovered frame;
+  - instance fields (23, 8 and 20) for abilities, items, units and unit
+    weapons;
+  - keyboard (6): meta keys, the typed character, and a key event with a
+    modifier mask;
+  - model handle (35): position, orientation, scale, colour, time, animation by
+    name, index, rarity or queue, model path swap, texture path by index,
+    texture count, and attachments;
+  - mouse (17): absolute and relative position, buttons, set position, hovered and
+    targeted unit, item or destructable, and the cursor state and icon;
+  - selection (4): selectable widgets, and units unselectable for the local
+    player only;
+  - sync (4): a sync event that can be marked as coming from the server;
+  - user input mode (11): the build mode's unit, ability and ground point, the
+    target mode's ability, order and target, and the current mode.
+- **W3CE's [issues](https://github.com/Warcraft-III-Community-Edition/W3CE/issues?q=is%3Aissue)**
+  (64 in all states, read 31 October 2026). This section links each request it
+  uses.
+- **W3CE's [Hive resource page](https://www.hiveworkshop.com/threads/warcraft-iii-community-edition.346600/)**
+  (0.3.2, updated 17 October 2026), with its feature list, known issues and
+  changelog. Pages 3 and 4 of the thread are user support and hold no
+  feature requests.
+- **The W3CE Discord #community-edition channel,** as screenshots Tom shared on
+  31 October 2026. No message text is quoted.
+- **The JAPI docs** ([embedded JAPI](https://github.com/PhoenixZeng/embedded-japi-vue-press)),
+  read for their topic list: doodad, ability and item APIs; unit model,
+  texture, portrait and name swap; attack missile model, arc and speed;
+  binding an effect to a unit; world-to-screen conversion; the hovered unit;
+  the FPS cap; and the server API. KKAPI and YDWE are as recorded in
+  [prior-art.md](prior-art.md).
+
+### W3CE as of 31 October 2026
+
+These are dated facts. The Discord facts come from Tom's screenshots, and the
+rest from the release and the Hive page:
+
+- 0.3.2 is the current release. 0.4 has been on a public test realm since
+  about 22 October. The launcher's own main menu carries the build and the
+  Discord link.
+- The current natives ship as `common.j` inside `w3ce.mpq`. The one on
+  GitHub is years older (last pushed 22 December 2024). A 0.3 common.j of
+  about 394 KB was posted in the Discord on 30 October. The 0.3.2 file read
+  above is 400,323 bytes.
+- 0.3.0 replaced Battle.net with W3CE's own server: accounts, hosted games,
+  no port forwarding, and a game that survives the host leaving. It also
+  added a Vulkan renderer, a deterministic Lua engine for maps that ship
+  `war3map.l64` (beside the retail-compatible one), maps saved in the 3.0
+  formats, and signed self-updates. It dropped the .NET runtime. 0.3.2 added
+  the Reign of Chaos campaign as an edition switch, and realm games for maps
+  up to 512 MB.
+- 0.4 added credential storage on Linux. After it, Windows Defender flags the
+  launcher as `Behavior:Win32/DefenseEvasion.A!ml`. The 0.3.2 changelog had
+  already fixed one antivirus flag by making the release smaller.
+- Reign of Chaos custom games are unsupported. The plan is a "balance set"
+  inside The Frozen Throne. The campaign is a special case.
+- Save and load are unsupported for maps that run Lua or WASM, and for
+  multiplayer games. Lua, the new frames and the instance API keep state that
+  the save format does not track.
+
+### Lessons for Wisp
+
+- **Distribution and antivirus trust.** W3CE ships a modified launcher that
+  loads its own native code into Warcraft and now stores credentials. That
+  behaviour is what a heuristic scanner flags, and every release has to earn
+  that trust again. Wisp touches no Warcraft process. The Warcraft backend is
+  a plain map, and the native backend is Wisp's own program, so it has nothing
+  to hide from a scanner. Keep it that way: sign the player build
+  (smashcraft#807), store no credentials Wisp does not need, and never
+  inject.
+- **Save and load with extended state.** W3CE cannot save because its
+  additions keep state outside the game's save format. A Wisp family has to
+  avoid that trap. Each family's native store is rebuilt from the
+  simulation's state, so a save is a simulation snapshot plus the input
+  since it. No family may keep state that the snapshot cannot rebuild.
+- **Version and balance sets.** W3CE plans Reign of Chaos as a data set
+  inside The Frozen Throne, not as a second engine. Wisp should do the same:
+  a balance or version set is a data module chosen in the lobby, built into
+  both backends, and included in the lockstep checksum. It is not a fork of
+  the game's code.
+- **Natives documentation drift.** W3CE's published `common.j` fell years
+  behind the shipped one, so map makers copy files out of the archive by
+  hand. Wisp's API declarations (`src/game/*.d.ts`) are the contract that
+  both backends compile against, and `docs/game-api.md` must be generated
+  from them or checked against them. The docs should never be written beside
+  the declarations by hand.
+
+### Requests and where they land
+
+Status: **covered** means a family above already has the call. **Planned**
+means the native window plan or a later family names it. **Missing** means
+no Wisp plan has it. Rank 1 is the most valuable. Ranks 1 to 5 are the
+proposed boxes below.
+
+| Request | Source | What it does | Family | Status | Rank |
+| --- | --- | --- | --- | --- | --- |
+| Create and change doodads at run time | [W3CE#61](https://github.com/Warcraft-III-Community-Edition/W3CE/issues/61), JAPI doodad API | Place, move, rotate, scale, recolour and remove scenery without editor preplacement | new: scenery (`wisp/game/scenery`) | missing (Smashcraft lists about 400 scenery pieces in `game/presentation/*Scenery.ts`, places them as effects in `host/loop/stageScenery.ts`, and moves the matrix stretch into the scale because Warcraft culls by scale) | 1 |
+| Model texture swap | `CeSetModelTexturePath`/`CeGetModelTexturePath`/`CeGetModelTextureCount`, `CeSetWar3ImageTexturePath`, [W3CE#55](https://github.com/Warcraft-III-Community-Edition/W3CE/issues/55) (still broken), JAPI unit texture | Replace one texture of a placed model by index | effects and bodies | missing (Reforged declares no texture-swap native, so the Warcraft backend lowers at compile time to a model variant per literal pair) | 2 |
+| Model swap and attachments | `CeSetModelPath`, `CeAddModelAttachment`/`CeSetModelAttachment` ([W3CE#53](https://github.com/Warcraft-III-Community-Edition/W3CE/issues/53)), JAPI bind effect, unit model and portrait | Change a placed model's file, and pin a model to another's attachment point | effects and bodies | missing (Warcraft: `AddSpecialEffectTarget`, `BlzSetUnitSkin`) | 2 |
+| Queue and index animations | `CeQueueModelAnimation`, `CeSetModelAnimationByIndex`, `...WithRarity` | Play animations in sequence or by index without a timer | effects and bodies | planned in part (`playEffectAnimation`, `setBodyAnimation`); queue is missing | 2 |
+| Full keyboard events | `CeTriggerRegisterPlayerKeyEvent` with a meta mask, `CeGetTriggerPlayerChar`, keys held in another window (fixed in 0.3.0) | Modifier-exact keys, the typed character, and no keys from unfocused windows | input | covered for keys with modifiers and focus (`addKeyEvent`, `windowFocused`); the typed character is missing | 3 |
+| Mouse and cursor | `CeGetMouseX/Y`, `CeGetMouseRelativeX/Y` ([W3CE#57](https://github.com/Warcraft-III-Community-Edition/W3CE/issues/57)), `CeSetMouseState`, `CeFrameCageMouse` | Relative motion, cursor icon and confining the cursor | input | covered for position, buttons, set and show; relative motion, cursor icon and cage are missing | 3 |
+| What is under the pointer | `CeGetMouseHoveredFrame` and hovered or targeted unit, item and destructable, JAPI hovered unit and world-to-screen | Pick a frame or a body under the cursor, and convert between world and screen | input, view | missing (Smashcraft's character select hit-tests the pointer against its roster grid by hand, `tileAt` in `game/menu/selectionDrag.ts`) | 3 |
+| Cliffs at run time | [W3CE#64](https://github.com/Warcraft-III-Community-Edition/W3CE/issues/64) | Generate cliffs procedurally in game | new: world (`wisp/game/world`) | missing (the Warcraft backend lowers to `war3map.w3e` at build time through `terrainAuthor`; the native window draws terrain in W4) | 4 |
+| Map bounds at run time | [W3CE#65](https://github.com/Warcraft-III-Community-Edition/W3CE/issues/65) | Grow or shrink the playable map in game | world | missing | 4 |
+| Terrain tiles and height | `SetTerrainType`, `TerrainDeform*`, and more than 16 tiles (0.3.0) | Paint and deform ground while playing | world | missing | 4 |
+| More model formats | [W3CE#50](https://github.com/Warcraft-III-Community-Edition/W3CE/issues/50) (W3CE declined it), SD models up to version 1100 | Load FBX, OBJ and Blend models | effects and bodies (asset build) | missing (the native renderer reads MDX; glTF converted to MDX at build time serves both backends) | 5 |
+| Fonts | [W3CE#45](https://github.com/Warcraft-III-Community-Edition/W3CE/issues/45) | Use more fonts than the install's seven | frames | covered (`setFont`; the native window rasterizes any TTF with fontdue) | 6 |
+| Text outline and per-state colour | `CeSetFrameTextColorEx`, `CeFrameAddText` | Colour text per button state and append text | frames | missing (Smashcraft draws an outline from four text copies in `game/ui/textOutline.ts`, while the native window already draws stroke) | 6 |
+| Frame geometry reads and texture coordinates | `CeGetFrameX/Y`, `CeFrameGetWidth/Height`, `CeFrameGet/SetParent`, `CeSetFrameTexCoord`, `CeGetFrameScale` | Read layout back, reparent, and draw part of a texture | frames | missing (G2 reads visibility, text, name and children only) | 7 |
+| Frame widgets | `CeFrameSetValue`/`MinMax`/`StepSize`, `CeFrameSetTooltip`, `CeFrameClick`, `CeFrameSetModel`/`CeGetFrameModel`, backdrop border, tile and alpha mode | Sliders, tooltips, scripted clicks, and models in UI | frames | missing | 7 |
+| Hotkeys defined in FDF | [W3CE#32](https://github.com/Warcraft-III-Community-Edition/W3CE/issues/32) | Buttons fire from their declared hotkey | frames, input | missing | 7 |
+| Save and load with extended state | Hive known issues, Discord (31 October) | Save games whose script or UI state is outside the engine's save | files, clock | missing (a simulation snapshot plus input, which also lets hot reload jump to a saved moment) | 8 |
+| Unlimited command buttons | [W3CE#62](https://github.com/Warcraft-III-Community-Edition/W3CE/issues/62), `CeGetCommandButtonData`, command-button effects | More ability slots than the 12-button card | new: command card, built from frames | missing (Smashcraft has no command card; the native backend builds one from frames and input) | 9 |
+| Grid hotkeys | [W3CE#63](https://github.com/Warcraft-III-Community-Edition/W3CE/issues/63) | Keys by grid position, not by letter | command card, input | missing | 9 |
+| Build and target mode reads | `CeGetBuildMode*`, `CeGetTargetMode*`, `CeGetCurrentInputMode` | Know what the player is placing or aiming | command card | missing | 10 |
+| Switch maps in multiplayer | [W3CE#38](https://github.com/Warcraft-III-Community-Edition/W3CE/issues/38) | Change level without leaving the lobby | clock (`restartMatch`), players | missing (the native session owns its levels) | 11 |
+| One-team maps online | [W3CE#39](https://github.com/Warcraft-III-Community-Edition/W3CE/issues/39) | Start a map that has a single force | players | planned (the native lobby fills slots from `src/netcode`) | 12 |
+| Server-sent sync messages | `CeTriggerRegisterPlayerSyncEvent` with `fromServer` | Messages from the server, not only from players | sync | missing (the relay can send them; the family has no call) | 12 |
+| Balance and version sets | Discord (31 October): Reign of Chaos as a balance set | Several rule sets in one build | new: data sets, chosen in the lobby | missing | 13 |
+| Hide Warcraft UI parts one by one | [W3CE#49](https://github.com/Warcraft-III-Community-Edition/W3CE/issues/49), `CeHideOriginFrames`, `CeEnableUIAutoPosition`, [W3CE#17](https://github.com/Warcraft-III-Community-Edition/W3CE/issues/17) | Remove portrait texts and side panels without workarounds | frames | covered (`hideWarcraftUi`; a no-op on native, which draws no Warcraft UI) | 14 |
+| Unplayable maps listed with their error | [W3CE#60](https://github.com/Warcraft-III-Community-Edition/W3CE/issues/60) | Explain why a map does not start | build tooling, not the API | covered (a missing call fails to compile against the declarations) | 15 |
+| Sound from script | [W3CE#58](https://github.com/Warcraft-III-Community-Edition/W3CE/issues/58) (silent on 1.29 to 1.30) | Script sounds play | sound | covered (the native backend plays through its own cpal mixer) | 15 |
+| Damage event details | `CeGetEventDamageTypes`, `CeGetEventAttackFlags`, `CeGetEventIsRanged` | Read and change a hit's types | none | not planned (combat lives in the game's TypeScript simulation) | 16 |
+| Instance fields | `Ce{Get,Set}{Ability,Item,Unit,UnitWeapon}*Field` | Change one object's data while playing | bodies (`setBodyObjectFields`) | covered for Warcraft setup; game data is plain TypeScript on native | 16 |
+| Jass operation limit | [W3CE#36](https://github.com/Warcraft-III-Community-Edition/W3CE/issues/36) | Raise or remove the op limit | none | not needed (Wisp compiles to Lua, which has no op limit, and the native backend runs on Bun) | 17 |
+| Lua, WASM and deterministic Lua | Hive features, `war3map.l64` (0.3.0), [W3CE#21](https://github.com/Warcraft-III-Community-Edition/W3CE/issues/21) | Modern scripting with deterministic numbers | the contract | covered (TypeScript to Lua, binary32 helpers, Bun) | 17 |
+| Unlocked frame rate and an FPS readout | JAPI; "models animate at your frame rate" (0.3.0) | Draw above the game's tick rate | native window | planned (render thread and present path, native-window-plan.md) | 17 |
+| Attack missile model, arc and speed | JAPI | Restyle attack missiles | effects | covered (Smashcraft's projectiles are effects it moves itself) | 17 |
+| Selection control | `CeSetWidgetSelectable`, `CeSetUnitLocalSelectable` | Make units unselectable, or unselectable for one player | input (`lockWarcraftControls`) | covered (no selection exists on native) | 17 |
+| Depth of field and minimap icons | `CameraSetDepthOfFieldScale`, `CameraSetFocalDistance`, `CreateMinimapIcon*` | Focus blur, and icons on the minimap | view | missing | 18 |
+
+### Proposed boxes for the next families
+
+Each box becomes its own issue in the same shape as G1 and G2: a Wisp module
+for each backend, a Smashcraft codemod where one applies, and both backends
+green. The lowering rule stays the same. Where Warcraft has no runtime native,
+the call lowers at compile time to data the map already carries, such as a
+model variant, `war3map.w3e` or object data, or the contract declares it
+native-only.
+
+1. **Scenery** (`wisp/game/scenery`). Calls are `placeScenery(model, x, y,
+   z, yaw, scale, matrixScale, colour)`, `moveScenery` and `removeScenery`, plus
+   a stage's static list, which the native backend draws as one batch.
+   Warcraft lowers to effects and owns the scale-for-culling rule.
+   Done when: Smashcraft's `host/loop/stageScenery.ts` places its pieces
+   through the family, so `rg -o 'wisp/game/effects|\b(AddSpecialEffect|DestroyEffect|BlzSetSpecialEffect\w+)\(' ts/src/host/loop/stageScenery.ts | wc -l`
+   prints 0 (20 effect natives today); the normalized bundle diff is empty;
+   and editing a scenery list hot-reloads into a running native window
+   without restarting the match.
+2. **Model instance calls** on effects and bodies: `setModel`,
+   `setTexture(index, path)`, `attach(to, point)` and `queueAnimation`.
+   Warcraft lowers `attach` to `AddSpecialEffectTarget`, and `setModel` on
+   bodies to `BlzSetUnitSkin`. A `setTexture` with literal arguments
+   generates a model variant at build time, from the project's own models
+   only. Done when: a fixture map swaps a texture and attaches a model on
+   both backends, with an offscreen native capture and a Warcraft capture
+   showing the same swap, and a `setTexture` with a non-literal path fails
+   to compile on the Warcraft backend with a message naming the rule.
+3. **Input completion.** Calls are the typed character, relative pointer
+   motion, the cursor icon and cage, the frame under the pointer, and a
+   world-to-screen and screen-to-world pair in view. Done when: Smashcraft's
+   character select takes the hovered roster tile from the family's
+   frame-under-pointer call instead of `tileAt`; a headless Bun test drives
+   each call; and the four-client playable journey shows no divergence.
+4. **World** (`wisp/game/world`). Calls are terrain height, tile, cliff
+   level and playable bounds, with run-time setters on native. On Warcraft,
+   the build-time form lowers into `war3map.w3e` through `terrainAuthor`,
+   tiles and deformation lower to natives, and run-time cliffs and bounds
+   are declared native-only. Done when: a fixture map edits a cliff in its
+   source and the running native window shows it after hot reload; the
+   Warcraft build of the same source carries the cliff in `war3map.w3e`;
+   and calling a native-only setter in the Warcraft build fails to compile.
+5. **glTF models at build time.** An effect or body may name a `.glb`
+   file. The native renderer loads it directly, and the Warcraft build
+   converts it to MDX into the map archive, so Tom's Quaternius library
+   (game-design-prototyping) works on both backends. Done when: a fixture
+   map shows one Quaternius `.glb` model animating on both backends, the
+   Warcraft map archive contains the converted MDX, and the converter
+   carries its licence in docs/references.md.
+
 ## Rejected
 
 - **A runtime wrapper library such as w3ts** (MIT; object classes over
