@@ -73,4 +73,40 @@ describe("lan setup registry", () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+
+  test("[integration tmpfs] a new client links its byte-identical Wine system files to the pool's first client's, keeps a differing one, and the first client links to none", async () => {
+    const root = mkdtempSync("/dev/shm/wisp-lan-prefix-");
+    const dataHome = process.env.XDG_DATA_HOME;
+    process.env.XDG_DATA_HOME = join(root, "data");
+    try {
+      const from = join(root, "Warcraft III");
+      for (const [path, text] of [[".build.info", "Branch!STRING:0|Active!DEC:1|Version!STRING:0\nus|1|3.0.0.24268\n"], ["_retail_/x86_64/Warcraft III.exe", "exe"]] as const) {
+        mkdirSync(join(from, path, ".."), { recursive: true });
+        writeFileSync(join(from, path), text);
+      }
+      const windows = (name: string, file: string) => join(prefixOf(name), "drive_c/windows", file);
+      const prepare = (name: string, d3d9: string) => {
+        mkdirSync(join(installOf(name), ".."), { recursive: true });
+        writeFileSync(join(prefixOf(name), "user.reg"), "\"Allow Local Files\"=dword:00000001\n");
+        for (const [file, text] of [["system32/d3d11.dll", "graphics"], ["winsxs/x86_vc/msvcp.dll", "runtime"], ["system32/d3d9.dll", d3d9], ["win.ini", "settings"]] as const) {
+          mkdirSync(join(windows(name, file), ".."), { recursive: true });
+          writeFileSync(windows(name, file), text);
+        }
+      };
+      const setup = (name: string) => Effect.runPromise(setupClient(name, from, "3.0.0.24268", 47200, () => {}).pipe(
+        Effect.provideService(GameLauncher, GameLauncher.of({ inPrefix: () => Effect.succeed({ command: ["true"], env: {} }) }))));
+      for (const [name, d3d9] of [["lan1a", "a's"], ["lan1b", "b's"]] as const) {
+        prepare(name, d3d9);
+        await setup(name);
+      }
+      const inode = (name: string, file: string) => statSync(windows(name, file)).ino;
+      for (const file of ["system32/d3d11.dll", "winsxs/x86_vc/msvcp.dll"]) expect(inode("lan1b", file)).toBe(inode("lan1a", file));
+      for (const file of ["system32/d3d9.dll", "win.ini"]) expect(inode("lan1b", file)).not.toBe(inode("lan1a", file));
+      expect(statSync(windows("lan1a", "system32/d3d11.dll")).nlink).toBe(2);
+    } finally {
+      if (dataHome === undefined) delete process.env.XDG_DATA_HOME;
+      else process.env.XDG_DATA_HOME = dataHome;
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });

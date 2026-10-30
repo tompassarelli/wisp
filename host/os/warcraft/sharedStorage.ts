@@ -27,6 +27,8 @@ const PREFIX_BINARY = /\.(dll|exe|sys|drv|ocx|ax|acm|cpl|tlb)$/i;
 
 const PREFIX_SYSTEM_FOLDERS = ["drive_c/windows/system32", "drive_c/windows/syswow64"];
 
+const PREFIX_STATIC_FOLDERS = ["drive_c/windows/winsxs", "drive_c/windows/globalization"];
+
 const BATTLE_NET = "drive_c/Program Files (x86)/Battle.net";
 
 const BATTLE_NET_VERSION = /^Battle\.net\.\d+$/;
@@ -41,7 +43,7 @@ const filesUnder = (folder: string, accept: (name: string) => boolean) => exists
   : [];
 
 // A pool's prefixes come from one Wine build, so the binaries Wine put in system32 and syswow64 (the graphics DLLs alone are 3.5 GB across gex45's pool) are shared when their contents match,
-// as are the files of Battle.net's version folders, which Battle.net never rewrites (an update adds a folder); prefix files are relative to the install.
+// as are the side-by-side assemblies and locale tables Wine installs once (winsxs, globalization) and the files of Battle.net's version folders, which Battle.net never rewrites (an update adds a folder); prefix files are relative to the install.
 const prefixFiles = (install: string): readonly string[] => {
   const prefix = prefixOf(install);
   if (prefix === undefined) return [];
@@ -49,6 +51,7 @@ const prefixFiles = (install: string): readonly string[] => {
   const versions = existsSync(battleNet) ? readdirSync(battleNet, { withFileTypes: true }).filter((entry) => entry.isDirectory() && BATTLE_NET_VERSION.test(entry.name)) : [];
   return [
     ...PREFIX_SYSTEM_FOLDERS.flatMap((folder) => filesUnder(join(prefix, folder), (name) => PREFIX_BINARY.test(name))),
+    ...PREFIX_STATIC_FOLDERS.flatMap((folder) => filesUnder(join(prefix, folder), () => true)),
     ...versions.flatMap((entry) => filesUnder(join(battleNet, entry.name), () => true)),
   ].map((file) => relative(install, file)).sort();
 };
@@ -115,6 +118,12 @@ const linkPrefixFiles = (base: string, install: string) => {
   }
   return { linked, freedBytes };
 };
+
+// Makes install's byte-identical Wine system files and Battle.net versions hardlinks to base's, for an install whose storage comes from elsewhere.
+export const linkPrefix = (base: string, install: string) => Effect.try({
+  try: (): Linked => ({ ...linkPrefixFiles(base, install), removed: 0 }),
+  catch: (cause) => new StorageFailure({ problem: `link ${install}'s prefix files to ${base}'s: ${String(cause)}` }),
+});
 
 // Makes install's Data/ and _retail_ a view of base's: every file but the game-written ones is a hardlink to base's, and files base lacks go,
 // so an install never mixes its own .idx versions with base's archives. Its shmem files follow base's whenever its storage changed.

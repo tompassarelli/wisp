@@ -6,9 +6,9 @@ import { ChildProcess } from "effect/process";
 import { GameLauncher } from "../os/platform/services";
 import { collect } from "../cli/hostProcess";
 import { installMenuPage } from "./menus";
-import { buildOf, linkStorage } from "../os/warcraft/sharedStorage";
+import { buildOf, linkPrefix, linkStorage } from "../os/warcraft/sharedStorage";
 import { LanFailure } from "./join";
-import { clientRoot, installOf, prefixOf, retailOf } from "./pool";
+import { clientRoot, dataRoot, installOf, prefixOf, retailOf } from "./pool";
 
 const run = (what: string, command: readonly string[], env: Readonly<Record<string, string>> = {}) =>
   collect(ChildProcess.make(command[0]!, command.slice(1), { env, extendEnv: true, stdin: "ignore" })).pipe(
@@ -47,6 +47,13 @@ const placeInstall = (name: string, from: string, refresh: boolean) => Effect.ge
   });
   return `copied ${Math.round(bytes / 2 ** 20)} MB outside Data and _retail_`;
 });
+
+// The pool's first client holds the Wine system files the others link to; it links to none, so the pool never splits between two bases.
+const prefixBase = (name: string) => {
+  const clients = join(dataRoot(), "clients");
+  const [first] = existsSync(clients) ? readdirSync(clients).filter((client) => existsSync(installOf(client))).sort() : [];
+  return first !== undefined && first !== name ? first : undefined;
+};
 
 const ALLOW_LOCAL_FILES = "\"Allow Local Files\"=dword:00000001";
 
@@ -94,6 +101,11 @@ export const setupClient = (name: string, from: string, poolBuild: string, port:
   }
   const linked = yield* linkStorage(from, installOf(name)).pipe(Effect.mapError((failure) => new LanFailure({ problem: `${name}: ${failure.problem}` })));
   if (linked.linked + linked.removed > 0) log(`${name}: linked ${linked.linked} files to the source's Data and _retail_ and removed ${linked.removed} it lacks`);
+  const base = prefixBase(name);
+  if (base !== undefined) {
+    const prefix = yield* linkPrefix(installOf(base), installOf(name)).pipe(Effect.mapError((failure) => new LanFailure({ problem: `${name}: ${failure.problem}` })));
+    if (prefix.linked > 0) log(`${name}: linked ${prefix.linked} Wine system files to ${base}'s`);
+  }
   yield* installMenuPage(retailOf(name), port).pipe(Effect.mapError((failure) => new LanFailure({ problem: failure.message })));
   log(`${name}: menu page reports to 127.0.0.1:${port}`);
 });
