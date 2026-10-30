@@ -18,6 +18,9 @@
         buildInputs = [ pkgs.udev pkgs.alsa-lib pkgs.libxkbcommon ];
         LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath runtimeLibraries;
         RUSTFLAGS = "-C link-arg=-Wl,-rpath,${pkgs.lib.makeLibraryPath runtimeLibraries}";
+        shellHook = ''
+          if command -v north >/dev/null; then north target-seed || true; fi
+        '';
       };
     };
 }
