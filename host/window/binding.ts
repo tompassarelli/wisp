@@ -20,6 +20,8 @@ const symbols = {
   wisp_window_start: { args: ["ptr"], returns: "void" },
   wisp_window_status: { args: ["ptr", "ptr", "usize"], returns: "void" },
   wisp_window_start_baseline: { args: ["ptr"], returns: "void" },
+  wisp_window_assets_pending: { args: ["ptr"], returns: "u64" },
+  wisp_window_asset: { args: ["ptr", "ptr", "usize", "ptr", "usize"], returns: "void" },
   wisp_window_submit: { args: ["ptr", "ptr", "usize", "f64", "u32"], returns: "void" },
   wisp_window_next_event: { args: ["ptr", "ptr", "u32"], returns: "u32" },
   wisp_window_select_pad: { args: ["ptr", "i32"], returns: "void" },
@@ -74,6 +76,10 @@ export interface WindowView {
   selectPad(slot: number | undefined): void;
   /** Blocks this thread, running no JavaScript, until the render thread queues a sample, the window closes or fails, or the window is stopped, for at most `timeoutMs`; a zero timeout never waits. Samples come oldest first. */
   nextEvent(timeoutMs: number): WindowEvent;
+  /** Hands the render thread a model or texture file, named by its Warcraft path, to upload before it draws its next scene. */
+  asset(path: string, bytes: Uint8Array): void;
+  /** How many pushed files the window has not finished building. */
+  assetsPending(): number;
   /** Encodes `scene` into one buffer the view reuses and hands it to the render thread as the answer to the sample numbered `frame`. */
   submit(scene: string, step: number, frame: number): void;
   /** One of the library's per-frame series, in milliseconds. */
@@ -123,6 +129,8 @@ const viewOf = (library: Library, handle: Pointer, vocabulary: { buttons: string
       const kind = EVENT_KINDS[call.wisp_window_next_event(handle, sample, timeoutMs)] ?? "failed";
       return kind === "frame" ? { kind, sample: { frame: sample[0]!, sampleNs: sample[1]!, mask: sample[2]!, axisX: sample[3]!, axisY: sample[4]! } } : { kind };
     },
+    asset: (path, bytes) => { const name = Buffer.from(path); call.wisp_window_asset(handle, name, name.length, bytes, bytes.length); },
+    assetsPending: () => Number(call.wisp_window_assets_pending(handle)),
     submit: (scene, step, frame) => {
       let written = encoder.encodeInto(scene, sceneBuffer);
       while (written.read < scene.length) {

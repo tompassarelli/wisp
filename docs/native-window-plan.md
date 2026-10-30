@@ -783,6 +783,19 @@ one sample. It checks that:
 - the late sample's scene is presented on a later frame;
 - no sample is dropped.
 
+## Renderer as built (wisp#108)
+
+Decision (31 October 2026, after Tom said Chrome is a dead end and the Rust window replaces it): the renderer is not a line-by-line port of host/browser. It is built for wgpu, and Chrome stays only as the reference for what is drawn.
+
+- **Split.** Bun keeps every decision about what is drawn: `host/window/drawScene.ts` reduces the `RenderScene` to the camera, fog, sky and one pose per loaded model (placement matrix, the sequence and frame the game's animation rules choose, colours). Rust draws; it makes no animation decision.
+- **Assets.** Bun reads each model once, and the textures it paints with, and pushes them with `wisp_window_asset`. Textures decode on the decode pool; a model builds only when no decode is outstanding, so its bind groups hold its real textures. A pose whose model is not yet built is not drawn.
+- **Upload once.** A model becomes one vertex buffer, one index buffer and one bind group per material layer when it loads. Each texture gets its whole mip chain.
+- **Skin on the GPU.** Each frame the render thread poses every drawn instance into one bone-matrix storage buffer; the vertex shader blends four bones per vertex.
+- **Instanced draws.** Poses are grouped by model. Each layer of each model is one instanced draw, with the layer's filter mode choosing one of seven pipelines (blend state and depth write). Models with a layer below Blend draw before the rest, as `orderDrawnModels` does in Chrome.
+- **No per-frame allocation in the draw.** The bone, instance and grouping scratch vectors keep their capacity; only a new model, texture or larger scene allocates. The scene's JSON parse still allocates once per scene (see "The scene goes to Rust as the same JSON").
+- **Not yet drawn:** day-night light and shadows, per-layer alpha and texture animation, particle and ribbon emitters, terrain and water, lightning, the cinematic filter, UI quads and text.
+- **Capture.** `WISP_WINDOW_CAPTURE=FILE.png` (after `WISP_WINDOW_CAPTURE_AFTER` scenes that drew a model, default 30) saves the window's image; W3's offscreen capture replaces it.
+
 ## Boxes
 
 Order:

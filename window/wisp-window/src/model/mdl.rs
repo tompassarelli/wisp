@@ -289,6 +289,33 @@ impl<'a> Parser<'a> {
         Ok(rows)
     }
 
+    /// Keeps the first set of texture coordinates and reads past the others.
+    fn first_uvs(&mut self, geoset: &mut Geoset) -> Parsed<()> {
+        let rows = self.rows()?;
+        if geoset.uvs.is_empty() {
+            geoset.uvs = rows.iter().map(|row| std::array::from_fn(|i| row.get(i).copied().unwrap_or(0.0) as f32)).collect();
+        }
+        Ok(())
+    }
+
+    /// The triangle list of a `Faces` block.
+    fn faces(&mut self) -> Parsed<Vec<u32>> {
+        self.require_number()?;
+        self.require_number()?;
+        self.expect(b'{', "{")?;
+        let mut indices = Vec::new();
+        while !self.symbol(b'}') {
+            self.keyword();
+            self.expect(b'{', "{")?;
+            while !self.symbol(b'}') {
+                indices.extend(self.array()?.into_iter().map(|index| index as u32));
+                self.symbol(b',');
+            }
+            self.symbol(b',');
+        }
+        Ok(indices)
+    }
+
     fn geoset(&mut self) -> Parsed<Geoset> {
         self.expect(b'{', "{")?;
         let mut geoset = Geoset::default();
@@ -296,6 +323,10 @@ impl<'a> Parser<'a> {
             let Some(keyword) = self.keyword() else { return self.fail("a geoset member") };
             match keyword {
                 "Vertices" => geoset.vertices = self.rows()?.iter().map(|row| std::array::from_fn(|i| row.get(i).copied().unwrap_or(0.0) as f32)).collect(),
+                "Normals" => geoset.normals = self.rows()?.iter().map(|row| std::array::from_fn(|i| row.get(i).copied().unwrap_or(0.0) as f32)).collect(),
+                "TVertices" => self.first_uvs(&mut geoset)?,
+                "Faces" => geoset.indices = self.faces()?,
+                "MaterialID" => geoset.material_id = self.require_number()? as u32,
                 "VertexGroup" => geoset.vertex_group = self.array()?.into_iter().map(|id| id as u8).collect(),
                 "Groups" => {
                     self.require_number()?;

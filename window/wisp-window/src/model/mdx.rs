@@ -1,5 +1,5 @@
 use super::track::{Key, LineType, Track};
-use super::{Geoset, Model, ModelError, Node, Sequence};
+use super::{Geoset, Layer, Material, Model, ModelError, Node, Sequence, Texture};
 
 const NO_ID: i32 = -1;
 const NAME_LENGTH: usize = 80;
@@ -46,6 +46,10 @@ impl<'a> Reader<'a> {
             *slot = self.f32()?;
         }
         Ok(out)
+    }
+
+    fn vectors<const N: usize>(&mut self) -> Result<Vec<[f32; N]>, ModelError> {
+        (0..self.count()?).map(|_| self.floats::<N>()).collect()
     }
 
     fn keyword(&mut self) -> Result<&'a [u8], ModelError> {
@@ -119,6 +123,8 @@ pub(super) fn parse(bytes: &[u8]) -> Result<Model, ModelError> {
             b"SEQS" => parse_sequences(&mut chunk, &mut model)?,
             b"GLBS" => (0..size / 4).try_for_each(|_| chunk.i32().map(|length| model.global_sequences.push(length as u32)))?,
             b"GEOS" => parse_geosets(&mut chunk, &mut model)?,
+            b"TEXS" => parse_textures(&mut chunk, &mut model)?,
+            b"MTLS" => parse_materials(&mut chunk, &mut model)?,
             b"BONE" => parse_each_node(&mut chunk, &mut model, 8)?,
             b"HELP" => parse_each_node(&mut chunk, &mut model, 0)?,
             b"ATCH" | b"LITE" | b"PREM" | b"PRE2" | b"RIBB" | b"CORN" => parse_sized_nodes(&mut chunk, &mut model)?,
@@ -169,12 +175,9 @@ fn parse_geosets(chunk: &mut Reader, model: &mut Model) -> Result<(), ModelError
         let mut geoset = Geoset::default();
         chunk.i32()?;
         chunk.expect("VRTX")?;
-        for _ in 0..chunk.count()? {
-            geoset.vertices.push(chunk.floats()?);
-        }
+        geoset.vertices = chunk.vectors()?;
         chunk.expect("NRMS")?;
-        let normals = chunk.count()?;
-        chunk.take(normals * 12)?;
+        geoset.normals = chunk.vectors()?;
         chunk.expect("PTYP")?;
         let types = chunk.count()?;
         chunk.take(types * 4)?;
@@ -182,8 +185,9 @@ fn parse_geosets(chunk: &mut Reader, model: &mut Model) -> Result<(), ModelError
         let counts = chunk.count()?;
         chunk.take(counts * 4)?;
         chunk.expect("PVTX")?;
-        let indices = chunk.count()?;
-        chunk.take(indices * 2)?;
+        for _ in 0..chunk.count()? {
+            geoset.indices.push(u32::from(chunk.u16()?));
+        }
         chunk.expect("GNDX")?;
         let assigned = chunk.count()?;
         geoset.vertex_group = chunk.take(assigned)?.to_vec();
@@ -194,7 +198,8 @@ fn parse_geosets(chunk: &mut Reader, model: &mut Model) -> Result<(), ModelError
         for size in sizes {
             geoset.groups.push((0..size).map(|_| chunk.i32().map(|bone| bone as u32)).collect::<Result<_, _>>()?);
         }
-        chunk.take(12)?;
+        geoset.material_id = u32::try_from(chunk.i32()?).unwrap_or(0);
+        chunk.take(8)?;
         if version >= SKIN_VERSION {
             chunk.take(4 + NAME_LENGTH)?;
         }
@@ -219,8 +224,10 @@ fn parse_geosets(chunk: &mut Reader, model: &mut Model) -> Result<(), ModelError
         }
         for _ in 0..chunk.count()? {
             chunk.expect("UVBS")?;
-            let coordinates = chunk.count()?;
-            chunk.take(coordinates * 8)?;
+            let coordinates = chunk.vectors::<2>()?;
+            if geoset.uvs.is_empty() {
+                geoset.uvs = coordinates;
+            }
         }
         model.geosets.push(geoset);
     }
@@ -238,4 +245,43 @@ fn parse_skin(chunk: &mut Reader, version: u32) -> Result<Vec<[u8; 8]>, ModelErr
         });
     }
     Ok(flat.chunks_exact(8).map(|row| row.try_into().unwrap()).collect())
+}
+
+const TEXTURE_RECORD: usize = 268;
+const PATH_LENGTH: usize = 260;
+
+fn parse_textures(chunk: &mut Reader, model: &mut Model) -> Result<(), ModelError> {
+    for _ in 0..chunk.bytes.len() / TEXTURE_RECORD {
+        let replaceable_id = u32::try_from(chunk.i32()?).unwrap_or(0);
+        let path = chunk.take(PATH_LENGTH)?;
+        let end = path.iter().position(|&byte| byte == 0).unwrap_or(PATH_LENGTH);
+        model.textures.push(Texture { replaceable_id, image: String::from_utf8_lossy(&path[..end]).into_owned() });
+        chunk.take(4)?;
+    }
+    Ok(())
+}
+
+fn parse_materials(chunk: &mut Reader, model: &mut Model) -> Result<(), ModelError> {
+    while chunk.at < chunk.bytes.len() {
+        let start = chunk.at;
+        let size = chunk.count()?;
+        chunk.take(8)?;
+        if chunk.bytes.get(chunk.at..chunk.at + 4) != Some(b"LAYS".as_slice()) {
+            chunk.take(NAME_LENGTH)?;
+        }
+        chunk.expect("LAYS")?;
+        let mut material = Material::default();
+        for _ in 0..chunk.count()? {
+            let layer_start = chunk.at;
+            let layer_size = chunk.count()?;
+            let filter_mode = u32::try_from(chunk.i32()?).unwrap_or(0);
+            let shading_flags = u32::try_from(chunk.i32()?).unwrap_or(0);
+            let texture_id = chunk.i32()?;
+            material.layers.push(Layer { filter_mode, texture_id, shading_flags });
+            chunk.at = layer_start + layer_size;
+        }
+        model.materials.push(material);
+        chunk.at = start + size;
+    }
+    Ok(())
 }

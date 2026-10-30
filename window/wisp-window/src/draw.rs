@@ -1,5 +1,10 @@
+use std::path::PathBuf;
 use std::sync::Arc;
+
 use winit::window::Window;
+
+use crate::capture;
+use crate::render::{DrawScene, Renderer};
 
 const COUNTER_BITS: usize = 24;
 const VERTICES: usize = COUNTER_BITS * 6;
@@ -41,6 +46,21 @@ fn counter_vertices(step: u64) -> Vec<Vertex> {
     vertices
 }
 
+/// `WISP_WINDOW_CAPTURE=FILE.png` saves the window's image at the first scene from game frame `WISP_WINDOW_CAPTURE_AFTER` (default 30) on that has every model it names.
+struct Capture {
+    path: PathBuf,
+    after: u32,
+    drawn: bool,
+}
+
+impl Capture {
+    fn from_environment() -> Option<Self> {
+        let path = PathBuf::from(std::env::var_os("WISP_WINDOW_CAPTURE")?);
+        let after = std::env::var("WISP_WINDOW_CAPTURE_AFTER").ok().and_then(|value| value.parse().ok()).unwrap_or(30);
+        Some(Self { path, after, drawn: false })
+    }
+}
+
 pub struct Gpu {
     surface: wgpu::Surface<'static>,
     config: wgpu::SurfaceConfiguration,
@@ -48,12 +68,16 @@ pub struct Gpu {
     queue: wgpu::Queue,
     pipeline: wgpu::RenderPipeline,
     vertices: wgpu::Buffer,
+    renderer: Renderer,
+    aspect: f32,
+    scene: Option<DrawScene>,
+    capture: Option<Capture>,
     pub adapter: String,
     pub backend: String,
 }
 
 impl Gpu {
-    pub fn new(window: Arc<Window>) -> Result<Self, String> {
+    pub fn new(window: Arc<Window>, aspect: f32) -> Result<Self, String> {
         let size = window.inner_size();
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
         let surface = instance.create_surface(window).map_err(|e| format!("surface: {e}"))?;
@@ -66,6 +90,15 @@ impl Gpu {
         .map_err(|e| format!("adapter: {e}"))?;
         let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())).map_err(|e| format!("device: {e}"))?;
         let mut config = surface.get_default_config(&adapter, size.width.max(1), size.height.max(1)).ok_or("surface not supported by the adapter")?;
+        let formats = surface.get_capabilities(&adapter).formats;
+        let plain = config.format.remove_srgb_suffix();
+        if formats.contains(&plain) {
+            config.format = plain;
+        }
+        let capture = Capture::from_environment();
+        if capture.is_some() {
+            config.usage |= wgpu::TextureUsages::COPY_SRC;
+        }
         config.present_mode = wgpu::PresentMode::Fifo;
         config.desired_maximum_frame_latency = 1;
         surface.configure(&device, &config);
@@ -100,7 +133,8 @@ impl Gpu {
             mapped_at_creation: false,
         });
         let info = adapter.get_info();
-        Ok(Self { surface, config, device, queue, pipeline, vertices, adapter: info.name, backend: format!("{:?}", info.backend) })
+        let renderer = Renderer::new(device.clone(), queue.clone(), config.format);
+        Ok(Self { surface, config, device, queue, pipeline, vertices, renderer, aspect, scene: None, capture, adapter: info.name, backend: format!("{:?}", info.backend) })
     }
 
     pub fn resize(&mut self, width: u32, height: u32) {
@@ -133,8 +167,35 @@ impl Gpu {
         self.queue.present(texture);
     }
 
-    pub fn draw(&self, texture: &wgpu::SurfaceTexture, step: u64) {
+    /// Hands the renderer the files Bun pushed, and returns how many files it finished with.
+    pub fn absorb(&mut self, files: Vec<(String, Vec<u8>)>) -> u64 {
+        for (path, contents) in files {
+            self.renderer.ingest(&path, contents);
+        }
+        self.renderer.pump()
+    }
+
+    /// Keeps the scene to draw.
+    pub fn load_scene(&mut self, bytes: &[u8]) -> Result<(), String> {
+        self.scene = Some(DrawScene::parse(bytes)?);
+        Ok(())
+    }
+
+    pub fn take_problem(&mut self) -> Option<String> {
+        self.renderer.problems.pop()
+    }
+
+    pub fn draw(&mut self, texture: &wgpu::SurfaceTexture, step: u64) {
         let view = texture.texture.create_view(&Default::default());
+        if let Some(scene) = &self.scene {
+            let mut encoder = self.device.create_command_encoder(&Default::default());
+            self.renderer.draw(&mut encoder, &view, (self.config.width, self.config.height), self.aspect, scene);
+            self.queue.submit([encoder.finish()]);
+            if scene.pending == 0 && scene.frame >= self.capture.as_ref().map_or(u32::MAX, |capture| capture.after) && scene.poses.iter().any(|pose| self.renderer.has_model(&pose.model)) {
+                self.save_capture(&texture.texture);
+            }
+            return;
+        }
         self.queue.write_buffer(&self.vertices, 0, bytemuck::cast_slice(&counter_vertices(step)));
         let [r, g, b] = clear_color(step);
         let mut encoder = self.device.create_command_encoder(&Default::default());
@@ -157,6 +218,37 @@ impl Gpu {
             pass.draw(0..VERTICES as u32, 0..1);
         }
         self.queue.submit([encoder.finish()]);
+    }
+}
+
+impl Gpu {
+    fn save_capture(&mut self, texture: &wgpu::Texture) {
+        let Some(capture) = self.capture.as_mut() else { return };
+        if std::mem::replace(&mut capture.drawn, true) {
+            return;
+        }
+        let (width, height) = (self.config.width, self.config.height);
+        let row = (width * 4).next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
+        let buffer = self.device.create_buffer(&wgpu::BufferDescriptor { label: Some("capture"), size: (row * height) as u64, usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ, mapped_at_creation: false });
+        let mut encoder = self.device.create_command_encoder(&Default::default());
+        encoder.copy_texture_to_buffer(
+            texture.as_image_copy(),
+            wgpu::TexelCopyBufferInfo { buffer: &buffer, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(row), rows_per_image: Some(height) } },
+            wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+        );
+        self.queue.submit([encoder.finish()]);
+        buffer.slice(..).map_async(wgpu::MapMode::Read, |_| ());
+        let _ = self.device.poll(wgpu::PollType::wait_indefinitely());
+        let Ok(mapped) = buffer.slice(..).get_mapped_range() else { return };
+        let bgra = matches!(self.config.format, wgpu::TextureFormat::Bgra8Unorm | wgpu::TextureFormat::Bgra8UnormSrgb);
+        let [left, top, picture_width, picture_height] = crate::render::fitted((width, height), self.aspect);
+        let mut rgba = Vec::with_capacity((picture_width * picture_height * 4) as usize);
+        for line in mapped.chunks(row as usize).skip(top as usize).take(picture_height as usize) {
+            for pixel in line[(left * 4) as usize..((left + picture_width) * 4) as usize].chunks(4) {
+                rgba.extend_from_slice(&if bgra { [pixel[2], pixel[1], pixel[0], 255] } else { [pixel[0], pixel[1], pixel[2], 255] });
+            }
+        }
+        let _ = capture::write(&capture.path, picture_width, picture_height, &rgba);
     }
 }
 

@@ -40,6 +40,29 @@ pub struct Geoset {
     pub vertex_group: Vec<u8>,
     pub groups: Vec<Vec<u32>>,
     pub skin_weights: Vec<[u8; 8]>,
+    pub normals: Vec<[f32; 3]>,
+    pub uvs: Vec<[f32; 2]>,
+    /// A triangle list; strips and fans other than triangles are not read.
+    pub indices: Vec<u32>,
+    pub material_id: u32,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Layer {
+    pub filter_mode: u32,
+    pub texture_id: i32,
+    pub shading_flags: u32,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Material {
+    pub layers: Vec<Layer>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Texture {
+    pub replaceable_id: u32,
+    pub image: String,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -49,6 +72,8 @@ pub struct Model {
     pub global_sequences: Vec<u32>,
     pub geosets: Vec<Geoset>,
     pub nodes: Vec<Option<Node>>,
+    pub materials: Vec<Material>,
+    pub textures: Vec<Texture>,
 }
 
 #[derive(Debug, PartialEq, Eq)]

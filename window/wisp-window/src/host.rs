@@ -38,6 +38,9 @@ struct Shared {
     metrics: Arc<Mutex<Metrics>>,
     info: Mutex<String>,
     error: Mutex<Option<String>>,
+    assets: Mutex<Vec<(String, Vec<u8>)>>,
+    assets_in: AtomicU64,
+    assets_done: AtomicU64,
 }
 
 impl Shared {
@@ -167,6 +170,9 @@ impl Host {
             metrics: Arc::new(Mutex::new(Metrics::default())),
             info: Mutex::new(String::new()),
             error: Mutex::new(None),
+            assets: Mutex::new(Vec::new()),
+            assets_in: AtomicU64::new(0),
+            assets_done: AtomicU64::new(0),
         });
         let (proxy_in, proxy_out) = mpsc::channel();
         let (handoff, windows) = mpsc::channel();
@@ -194,9 +200,10 @@ impl Host {
             let _ = window_thread.join();
             return Err(lock(&shared.error).clone().unwrap_or_else(|| "no event loop".into()));
         };
+        let aspect = width as f32 / height.max(1) as f32;
         let render_thread = {
             let shared = shared.clone();
-            guarded(&shared.clone(), move || render_loop(shared, windows))
+            guarded(&shared.clone(), move || render_loop(shared, windows, aspect))
         };
         Ok(Self { shared, proxy: Mutex::new(proxy), threads: Mutex::new(Some(Threads { window: window_thread, render: render_thread })) })
     }
@@ -215,6 +222,18 @@ impl Host {
 
     pub fn set_status(&self, text: &str) {
         let _ = lock(&self.proxy).send_event(Command::Status(text.to_string()));
+    }
+
+    /// Queues a model or texture file for the render thread to upload before its next scene.
+    pub fn asset(&self, path: &str, bytes: &[u8]) {
+        self.shared.assets_in.fetch_add(1, Ordering::AcqRel);
+        lock(&self.shared.assets).push((path.to_string(), bytes.to_vec()));
+    }
+
+    /// How many pushed files the render thread has not yet finished with.
+    pub fn assets_pending(&self) -> u64 {
+        let done = self.shared.assets_done.load(Ordering::Acquire);
+        self.shared.assets_in.load(Ordering::Acquire).saturating_sub(done)
     }
 
     pub fn submit(&self, bytes: &[u8], step: u64, frame: u32) {
@@ -260,6 +279,18 @@ struct WindowSurface {
     shared: Arc<Shared>,
 }
 
+impl WindowSurface {
+    /// Takes the files Bun pushed, builds what is ready and counts what it finished with.
+    fn absorb(&mut self) {
+        let files = std::mem::take(&mut *lock(&self.shared.assets));
+        let finished = self.gpu.absorb(files);
+        self.shared.assets_done.fetch_add(finished, Ordering::AcqRel);
+        while let Some(problem) = self.gpu.take_problem() {
+            eprintln!("wisp-window: {problem}");
+        }
+    }
+}
+
 impl Surface for WindowSurface {
     type Image = wgpu::SurfaceTexture;
 
@@ -273,8 +304,17 @@ impl Surface for WindowSurface {
         image
     }
 
-    fn draw(&self, image: &Self::Image, step: u64) {
+    fn draw(&mut self, image: &Self::Image, step: u64) {
         self.gpu.draw(image, step);
+    }
+
+    fn load_scene(&mut self, bytes: &[u8]) -> Result<(), String> {
+        self.absorb();
+        self.gpu.load_scene(bytes)
+    }
+
+    fn idle(&mut self) {
+        self.absorb();
     }
 
     fn present(&self, image: Self::Image) {
@@ -311,13 +351,13 @@ fn mode_of(shared: &Shared) -> Mode {
     }
 }
 
-fn render_loop(shared: Arc<Shared>, windows: mpsc::Receiver<Arc<Window>>) {
+fn render_loop(shared: Arc<Shared>, windows: mpsc::Receiver<Arc<Window>>, aspect: f32) {
     let Ok(window) = windows.recv_timeout(WINDOW_WAIT) else {
         lock(&shared.error).get_or_insert_with(|| "no window appeared".into());
         shared.finish(End::Failed);
         return;
     };
-    let gpu = match Gpu::new(window.clone()) {
+    let gpu = match Gpu::new(window.clone(), aspect) {
         Ok(gpu) => gpu,
         Err(error) => {
             *lock(&shared.error) = Some(error);

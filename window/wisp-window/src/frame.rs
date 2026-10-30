@@ -23,8 +23,14 @@ pub trait Clock {
 pub trait Surface {
     type Image;
     fn acquire(&mut self) -> Option<Self::Image>;
-    fn draw(&self, image: &Self::Image, step: u64);
+    fn draw(&mut self, image: &Self::Image, step: u64);
+    /// Takes the scene a submission carried; the surface keeps what it needs to draw it.
+    fn load_scene(&mut self, bytes: &[u8]) -> Result<(), String> {
+        serde_json::from_slice::<serde_json::Value>(bytes).map(drop).map_err(|_| "the scene was not JSON".to_string())
+    }
     fn present(&self, image: Self::Image);
+    /// Runs while the window shows its loading state: takes what Bun sent so far.
+    fn idle(&mut self) {}
 }
 
 /// How the loop reads input.
@@ -218,7 +224,10 @@ impl<S: Surface, C: Clock> FrameLoop<S, C> {
             }
         }
         let period_ms = self.period_ms();
-        let outcome = if mode == Mode::Loading { Outcome::default() } else { self.sample_and_wait(mode, seam, acquired, period_ms) };
+        let outcome = if mode == Mode::Loading {
+            self.surface.idle();
+            Outcome::default()
+        } else { self.sample_and_wait(mode, seam, acquired, period_ms) };
         let drawing = self.clock.now_ns();
         self.surface.draw(&image, self.drawn_step);
         let drawn = self.clock.now_ns();
@@ -263,11 +272,12 @@ impl<S: Surface, C: Clock> FrameLoop<S, C> {
         outcome.late = !self.mailbox.wait_for_scene(sample.frame, wait) && !self.mailbox.is_stopping();
         if let Some(submission) = self.mailbox.take_scene() {
             let began = self.clock.now_ns();
-            if serde_json::from_slice::<serde_json::Value>(&submission.bytes).is_ok() {
-                self.drawn_step = submission.step;
-                self.drawn_frame = Some(submission.frame);
-            } else {
-                self.problem = Some("the scene was not JSON".into());
+            match self.surface.load_scene(&submission.bytes) {
+                Ok(()) => {
+                    self.drawn_step = submission.step;
+                    self.drawn_frame = Some(submission.frame);
+                }
+                Err(problem) => self.problem = Some(problem),
             }
             outcome.parse_ms = Some(ms(began, self.clock.now_ns()));
         }
@@ -323,7 +333,7 @@ mod tests {
             Some(vblank)
         }
 
-        fn draw(&self, _: &Instant, step: u64) {
+        fn draw(&mut self, _: &Instant, step: u64) {
             self.drawing.store(step as u32, Ordering::Release);
         }
 

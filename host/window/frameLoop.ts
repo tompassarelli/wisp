@@ -5,7 +5,7 @@ import { spread } from "./stats";
 
 /** What `openStandalone` gives a window that drives the session itself: the scene before the first step, one step, and the end of the run. */
 export interface NativePlayer {
-  prepare(): { readonly models: readonly string[]; readonly step: number };
+  prepare(): { readonly scene: StandaloneFrame["scene"]; readonly models: readonly string[]; readonly step: number };
   advance(input: StandaloneInput): StandaloneFrame;
   finish(result: Readonly<Record<string, unknown>>): Promise<void>;
 }
@@ -18,6 +18,8 @@ export interface FrameLoopOptions {
   readonly afterFrame?: ((count: number) => void) | undefined;
   /** Fields added to the result, such as the raw series a probe reads. */
   readonly extraResult?: ((series: FrameSeries) => Record<string, unknown>) | undefined;
+  /** Turns a step's scene into the text the window draws; JSON of the whole scene when absent. */
+  readonly encodeScene?: ((scene: StandaloneFrame["scene"]) => string) | undefined;
 }
 
 /** Every per-frame series of a run, in milliseconds. */
@@ -78,7 +80,7 @@ export function createFrameLoop(player: NativePlayer, window: WindowView, option
       const input: StandaloneInput = options.scripted ? { buttons: [], axisX: 0, axisY: 0 } : { buttons: window.buttons(sample.mask), axisX: sample.axisX, axisY: sample.axisY };
       const frame = player.advance(input);
       const stepped = performance.now();
-      window.submit(JSON.stringify(frame.scene), frame.step, sample.frame);
+      window.submit(options.encodeScene === undefined ? JSON.stringify(frame.scene) : options.encodeScene(frame.scene), frame.step, sample.frame);
       const submitted = performance.now();
       series.steps.push(stepped - began);
       series.encodes.push(submitted - stepped);

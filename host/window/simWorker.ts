@@ -2,6 +2,7 @@
 import { Effect } from "effect";
 import { type StandaloneGame, openStandalone } from "../play/standalone";
 import { type WindowView, adoptNativeWindow } from "./binding";
+import { createModelLibrary, drawScene, preloadScene } from "./drawScene";
 import { type FrameLoop, createFrameLoop } from "./frameLoop";
 import { type RenderSeries, type RenderSeriesName, renderSeriesLengths, renderSeriesSince } from "./renderSeries";
 import type { SimWorkerAttach, SimWorkerInit, SimWorkerMessage } from "./simProtocol";
@@ -55,8 +56,10 @@ const run = async (init: SimWorkerInit) => {
     let measured: RenderSeries | undefined;
     const assets = [...(game.render.preloadModels ?? []), "missing\\probe.mdx"];
     const probe = init.probe;
+    const library = createModelLibrary((path) => game.render.readAsset(path), view, (problem) => console.error(`native window: ${problem}`));
     const loop = createFrameLoop(player.native, view, {
       scripted: init.options.script !== undefined,
+      encodeScene: (scene) => JSON.stringify(drawScene(scene, library)),
       startupMs: performance.now() - began,
       afterFrame: probe === undefined ? undefined : (count) => {
         if (count === probe.warmupFrames) {
@@ -76,6 +79,7 @@ const run = async (init: SimWorkerInit) => {
     }, (result) => {
       void player.native.finish(result).catch(() => undefined).then(() => { send({ type: "completed", result }); finished.resolve(); });
     });
+    yield* Effect.promise(() => preloadScene(player.native.prepare().scene, library, () => view.assetsPending()));
     view.start();
     yield* serve(view, loop, finished.promise);
   })));

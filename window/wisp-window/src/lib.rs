@@ -4,6 +4,7 @@
 //! unwind into Bun. A window handle is a counted reference to the host: `wisp_window_attach` gives another thread its own, and
 //! `wisp_window_stop` joins both library threads, so a thread that outlives the stop reaches a stopped host, never freed memory.
 
+mod capture;
 mod clock;
 pub mod decode_pool;
 mod draw;
@@ -12,6 +13,7 @@ mod host;
 mod input;
 mod metrics;
 pub mod model;
+mod render;
 mod pad;
 #[cfg(target_os = "linux")]
 mod pad_gilrs;
@@ -132,6 +134,28 @@ pub unsafe extern "C" fn wisp_window_status(handle: *mut c_void, status: *const 
             host.set_status(text(status, length));
         }
     })
+}
+
+/// Queues a model or texture file, named by its Warcraft path, for the render thread to upload before it draws its next scene.
+///
+/// # Safety
+/// `handle` is live; `path` and `bytes` point to `path_length` and `length` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn wisp_window_asset(handle: *mut c_void, path: *const c_char, path_length: usize, bytes: *const u8, length: usize) {
+    guard((), || {
+        if let (Some(host), false) = (host(handle), bytes.is_null()) {
+            host.asset(text(path, path_length), slice::from_raw_parts(bytes, length));
+        }
+    })
+}
+
+/// How many files pushed with `wisp_window_asset` the render thread has not finished with; the game steps only once it is zero for the first scene.
+///
+/// # Safety
+/// `handle` is live.
+#[no_mangle]
+pub unsafe extern "C" fn wisp_window_assets_pending(handle: *mut c_void) -> u64 {
+    guard(0, || host(handle).map_or(0, |host| host.assets_pending()))
 }
 
 /// Hands the render thread the scene for the sample with frame number `frame`.
