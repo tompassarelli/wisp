@@ -261,6 +261,84 @@ Measured facts first, then the parts the audit must settle:
   P1 writes one line per surface: what differs, the check that shows it, and
   either a box to fix it or a reason it stays.
 
+### Input-to-display latency
+
+Measured on 30 October 2026 on gex45, to decide whether the standalone window's
+shell (Chrome) adds input latency or frame-time spikes that the Warcraft build
+doesn't. Tom then decided that Chrome can't ship and a native Rust window
+replaces it; these numbers are that window's baseline, and the harness below is
+its acceptance check (`--window native`).
+
+| Window | Press to first changed pixel, p50 | p95 | Trials answered | Command |
+| --- | --- | --- | --- | --- |
+| `wisp play --standalone` (Chrome 156, Xwayland) | 85 ms | 195 ms | 29 of 30 | `bun host/play/pressLatency.ts --window chrome --display :1 --wayland-runtime RUN/runtime --key j --region 360,260,200,220 --control 620,425,300,40 --trials 30 --out DIR` |
+| Native Classic Warcraft 3.0.0.24268, same build | 82 ms | 257 ms | 29 of 30 | `bun host/play/pressLatency.ts --window warcraft --display :5 --wayland-runtime RUN/runtime --key n --region 200,220,220,270 --control 600,520,300,60 --trials 30 --out DIR` |
+
+Each figure is the middle of the trial's bracket: the change came after the
+last unchanged screen grab began and before the first changed one ended. The
+conservative bound (the changed grab's end) is 24 ms higher at the median:
+109 against 106 ms at p50, 229 against 284 ms at p95. The bracket's median width
+is 48 ms, so the two medians are the same within the method's resolution, and
+neither window adds latency the other lacks.
+
+A game's program runs the same harness as `bun wisp perf latency`, with the
+same flags. `GRIM` and `XDOTOOL` name the tools when they aren't on PATH.
+
+Method (wisp:host/play/pressLatency.ts):
+
+- Both windows sit alone on a private labwc desktop
+  (`private-desktop-development`), the Warcraft client on LAN pair 0's lan0a
+  in a single-player game (`lan solo`). Chrome runs on Xwayland
+  (`--ozone-platform=x11`), so both take the same XTEST input.
+- The same Smashcraft source on both sides (smashcraft 8fb714ee1e): the
+  standalone with `-dev quick training` in place of its computer match, and the
+  `native-input` map with the same chat command. Illidan, standing, taps
+  attack (a 50 ms press): J in the browser's keys, N in the map's WASD preset.
+- A trial waits for a quiet 300 ms (the fighter's region below 1,000 changed
+  pixels and the control region still), taps the key through `xdotool` at a
+  logged monotonic time, and grabs the whole output with `grim` until the
+  fighter's region passes three times its idle change. Each grab takes one
+  compositor frame (16.4 ms median), so trials sample every frame.
+- A trial whose control region (stage floor away from the fighters) changed
+  in the answering grab saw the camera move, not the press, and is dropped:
+  one per window.
+- Both sides use the map's own two-frame input delay and predicted pooled
+  fighters, so the game's share is equal; the difference is the shell.
+- The standalone's game host ran under a gpu capacity lease, which scopes it
+  to one CPU; the training scene is light, but a throttled step would show as
+  a slow trial.
+- The spread is the host's, not the window's: gex45 ran other sessions' pools
+  and builds throughout (load average 8 to 12), and each window's p95 comes
+  from two or three slow trials (Chrome's slowest 197 ms, Warcraft's 603 ms).
+
+Frame time over a two-minute four-fighter match:
+
+| Measure | Standalone (Chrome) | Command |
+| --- | --- | --- |
+| p99 frame time (the page's work per frame) | 33.6 ms | `bun wisp play --standalone --four-fighters --frames 7200 --out DIR`, `frameMs` and `frameSamplesMs` in `DIR/standalone.json` |
+| Worst frame time | 179 ms (the first frame); 123 ms after the first second | same run |
+| Frames over 16.7 ms | 183 of 7,200 | same run |
+| Display frames held two refreshes or more | 212 of 7,199; interval p99 50.1 ms, worst 133.7 ms; 57.1 fps | same run, from `frameTimings` rAF timestamps |
+
+So Chrome misses about one display frame in 34 in a four-fighter match, in
+stalls of 33 to 134 ms spread across the whole match, not only at startup.
+The run held a moderate capacity lease (two CPUs for the Bun game host;
+Chrome ran outside it). The host averaged 1.45 cores and was throttled
+0.65 s in a 10 s sample, so some stalls may be the lease's quota rather than
+Chrome; the gpu class, which scopes to one CPU, ran the same match at about a
+quarter of real time. A native window should be held to this table and to no
+held display frames.
+
+Smashcraft defects the run found, left for Smashcraft:
+
+- `--four-fighters` picks Rifleman, who no longer ships in the map
+  (`shipsInMap`), so the run fails on a missing model; the measurement put
+  Samuro (`-dev fighter 2 Blademaster`) in his slot.
+- The `native-input` and `main` map profiles failed to compile on the
+  checkout's node_modules: Bun caches local tarballs by name and version, every
+  vendored Wisp tarball is `wisp@0.13.0`, so `bun install` installed another
+  commit's Wisp. A private `BUN_INSTALL_CACHE_DIR` installed the pinned one.
+
 ## 3. Standalone play through the relay, by region
 
 **Gain.** A join works through any NAT, CGNAT included, with no port

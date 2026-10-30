@@ -10,6 +10,7 @@ import { type NativeCase, checkNative, fitNativeCost, nativeCheckLines, parseNat
 import { type NativeCostModel, WARCRAFT_COST } from "../../src/headless/nativeCost";
 import { captureReceipt, parseFrameCostCapture, sectionTable, sectionTableLines } from "../perf/frameCostCapture";
 import { PERF_COLLECTOR_VARIABLE } from "../../src/headless/perfCollector";
+import { pressLatency, pressLatencyArguments } from "../play/pressLatency";
 
 export interface LuaBuild {
   readonly config: string;
@@ -173,7 +174,17 @@ const sections = (output: PerfOutput): Command => (args) => Effect.gen(function*
   else yield* Console.log(sectionTableLines(table).join("\n"));
 });
 
+const latency = (output: PerfOutput): Command => (args) => Effect.gen(function*() {
+  const options = pressLatencyArguments(args);
+  if (typeof options === "string") return yield* new UsageFailure({ problem: `perf latency ${options}` });
+  const report = yield* pressLatency(options).pipe(Effect.mapError((cause) => new PerfFailure({ problem: `perf latency: ${describeCause(cause)}` })));
+  const { rows, ...summary } = report;
+  if (output.json) yield* output.result(summary);
+  else yield* Console.log(JSON.stringify(summary));
+});
+
 const perf = (project: PerfProject, output: PerfOutput): Command => (args) => Effect.gen(function*() {
+  if (args[0] === "latency") return yield* latency(output)(args.slice(1));
   if (args[0] === "compare") return yield* compare(output)(args.slice(1));
   if (args[0] === "native") return yield* native(project, output)(args.slice(1));
   if (args[0] === "fit") return yield* fit(output)(args.slice(1));
@@ -185,7 +196,7 @@ const perf = (project: PerfProject, output: PerfOutput): Command => (args) => Ef
   const name = named[0] ?? project.defaultRun ?? "journey";
   const frames = Number(framesText);
   if (named.length > 1 || runs[name] === undefined || !Number.isInteger(frames) || frames < 1) {
-    return yield* new UsageFailure({ problem: `perf takes one run (${Object.keys(runs).join(", ")}), --frames N, --samples, --incremental-gc and --out FILE; or compare A B; native READINGS [RUN]; fit SAMPLES=READINGS ...; sections RECEIPT` });
+    return yield* new UsageFailure({ problem: `perf takes one run (${Object.keys(runs).join(", ")}), --frames N, --samples, --incremental-gc and --out FILE; or compare A B; native READINGS [RUN]; fit SAMPLES=READINGS ...; sections RECEIPT; latency --window KIND ...` });
   }
   const { output: stdout, summary, measured } = yield* measureRun(project, name, frames, args.includes("--samples"), args.includes("--incremental-gc"));
   if (out !== undefined) yield* Effect.tryPromise({ try: () => Bun.write(out, stdout), catch: (cause) => new PerfFailure({ problem: `writing ${out}: ${describeCause(cause)}` }) });
@@ -203,7 +214,7 @@ const perf = (project: PerfProject, output: PerfOutput): Command => (args) => Ef
 export const makePerf = (project: PerfProject): Command => (args) => Effect.gen(function*() {
   const json = args.includes("--json");
   const clean = args.filter((arg) => arg !== "--json");
-  const command = ["compare", "native", "fit", "sections"].includes(clean[0] ?? "") ? `perf ${clean[0]}` : "perf";
+  const command = ["compare", "native", "fit", "sections", "latency"].includes(clean[0] ?? "") ? `perf ${clean[0]}` : "perf";
   const started = yield* Clock.currentTimeMillis;
   let results = 0;
   const output: PerfOutput = {

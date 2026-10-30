@@ -72,7 +72,7 @@ program can register it; "game" means the consuming game defines it.
 | `fidelity` | Held-out look captures within calibration | `check` | Wisp |
 | `headless` | A journey in simulated clients | (journey name), `silhouette` ([Screen bounds](headless.md#screen-bounds)) | Wisp |
 | `soak` | Many headless matches by computers and a fuzzed controller | (session) | Wisp |
-| `perf` | Predicted frame cost | (run name), `compare`, `native`, `fit`, `sections`, `budget`, `profile`, `census` | Wisp |
+| `perf` | Predicted frame cost, and a window's press-to-pixel latency | (run name), `compare`, `native`, `fit`, `sections`, `latency`, `budget`, `profile`, `census` | Wisp |
 | `repro` | A saved moment of play or native replay actions | (file), `import` | Wisp |
 | `replay` | A full-match replay | (file) | game |
 | `parity` | Bun against 32-bit Lua on the same numbers | `numeric`, `tapes`, `corpus` | game |
@@ -192,7 +192,14 @@ Every flag a command's usage line shows is declared here with its one meaning.
 | `--screen` | Capture native framebuffer samples on the stimulus clock | `integrity capture` |
 | `--count N` | How many samples to capture | `integrity capture --screen`, `lan dummy` |
 | `--program FILE` | External command executable | `lan dummy` |
-| `--region X,Y,WIDTH,HEIGHT` | The pixel rectangle to capture | `integrity capture --screen` |
+| `--region X,Y,WIDTH,HEIGHT` | The pixel rectangle to capture | `integrity capture --screen`, `perf latency` |
+| `--control X,Y,WIDTH,HEIGHT` | A still pixel rectangle whose change marks camera motion, not a response | `perf latency` |
+| `--window chrome\|warcraft\|native` | The kind of game window measured, recorded in the result | `perf latency` |
+| `--display :N` | The private desktop's X display that receives input | `perf latency` |
+| `--wayland-runtime DIR` | The private desktop's Wayland runtime folder, for screen grabs | `perf latency` |
+| `--key KEYSYM` | The X key a trial taps | `perf latency` |
+| `--trials N` | How many presses to time | `perf latency` |
+| `--settle-ms MS` | The wait after each trial so the move ends | `perf latency` |
 | `--functions` | Report functions in the worst frames | `perf census` |
 | `--frame N` | Inspect this recorded frame | `repro` |
 | `--diff-frame N\|previous` | Compare the inspected frame with this other frame | `repro` |
