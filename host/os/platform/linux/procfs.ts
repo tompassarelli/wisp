@@ -1,8 +1,8 @@
 import { dlopen } from "bun:ffi";
 import { existsSync, readFileSync, readdirSync, readlinkSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import type { ProcessInfo } from "../../warcraft/battleNet";
-import type { CpuPressure, GameProcess, LauncherProcess, ServiceOwner } from "../services";
+import type { ProcessInfo } from "../../../contract/processInfo";
+import type { CpuPressure, GameProcess, LauncherProcess, ServiceOwner } from "../../../contract/services";
 import { readTextOrUndefined as readText } from "../../files";
 
 function prefixPath(prefix: string, windowsPath: string): string {

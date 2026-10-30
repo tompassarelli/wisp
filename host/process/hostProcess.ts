@@ -2,12 +2,7 @@ import { chmodSync, copyFileSync, renameSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { Duration, Effect, Exit, Fiber, FileSystem, Schedule, Schema, Scope, Stream } from "effect";
 import { ChildProcess } from "effect/process";
-
-export function describeCause(cause: unknown): string {
-  if (typeof cause === "string") return cause;
-  if (cause instanceof Error) return cause.message;
-  return String(cause);
-}
+import { describeCause } from "../contract/describeCause";
 
 export interface LogFiles {
   readonly stdout?: string;

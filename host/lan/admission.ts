@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Effect } from "effect";
-import { CapacityAdmission } from "../os/platform/services";
+import { CapacityAdmission } from "../contract/services";
 import { pollUntil } from "../process/hostProcess";
 
 export const admissionFile = (directory: string) => join(directory, "admission.json");

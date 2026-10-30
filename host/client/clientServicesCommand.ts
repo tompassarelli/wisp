@@ -1,5 +1,5 @@
 import { Console, Effect } from "effect";
-import type { Platform } from "../os/platform/services";
+import type { Platform } from "../contract/services";
 import { prefixFromDocuments } from "../os/warcraft/battleNet";
 import * as desktop from "../os/warcraft/desktop";
 import type { Command } from "../cli/command";

@@ -1,7 +1,7 @@
 import { Context, type Effect, type Option, Schema } from "effect";
-import type { ProcessInfo } from "../warcraft/battleNet";
-import type { Client, ClientEntry, ClientsConfig, DesktopFailure, Region } from "../warcraft/desktopClient";
-import type { InputAction } from "../warcraft/inputBatch";
+import type { ProcessInfo } from "./processInfo";
+import type { Client, ClientEntry, ClientsConfig, DesktopFailure, Region } from "./client";
+import type { InputAction } from "./inputAction";
 
 export class PlatformUnsupported extends Schema.TaggedError<PlatformUnsupported, { readonly brand: unique symbol }>()("PlatformUnsupported", {
   capability: Schema.String,

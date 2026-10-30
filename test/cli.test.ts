@@ -3,11 +3,13 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { Console, Effect } from "effect";
 import { expect, test } from "bun:test";
-import { cliProgram, runCli } from "../host/cli/cli";
+import { cliProgram } from "../host/cli/cli";
 import { flagValues } from "../host/cli/command";
 import { makeCi } from "../host/commands/ci";
+import { runCli } from "../host/commands/cli";
 import { makeMenus } from "../host/commands/menus";
 import { TestPlan } from "../host/dev/testSelection";
+import { platformLayer } from "../host/os/platform/layer";
 
 test("[property seed 824108] command dispatch preserves value boundaries, empty values and repetition", async () => {
   const lines: string[] = [];
@@ -52,7 +54,7 @@ test("[boundary] ci pre-merge runs the type check, only the tests the diff since
   const ci = makeCi({ root, sources: ["src", "test"], typeCheck: { command: ["true"] }, tests: { files: ["test/**/*.test.ts"] }, soak: { project: join(root, "soak/project.ts"), out: join(root, "out") } });
   const output = async (...flags: string[]) => {
     const lines: string[] = [];
-    const code = await Effect.runPromise(cliProgram("ci", { ci: { usage: "", load: async () => ci } }, ["ci", "pre-merge", "--base", "HEAD", "--json", ...flags], () => {}).pipe(
+    const code = await Effect.runPromise(cliProgram("ci", { ci: { usage: "", load: async () => ci } }, ["ci", "pre-merge", "--base", "HEAD", "--json", ...flags], platformLayer(), () => {}).pipe(
       Effect.provideService(Console.Console, { ...console, log: (...text: unknown[]) => lines.push(text.join(" ")), error: () => {} }),
     ));
     return { code, lines: lines.map((line) => JSON.parse(line) as Record<string, unknown>) };

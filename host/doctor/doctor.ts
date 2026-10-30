@@ -1,10 +1,8 @@
 import { join } from "node:path";
 import { reportBuild } from "../client/buildHost";
 import { Clock, Context, Effect, Schema } from "effect";
-import {
-  type LauncherHealth, type PrefixUse, type ProcessInfo, hasSavedLogin, isErrorDialog, launchOutcome, launchRequested, launcherHealth, launcherLogDirectory, newestLauncherLog,
-  prefixUse, shortcutUrl, withoutSavedLogin,
-} from "../os/warcraft/battleNet";
+import { type LauncherHealth, type PrefixUse, hasSavedLogin, isErrorDialog, launchOutcome, launchRequested, launcherHealth, launcherLogDirectory, newestLauncherLog, prefixUse, shortcutUrl, withoutSavedLogin } from "../os/warcraft/battleNet";
+import { type ProcessInfo } from "../contract/processInfo";
 import { type DisplayChange, type PreferenceSettings, preferenceChanges, preferencesPath, withPreferences } from "../os/warcraft/preferences";
 import { sessionLines, war3LogPath } from "../os/warcraft/war3Log";
 import type { Client } from "../client/clients";

@@ -3,11 +3,13 @@ import { join } from "node:path";
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { Effect, Exit, Layer, Option } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
-import { type InputAction, type KeyAction, untypable, vncActions, vncKey } from "../../warcraft/inputBatch";
-import { type Client, type ClientEntry, type ClientsConfig, DesktopFailure, type Region, ToplevelMissing, runTool, toolExit, toplevelMissing } from "../../warcraft/desktopClient";
+import { untypable, vncActions, vncKey } from "../../warcraft/inputBatch";
+import { type InputAction, type KeyAction } from "../../../contract/inputAction";
+import { ToplevelMissing, runTool, toolExit, toplevelMissing } from "../../warcraft/desktopClient";
+import { type Client, type ClientEntry, type ClientsConfig, DesktopFailure, type Region } from "../../../contract/client";
 import { skillScript } from "../../../process/hostProcess";
 import { step } from "../../../process/timings";
-import { InputInjection, ScreenCapture, type WindowTools } from "../services";
+import { InputInjection, ScreenCapture, type WindowTools } from "../../../contract/services";
 
 const fail = (operation: string, client: string) => (cause: unknown) => new DesktopFailure({ operation, client, cause });
 

@@ -1,10 +1,10 @@
 import { join } from "node:path";
 import { Effect, Layer } from "effect";
-import type { Platform } from "../os/platform/services";
+import type { Platform } from "../contract/services";
 import { documentsFolder, prefixFromDocuments } from "../os/warcraft/battleNet";
 import * as desktop from "../os/warcraft/desktop";
 import { type Command, type CommandFailure, UsageFailure } from "../cli/command";
-import { type ClientProfile, clientSettings } from "../os/warcraft/clientProfiles";
+import { type ClientProfile, clientSettings } from "../contract/clientProfiles";
 import { DoctorHands, DoctorStop, type DoctorTarget, doctor, signOut } from "../doctor/doctor";
 import { privateDoctorHands } from "../doctor/doctorHost";
 import { PlayMachine } from "../play/play";

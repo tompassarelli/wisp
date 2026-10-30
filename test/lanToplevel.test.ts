@@ -5,8 +5,9 @@ import { join } from "node:path";
 import { Cause, Effect, Exit } from "effect";
 import { confirmToplevel } from "../host/lan/pool";
 import { linuxDesktopLayer } from "../host/os/platform/linux/desktop";
-import { InputInjection } from "../host/os/platform/services";
-import { type Client, DesktopFailure, ToplevelMissing, toplevelMissing } from "../host/os/warcraft/desktopClient";
+import { InputInjection } from "../host/contract/services";
+import { ToplevelMissing, toplevelMissing } from "../host/os/warcraft/desktopClient";
+import { type Client, DesktopFailure } from "../host/contract/client";
 
 describe("pool client toplevel", () => {
   test("[spec docs/lan.md] a pool client whose compositor lists no Warcraft toplevel is restarted once before its pair is up, and its pair fails with a missing toplevel when the restart lists none", () => {

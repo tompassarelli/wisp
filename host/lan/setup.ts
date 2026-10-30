@@ -3,7 +3,7 @@ import { join } from "node:path";
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { Effect } from "effect";
 import { ChildProcess } from "effect/process";
-import { GameLauncher } from "../os/platform/services";
+import { GameLauncher } from "../contract/services";
 import { collect } from "../process/hostProcess";
 import { installMenuPage } from "./menus";
 import { buildOf, linkPrefix, linkStorage } from "../os/warcraft/sharedStorage";

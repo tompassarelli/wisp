@@ -1,17 +1,6 @@
 import { Effect, Schema } from "effect";
-import { describeCause } from "../../process/hostProcess";
 import { step } from "../../process/timings";
-import { CLIENT_PROFILE_NAMES } from "./clientProfiles";
-
-export class DesktopFailure extends Schema.TaggedError<DesktopFailure, { readonly brand: unique symbol }>()("DesktopFailure", {
-  operation: Schema.String,
-  client: Schema.String,
-  cause: Schema.Unknown,
-}) {
-  override get message(): string {
-    return `${this.operation} failed for ${this.client}: ${describeCause(this.cause)}`;
-  }
-}
+import { type Client, ClientsFile, DesktopFailure, type Region } from "../../contract/client";
 
 export class ToplevelMissing extends Schema.TaggedError<ToplevelMissing, { readonly brand: unique symbol }>()("ToplevelMissing", {
   title: Schema.String,
@@ -28,32 +17,6 @@ export const toplevelMissing = (error: unknown): boolean => {
   }
   return false;
 };
-
-const ClientsFile = Schema.Struct({
-  tools: Schema.Struct({ grim: Schema.String, xdotool: Schema.String, wlrctl: Schema.String, tesseract: Schema.String }),
-  clients: Schema.NonEmptyArray(Schema.Struct({ name: Schema.String, run: Schema.String, documents: Schema.String, menuReportPort: Schema.optional(Schema.Int), displaySettings: Schema.optional(Schema.Record(Schema.String, Schema.String)), profile: Schema.optional(Schema.Literals(CLIENT_PROFILE_NAMES)), offline: Schema.optionalKey(Schema.Boolean) })),
-});
-type Tools = typeof ClientsFile.Type["tools"];
-
-export interface Client {
-  readonly name: string;
-
-  readonly documents: string;
-
-  readonly menuReportPort?: number;
-  readonly run?: string;
-  readonly tools: Tools;
-  readonly x11: Record<string, string>;
-  readonly wayland: Record<string, string>;
-  readonly window: string;
-}
-
-export interface Region {
-  readonly x: number;
-  readonly y: number;
-  readonly width: number;
-  readonly height: number;
-}
 
 function fail(operation: string, client: string) {
   return (cause: unknown) => new DesktopFailure({ operation, client, cause });
@@ -101,9 +64,6 @@ export function toolExit(client: string, operation: string, command: readonly st
     }),
   );
 }
-
-export type ClientsConfig =typeof ClientsFile.Type;
-export type ClientEntry = ClientsConfig["clients"][number];
 
 export const readClientsFile = (path: string) =>
   Effect.gen(function*() {

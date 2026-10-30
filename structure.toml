@@ -67,19 +67,25 @@ may_use = ["map", "runtime", "num", "natives"]
 name = "process"
 paths = ["host/process/**"]
 responsibility = "Process spawning, polling, logged child processes and step timings shared by every host layer."
+may_use = ["contract"]
+
+[[module]]
+name = "contract"
+paths = ["host/contract/**"]
+responsibility = "The Platform service contract (tags and interfaces, no implementations) and the process, client and input types it names, below both the CLI and the OS layer."
 may_use = []
 
 [[module]]
 name = "cli"
 paths = ["host/cli/**"]
 responsibility = "Command type, CLI runner, JSON results and the panel server."
-may_use = ["os", "process"]
+may_use = ["contract", "process"]
 
 [[module]]
 name = "os"
 paths = ["host/os/**"]
 responsibility = "Host OS services and Warcraft client control (launcher, window, input, preferences, log)."
-may_use = ["process"]
+may_use = ["contract", "process"]
 
 [[module]]
 name = "build"

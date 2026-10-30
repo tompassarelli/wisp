@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Layer } from "effect";
-import { BackgroundServices } from "../host/os/platform/services";
+import { BackgroundServices } from "../host/contract/services";
 import { desktopOwner, startDesktop } from "../host/client/clientServices";
 
 test("[scenario] two sessions starting a desktop for client a keep two desktop units", async () => {

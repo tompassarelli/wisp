@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { Console, Effect } from "effect";
-import { ProcessTable } from "../os/platform/services";
+import { ProcessTable } from "../contract/services";
 import { prefixFromDocuments } from "../os/warcraft/battleNet";
 import * as desktop from "../os/warcraft/desktop";
 import { liveBuild } from "../os/warcraft/liveBuild";

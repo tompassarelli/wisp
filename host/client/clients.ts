@@ -1,5 +1,5 @@
 import { Context, Effect, Layer } from "effect";
-import type { Platform } from "../os/platform/services";
+import type { Platform } from "../contract/services";
 import * as desktop from "./desktop";
 import type { Frame } from "../scene/frameProbe";
 import type { Client } from "./client";

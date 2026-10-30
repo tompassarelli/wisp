@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { runPlatformSync } from "../os/platform/layer";
-import { ProcessTable } from "../os/platform/services";
+import { ProcessTable } from "../contract/services";
 
 export const isolatedNetworkProblem = (pid: number): string | undefined => runPlatformSync(ProcessTable.use((table) => table.networkInterfaces(pid)).pipe(
   Effect.map((names) => {

@@ -5,8 +5,8 @@ import { ServiceProblem, pollFor } from "../process/hostProcess";
 import { stateHome } from "../os/xdg";
 import { dirname, join, resolve } from "node:path";
 import { Effect, Schema } from "effect";
-import { BackgroundServices, CapacityAdmission, type PlatformError, ProcessTable, type ServiceOwner } from "../os/platform/services";
-import type { ProcessInfo } from "../os/warcraft/battleNet";
+import { BackgroundServices, CapacityAdmission, type PlatformError, ProcessTable, type ServiceOwner } from "../contract/services";
+import type { ProcessInfo } from "../contract/processInfo";
 export { clientUnit } from "./client";
 
 /** The session that owns a desktop: its clients file, so two lanes' clients named alike get separate units. */

@@ -4,7 +4,7 @@ import { userInfo } from "node:os";
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { Console, Effect, Exit, Schema, Scope } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
-import { Namespaces } from "../os/platform/services";
+import { Namespaces } from "../contract/services";
 import { collect, pollUntil, spawnLogged } from "../process/hostProcess";
 import { LEASE_USAGE, lease, releaseLocalLeases } from "./lanQueue";
 import { type Command, UsageFailure, describeCause, flagValues, portFlag, wholeFlag } from "../cli/command";
@@ -20,7 +20,7 @@ import { ensurePackager } from "../compile/mapBuild";
 import {
   PAIR_SIDES, agentFile, agentSocket, alive, clientName, lanPlayRefusal, mapPackager, networkFlagProblem, pairClients, pairSides, pairDirectory, pairEntryFile, pairsHeldBy, readClaim, livePairs, poolClientsFile, poolFile, poolHolder, poolOwners, playtestPairRefusal, readPool, reportPort, stopAgent, stopPairScopes, writeJson, writePoolClients, wrongUser,
 } from "../lan/pool";
-import { PROFILES, desktopSize } from "../os/warcraft/clientProfiles";
+import { PROFILES, desktopSize } from "../contract/clientProfiles";
 import { DEFAULT_BUILD, profileFor } from "../os/warcraft/builds";
 import { setupClient } from "../lan/setup";
 import { deferredExit, lastQueued, unadmitted } from "../lan/admission";

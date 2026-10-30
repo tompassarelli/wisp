@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Effect } from "effect";
-import { GameLauncher } from "../host/os/platform/services";
+import { GameLauncher } from "../host/contract/services";
 import { installOf, prefixOf } from "../host/lan/pool";
 import { setupClient } from "../host/lan/setup";
 

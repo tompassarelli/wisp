@@ -5,7 +5,7 @@ import { Effect, Layer, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import {
   AudioIsolation, BackgroundServices, CapacityAdmission, GameLauncher, Namespaces, PageOpener, PlatformFailure, ProcessTable, ResourceAccounting,
-} from "../services";
+} from "../../../contract/services";
 import { linuxDesktopLayer } from "./desktop";
 import * as procfs from "./procfs";
 import { startUnit, stopUnit, unitState } from "./systemd";

@@ -4,13 +4,13 @@ import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { Deferred, Effect, Exit, Fiber, FileSystem, Layer, Scope, Stream } from "effect";
 import { platformLayer } from "../os/platform/layer";
-import { Namespaces } from "../os/platform/services";
+import { Namespaces } from "../contract/services";
 import { ChildProcess } from "effect/process";
 import { flagValues } from "../cli/command";
 import { spawnLogged } from "../process/hostProcess";
 import { LanFailure } from "./join";
 import { agentFile, agentPidFile, pairDirectory, pairFlags, pairSides, stopAgent } from "./pool";
-import { desktopSize } from "../os/warcraft/clientProfiles";
+import { desktopSize } from "../contract/clientProfiles";
 
 const argument = (name: string) => flagValues(process.argv, name)[0];
 const { pair, profile, network } = pairFlags(process.argv);

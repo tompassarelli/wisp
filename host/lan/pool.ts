@@ -9,12 +9,12 @@ import { UsageFailure, flagValues, wholeFlag } from "../cli/command";
 import { pollUntil } from "../process/hostProcess";
 import { writeAtomic } from "../os/files";
 import { cacheHome, dataHome, stateHome } from "../os/xdg";
-import { CapacityAdmission, InputInjection } from "../os/platform/services";
+import { CapacityAdmission, InputInjection } from "../contract/services";
 import { documentsFolder } from "../os/warcraft/battleNet";
-import { PROFILES, type Profile } from "../os/warcraft/clientProfiles";
+import { PROFILES, type Profile } from "../contract/clientProfiles";
 export {
   CLIENT_PROFILE_NAMES, type ClientProfile, PROFILES, type Profile, clientSettings, desktopSize, preferences,
-} from "../os/warcraft/clientProfiles";
+} from "../contract/clientProfiles";
 
 export const stateRoot = () => join(stateHome(), "wisp/lan");
 /** The pair lease queue: the lease files `lan lease take` writes and a pool start reads. */

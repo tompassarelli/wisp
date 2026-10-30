@@ -1,6 +1,6 @@
 import { connect } from "node:net";
 import { Effect } from "effect";
-import { DesktopFailure } from "../os/warcraft/desktopClient";
+import { DesktopFailure } from "../contract/client";
 
 const NAMED_KEYSYMS: Readonly<Record<string, number>> = {
   space: 0x20, Return: 0xff0d, Escape: 0xff1b, Tab: 0xff09, BackSpace: 0xff08,

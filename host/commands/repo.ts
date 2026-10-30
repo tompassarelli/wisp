@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { runMainCli } from "../cli/cli";
+import { runMainCli } from "./cli";
 
 const root = join(import.meta.dir, "../..");
 /** Wisp's own soak for `ci`: the soak test's map with fault-free policies (wisp:host/soak/ci/ciProject.ts). */

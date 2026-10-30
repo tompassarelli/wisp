@@ -8,7 +8,7 @@ import { capacityHelper } from "../render/gpuLease";
 import { pollUntil } from "../process/hostProcess";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { platformLayer } from "../os/platform/layer";
-import { type CpuPressure, ResourceAccounting } from "../os/platform/services";
+import { type CpuPressure, ResourceAccounting } from "../contract/services";
 import { TEST_COST_OUT_ENV, addCost, report, type Costs } from "./testCost";
 import { TEST_PHASE_ENV, TIMING_TEST_PREFIX } from "./timingTest";
 

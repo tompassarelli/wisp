@@ -2,9 +2,10 @@ import { Effect } from "effect";
 import { ClientWatch, describeView, typesIntoMatch } from "../dev/watch";
 import { chatEntryBand, chatEntryOpen, sendCheckedChat } from "../os/warcraft/chatEntry";
 import { capture, focus } from "../os/warcraft/desktop";
-import { type Client, DesktopFailure } from "../os/warcraft/desktopClient";
-import { type InputAction, sendsChat } from "../os/warcraft/inputBatch";
-import { InputInjection } from "../os/platform/services";
+import { type Client, DesktopFailure } from "../contract/client";
+import { sendsChat } from "../os/warcraft/inputBatch";
+import { type InputAction } from "../contract/inputAction";
+import { InputInjection } from "../contract/services";
 
 export * from "../os/warcraft/desktop";
 

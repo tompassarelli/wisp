@@ -4,7 +4,8 @@ import { join } from "node:path";
 import { afterAll, expect, test } from "bun:test";
 import { Effect } from "effect";
 import { linuxDesktopLayer } from "../host/os/platform/linux/desktop";
-import { type Client, capture, captureTimed } from "../host/os/warcraft/desktop";
+import { capture, captureTimed } from "../host/os/warcraft/desktop";
+import { type Client } from "../host/contract/client";
 
 const folder = mkdtempSync(join(tmpdir(), "wisp-capture-"));
 afterAll(() => rmSync(folder, { recursive: true, force: true }));

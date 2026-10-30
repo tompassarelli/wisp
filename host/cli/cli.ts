@@ -1,7 +1,6 @@
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import { Cause, Effect, Exit, Layer, Option } from "effect";
-import { platformLayer } from "../os/platform/layer";
-import type { Platform } from "../os/platform/services";
+import type { Platform } from "../contract/services";
 import type { Command } from "./command";
 import { step, timingsLayer } from "../process/timings";
 
@@ -12,7 +11,7 @@ export interface CommandEntry {
   readonly load: () => Promise<Command>;
 }
 
-export const cliProgram = (program: string, commands: Readonly<Record<string, CommandEntry>>, argv: readonly string[], print: (line: string) => void = console.error, platform: Layer.Layer<Platform> = platformLayer()) => Effect.gen(function*() {
+export const cliProgram = (program: string, commands: Readonly<Record<string, CommandEntry>>, argv: readonly string[], platform: Layer.Layer<Platform>, print: (line: string) => void = console.error) => Effect.gen(function*() {
   const [name, ...args] = argv;
   const entry = name === undefined ? undefined : commands[name];
   if (name === undefined || entry === undefined) {
@@ -37,8 +36,8 @@ export const cliProgram = (program: string, commands: Readonly<Record<string, Co
 
 export const runCli = (...args: Parameters<typeof cliProgram>): Promise<number> => Effect.runPromise(cliProgram(...args));
 
-export const runMainCli = (program: string, commands: Readonly<Record<string, CommandEntry>>, argv: readonly string[]) =>
-  BunRuntime.runMain(cliProgram(program, commands, argv), {
+export const runMainCli = (program: string, commands: Readonly<Record<string, CommandEntry>>, argv: readonly string[], platform: Layer.Layer<Platform>) =>
+  BunRuntime.runMain(cliProgram(program, commands, argv, platform), {
     disableErrorReporting: true,
     teardown: (exit) => process.exit(Exit.isSuccess(exit) ? Number(exit.value) : Cause.hasInterruptsOnly(exit.cause) ? 130 : 1),
   });

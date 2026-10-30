@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from
 import { dirname, join, relative, resolve } from "node:path";
 import { Console, Effect } from "effect";
 import { type Repro } from "../../src/runtime/repro";
-import { PageOpener } from "../os/platform/services";
+import { PageOpener } from "../contract/services";
 import { type Command, UsageFailure, describeCause, flagValues } from "../cli/command";
 import { type HeadlessMap } from "../headless/headless";
 import { step } from "../process/timings";

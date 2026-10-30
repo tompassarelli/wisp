@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { Effect, Option, Schema } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
-import { ResourceAccounting } from "../os/platform/services";
+import { ResourceAccounting } from "../contract/services";
 
 /** The machine-capacity helper script, or undefined where none is installed (CI, cloud, other machines). `WISP_CAPACITY_HELPER` names it directly. */
 export const capacityHelper = Effect.gen(function*() {

@@ -5,8 +5,9 @@ import { join } from "node:path";
 import { parseArgs } from "node:util";
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import { Effect } from "effect";
-import { decodePpm } from "../os/platform/services";
-import { DesktopFailure, runTool } from "../os/warcraft/desktopClient";
+import { decodePpm } from "../contract/services";
+import { runTool } from "../os/warcraft/desktopClient";
+import { DesktopFailure } from "../contract/client";
 import { type PressLatencyOptions, pressLatency, type Rect } from "./pressLatency";
 
 /** Frames the reference page waits between the key and the pixel it changes. */

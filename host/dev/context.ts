@@ -1,7 +1,7 @@
 import { availableParallelism } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { Effect, Schema, Semaphore } from "effect";
-import { ResourceAccounting } from "../os/platform/services";
+import { ResourceAccounting } from "../contract/services";
 import { describeCause } from "../cli/command";
 import { Standby, runProcess } from "./devProcesses";
 import { WARM_ENV } from "./devResult";

@@ -1,7 +1,8 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { type ProcessInfo, prefixUse } from "../host/os/warcraft/battleNet";
+import { prefixUse } from "../host/os/warcraft/battleNet";
+import { type ProcessInfo } from "../host/contract/processInfo";
 import { sessionStart } from "../host/os/warcraft/war3Log";
 import { type ClientState, type CrashReport, type SocketState, type Sources, changes, crashSummary, decide, eventLine, socketEvent, typesIntoMatch } from "../host/dev/watch";
 

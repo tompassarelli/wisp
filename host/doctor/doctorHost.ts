@@ -1,7 +1,7 @@
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { Effect, Layer } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
-import type { Platform } from "../os/platform/services";
+import type { Platform } from "../contract/services";
 import * as desktop from "../client/desktop";
 import { DoctorHands, type DoctorTarget } from "./doctor";
 import { collect } from "../process/hostProcess";

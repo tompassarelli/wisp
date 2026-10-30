@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { Cause, Effect, Exit, Scope } from "effect";
-import { GameLauncher } from "../host/os/platform/services";
+import { GameLauncher } from "../host/contract/services";
 import { startHost } from "../host/lan/host";
 import { ALARM_AFTER_MS, type Driver, clientRun, driverVerdict, idleness, installOf, lanPlayRefusal, networkFlagProblem, pairClients, pairFlags, pairSides, prefixOf, wrongUser } from "../host/lan/pool";
 import { setupClient } from "../host/lan/setup";

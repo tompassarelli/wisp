@@ -1,10 +1,8 @@
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { Clock, Context, Effect, Exit, Schema, type Scope } from "effect";
-import {
-  type LaunchOutcome, type PrefixUse, type ProcessInfo, documentsFolder, launchOptions, launchOutcome, launchRequested, launcherConfig, launcherLogDirectory, loadMapOption,
-  newestLauncherLog, prefixUse, shortcutAppId, shortcutUrl, signedIn, withLaunchOptions,
-} from "../os/warcraft/battleNet";
+import { type LaunchOutcome, type PrefixUse, documentsFolder, launchOptions, launchOutcome, launchRequested, launcherConfig, launcherLogDirectory, loadMapOption, newestLauncherLog, prefixUse, shortcutAppId, shortcutUrl, signedIn, withLaunchOptions } from "../os/warcraft/battleNet";
+import { type ProcessInfo } from "../contract/processInfo";
 import type { Ink, Word } from "../os/warcraft/desktop";
 import { type DisplaySettings, absentSettings, displayChanges, preferencesBackupPath, preferencesPath, withGraphicsMode, withDisplaySettings } from "../os/warcraft/preferences";
 import { SCAN_QUIET_MS, importFailures, ladderScan, sessionStart, war3LogPath } from "../os/warcraft/war3Log";

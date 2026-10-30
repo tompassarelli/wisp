@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { Effect, Layer } from "effect";
-import { ResourceAccounting } from "../host/os/platform/services";
+import { ResourceAccounting } from "../host/contract/services";
 import { agentRender } from "../host/play/standalone";
 import { requireGpuLease } from "../host/render/gpuLease";
 

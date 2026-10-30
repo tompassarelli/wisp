@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { runPlatformSync } from "../os/platform/layer";
-import { ResourceAccounting } from "../os/platform/services";
+import { ResourceAccounting } from "../contract/services";
 
 export type SoakClock = (this: void) => number;
 

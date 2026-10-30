@@ -1,5 +1,6 @@
 import { Effect } from "effect";
-import { DesktopFailure, waitFor } from "../os/warcraft/desktop";
+import { waitFor } from "../os/warcraft/desktop";
+import { DesktopFailure } from "../contract/client";
 
 interface ChatEntry {
   readonly available: boolean;

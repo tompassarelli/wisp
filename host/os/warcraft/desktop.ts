@@ -1,9 +1,11 @@
 import { Effect } from "effect";
 import { pollFor } from "../../process/hostProcess";
-import { type Frame, InputInjection, ScreenCapture, decodePpm } from "../platform/services";
-import { type Client, type ClientEntry, type ClientsConfig, DesktopFailure, type Region, readClientsFile, runTool } from "./desktopClient";
-export { type Client, type ClientEntry, type ClientsConfig, DesktopFailure, type Region, ToplevelMissing, readClientsFile, runTool, toplevelMissing } from "./desktopClient";
-export type { InputAction } from "./inputBatch";
+import { type Frame, InputInjection, ScreenCapture, decodePpm } from "../../contract/services";
+import { readClientsFile, runTool } from "./desktopClient";
+import { type Client, type ClientEntry, type ClientsConfig, DesktopFailure, type Region } from "../../contract/client";
+export { ToplevelMissing, readClientsFile, runTool, toplevelMissing } from "./desktopClient";
+export { type Client, type ClientEntry, type ClientsConfig, DesktopFailure, type Region } from "../../contract/client";
+export type { InputAction } from "../../contract/inputAction";
 export { sendsChat } from "./inputBatch";
 
 export type Ink = "light" | "gold" | "white";

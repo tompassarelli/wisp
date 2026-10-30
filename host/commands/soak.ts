@@ -3,7 +3,7 @@ import { join } from "node:path";
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { Cause, Console, Effect, Exit, FileSystem, Queue, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
-import { ResourceAccounting } from "../os/platform/services";
+import { ResourceAccounting } from "../contract/services";
 import { type Command, UsageFailure, describeCause, flagValues, wholeFlag } from "../cli/command";
 import { installHeadless } from "../headless/headless";
 import { writtenPreloadFile } from "../headless/headlessInput";

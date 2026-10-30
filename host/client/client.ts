@@ -1,4 +1,4 @@
-import type { Client as Session } from "../os/warcraft/desktopClient";
+import type { Client as Session } from "../contract/client";
 
 export type Client = Pick<Session, "name" | "documents" | "menuReportPort">;
 

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { Frame } from "../host/os/platform/services";
+import type { Frame } from "../host/contract/services";
 import { checkArguments, referenceErrors } from "../host/play/latencyReference";
 import { changedPixels, framePeriodMs, pressLatencyArguments, response, type Sample } from "../host/play/pressLatency";
 import { displaySocket, fakeKey, keycodeOf, keysymOf, queryExtension } from "../host/play/xtest";

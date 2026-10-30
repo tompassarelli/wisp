@@ -3,8 +3,9 @@ import { join } from "node:path";
 import { parseArgs } from "node:util";
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import { Effect } from "effect";
-import { decodePpm, encodePpm, type Frame } from "../os/platform/services";
-import { DesktopFailure, runTool } from "../os/warcraft/desktopClient";
+import { decodePpm, encodePpm, type Frame } from "../contract/services";
+import { runTool } from "../os/warcraft/desktopClient";
+import { DesktopFailure } from "../contract/client";
 import { openKeyboard } from "./xtest";
 
 export const WINDOW_KINDS = ["chrome", "warcraft", "native", "reference"] as const;

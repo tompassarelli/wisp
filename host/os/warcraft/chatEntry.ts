@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import { pollFor } from "../../process/hostProcess";
-import type { Frame } from "../platform/services";
-import { DesktopFailure, type Region } from "./desktopClient";
+import type { Frame } from "../../contract/services";
+import { DesktopFailure, type Region } from "../../contract/client";
 
 export interface ChatEntryBand {
   readonly region: Region;
