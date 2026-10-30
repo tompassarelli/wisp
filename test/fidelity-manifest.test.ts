@@ -94,9 +94,7 @@ test("[wisp#75 P4.2 and P1.3] public capture file boundary accepts a complete sl
     fault(incomplete);
     expect(await Effect.runPromise(decodeManifest(incomplete).pipe(Effect.isSuccess)), `fault ${index}`).toBe(false);
   }
-  for (const look of ["classic"] as const) {
-    expect(await accepted(makeManifest("fog", look, tombControls.filter((control) => control.fog !== true))), `${look} without fog on`).toBe(false);
-    expect(await accepted(makeManifest("fog", look, tombControls.filter((control) => control.mode !== "mask"))), `${look} without mask`).toBe(false);
-  }
+  expect(await accepted(makeManifest("fog", "classic", tombControls.filter((control) => control.fog !== true))), "classic without fog on").toBe(false);
+  expect(await accepted(makeManifest("fog", "classic", tombControls.filter((control) => control.mode !== "mask"))), "classic without mask").toBe(false);
   console.log(`capture manifest: ${paths.length} required-field omissions and ${faults.length} invalid slices rejected`);
 });

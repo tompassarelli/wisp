@@ -38,6 +38,10 @@ farmTest("[reference] numeric, payload and record text contracts pass in emitted
   for (const [lua, only, passed] of [[process.env.LUA ?? "lua", [], /(\d+) of \1 passed/], [towardZero, ["record text"], /([1-9]\d*) of \1 passed/], [towardZero, ["f32"], /([1-9]\d*) of \1 passed/]] as const) {
     const run = Bun.spawnSync([lua, join(root, "build/lua-tests/tests.lua"), ...only], { cwd: root, stdout: "pipe", stderr: "pipe" });
     expect({ lua, code: run.exitCode, stderr: run.stderr.toString() }).toEqual({ lua, code: 0, stderr: "" });
-    expect(run.stdout.toString()).toMatch(passed);
+    const counts = /(\d+) of (\d+) passed/.exec(run.stdout.toString());
+    expect(counts).not.toBeNull();
+    const [passed, total] = [Number(counts?.[1]), Number(counts?.[2])];
+    expect(total).toBeGreaterThan(0);
+    expect(passed).toBe(total);
   }
 }, 600_000);
