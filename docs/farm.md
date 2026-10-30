@@ -57,31 +57,27 @@ This clears branches left by a killed command or a manual push.
 
 ## Where shards run
 
-When the `FARM_RUNNER` repository variable names a self-hosted runner label
-(Wisp's is the farm-big box), the plan job sends the even Bun shards there
-and the odd ones to hosted runners, so both pools run at once. It sends an
-even shard to the farm only while the box can take it (wisp#132): the farm box
-ran shards 1.37x slower than hosted while its VM pool loaded it to 62 on
-30 cores.
+Wisp's runner placement is the reviewed wisp:runner-routing.json and
+wisp:host/farm/runnerRoute.ts. The workflow revision's own `route` job (CI) or
+plan job (farm test) runs the script, which counts this repository's
+unfinished jobs asking for the `farm-big` label (the runners API needs an admin
+token the workflow lacks) and reports `capacity` minus that count as the idle
+runners. Only `push`, `workflow_dispatch` and `schedule` events can pick the
+farm: a `pull_request` or `pull_request_target` event, a fork's included, a
+retry (run attempt above 1) and a full farm all give `ubuntu-latest`. Keep
+`capacity` equal to the number of wisp runners registered on gex45 (2).
 
-wisp:.github/workflows/farm-load.yml runs every 5 minutes (and on dispatch)
-on the `FARM_RUNNER` label, with no checkout. It writes
-`{"load1":L,"cores":C,"at":UNIX_SECONDS}` from `/proc/loadavg` and `nproc` to
-`farm-load.json` and saves it in the Actions cache under
-`farm-load-RUN_ID`; one probe waits for the box at a time. Schedules run on
-main, so every branch's plan job restores the newest sample (`restore-keys:
-farm-load-`), the same way it restores `farm-timings.json`. Without
-`FARM_RUNNER` the probe is skipped.
-
-`placeShards` in wisp:host/farm/farmShards.ts (`farmShards.ts place`)
-decides each shard. An even shard goes to the farm label only when a sample
-exists, it is at most 900 s old, and `load1 <= cores`. Otherwise it goes to
-`ubuntu-latest` with the reason `missing`, `stale AGEs` (a box too busy to
-take the probe for 15 minutes is too busy for shards) or `load L > C cores`.
-Without `FARM_RUNNER` every shard is hosted (`no farm runner`). A
-`farm-runner` dispatch input, which measures a box before enabling it, skips
-the load check (`farm-runner input`). The plan job's run summary has one line
-per shard, such as `- bun 0: ubuntu-latest (load 62.1 > 30 cores)`.
+`placeShards` in wisp:host/farm/farmShards.ts (`farmShards.ts place`) sends the
+first `idle` Bun shards to the farm label and the rest to hosted runners, so
+both pools run at once; with no farm label every shard is hosted
+(`no farm runner`). A `farm-runner` dispatch input names the label in place of
+the choice (`ubuntu-latest` forces hosted runners). The plan job's run summary
+has the route's reason and one line per shard, such as
+`- bun 0: farm-big (2 farm runners idle)`. The CI `framework` job takes the
+farm the same way; Rust, Windows and `sudo` jobs stay hosted. The farm box ran
+shards 1.37x slower than hosted while its VM pool loaded it to 62 on
+30 cores (wisp#132): this routing no longer reads the box's load, so a loaded
+box slows farm shards rather than moving them.
 
 Autoland runs the suite inside each branch's own run, so branches waiting at once each add a farm run, and the plan job chooses its runners again for each.
 
@@ -93,7 +89,7 @@ one job per shard and a merge job, talking through `farmShards.ts`:
 | Step | Command |
 | --- | --- |
 | Split | `farmShards.ts plan --timings FILE --bun N [--lua N] UNIT... > plan.json`; a unit is a test file, or comma-joined files that share one process |
-| Placement | `farmShards.ts place --shards N --farm LABEL [--load farm-load.json]` prints each shard's `{runner, reason}`; without `--load` the load check is skipped, and a `--load` file that doesn't exist reads as `missing` |
+| Placement | `farmShards.ts place --shards N --farm LABEL --idle N` prints each shard's `{runner, reason}`: the first N shards on LABEL, the rest hosted |
 | Lua assignments | `farmShards.ts lua-plan plan.json` prints `NAME<TAB>SHARD` lines for the Lua runner |
 | Bun shard result | `farmShards.ts junit --shard K --exit-code C XML... > result.json` |
 | Lua shard result | `farmShards.ts lua --shard K --exit-code C TSV... > result.json`, from `pass\|fail<TAB>SECONDS<TAB>NAME` lines |

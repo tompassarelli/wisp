@@ -19,13 +19,37 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  route:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      runner: ${{ steps.route.outputs.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.13
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - id: route
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bun host/farm/runnerRoute.ts --class premerge | tee -a "$GITHUB_STEP_SUMMARY" >> "$GITHUB_OUTPUT"
+
   # `bun wisp ci post-merge` (wisp:docs/ci-command.md): the type check, the whole
   # `bun run test` and the tests marked farmTest (wisp:docs/testing.md "Test cost"),
   # which are too heavy for `bun run test`'s per-test ceilings.
   # A commit Autoland landed exactly as its farm suite passed it (artifact
   # autoland-summary-SHA, no failures) skips the tests and keeps the checks.
   framework:
-    runs-on: ubuntu-latest
+    needs: route
+    if: ${{ !cancelled() }}
+    runs-on: ${{ github.event_name != 'pull_request' && needs.route.outputs.runner || 'ubuntu-latest' }}
     timeout-minutes: 25
     permissions:
       contents: read
@@ -55,7 +79,7 @@ jobs:
       - if: steps.tested.outputs.run != ''
         run: bun run check
       - name: Install the native archive test dependency
-        if: steps.tested.outputs.run == ''
+        if: steps.tested.outputs.run == '' && runner.environment == 'github-hosted'
         timeout-minutes: 18
         uses: ./.github/actions/apt-install
         with:

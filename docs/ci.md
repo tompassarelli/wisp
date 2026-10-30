@@ -202,10 +202,8 @@ and `map build` compiles its syntax-checking `luac` from the vendored Lua
 5.3.6 source with gcc and make instead of linking nixpkgs `lua5_3`;
 without those two variables they use `nix`.
 
-Every 5 minutes wisp:.github/workflows/farm-load.yml samples the load of the
-`FARM_RUNNER` box into the Actions cache; the farm test's plan job reads the
-newest sample and sends shards to hosted runners while it is missing, stale
-or over the box's cores ([Where shards run](farm.md#where-shards-run)).
+The framework job and the farm test's Bun shards take the self-hosted farm runners while they have idle ones and fall back to hosted runners when the farm is full;
+pull requests never use the farm ([Where shards run](farm.md#where-shards-run)).
 
 ## Main stays green
 
