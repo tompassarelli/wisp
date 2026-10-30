@@ -390,3 +390,5 @@ To see where runs wait, compare each run's `created_at` with its first job's
 `started_at` (`gh api repos/OWNER/REPO/actions/runs/ID/jobs`); a queued job
 has no `runner_name` yet. A run's status alone hides the jobs running inside
 a queued run, so count jobs, not runs.
+
+Measured 2026-10-31 (run 41111933394): a lone branch with a clean suite landed 4 min 31 s after its dispatch, 17 s of it in the land job.
