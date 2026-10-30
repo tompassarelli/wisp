@@ -87,3 +87,50 @@ jobs:
           bun examples/sample/scripts/sample.ts map build --base "$RUNNER_TEMP/base.w3x" --out "$RUNNER_TEMP/sample.w3x"
           build/tools/map-pack extract "$RUNNER_TEMP/sample.w3x" "$RUNNER_TEMP/war3map.lua"
           grep -q 'wispTs.start' "$RUNNER_TEMP/war3map.lua"
+
+  # wisp-window (wisp:docs/native-window-plan.md, box W7): the library builds and tests, the
+  # headless probe runs on WARP, and wisp_window.dll goes up as the wisp-window
+  # artifact. Skipped while window/ does not exist.
+  window:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    env:
+      WGPU_BACKEND: dx12
+      WGPU_ADAPTER_NAME: Microsoft Basic Render Driver
+    steps:
+      - uses: actions/checkout@v4
+      - id: crate
+        run: echo "present=$([ -f window/Cargo.toml ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+      - if: steps.crate.outputs.present == 'true'
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.13
+      - if: steps.crate.outputs.present == 'true'
+        run: bun install --frozen-lockfile
+      - if: steps.crate.outputs.present == 'true'
+        run: cargo build --release --locked
+        working-directory: window
+      - if: steps.crate.outputs.present == 'true'
+        run: cargo test --release --locked
+        working-directory: window
+      - name: Headless probe on WARP
+        if: steps.crate.outputs.present == 'true'
+        run: bun wisp window probe --frames 60 --out "$RUNNER_TEMP/window-probe"
+      - name: Can bun build --compile embed the library
+        if: steps.crate.outputs.present == 'true'
+        run: |
+          bun host/compile/windowEmbedCheck.ts window/target/release/wisp_window.dll "$RUNNER_TEMP/window-embed"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          cat "$RUNNER_TEMP/window-embed/embed.json" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+      - if: steps.crate.outputs.present == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: wisp-window
+          path: |
+            window/target/release/wisp_window.dll
+            ${{ runner.temp }}/window-embed/embed.json
+            ${{ runner.temp }}/window-probe

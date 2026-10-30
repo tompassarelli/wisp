@@ -158,6 +158,8 @@ still needs a Windows-native stand-in. It is a separate workflow from CI, so a W
 shows on the commit without opening the "main is red" issue
 ([CI](ci.md)).
 
+The `window` job in the same workflow and in ci.yml builds and tests the native window (wisp:window/, [native window plan](native-window-plan.md), box W7) with `cargo build --release` and `cargo test`, runs `wisp window probe` headless on a software GPU (WARP on Windows, lavapipe on Linux), and uploads the library as the `wisp-window` artifact together with the result of wisp:host/compile/windowEmbedCheck.ts, which compiles a Bun executable that embeds the library and runs it alone: that result is whether `bun build --compile` can embed it. The job skips every step while `window/Cargo.toml` does not exist.
+
 Not done here: Windows or macOS layers for the native side (game launch,
 capture, input, accounting), and macOS CI. A Windows or macOS layer is a new
 folder beside wisp:host/os/platform/linux/ that `platformLayer` selects; it
