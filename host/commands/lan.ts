@@ -127,6 +127,7 @@ const startPair = (pair: number, custody: { readonly custodian: Custodian; reado
     const outlived = yield* stopPairScopes(pair, outlivedStop);
     if (outlived.length > 0) return yield* new LanFailure({ problem: `${outlived.join(" and ")} from its last start outlived the stop of ${outlived.length === 1 ? "its" : "their"} capacity scope` });
     rmSync(admissionFile(directory), { force: true });
+    rmSync(sessionErr, { force: true });
 
     const scope = yield* Scope.fork(yield* Effect.scope);
     return yield* Effect.gen(function*() {
