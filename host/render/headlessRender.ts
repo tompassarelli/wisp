@@ -7,6 +7,7 @@ import { ChildProcess } from "effect/process";
 import type { EffectDeaths, HeadlessClient } from "../../src/headless/client";
 import { pollFor, spawnLogged } from "../cli/hostProcess";
 import { deathSeconds } from "../models/models";
+import { browserBundle } from "./browserBundle";
 import type { RenderAssetResolution, ResolvedRenderAsset } from "./renderAssets";
 import { decodeTerrain, shiftedBounds, worldBounds, type Terrain, type WorldBounds } from "../terrain/terrain";
 import { decodeDoodadFile } from "../terrain/doodads";
@@ -299,11 +300,7 @@ const openAnyBrowser = (project: HeadlessRenderProject, bundle: string, graphics
 export const renderScenes = (project: HeadlessRenderProject, scenes: readonly RenderScene[], directory: string, graphics: Graphics = "classic", look: readonly Lever[] = [], bounds: readonly (readonly ModelBounds[])[] = []) => Effect.scoped(Effect.gen(function*() {
   const unsupported = unsupportedLevers(graphics, look);
   if (unsupported.length > 0) return yield* new RenderFailure({ cause: `the look check asks for ${unsupported.join(", ")}, which Wisp does not draw in ${graphics} (wisp:docs/headless.md, "Graphics profiles")` });
-  const bundle = yield* Effect.tryPromise({ try: async () => {
-    const result = await Bun.build({ entrypoints: [join(import.meta.dir, "../browser/headlessRender.ts")], target: "browser", minify: true });
-    if (!result.success || result.outputs[0] === undefined) throw new Error(result.logs.join("\n"));
-    return result.outputs[0].text();
-  }, catch: (cause) => new RenderFailure({ cause }) });
+  const bundle = yield* Effect.tryPromise({ try: () => browserBundle(join(import.meta.dir, "../browser/headlessRender.ts")), catch: (cause) => new RenderFailure({ cause }) });
   const browser = yield* openAnyBrowser(project, bundle, graphics);
   const write = (run: () => Promise<unknown>) => Effect.tryPromise({ try: run, catch: (cause) => new RenderFailure({ cause }) });
   yield* write(() => mkdir(directory, { recursive: true }));

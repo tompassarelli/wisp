@@ -11,6 +11,7 @@ import { requireGpuLease } from "../render/gpuLease";
 import { joinCode, joinTarget, CODE_HASH_DIGITS } from "../net/joinCode";
 import { type NetSession, NetFailure, runNetPeer } from "../net/peer";
 import { captureScene, sceneWithUnits, RenderFailure, type HeadlessRenderProject } from "../render/headlessRender";
+import { browserBundle } from "../render/browserBundle";
 import { createSoundResolver } from "../render/standaloneSound";
 import type { StandaloneFrame, StandaloneInput } from "../render/standaloneFrames";
 
@@ -102,9 +103,7 @@ export const openStandalone = (game: StandaloneGame, options: StandaloneOptions 
   const sounds = createSoundResolver(game.render.readAsset);
   const assets = new Map<string, Promise<Uint8Array | undefined>>();
   const completion = yield* Deferred.make<Readonly<Record<string, unknown>>, RenderFailure>();
-  const bundle = yield* attempt(() => Bun.build({ entrypoints: [join(import.meta.dir, "../browser/standalone.ts")], target: "browser", minify: true }));
-  if (!bundle.success || bundle.outputs[0] === undefined) return yield* failed(bundle.logs.join("\n"));
-  const javascript = yield* attempt(() => bundle.outputs[0]!.text());
+  const javascript = yield* attempt(() => browserBundle(join(import.meta.dir, "../browser/standalone.ts")));
   if (options.out !== undefined) yield* attempt(() => mkdir(options.out!, { recursive: true }));
   const step = (body: string) => Effect.gen(function*() {
     const input = yield* decode(Schema.fromJsonString(Input), body);
