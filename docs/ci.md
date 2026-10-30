@@ -244,9 +244,16 @@ Then it pushes a new commit, never a rewrite, titled `Revert "SUBJECT"` with a
 `Reverts: FULL_SHA` trailer (the form safe-push accepts) and starts main's CI
 for it. It comments on each issue the landing's message references and on its
 pull requests, naming the failing jobs and the run, and reopens a referenced
-issue the landing had closed. If the revert conflicts with what landed since,
-the job summary says so and the "main is red" issue stands. The author's lane
-re-lands the fixed change. Try it on a scratch run with
+issue the landing had closed. If the revert conflicts with what landed since
+(more landings piled onto the red main before the 15 minutes passed), it
+reverts the culprit together with every later landing up to the newest red run
+in one commit, each named by its own `Reverts:` trailer, so main returns to the
+green parent's tree; only when that conflicts too, or a later landing is a merge
+or changes `.github/workflows/`, does the job summary say so and the "main is red"
+issue stand. Autoland records the branch it landed on each commit as an
+`autoland/branch` commit status; the "main is red" issue prints it as
+`Culprit lane` and the revert commit and comments as `Landed from`, which is
+how the author's lane is found. The author's lane re-lands the fixed change. Try it on a scratch run with
 `gh workflow run revert-red.yml -f run=RUN_ID`, which refuses any run that is
 not on main.
 
@@ -293,6 +300,15 @@ it locally.
    `harness/code-health/cli.ts gate BASE SHA` on the rebased commit (Bun
    1.3.13, ast-grep 0.42.1); new debt (exit 1) or a gate error (exit 2)
    refuses the branch. The gate passes without `structure.toml`.
+   A `ci` job runs wisp:.github/workflows/ci.yml itself on the rebased commit
+   (`ref` the commit, `base` the main it was rebased onto, `bun-tests: skip`
+   because the farm run above is the Bun suites): `bun run check`, clean room,
+   `effect-kit check`, knip, the sample journeys, and, when the diff touches
+   `window/`, `relay/` or `.github/`, `cargo test --release --locked` in
+   `window/` on lavapipe (Linux) and WARP (Windows) and in `relay/`. These are the
+   jobs main's CI runs on the landed commit, so a landing cannot turn main
+   red on a job Autoland skipped; a failing job refuses the branch and the
+   summary links each failed job with the cargo or Bun tests it names.
 5. **Land.** Steps 1 to 4 end in the `judge` job, which refuses or passes a
    tip. A passing tip goes to the `land` job, the only job the runs queue
    on (group `autoland`, held for about a minute). If main is still the
@@ -315,7 +331,7 @@ it locally.
    `autoland` status to failure, linked to the run, so safe-push and
    `north flow` read the refusal; its error and job summary
    say "Autoland didn't land" and name the conflicting files, failed
-   check, new failing tests or the gate's violations. Autoland
+   check, new failing tests, CI-job failures or the gate's violations. Autoland
    posts no issue comments: read outcomes with `gh run list --workflow
    autoland.yml --branch claude/NAME` and `gh run view RUN_ID`. Push a fix to
    the same branch and it tries again.

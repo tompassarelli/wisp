@@ -252,3 +252,13 @@ jobs:
 
 The run farms the calling workflow's ref and files issues in the
 calling repository.
+
+## Autoland's gate
+
+Autoland's pre-merge gate is the farm run of the Bun suites (`ci post-merge`'s
+tests and farm tests, sharded) plus `ci.yml` called on the rebased commit with
+`bun-tests: skip`, so every job main's CI runs also runs before the merge:
+the stages of `bun wisp ci post-merge` other than the tests, knip, the sample
+journeys and, when the diff touches `window/`, `relay/` or `.github/`, the
+crates' `cargo test` on the adapters CI uses (lavapipe on Linux, WARP on
+Windows). Details: [CI](ci.md#autoland).

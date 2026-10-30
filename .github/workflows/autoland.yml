@@ -121,6 +121,18 @@ jobs:
     with:
       ref: ${{ needs.rebase.outputs.sha }}
 
+  # The CI workflow's own jobs on the rebased commit (wisp:.github/workflows/ci.yml): the window crate's cargo tests
+  # on lavapipe and WARP, relay, knip, the sample journeys and the checks, so a landing never turns main's CI red.
+  # The Bun suites are the farm run above.
+  ci:
+    needs: rebase
+    if: needs.rebase.outputs.verdict == 'test'
+    uses: ./.github/workflows/ci.yml
+    with:
+      ref: ${{ needs.rebase.outputs.sha }}
+      base: ${{ needs.rebase.outputs.base }}
+      bun-tests: skip
+
   # Main's failures at the base commit, needed only when the suite failed: from
   # the newest farm result for it or one of its last 30 main ancestors (a
   # previous landing's saved summary or a `bun wisp farm test` run), else from a
@@ -215,7 +227,7 @@ jobs:
 
   # Everything that can refuse or hold a tip, outside the landing queue, so a branch waiting on its suite never holds another's landing.
   judge:
-    needs: [rebase, suite, baseline, code-health]
+    needs: [rebase, suite, baseline, code-health, ci]
     if: ${{ !cancelled() && needs.rebase.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -231,6 +243,7 @@ jobs:
       BASE: ${{ needs.rebase.outputs.base }}
       DETAIL: ${{ needs.rebase.outputs.detail }}
       SUITE: ${{ needs.suite.result }}
+      CI_RESULT: ${{ needs.ci.result }}
       CODE_HEALTH: ${{ needs.code-health.result }}
       CODE_HEALTH_VERDICT: ${{ needs.code-health.outputs.verdict }}
       CODE_HEALTH_DETAIL: ${{ needs.code-health.outputs.detail }}
@@ -299,6 +312,18 @@ jobs:
           fi
           if [ -n "$new" ]; then
             refuse "$(grep -c . <<< "$new") failing that main's run passes:" "$(printf '%s\n' "$new" | sed 's/^/- /')"
+          fi
+          if [ "$CI_RESULT" != success ]; then
+            jobs=$(gh api "repos/$GH_REPO/actions/runs/$GITHUB_RUN_ID/jobs?per_page=100" --jq '.jobs[] | select(.name | startswith("ci / ")) | select(.conclusion == "failure") | [.id, .name, .html_url] | @tsv')
+            detail=
+            failing=
+            while IFS=$'\t' read -r id name url; do
+              [ -n "$id" ] || continue
+              tests=$(gh api "repos/$GH_REPO/actions/jobs/$id/logs" 2> /dev/null | sed -E 's/^\xEF\xBB\xBF//; s/^[0-9T:.-]+Z //' | grep -E '^test .* \.\.\. FAILED$|^\(fail\) ' | sed -E 's/^test (.*) \.\.\. FAILED$/\1/; s/^\(fail\) //' | sort -u | head -30)
+              failing+="${failing:+, }${name#ci / }${tests:+ ($(grep -c . <<< "$tests") failing: $(head -1 <<< "$tests"))}"
+              detail+="- [$name]($url)"$'\n'"$(sed 's/^/    - /' <<< "$tests")"$'\n'
+            done <<< "$jobs"
+            refuse "CI jobs failed on the rebased commit: ${failing:-$CI_RESULT}" "$detail"
           fi
           case "$CODE_HEALTH:$CODE_HEALTH_VERDICT" in
             success:pass) ;;
@@ -382,6 +407,7 @@ jobs:
           git push origin --delete "$BRANCH"
           echo "Landed $BRANCH on main as ${landed:0:10}; deleted the branch." >> "$GITHUB_STEP_SUMMARY"
           echo "pushed=true" >> "$GITHUB_OUTPUT"
+          echo "sha=$landed" >> "$GITHUB_OUTPUT"
           if [ "$landed" = "$SHA" ]; then echo "landed=true" >> "$GITHUB_OUTPUT"; fi
       # The landed commit's result: main's CI skips the tests it passed, and the next landing's baseline reads it.
       - if: steps.land.outputs.landed == 'true'
@@ -390,6 +416,10 @@ jobs:
           name: autoland-summary-${{ env.SHA }}
           path: candidate/summary.json
           retention-days: 14
+      - if: steps.land.outputs.pushed == 'true'
+        env:
+          LANDED: ${{ steps.land.outputs.sha }}
+        run: gh api -X POST "repos/$GH_REPO/statuses/$LANDED" -f state=success -f context=autoland/branch -f description="$BRANCH" > /dev/null || echo "::warning::couldn't record the landing branch on ${LANDED:0:10}"
       # Pushes made with this token start no workflows: start main's CI (main-red follows it).
       - if: steps.land.outputs.pushed == 'true'
         run: gh workflow run ci.yml --ref main || echo "::warning::couldn't start main's CI"

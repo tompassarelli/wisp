@@ -97,7 +97,7 @@ test("[invariant] pushRevert pushes a new revert commit to origin main with the 
   sh(runner, "config", "user.email", "t@t");
 
   const message = revertMessage({ landing: landing(x, "Break a.txt (Fixes #7)"), jobs: ["framework"], runUrl: "u", issues: [7] });
-  const pushed = await Effect.runPromise(pushRevert(landing(x, "Break a.txt (Fixes #7)"), message, gitIn(runner)));
+  const pushed = (await Effect.runPromise(pushRevert(landing(x, "Break a.txt (Fixes #7)"), () => message, gitIn(runner)))).sha;
 
   expect(sh(origin, "rev-parse", "main")).toBe(pushed);
   expect(sh(origin, "rev-parse", `${pushed}~1`)).toBe(x);
@@ -106,4 +106,41 @@ test("[invariant] pushRevert pushes a new revert commit to origin main with the 
   expect(sh(origin, "merge-base", "--is-ancestor", parent, x)).toBe("");
   expect(sh(origin, "show", "main:a.txt")).toBe("green");
   expect(readFileSync(join(runner, "a.txt"), "utf8")).toBe("green\n");
+});
+
+test("[invariant] a later landing that conflicts with reverting the culprit alone goes with it, each named by a Reverts: trailer, and the tree returns to the green parent", async () => {
+  const sh = (cwd: string, ...args: string[]) => {
+    const out = Bun.spawnSync(["git", "-c", "user.name=t", "-c", "user.email=t@t", ...args], { cwd, stdout: "pipe", stderr: "pipe" });
+    if (out.exitCode !== 0) throw new Error(`git ${args.join(" ")}: ${out.stderr.toString()}`);
+    return out.stdout.toString().trim();
+  };
+  const origin = join(folder, "pile.git");
+  const work = join(folder, "pile-work");
+  const runner = join(folder, "pile-runner");
+  sh(folder, "init", "-q", "--bare", "-b", "main", origin);
+  sh(folder, "clone", "-q", origin, work);
+  const land = (text: string, message: string) => {
+    writeFileSync(join(work, "a.txt"), text);
+    sh(work, "add", "a.txt");
+    sh(work, "commit", "-q", "-m", message);
+    sh(work, "push", "-q", "origin", "HEAD:main");
+    return sh(work, "rev-parse", "HEAD");
+  };
+  land("green\n", "A green start");
+  const culprit = land("broken\n", "Break a.txt");
+  const piled = land("broken again\n", "Edit the broken line");
+  sh(folder, "clone", "-q", origin, runner);
+  sh(runner, "config", "user.name", "t");
+  sh(runner, "config", "user.email", "t@t");
+
+  const culpritLanding = landing(culprit, "Break a.txt");
+  const alone = await Effect.runPromiseExit(pushRevert(culpritLanding, () => "alone", gitIn(runner)));
+  expect(alone._tag).toBe("Failure");
+
+  const reverted = await Effect.runPromise(pushRevert(culpritLanding, (alongside) => revertMessage({ landing: culpritLanding, jobs: ["window"], runUrl: "u", issues: [], alongside, lane: "claude/land-lane-abc" }), gitIn(runner), [landing(piled, "Edit the broken line")]));
+  expect(reverted.alongside.map((also) => also.sha)).toEqual([piled]);
+  expect(sh(origin, "show", "main:a.txt")).toBe("green");
+  const trailers = sh(origin, "log", "-1", "--format=%(trailers:key=Reverts,valueonly)", "main").split("\n").filter(Boolean);
+  expect(trailers).toEqual([piled, culprit]);
+  expect(sh(origin, "log", "-1", "--format=%B", "main")).toContain("Landed from: claude/land-lane-abc");
 });

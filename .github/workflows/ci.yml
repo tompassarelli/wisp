@@ -7,6 +7,20 @@ on:
     branches-ignore: ["farm/**"]
   # Autoland's pushes to main start no workflows, so it dispatches this one.
   workflow_dispatch:
+  # Autoland (autoland.yml) runs this on the rebased candidate before it lands: `ref` is the
+  # candidate, `base` the main it was rebased onto (window/ and relay/ jobs run only when the
+  # diff reaches them) and `bun-tests: skip` leaves the Bun suites to its farm run.
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        default: ""
+      base:
+        type: string
+        default: ""
+      bun-tests:
+        type: string
+        default: run
 
 permissions:
   contents: read
@@ -15,7 +29,7 @@ permissions:
 # finishes; a newer push replaces only the queued run, so the newest commit is
 # always the next verified.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ inputs.ref && format('call-{0}', inputs.ref) || github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -32,6 +46,8 @@ jobs:
       actions: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.13
@@ -40,7 +56,7 @@ jobs:
       - run: git clone --depth 1 https://github.com/tompassarelli/north "$RUNNER_TEMP/north"
       - run: bun "$RUNNER_TEMP/north/agent-machinery/scripts/effect-kit.mjs" check
       - id: tested
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && inputs.ref == '' && inputs.bun-tests != 'skip'
         env:
           GH_TOKEN: ${{ github.token }}
           SHA: ${{ github.sha }}
@@ -52,15 +68,15 @@ jobs:
             echo "run=$run" >> "$GITHUB_OUTPUT"
             echo "Autoland run $run passed the full farm suite on ${SHA:0:10}: tests skipped, checks kept." >> "$GITHUB_STEP_SUMMARY"
           fi
-      - if: steps.tested.outputs.run != ''
+      - if: steps.tested.outputs.run != '' || inputs.bun-tests == 'skip'
         run: bun run check
       - name: Install the native archive test dependency
-        if: steps.tested.outputs.run == ''
+        if: steps.tested.outputs.run == '' && inputs.bun-tests != 'skip'
         timeout-minutes: 18
         uses: ./.github/actions/apt-install
         with:
           packages: libstorm-dev
-      - if: steps.tested.outputs.run == ''
+      - if: steps.tested.outputs.run == '' && inputs.bun-tests != 'skip'
         run: CC=gcc STORMLIB_PREFIX=/usr bun wisp ci post-merge
 
   # The consumer template (wisp:docs/ci.md) on the neutral sample: its checks
@@ -68,6 +84,7 @@ jobs:
   sample:
     uses: ./.github/workflows/consumer.yml
     with:
+      ref: ${{ inputs.ref }}
       bun-version: 1.3.13
       test: bun run test examples/sample
       headless: bun examples/sample/scripts/sample.ts headless
@@ -76,6 +93,7 @@ jobs:
   sample-failing-fixture:
     uses: ./.github/workflows/consumer.yml
     with:
+      ref: ${{ inputs.ref }}
       bun-version: 1.3.13
       check: ""
       test: ""
@@ -89,13 +107,41 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.13
       - run: bun install --frozen-lockfile
       - run: bunx knip@6.38.0
 
+  # Which native jobs a call reaches (a push, pull request or main run with no `base` runs them all): the
+  # window crate and relay have no inputs outside their folders and the workflow files.
+  scope:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      window: ${{ steps.scope.outputs.window }}
+      relay: ${{ steps.scope.outputs.relay }}
+    steps:
+      - if: inputs.base != ''
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+      - id: scope
+        env:
+          BASE: ${{ inputs.base }}
+        run: |
+          changed=
+          if [ -n "$BASE" ]; then changed=$(git diff --name-only "$BASE" HEAD); fi
+          reaches() { [ -z "$BASE" ] || grep -qE "^(\.github/|$1/)" <<< "$changed" && echo true || echo false; }
+          echo "window=$(reaches window)" >> "$GITHUB_OUTPUT"
+          echo "relay=$(reaches relay)" >> "$GITHUB_OUTPUT"
+
   relay-proto:
+    needs: scope
+    if: needs.scope.outputs.relay == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
@@ -103,6 +149,8 @@ jobs:
         working-directory: relay
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
       - run: cargo test --locked -p relay-proto
       - run: cargo test --locked -p relay -p relay-agent
 
@@ -110,6 +158,8 @@ jobs:
   # headless probe runs on lavapipe, and libwisp_window.so goes up as the wisp-window
   # artifact. Skipped while window/ does not exist.
   window:
+    needs: scope
+    if: needs.scope.outputs.window == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -117,6 +167,8 @@ jobs:
       WGPU_ADAPTER_NAME: llvmpipe
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
       - id: crate
         run: echo "present=$([ -f window/Cargo.toml ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
       - if: steps.crate.outputs.present == 'true'
@@ -156,10 +208,14 @@ jobs:
   # wisp-window on Windows (wisp:docs/native-window-plan.md, box W5): SDL3 builds from source
   # for the pads, and the library builds and tests there as well as on Linux.
   window-windows:
+    needs: scope
+    if: needs.scope.outputs.window == 'true'
     runs-on: windows-latest
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
       - run: cargo build --release --locked
         working-directory: window
       - run: cargo test --release --locked
@@ -173,6 +229,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ inputs.ref }}
           fetch-depth: 0
       - uses: oven-sh/setup-bun@v2
         with:
@@ -193,7 +250,7 @@ jobs:
   # starts no workflow_run, so it hands its own result to "Main is red".
   main-red:
     needs: [framework, sample, sample-failing-fixture, relay-proto, window]
-    if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' }}
+    if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.ref == '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -206,7 +263,7 @@ jobs:
   # The seed farm's workflow_run trigger misses dispatched runs the same way.
   seed-farm:
     needs: [framework, sample, sample-failing-fixture]
-    if: ${{ success() && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' }}
+    if: ${{ success() && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.ref == '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:

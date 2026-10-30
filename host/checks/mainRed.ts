@@ -16,12 +16,13 @@ export function failingTests(log: string): string[] {
   const steps = new Map<string, boolean>();
   for (const line of log.split("\n")) {
     const [job = "", step = "", stamped = ""] = line.split("\t");
-    const text = stamped.replace(/^\S+Z /, "").replace(/\x1b\[[0-9;]*m/g, "");
+    const text = stamped.replace(/^\S+Z /, "").replace(/\x1b\[[0-9;]*m/g, "").replace(/\r$/, "");
     const key = `${job}: ${step.replace(/^Run /, "")}`;
     if (!steps.has(key)) steps.set(key, false);
     const bun = /^\(fail\) (.+?)(?: \[[\d.]+m?s\])?$/.exec(text);
     const lua = /^fail (.+?): /.exec(text);
-    const name = bun?.[1] ?? (lua?.[1] === undefined ? undefined : `Lua32: ${lua[1]}`);
+    const cargo = /^test (.+) \.\.\. FAILED$/.exec(text);
+    const name = bun?.[1] ?? (cargo?.[1] === undefined ? undefined : `cargo: ${cargo[1]}`) ?? (lua?.[1] === undefined ? undefined : `Lua32: ${lua[1]}`);
     if (name !== undefined) {
       tests.add(name);
       steps.set(key, true);
@@ -38,11 +39,15 @@ export function issueTests(body: string): string[] {
 
 interface Run { readonly databaseId: number; readonly conclusion: string; readonly status: string; readonly headSha: string; readonly url: string }
 
-export function redIssueBody(branch: string, tests: readonly string[], runs: readonly Run[], repository: string): string {
+export function culpritRun(runs: readonly Run[]): Run | undefined {
+  const green = runs.findIndex((run) => run.conclusion === "success");
+  return (green === -1 ? runs : runs.slice(0, green)).filter((run) => run.conclusion === "failure").at(-1);
+}
+
+export function redIssueBody(branch: string, tests: readonly string[], runs: readonly Run[], repository: string, lane?: string): string {
   const [latest] = runs;
   const green = runs.findIndex((run) => run.conclusion === "success");
-  const failed = (green === -1 ? runs : runs.slice(0, green)).filter((run) => run.conclusion === "failure");
-  const first = failed.at(-1);
+  const first = culpritRun(runs);
   const lastGreen = green === -1 ? undefined : runs[green];
   const short = (sha: string) => sha.slice(0, 10);
   return [
@@ -50,6 +55,7 @@ export function redIssueBody(branch: string, tests: readonly string[], runs: rea
     "",
     `- Latest failing run: ${latest?.url ?? "?"} (${short(latest?.headSha ?? "")})`,
     first === undefined ? "" : `- First failing commit: ${first.headSha} (${first.url})`,
+    first === undefined || lane === undefined ? "" : `- Culprit lane: ${lane} (the Autoland branch that landed it)`,
     lastGreen === undefined
       ? "- Last green run: none in the recent history"
       : `- Last green commit: ${lastGreen.headSha}; commits that may have broken it: https://github.com/${repository}/compare/${short(lastGreen.headSha)}...${short(first?.headSha ?? latest?.headSha ?? "")}`,
@@ -79,6 +85,12 @@ const ThisRun = Schema.Struct({ conclusion: Schema.String, headBranch: Schema.St
 const Issues = Schema.Array(Schema.Struct({ number: Schema.Finite, title: Schema.String }));
 const Repository = Schema.Struct({ nameWithOwner: Schema.String });
 
+export const landedFrom = (repository: string, sha: string) =>
+  gh("api", `repos/${repository}/commits/${sha}/statuses`, "--jq", '[.[] | select(.context == "autoland/branch")][0].description // empty').pipe(
+    Effect.map((text) => text.trim() === "" ? undefined : text.trim()),
+    Effect.orElseSucceed(() => undefined),
+  );
+
 export const reportRun = (runId: string) => Effect.gen(function*() {
   const run = yield* gh("run", "view", runId, "--json", "conclusion,headBranch,workflowName,databaseId").pipe(Effect.flatMap(decode(ThisRun, "gh run view")));
   if (run.conclusion !== "success" && run.conclusion !== "failure") return yield* Console.log(`run ${runId} ${run.conclusion || "unfinished"}: nothing to report`);
@@ -99,7 +111,10 @@ export const reportRun = (runId: string) => Effect.gen(function*() {
   }
   const { nameWithOwner } = yield* gh("repo", "view", "--json", "nameWithOwner").pipe(Effect.flatMap(decode(Repository, "gh repo view")));
   const tests = failingTests(yield* gh("run", "view", runId, "--log-failed"));
-  const body = redIssueBody(run.headBranch, tests, index === -1 ? completed : completed.slice(index), nameWithOwner);
+  const streak = index === -1 ? completed : completed.slice(index);
+  const culprit = culpritRun(streak);
+  const lane = culprit === undefined ? undefined : yield* landedFrom(nameWithOwner, culprit.headSha);
+  const body = redIssueBody(run.headBranch, tests, streak, nameWithOwner, lane);
   const [issue] = open;
   if (issue === undefined) {
     const url = yield* gh("issue", "create", "--title", title, "--body", body, "--label", "bug", "--label", "priority:now");

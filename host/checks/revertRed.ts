@@ -1,6 +1,7 @@
 import { appendFileSync } from "node:fs";
 import { Console, Effect, Schema } from "effect";
 import { captureProcess } from "../process/hostProcess";
+import { landedFrom } from "./mainRed";
 
 class RevertRedFailure extends Schema.TaggedError<RevertRedFailure, { readonly brand: unique symbol }>()("RevertRedFailure", { command: Schema.String, problem: Schema.String }) {
   override get message(): string {
@@ -74,27 +75,32 @@ export function referencedIssues(message: string, repository: string): number[] 
   return [...issues].toSorted((a, b) => a - b);
 }
 
-export function revertMessage(input: { readonly landing: Landing; readonly jobs: readonly string[]; readonly runUrl: string; readonly issues: readonly number[] }): string {
-  const { landing, jobs, runUrl, issues } = input;
+export function revertMessage(input: { readonly landing: Landing; readonly jobs: readonly string[]; readonly runUrl: string; readonly issues: readonly number[]; readonly alongside?: readonly Landing[]; readonly lane?: string }): string {
+  const { landing, jobs, runUrl, issues, alongside = [], lane } = input;
   const subject = landing.message.split("\n")[0] ?? "";
   return [
     `Revert "${subject}"`,
     "",
     `Main's CI stayed red for ${REVERT_AFTER_MS / 60_000} minutes after this landing, whose parent was green. Failing jobs: ${jobs.length === 0 ? "none named" : jobs.join(", ")}`,
     `CI run: ${runUrl}`,
+    ...(lane === undefined ? [] : [`Landed from: ${lane}`]),
+    ...(alongside.length === 0 ? [] : ["", "Main stayed red while these landed on top, and reverting the first alone conflicts, so they go with it:", ...alongside.map((also) => `- ${also.sha} ${also.message.split("\n")[0] ?? ""}`)]),
     "",
     ...(issues.length === 0 ? [] : [...issues.map((issue) => `Refs #${issue}`), ""]),
+    ...alongside.map((also) => `Reverts: ${also.sha}`),
     `Reverts: ${landing.sha}`,
   ].join("\n");
 }
 
-export function failureComment(input: { readonly landing: Landing; readonly revert: string; readonly jobs: readonly string[]; readonly runUrl: string }): string {
-  const { landing, revert, jobs, runUrl } = input;
+export function failureComment(input: { readonly landing: Landing; readonly revert: string; readonly jobs: readonly string[]; readonly runUrl: string; readonly alongside?: readonly Landing[]; readonly lane?: string }): string {
+  const { landing, revert, jobs, runUrl, alongside = [], lane } = input;
   return [
     `Main's CI failed on ${landing.sha} and nothing green landed within ${REVERT_AFTER_MS / 60_000} minutes, so ${revert} reverts it.`,
     "",
     `Failing jobs: ${jobs.length === 0 ? "none named (see the run)" : jobs.join(", ")}`,
     `Run: ${runUrl}`,
+    ...(lane === undefined ? [] : [`Landed from: ${lane}`]),
+    ...(alongside.length === 0 ? [] : ["", `It went with ${alongside.length} later landing${alongside.length === 1 ? "" : "s"} that conflicted with reverting it alone: ${alongside.map((also) => also.sha.slice(0, 10)).join(", ")}.`]),
     "",
     "Fix the failure in the lane and land the change again.",
   ].join("\n");
@@ -110,15 +116,19 @@ export const gitIn = (cwd: string | undefined) => (...args: string[]) => run("gi
 const gh = (...args: string[]) => run("gh", undefined, ...args);
 const git = gitIn(undefined);
 
-export const pushRevert = (landing: Landing, message: string, git: ReturnType<typeof gitIn>, attempts = 3) => Effect.gen(function*() {
+export const pushRevert = (landing: Landing, message: (alongside: readonly Landing[]) => string, git: ReturnType<typeof gitIn>, following: readonly Landing[] = [], attempts = 3) => Effect.gen(function*() {
   let last = new RevertRedFailure({ command: "git push", problem: "no attempt" });
+  const revertOf = (shas: readonly string[]) => git("revert", "--no-edit", "--no-commit", ...shas).pipe(Effect.tapError(() => git("revert", "--abort").pipe(Effect.ignore)));
   for (let attempt = 0; attempt < attempts; attempt++) {
     yield* git("fetch", "-q", "origin", "main");
     yield* git("checkout", "-q", "-B", "revert-red", "origin/main");
-    yield* git("revert", "--no-edit", "--no-commit", landing.sha).pipe(Effect.tapError(() => git("revert", "--abort").pipe(Effect.ignore)));
-    yield* git("commit", "-q", "-m", message);
+    const alongside = yield* revertOf([landing.sha]).pipe(
+      Effect.as([] as readonly Landing[]),
+      Effect.catch((error) => following.length === 0 ? Effect.fail(error) : revertOf([...following.map((also) => also.sha), landing.sha]).pipe(Effect.as(following))),
+    );
+    yield* git("commit", "-q", "-m", message(alongside));
     const pushed = yield* git("push", "-q", "origin", "HEAD:refs/heads/main").pipe(Effect.as(true), Effect.catch((error) => Effect.sync(() => { last = error; return false; })));
-    if (pushed) return (yield* git("rev-parse", "HEAD")).trim();
+    if (pushed) return { sha: (yield* git("rev-parse", "HEAD")).trim(), alongside };
   }
   return yield* last;
 });
@@ -141,12 +151,18 @@ const summary = (line: string) => Effect.sync(() => {
   if (process.env.GITHUB_STEP_SUMMARY !== undefined) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `Revert red main: ${line}\n`);
 }).pipe(Effect.andThen(Console.log(`::notice title=Revert red main::${line}`)));
 
-const landingOf = (sha: string, prior: string) => Effect.gen(function*() {
-  const [entry = ""] = (yield* git("log", "--first-parent", "-z", "--format=%H%x1f%P%x1f%B", `${prior}..${sha}`)).split("\0").filter((text) => text.trim() !== "");
-  const [commit = "", parents = "", message = ""] = entry.split("\x1f");
-  const workflowFiles = (yield* git("diff", "--name-only", prior, sha, "--", ".github/workflows")).split("\n").filter(Boolean);
-  return { sha: commit.trim(), message: message.trim(), parents: parents.trim().split(" ").filter(Boolean).length, workflowFiles } satisfies Landing;
+const landingsOf = (sha: string, prior: string) => Effect.gen(function*() {
+  const entries = (yield* git("log", "--first-parent", "-z", "--format=%H%x1f%P%x1f%B", `${prior}..${sha}`)).split("\0").filter((text) => text.trim() !== "");
+  return yield* Effect.forEach(entries, (entry) => Effect.gen(function*() {
+    const [commit = "", parents = "", message = ""] = entry.split("\x1f");
+    const workflowFiles = (yield* git("diff", "--name-only", `${commit.trim()}~1`, commit.trim(), "--", ".github/workflows")).split("\n").filter(Boolean);
+    return { sha: commit.trim(), message: message.trim(), parents: parents.trim().split(" ").filter(Boolean).length, workflowFiles } satisfies Landing;
+  }));
 });
+const landingOf = (sha: string, prior: string) => landingsOf(sha, prior).pipe(Effect.map(([landing]) => landing));
+
+export const alongsideOf = (landings: readonly Landing[]): readonly Landing[] =>
+  landings.some((landing) => landing.parents !== 1 || landing.workflowFiles.length > 0) ? [] : landings;
 
 const alreadyReverted = (sha: string) => git("log", "-z", "--format=%B", `${sha}..origin/main`).pipe(
   Effect.map((log) => log.split("\0").some((message) => new RegExp(`^(?:Sheriff-)?Reverts:.*${sha}|^This reverts commit ${sha}`, "m").test(message))),
@@ -168,6 +184,14 @@ const associatedPulls = (repository: string, sha: string) =>
 
 const viewRun = (runId: string) =>
   gh("run", "view", runId, "--json", "databaseId,headSha,conclusion,status,updatedAt,headBranch,workflowName,url,jobs").pipe(Effect.flatMap(decode(RunView, "gh run view")));
+
+const laneOf = (lane: string | undefined) => lane === undefined ? {} : { lane };
+
+const followingOf = (runs: readonly MainRun[], failing: MainRun, landing: Landing) => Effect.gen(function*() {
+  const newestRed = runs.filter((entry) => entry.id > failing.id && entry.conclusion === "failure").toSorted((a, b) => b.id - a.id)[0];
+  if (newestRed === undefined || !(yield* onMain(newestRed.sha))) return [];
+  return alongsideOf(yield* landingsOf(newestRed.sha, landing.sha));
+});
 
 export const revertRed = (runId: string) => Effect.gen(function*() {
   const view = yield* viewRun(runId);
@@ -200,15 +224,16 @@ export const revertRed = (runId: string) => Effect.gen(function*() {
   const { nameWithOwner } = yield* gh("repo", "view", "--json", "nameWithOwner").pipe(Effect.flatMap(decode(Repository, "gh repo view")));
   const jobs = view.jobs.filter((job) => job.conclusion === "failure").map((job) => job.name);
   const issues = referencedIssues(landing.message, nameWithOwner);
-  const message = revertMessage({ landing, jobs, runUrl: view.url, issues });
-  const revert = yield* pushRevert(landing, message, git).pipe(
+  const laneField = yield* landedFrom(nameWithOwner, landing.sha).pipe(Effect.map(laneOf));
+  const following = yield* followingOf(yield* listRuns, failing, landing);
+  const revert = yield* pushRevert(landing, (alongside) => revertMessage({ landing, jobs, runUrl: view.url, issues, alongside, ...laneField }), git, following).pipe(
     Effect.catch((error) => summary(`couldn't revert ${failing.sha.slice(0, 10)}: ${error.message}; a person decides (${view.url})`).pipe(Effect.as(undefined))),
   );
   if (revert === undefined) return;
   yield* gh("workflow", "run", CI_WORKFLOW, "--ref", "main").pipe(Effect.catch((error) => Console.warn(`couldn't start main's CI: ${error.message}`)));
-  const comment = failureComment({ landing, revert, jobs, runUrl: view.url });
+  const comment = failureComment({ landing, revert: revert.sha, jobs, runUrl: view.url, alongside: revert.alongside, ...laneField });
   yield* notify([...new Set([...issues, ...(yield* associatedPulls(nameWithOwner, landing.sha))])], comment);
-  yield* summary(`reverted ${failing.sha.slice(0, 10)} as ${revert.slice(0, 10)} after ${REVERT_AFTER_MS / 60_000} minutes red: ${jobs.join(", ")} (${view.url})`);
+  yield* summary(`reverted ${failing.sha.slice(0, 10)} as ${revert.sha.slice(0, 10)} after ${REVERT_AFTER_MS / 60_000} minutes red: ${jobs.join(", ")} (${view.url})`);
 });
 
 if (import.meta.main) {

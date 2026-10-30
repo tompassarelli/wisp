@@ -14,6 +14,10 @@ on:
         description: Exact Bun version, as in the game's packageManager
         required: true
         type: string
+      ref:
+        description: Commit to check out in place of the caller's own; empty checks out the caller's
+        type: string
+        default: ""
       wisp-ref:
         description: Full Wisp commit the game installs from vendor/wisp-<commit>.tgz; empty in Wisp itself
         type: string
@@ -96,6 +100,8 @@ jobs:
         working-directory: ${{ inputs.working-directory }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ inputs.bun-version }}
@@ -171,6 +177,8 @@ jobs:
         working-directory: ${{ inputs.working-directory }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ inputs.bun-version }}
