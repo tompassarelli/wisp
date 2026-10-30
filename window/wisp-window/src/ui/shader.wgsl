@@ -29,6 +29,9 @@ struct Out {
 
 @fragment fn fs(input: Out) -> @location(0) vec4<f32> {
     let sample = textureSample(image, pick, input.uv);
+    if (input.coverage == 2u) {
+        return input.color;
+    }
     if (input.coverage == 1u) {
         return vec4<f32>(input.color.rgb, input.color.a * sample.r);
     }

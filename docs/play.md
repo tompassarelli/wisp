@@ -294,7 +294,7 @@ drawn), `missedPresents` (an acquire interval over 1.5 T, with
 and `droppedSamples`; `presentedMs` is the interval between two images the
 display handed back. Closing the window ends the session.
 
-Set `WISP_REMASTER=standard` or `high` to remaster textures and round silhouettes at load (see [Remaster at load](native-window-plan.md#remaster-at-load)); the default is off.
+Press F10 in the window for the options screen: a Low, Medium, High or Ultra graphics preset and an Original or Remastered art choice (Remastered sharpens textures and rounds silhouettes, see [Remaster at load](native-window-plan.md#remaster-at-load)), saved per player and applied at once; see [Graphics settings](native-window-plan.md#graphics-settings). `WISP_REMASTER=off|standard|high` is a developer override of the art choice.
 
 `bun wisp window probe [--baseline] [--frames N] [--out DIR]` runs the sample map's scene
 through the production player and window on a display, for N frames after 120

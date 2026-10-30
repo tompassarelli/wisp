@@ -1,4 +1,5 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::time::Instant;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
@@ -7,7 +8,9 @@ use std::sync::Arc;
 use winit::window::Window;
 
 use crate::capture;
+use crate::menu::{self, Menu};
 use crate::present::PresentSetting;
+use crate::settings::{self, Settings, Store, PRESETS};
 use crate::surface_target::SurfaceTarget;
 use crate::render::{fitted, DrawScene, Renderer};
 use crate::ui::{is_font, UiRenderer};
@@ -69,6 +72,31 @@ impl Capture {
     }
 }
 
+/// `WISP_WINDOW_PRESET_SWEEP=DIR` opens the options screen once the scene is ready and, at each preset in turn, draws `SWEEP_FRAMES` frames timed to the GPU finishing them, prints their frame times and saves `DIR/options-PRESET.png`. The player's saved settings are restored afterwards.
+struct Sweep {
+    directory: PathBuf,
+    saved: Settings,
+    started: bool,
+    next: usize,
+    skip: u32,
+    millis: Vec<f64>,
+}
+
+const SWEEP_AFTER: u32 = 30;
+const SWEEP_WARMUP: u32 = 20;
+const SWEEP_FRAMES: usize = 120;
+
+impl Sweep {
+    fn from_environment(saved: Settings) -> Option<Self> {
+        let directory = PathBuf::from(std::env::var_os("WISP_WINDOW_PRESET_SWEEP")?);
+        Some(Self { directory, saved, started: false, next: 0, skip: 0, millis: Vec::with_capacity(SWEEP_FRAMES) })
+    }
+}
+
+fn percentile(sorted: &[f64], fraction: f64) -> f64 {
+    sorted[((sorted.len() as f64 * fraction).ceil() as usize).clamp(1, sorted.len()) - 1]
+}
+
 pub struct Gpu {
     surface: wgpu::Surface<'static>,
     config: wgpu::SurfaceConfiguration,
@@ -83,6 +111,10 @@ pub struct Gpu {
     capture: Option<Capture>,
     adapter_handle: wgpu::Adapter,
     present: PresentSetting,
+    settings: Settings,
+    store: Option<Store>,
+    menu: Menu,
+    sweep: Option<Sweep>,
     images: HashSet<u64>,
     pub adapter: String,
     pub backend: String,
@@ -108,7 +140,10 @@ impl Gpu {
             config.format = plain;
         }
         let capture = Capture::from_environment();
-        if capture.is_some() {
+        let store = Store::open();
+        let settings = store.as_ref().map(Store::load).unwrap_or_default();
+        let sweep = Sweep::from_environment(settings);
+        if capture.is_some() || sweep.is_some() {
             config.usage |= wgpu::TextureUsages::COPY_SRC;
         }
         let present = PresentSetting::Fifo;
@@ -146,9 +181,31 @@ impl Gpu {
             mapped_at_creation: false,
         });
         let info = adapter.get_info();
-        let renderer = Renderer::new(device.clone(), queue.clone(), config.format, crate::remaster::Quality::from_environment());
+        let renderer = Renderer::new(device.clone(), queue.clone(), config.format, settings.quality(settings::developer_quality()), settings.features());
         let ui = UiRenderer::new(device.clone(), queue.clone(), config.format);
-        Ok(Self { surface, config, device, queue, pipeline, vertices, renderer, ui, aspect, scene: None, capture, adapter_handle: adapter, present, images: HashSet::new(), adapter: info.name, backend: format!("{:?}", info.backend) })
+        Ok(Self { surface, config, device, queue, pipeline, vertices, renderer, ui, aspect, scene: None, capture, adapter_handle: adapter, present, settings, store, menu: Menu::default(), sweep, images: HashSet::new(), adapter: info.name, backend: format!("{:?}", info.backend) })
+    }
+
+    /// Applies what the player did at the options screen since the last frame, saving a change.
+    pub fn menu_events(&mut self, events: Vec<menu::Event>) {
+        let mut settings = self.settings;
+        let mut changed = false;
+        for event in events {
+            changed |= self.menu.handle(event, &mut settings);
+        }
+        if changed {
+            self.apply(settings);
+        }
+    }
+
+    /// Applies and saves the player's choice: the features take effect at the next frame, and the art is rebuilt beside the one on screen.
+    pub fn apply(&mut self, settings: Settings) {
+        self.settings = settings;
+        self.renderer.set_features(settings.features());
+        self.renderer.set_quality(settings.quality(settings::developer_quality()));
+        if let Some(Err(error)) = self.store.as_ref().map(|store| store.save(&settings)) {
+            eprintln!("wisp-window: settings not saved: {error}");
+        }
     }
 
     pub fn setting(&self) -> PresentSetting {
@@ -235,16 +292,23 @@ impl Gpu {
     }
 
     pub fn draw(&mut self, texture: &wgpu::SurfaceTexture, step: u64) {
+        let began = Instant::now();
         let view = texture.texture.create_view(&Default::default());
         if let Some(scene) = &self.scene {
+            let frame = scene.frame;
             let mut encoder = self.device.create_command_encoder(&Default::default());
             let size = (self.config.width, self.config.height);
             self.renderer.draw(&mut encoder, &view, size, self.aspect, scene);
             let [left, top, width, height] = fitted(size, self.aspect);
+            self.ui.set_overlay(self.menu.scene(&self.settings));
             self.ui.draw(&mut encoder, &view, size, [left as f32, top as f32, width as f32, height as f32], &self.renderer);
             self.queue.submit([encoder.finish()]);
-            if scene.pending == 0 && scene.frame >= self.capture.as_ref().map_or(u32::MAX, |capture| capture.after) && (scene.poses.is_empty() || scene.poses.iter().any(|pose| self.renderer.has_model(&pose.model))) {
+            let ready = scene.pending == 0 && (scene.poses.is_empty() || scene.poses.iter().any(|pose| self.renderer.has_model(&pose.model)));
+            if ready && frame >= self.capture.as_ref().map_or(u32::MAX, |capture| capture.after) {
                 self.save_capture(&texture.texture);
+            }
+            if ready && frame >= SWEEP_AFTER {
+                self.sweep_step(&texture.texture, began);
             }
             return;
         }
@@ -274,11 +338,74 @@ impl Gpu {
 }
 
 impl Gpu {
+    /// One frame of the preset sweep: waits for the GPU to finish the frame just submitted, and when a preset has its frames, reports and captures it and moves on.
+    fn sweep_step(&mut self, texture: &wgpu::Texture, began: Instant) {
+        let Some(mut sweep) = self.sweep.take() else { return };
+        if !sweep.started {
+            sweep.started = true;
+            self.sweep_preset(&mut sweep);
+        }
+        let _ = self.device.poll(wgpu::PollType::wait_indefinitely());
+        let millis = began.elapsed().as_secs_f64() * 1000.0;
+        if sweep.skip > 0 {
+            sweep.skip -= 1;
+        } else {
+            sweep.millis.push(millis);
+        }
+        if sweep.millis.len() == SWEEP_FRAMES {
+            let preset = PRESETS[sweep.next];
+            let mut sorted = sweep.millis.clone();
+            sorted.sort_by(f64::total_cmp);
+            let line = format!(
+                "preset {} {}x{} on {} ({}): p50 {:.2} ms, p95 {:.2} ms, max {:.2} ms over {} frames",
+                preset.name(),
+                self.config.width,
+                self.config.height,
+                self.adapter,
+                self.backend,
+                percentile(&sorted, 0.5),
+                percentile(&sorted, 0.95),
+                sorted[sorted.len() - 1],
+                sorted.len()
+            );
+            eprintln!("wisp-window sweep: {line}");
+            let _ = std::fs::create_dir_all(&sweep.directory);
+            if let Ok(mut log) = std::fs::OpenOptions::new().create(true).append(true).open(sweep.directory.join("frame-times.txt")) {
+                let _ = std::io::Write::write_all(&mut log, format!("{line}\n").as_bytes());
+            }
+            self.write_picture(texture, &sweep.directory.join(format!("options-{}.png", preset.name().to_ascii_lowercase())));
+            sweep.next += 1;
+            if sweep.next == PRESETS.len() {
+                self.menu_events(vec![menu::Event::Close]);
+                self.apply(sweep.saved);
+                return;
+            }
+            self.sweep_preset(&mut sweep);
+        }
+        self.sweep = Some(sweep);
+    }
+
+    fn sweep_preset(&mut self, sweep: &mut Sweep) {
+        let mut settings = sweep.saved;
+        settings.preset = PRESETS[sweep.next];
+        self.apply(settings);
+        self.menu.handle(menu::Event::Open, &mut settings);
+        sweep.skip = SWEEP_WARMUP;
+        sweep.millis.clear();
+    }
+}
+
+impl Gpu {
     fn save_capture(&mut self, texture: &wgpu::Texture) {
         let Some(capture) = self.capture.as_mut() else { return };
         if std::mem::replace(&mut capture.drawn, true) {
             return;
         }
+        let path = capture.path.clone();
+        self.write_picture(texture, &path);
+    }
+
+    fn write_picture(&self, texture: &wgpu::Texture, path: &Path) {
         let (width, height) = (self.config.width, self.config.height);
         let row = (width * 4).next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
         let buffer = self.device.create_buffer(&wgpu::BufferDescriptor { label: Some("capture"), size: (row * height) as u64, usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ, mapped_at_creation: false });
@@ -299,7 +426,7 @@ impl Gpu {
                 rgba.extend_from_slice(&if bgra { [pixel[2], pixel[1], pixel[0], 255] } else { [pixel[0], pixel[1], pixel[2], 255] });
             }
         }
-        let _ = capture::write(&capture.path, width, height, &rgba);
+        let _ = capture::write(path, width, height, &rgba);
     }
 }
 

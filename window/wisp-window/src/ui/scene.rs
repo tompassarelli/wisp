@@ -20,6 +20,8 @@ pub struct UiFrame {
     pub vertical: Vertical,
     pub scale: f32,
     pub plain: bool,
+    /// Drawn as a flat rectangle of `color`, with no texture or text.
+    pub solid: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
@@ -128,6 +130,7 @@ impl UiScene {
                     vertical: alignment.vertical,
                     scale: row.scale,
                     plain: row.plain,
+                    solid: false,
                 })
             })
             .collect();

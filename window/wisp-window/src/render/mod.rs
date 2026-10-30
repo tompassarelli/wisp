@@ -6,6 +6,7 @@
 //! with no new model allocates nothing on this thread beyond the scene's own parse.
 
 mod math;
+mod assets;
 mod gpu;
 pub mod model;
 mod lightning;
@@ -25,6 +26,7 @@ use std::sync::Arc;
 
 use crate::decode_pool::Pool;
 use crate::remaster::{self, Cache, Prepared, Quality};
+use crate::settings::Features;
 use math::{multiply, projection, Mat4, IDENTITY};
 use gpu::{bone_storage, frame_group, instance_storage, opacity_storage, upload, uv_storage, white};
 use lightning::Lightning;
@@ -114,14 +116,17 @@ pub struct Renderer {
     decoder: Pool<Result<Prepared, String>>,
     decoding: HashMap<u64, String>,
     next_job: u64,
-    waiting: Vec<(String, Vec<u8>)>,
+    waiting: Vec<(String, Arc<[u8]>)>,
+    sources: Vec<(String, Arc<[u8]>)>,
+    incoming: Option<Box<Renderer>>,
+    features: Features,
     particles: Particles,
     lightning: Lightning,
     pub problems: Vec<String>,
 }
 
 impl Renderer {
-    pub fn new(device: wgpu::Device, queue: wgpu::Queue, format: wgpu::TextureFormat, quality: Quality) -> Self {
+    pub fn new(device: wgpu::Device, queue: wgpu::Queue, format: wgpu::TextureFormat, quality: Quality, features: Features) -> Self {
         let (pipelines, frame_layout, layer_layout) = pipelines::build(&device, HDR);
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             address_mode_u: wgpu::AddressMode::Repeat,
@@ -173,7 +178,7 @@ impl Renderer {
             sky_group,
             targets: None,
             post,
-            tuning: TUNING,
+            tuning: assets::tuning_of(features, TUNING),
             bone_scratch: Vec::new(),
             instance_scratch: Vec::new(),
             counts: Vec::new(),
@@ -184,6 +189,9 @@ impl Renderer {
             decoding: HashMap::new(),
             next_job: 0,
             waiting: Vec::new(),
+            sources: Vec::new(),
+            incoming: None,
+            features,
             particles,
             lightning,
             problems: Vec::new(),
@@ -193,47 +201,6 @@ impl Renderer {
     /// Sets how strongly the final-image pass acts; a strength of zero skips that effect's passes (the graphics settings' bloom and ambient-occlusion keys).
     pub fn set_post_tuning(&mut self, tuning: Tuning) {
         self.tuning = tuning;
-    }
-
-    /// Takes a file Bun pushed, a model or a texture told apart by its magic. Textures decode on worker threads; a model waits for them so its bind groups hold its real textures, and one that cannot be read is left out.
-    pub fn ingest(&mut self, path: &str, bytes: Vec<u8>) {
-        if bytes.starts_with(b"MDLX") {
-            self.waiting.push((path.to_string(), bytes));
-        } else {
-            self.next_job += 1;
-            self.decoding.insert(self.next_job, path.to_ascii_lowercase());
-            let (quality, cache) = (self.quality, self.cache.clone());
-            self.decoder.submit(self.next_job, move || remaster::prepare(&bytes, quality, cache.as_deref()));
-        }
-    }
-
-    /// Uploads the textures that finished decoding and, once none is outstanding, builds the models that were waiting on them; returns how many files that finished, built or failed.
-    pub fn pump(&mut self) -> u64 {
-        let mut finished = 0;
-        while let Some((job, decoded)) = self.decoder.try_recv() {
-            let Some(path) = self.decoding.remove(&job) else { continue };
-            finished += 1;
-            match decoded {
-                Ok(prepared) => {
-                    if let Some(relief) = &prepared.relief {
-                        self.reliefs.insert(path.clone(), upload(&self.device, &self.queue, relief));
-                    }
-                    let view = upload(&self.device, &self.queue, &prepared.albedo);
-                    self.textures.insert(path, view);
-                }
-                Err(error) => self.problems.push(format!("{path}: {error}")),
-            }
-        }
-        if self.decoding.is_empty() {
-            for (path, bytes) in std::mem::take(&mut self.waiting) {
-                finished += 1;
-                match source::model(&bytes, self.quality) {
-                    Ok(data) => self.add_model(&path, data),
-                    Err(error) => self.problems.push(format!("{path}: {error}")),
-                }
-            }
-        }
-        finished
     }
 
     fn add_model(&mut self, path: &str, data: ModelData) {

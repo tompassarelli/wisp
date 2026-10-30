@@ -14,8 +14,7 @@ use wgpu::util::DeviceExt;
 pub use glyphs::is_font;
 use glyphs::{Glyphs, Slot, ATLAS_SIZE};
 use layout::{Line, Pixels};
-pub use scene::UiScene;
-use scene::UiFrame;
+pub use scene::{Horizontal, UiFrame, UiScene, Vertical};
 
 const SHADER: &str = include_str!("shader.wgsl");
 const OUTLINE_ALPHA: f32 = 0.9;
@@ -59,6 +58,7 @@ pub struct UiRenderer {
     runs: Vec<Run>,
     glyphs: Glyphs,
     scene: UiScene,
+    overlay: UiScene,
     quads: Vec<Quad>,
     drawn: Vec<Quad>,
     lines: Vec<Line>,
@@ -117,6 +117,7 @@ impl UiRenderer {
             runs: Vec::new(),
             glyphs,
             scene: UiScene::default(),
+            overlay: UiScene::default(),
             quads: Vec::with_capacity(INITIAL_QUADS),
             drawn: Vec::with_capacity(INITIAL_QUADS),
             lines: Vec::new(),
@@ -178,6 +179,11 @@ impl UiRenderer {
         Ok(())
     }
 
+    /// Keeps the frames the window draws over the game's own, such as its options screen; empty to draw none.
+    pub fn set_overlay(&mut self, overlay: UiScene) {
+        self.overlay = overlay;
+    }
+
     /// Registers a font file Bun pushed; false when `bytes` are not a face.
     pub fn add_font(&mut self, path: &str, bytes: &[u8]) -> bool {
         self.glyphs.add_font(path, bytes)
@@ -185,19 +191,20 @@ impl UiRenderer {
 
     /// Records the scene's frames over `target`, with `area` (x, y, width, height in pixels) as the screen the 0.8 x 0.6 units fill.
     pub fn draw(&mut self, encoder: &mut wgpu::CommandEncoder, target: &wgpu::TextureView, target_size: (u32, u32), area: Pixels, textures: &dyn UiTextures) {
-        if self.scene.frames.is_empty() {
+        if self.scene.frames.is_empty() && self.overlay.frames.is_empty() {
             return;
         }
         if target_size != self.screen_size {
             self.screen_size = target_size;
             self.queue.write_buffer(&self.screen, 0, bytemuck::bytes_of(&[target_size.0 as f32, target_size.1 as f32]));
         }
-        let scene = std::mem::take(&mut self.scene);
-        if !self.build(&scene, area, textures) {
+        let (scene, overlay) = (std::mem::take(&mut self.scene), std::mem::take(&mut self.overlay));
+        if !self.build(&scene, &overlay, area, textures) {
             self.glyphs.reset();
-            self.build(&scene, area, textures);
+            self.build(&scene, &overlay, area, textures);
         }
         self.scene = scene;
+        self.overlay = overlay;
         self.upload();
         if self.quads.is_empty() {
             return;
@@ -258,12 +265,18 @@ impl UiRenderer {
     }
 
     /// Fills `quads` and `runs` from the scene; false when the atlas filled up part way, so the caller empties it and builds again.
-    fn build(&mut self, scene: &UiScene, area: Pixels, textures: &dyn UiTextures) -> bool {
+    fn build(&mut self, scene: &UiScene, overlay: &UiScene, area: Pixels, textures: &dyn UiTextures) -> bool {
         self.quads.clear();
         self.runs.clear();
-        for frame in &scene.frames {
+        for frame in scene.frames.iter().chain(&overlay.frames) {
             let pixels = layout::pixels(frame.rectangle, area);
             let alpha = frame.alpha as f32 / 255.0;
+            if frame.solid {
+                if pixels[2] > 0.0 && pixels[3] > 0.0 {
+                    self.emit(Source::Glyphs, Quad { rect: pixels, uv: [0.0; 4], color: rgba(frame.color, alpha * (frame.color >> 24) as f32 / 255.0), coverage: 2 });
+                }
+                continue;
+            }
             if !frame.texture.is_empty() && pixels[2] > 0.0 && pixels[3] > 0.0 {
                 if let Some(group) = self.image_group(&frame.texture, textures) {
                     let tint = rgba(frame.color, alpha * (frame.color >> 24) as f32 / 255.0);

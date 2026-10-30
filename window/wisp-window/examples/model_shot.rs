@@ -33,7 +33,7 @@ fn main() {
     let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default())).expect("adapter");
     println!("adapter {}", adapter.get_info().name);
     let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())).expect("device");
-    let mut renderer = Renderer::new(device.clone(), queue.clone(), FORMAT, Quality::Off);
+    let mut renderer = Renderer::new(device.clone(), queue.clone(), FORMAT, Quality::Off, wisp_window::settings::Preset::High.features());
     let mut poses = Vec::new();
     for (index, path) in args[2..].iter().enumerate() {
         let bytes = stocks.iter().find_map(|stock| std::fs::read(stock.join(path)).ok()).expect("model");

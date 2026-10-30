@@ -868,11 +868,34 @@ The menu and HUD frames are drawn by `window/wisp-window/src/ui/`, one render pa
 - **Draw.** Each scene's quads go to one instance buffer in drawing order, written only when they differ from the last scene's; a run of quads that share a texture is one draw call. The pass loads the world's image, blends straight alpha, and has no depth. A textured frame whose image has not decoded yet is skipped until it has.
 - **Not yet drawn:** frames with a colour but no texture draw nothing, as in Chrome, and `|c` colours apply to the whole text.
 
+## Graphics settings
+
+Players' machines differ and rollback needs a steady frame, so every costly renderer feature has an off switch, and the preset names which are on (wisp#109; Tom asked for this, 2026-10-31).
+
+- **Presets.** `settings::Preset` is Low, Medium, High (the default, today's look) or Ultra, and `Preset::features()` returns the `Features` it runs. Each field of `Features` is a setting key; a feature reads `renderer.features().<field>` and draws nothing when it is off.
+
+  Setting key | Low | Medium | High | Ultra
+  --- | --- | --- | --- | ---
+  `shadows` (map side) | off | 1024 | 2048 | 4096
+  `msaa` (samples) | 1 | 2 | 4 | 8, or the most the adapter has
+  `ssao` | off | off | on | on
+  `bloom` | off | off | on | on
+  `volumetrics` (fog and light shafts) | off | off | off | on
+  `weather` (percent of particles) | 25 | 50 | 100 | 100
+  `water` | flat | reflective | reflective | refractive
+  `renderScale` (percent of window size) | 75 | 100 | 100 | 100
+
+- **What reads them today.** `bloom` and `ssao`: the renderer sets the final-image pass's `bloom_strength` and `occlusion_strength` to their defaults when on and to zero when off, and a strength of zero skips that effect's passes. `msaa` and `renderScale` are registered but not read: the final-image pass samples a 4-sample depth buffer and works in whole pixels of a scene as large as the window, so it must learn another sample count and a smaller scene first. The remaining keys wait for their features (lighting, fog and shafts, weather, water).
+- **Art.** Original or Remastered, independent of the preset. Switching rebuilds every file the renderer has seen at the new quality beside the set on screen, which keeps drawing until the new one is complete and then replaces it, so there is no restart and no blank frame; a texture not yet in the remaster cache takes as long as its first remaster. Remastered is Standard above; the Real-CUGAN 2x conservative kernels are a separate box.
+- **Saved per player** in `$XDG_CONFIG_HOME/wisp/players/<name>.graphics.json` (`APPDATA` on Windows, else `~/.config`), where `<name>` is `WISP_PLAYER`, else the operating-system user name. A missing or damaged file means the defaults.
+- **Options screen.** F10 opens and closes it (Esc closes); while it is open the arrow keys, W/S/A/D, Enter and Space drive it and the game sees no keys. It is drawn through the UI renderer as an overlay of UI frames (`menu.rs`), so it is crisp at any render scale.
+- **Preset sweep.** `WISP_WINDOW_PRESET_SWEEP=DIR` opens the screen once the scene is ready and, at each preset, draws 120 frames timed from the start of the draw to the GPU finishing it, prints p50, p95 and max, appends them to `DIR/frame-times.txt` and saves `DIR/options-<preset>.png`.
+
 ## Remaster at load
 
 Classic art is sharpened and lit on the player's machine from the player's own map and install (wisp#109; Tom asked for this, 2026-10-31). Shapes stay Classic: only textures and the silhouette's roundness change.
 
-- **Setting.** `WISP_REMASTER=off|standard|high`, read when the window opens; off by default. Standard doubles a texture's sides and subdivides each triangle once, High does both twice. Textures of 1024 px or more on a side (backdrops) are left alone.
+- **Setting.** The player picks Original or Remastered at the options screen (F10, "Graphics settings" below); Original is the default and Remastered is Standard here. `WISP_REMASTER=off|standard|high` stays as a developer override that replaces the choice and is the only way to High. Standard doubles a texture's sides and subdivides each triangle once, High does both twice. Textures of 1024 px or more on a side (backdrops) are left alone.
 - **Method chosen: edge-directed Catmull-Rom, our own code** (`remaster/upscale.rs`). Each output pixel is a Catmull-Rom sample; where the 3x3 structure tensor shows one dominant edge, it is averaged with two samples along the edge, then clamped to the four nearest source pixels (plus 6% overshoot) so it never rings. Alpha is premultiplied, so cutout silhouettes get no fringes. It needs no model, runtime or download, and no licence beyond our own.
 - **Normals and roughness** (`remaster/relief.rs`) come from the upscaled albedo: luminance is the height, a difference of two box blurs removes slow colour shifts, alpha adds a bevel where a silhouette ends, and a Sobel-style slope gives the normal. Roughness is a heuristic (bright high-contrast detail glossier, flat dull areas rougher), not a measurement. Output contract for the lighting box: an RGBA8 `relief` texture per source texture whose RGB is a tangent-space normal (`n * 0.5 + 0.5`; x toward +u, y toward +v, which is down the image, z out) and whose alpha is roughness; `Renderer` keeps it in `reliefs`, keyed like `textures`. Nothing binds it in a shader yet.
 - **Cache.** `$XDG_CACHE_HOME/wisp/remaster` (`LOCALAPPDATA` on Windows, else `~/.cache`): `<sha256 of source bytes, quality and algorithm version>.albedo.png` and `.relief.png`. The work runs on the decode workers once per texture; a later run reads the cache. Nothing derived from a player's files is written to a repository, package or download: the example tools write only to a directory they are given.

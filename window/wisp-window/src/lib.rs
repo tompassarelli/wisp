@@ -13,6 +13,7 @@ mod draw;
 mod frame;
 mod host;
 mod input;
+pub mod menu;
 mod metrics;
 pub mod model;
 pub mod render;
@@ -27,6 +28,7 @@ pub mod post;
 mod sync;
 mod timer;
 pub mod remaster;
+pub mod settings;
 pub mod texture;
 pub mod ui;
 

@@ -22,10 +22,6 @@ pub enum Quality {
 }
 
 impl Quality {
-    pub fn from_environment() -> Self {
-        std::env::var("WISP_REMASTER").ok().and_then(|value| value.parse().ok()).unwrap_or_default()
-    }
-
     /// Doublings of the texture's resolution.
     pub fn upscale_steps(self) -> u32 {
         match self {

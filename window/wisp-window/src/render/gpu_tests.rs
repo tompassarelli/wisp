@@ -58,7 +58,7 @@ fn pixel(image: &[u8], x: u32, y: u32) -> [u8; 3] {
 fn a_particle_and_a_bolt_reach_the_screen() {
     let Some((device, queue)) = device() else { return };
     let scope = device.push_error_scope(wgpu::ErrorFilter::Validation);
-    let mut renderer = Renderer::new(device.clone(), queue.clone(), FORMAT, crate::remaster::Quality::Off);
+    let mut renderer = Renderer::new(device.clone(), queue.clone(), FORMAT, crate::remaster::Quality::Off, crate::settings::Preset::High.features());
     let spec = Emitter2 { rows: 1, columns: 1, head: true, life_span: 5.0, time: 0.5, scaling: [20.0; 3], alphas: [1.0; 3], colors: [[1.0; 3]; 3], ..Emitter2::default() };
     let emitter = ModelEmitter { spec, paint: Paint::None };
     let slot = renderer.particles.register(&device, &queue, &emitter, ("", &renderer.white), &renderer.sampler).expect("room for an emitter");
@@ -77,6 +77,38 @@ fn a_particle_and_a_bolt_reach_the_screen() {
     assert!(corner[0] < 40, "the corner is clear: {corner:?}");
     let bolt_rows = (0..SIDE / 3).filter(|&y| (0..SIDE).any(|x| pixel(&image, x, y)[2] > 150)).count();
     assert!(bolt_rows > 0, "the bolt lights rows in the upper third");
+    let error = pollster::block_on(scope.pop());
+    assert!(error.is_none(), "wgpu validation: {error:?}");
+}
+
+#[test]
+fn each_preset_draws_the_scene_with_its_post_effects_on_or_off() {
+    use crate::settings::PRESETS;
+    let Some((device, queue)) = device() else { return };
+    let mut scope = device.push_error_scope(wgpu::ErrorFilter::Validation);
+    let mut renderer = Renderer::new(device.clone(), queue.clone(), FORMAT, crate::remaster::Quality::Off, PRESETS[2].features());
+    let spec = Emitter2 { rows: 1, columns: 1, head: true, life_span: 5.0, time: 0.5, scaling: [20.0; 3], alphas: [1.0; 3], colors: [[1.0; 3]; 3], ..Emitter2::default() };
+    let emitter = ModelEmitter { spec, paint: Paint::None };
+    let slot = renderer.particles.register(&device, &queue, &emitter, ("", &renderer.white), &renderer.sampler).expect("room for an emitter");
+    let mut scene = Scene { frame: 0, ..Scene::default() };
+    scene.camera = scene::Camera { view: IDENTITY, eye: [0.0; 3], tangent: 1.0, near: 1.0, far: 10_000.0, sky_far: 10_000.0, rise: 0.0 };
+    for (round, preset) in [PRESETS[0], PRESETS[1], PRESETS[2], PRESETS[0]].into_iter().enumerate() {
+        renderer.set_features(preset.features());
+        scene.frame = round as u32 * 2;
+        let _ = render(&mut renderer, &device, &queue, &scene);
+        scene.frame += 1;
+        renderer.particles.begin(scene.frame);
+        let sample = EmitterSample { visible: true, rate: 120.0, ..EmitterSample::default() };
+        renderer.particles.emit(1, 0, slot, &emitter, &sample, &translation(0.0, 0.0, -100.0), 1.0);
+        let image = render(&mut renderer, &device, &queue, &scene);
+        let round_error = pollster::block_on(scope.pop());
+        assert!(round_error.is_none(), "{preset:?}: wgpu validation: {round_error:?}");
+        scope = device.push_error_scope(wgpu::ErrorFilter::Validation);
+        let centre = pixel(&image, SIDE / 2, SIDE / 2);
+        let corner = pixel(&image, 2, SIDE - 3);
+        assert!(centre[0] > 200 && centre[1] > 200, "{preset:?}: the particle covers the middle: {centre:?}");
+        assert!(corner[0] < 40, "{preset:?}: the corner is clear: {corner:?}");
+    }
     let error = pollster::block_on(scope.pop());
     assert!(error.is_none(), "wgpu validation: {error:?}");
 }
@@ -131,7 +163,7 @@ fn sheet(filter: Filter, depth: f32, texel: [u8; 4]) -> Sheet {
 
 fn centre_of(sheets: &[Sheet]) -> [f32; 3] {
     let Some((device, queue)) = device() else { return [f32::NAN; 3] };
-    let mut renderer = Renderer::new(device.clone(), queue.clone(), FORMAT, crate::remaster::Quality::Off);
+    let mut renderer = Renderer::new(device.clone(), queue.clone(), FORMAT, crate::remaster::Quality::Off, crate::settings::Preset::High.features());
     let mut vertices = Vec::new();
     let mut indices = Vec::new();
     let mut parts = Vec::new();

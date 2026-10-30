@@ -17,6 +17,7 @@ use crate::clock::now_ns;
 use crate::draw::Gpu;
 use crate::frame::{Clock, End, Event, FrameLoop, Mailbox, Mode, Seam, Submission, Surface};
 use crate::input::{Held, Input};
+use crate::menu;
 use crate::metrics::Metrics;
 use crate::pad::Pads;
 use crate::present::PresentSetting;
@@ -36,6 +37,7 @@ struct Shared {
     pad_slot: AtomicI32,
     mode: AtomicU8,
     present: AtomicU8,
+    menu: menu::Input,
     closed: AtomicBool,
     size: AtomicU64,
     mailbox: Arc<Mailbox>,
@@ -117,12 +119,13 @@ impl ApplicationHandler<Command> for App {
             WindowEvent::Resized(size) => self.shared.size.store(pack(size), Ordering::Release),
             WindowEvent::KeyboardInput { event, .. } if !event.repeat => {
                 if let PhysicalKey::Code(code) = event.physical_key {
-                    self.shared.held.press(code, event.state == ElementState::Pressed);
+                    self.shared.menu.key(&self.shared.held, code, event.state == ElementState::Pressed);
                 }
             }
             _ => {}
         }
     }
+
 
     fn user_event(&mut self, event_loop: &ActiveEventLoop, command: Command) {
         match command {
@@ -205,6 +208,7 @@ impl Host {
             assets: Mutex::new(Vec::new()),
             assets_in: AtomicU64::new(0),
             assets_done: AtomicU64::new(0),
+            menu: menu::Input::default(),
         });
         let (proxy_in, proxy_out) = mpsc::channel();
         let (handoff, windows) = mpsc::channel();
@@ -361,6 +365,7 @@ impl Surface for WindowSurface {
     }
 
     fn draw(&mut self, image: &Self::Image, step: u64) {
+        self.gpu.menu_events(self.shared.menu.drain());
         self.gpu.draw(image, step);
     }
 
