@@ -868,6 +868,30 @@ native-only.
    Warcraft map archive contains the converted MDX, and the converter
    carries its licence in docs/references.md.
 
+## Mods (later)
+
+Not planned yet (Tom, 31 October 2026); no boxes.
+
+- **Model swaps.** A replacement model works only when it keeps the
+  skeleton and sequence names of the model it replaces, as HD remakes of
+  the same Classic units do (for example LongbowMan's Warcraft 3 Classic
+  HD). Smashcraft authors its own fighter motion on Classic bones, so an HD
+  fighter model must match those bones. Art overrides are client-local and
+  cosmetic: the sim never reads them, so players with different art stay in
+  sync. Wisp would redistribute no pack.
+- **Fighter and stage mods** with their own animations wait until the
+  roster ships. Before online play they need content-hash matching, the way
+  a match already refuses a joiner whose map hash differs
+  (`host/play/standalone.ts:283`, `host/net/peer.ts:206`).
+- **Smoothed animation, as of today.** Keyframes are interpolated:
+  `Track::vector` (`window/wisp-window/src/model/track.rs:75`) blends
+  linear, Hermite and Bezier keys, `Track::quaternion` (line 94) slerps
+  rotations, and node poses use both (`model/pose.rs:110`). Ticks are not:
+  the window draws each 60 Hz scene as it arrived, and a display frame with
+  no new tick redraws the last one (`window/wisp-window/src/frame.rs:408`).
+  Blending between ticks is the unlanded `wisp-109-motion` lane under
+  wisp#109.
+
 ## Rejected
 
 - **A runtime wrapper library such as w3ts** (MIT; object classes over
