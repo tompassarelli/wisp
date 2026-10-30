@@ -271,7 +271,7 @@ scene-to-present time, the p99 lateness of the render thread's own wakes (at mos
 scene that has arrived and redraws the last one when none has, so a late game
 never makes a present miss its vblank; a scene that missed its deadline is
 counted in `lateScenes` and drawn on a later frame. Above 60 Hz the game still steps 60 times a second: a step runs on the first vblank whose
-acquire is at or after its due time and the vblanks between redraw the last scene.
+acquire is at or after its due time and the vblanks between redraw the last scene. The due time advances by exactly 1/60 s from the first step, so 120 Hz steps every second vblank, 144 Hz every second or third and a display a little off its rate (119.88 Hz) still averages 60; after a stall of more than one step the clock restarts one step ahead of the acquire instead of stepping to catch up. The tests in `pacing.rs` hold 600 steps (plus or minus 1) in ten simulated seconds at 120 and 144 Hz and one step per vblank at 60 Hz. A game linked against a Wisp from before this gate (Smashcraft's pin until it moves) steps once per display frame and runs at double speed on a 120 Hz panel.
 
 `WISP_WINDOW_PRESENT` (`Fifo`, the default, `Mailbox` or `Immediate`) and
 `WISP_WINDOW_FULLSCREEN=1` (borderless fullscreen) set the present path of an `openNativeWindow`

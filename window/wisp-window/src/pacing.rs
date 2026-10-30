@@ -204,9 +204,37 @@ mod tests {
 
     #[test]
     fn a_144_hz_display_steps_sixty_times_a_second_two_or_three_vblanks_apart() {
-        let steps = steps_over(144.0, 2.0);
-        assert!((119..=121).contains(&steps.len()), "{} steps in two seconds", steps.len());
+        let steps = steps_over(144.0, 10.0);
+        assert!((599..=601).contains(&steps.len()), "{} steps in ten seconds", steps.len());
         assert!(steps.windows(2).all(|pair| (2..=3).contains(&(pair[1] - pair[0]))));
+    }
+
+    #[test]
+    fn a_120_hz_display_steps_sixty_times_a_second_every_second_vblank() {
+        let steps = steps_over(120.0, 10.0);
+        assert!((599..=601).contains(&steps.len()), "{} steps in ten seconds", steps.len());
+        assert!(steps.windows(2).all(|pair| pair[1] - pair[0] == 2));
+    }
+
+    #[test]
+    fn a_display_slightly_off_its_rate_still_steps_sixty_times_a_second() {
+        for hz in [119.88, 143.9, 239.76] {
+            let steps = steps_over(hz, 10.0);
+            let rate = steps.len() as f64 / 10.0;
+            assert!((rate - 60.0).abs() <= 0.2, "{hz} Hz stepped {rate} a second");
+        }
+    }
+
+    #[test]
+    fn a_stall_catches_up_at_most_one_step() {
+        let mut clock = StepClock::default();
+        let period_ns = 8_333_333;
+        for k in 0..10 {
+            clock.step_now(1_000_000 + k * period_ns, 8.333);
+        }
+        let after = 1_000_000 + 10 * period_ns + 2_000_000_000;
+        let stepped = (0..5).filter(|k| clock.step_now(after + k * period_ns, 8.333)).count();
+        assert!(stepped <= 3, "{stepped} steps in five vblanks after a two second stall");
     }
 
     #[test]
