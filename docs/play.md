@@ -299,6 +299,7 @@ unpacks every file the archive lists into `$XDG_CACHE_HOME/wisp/map-imports/<sha
 once, with the map packager, and returns `{ entry, source }` rows a game's
 `readAsset` serves as map imports before it falls back to stock files. Smashcraft
 turns this on with `play --standalone --map MAP.w3x --player-assets-only`.
+The native window reads assets the same way, models, textures and sounds alike, because every one goes through the game's `readAsset`. A game that steps on the worker thread (`nativeGame`) exports a function from `arguments` to the game instead of the game, and passes the player's flags in `arguments`, so the worker's `readAsset` serves the map's imports first and the Warcraft install after, as the main thread's does; a sound the map imports then plays from the map.
 
 ```ts
 import { runStandalone, type StandaloneGame } from "wisp/scripts/wisp/standalone";

@@ -70,7 +70,7 @@ export interface StandaloneOptions {
   readonly net?: StandaloneNet;
   /** False skips the gpu machine-capacity lease check, which otherwise applies only to a scripted, captured or headless run (`agentRender`). */
   readonly gpuLease?: boolean;
-  /** With `window: "native"`, where a worker thread imports the game from: it then steps the game there, so the game's collections never delay the window's wake. Without it, or with `net`, the game steps on Bun's main thread. */
+  /** With `window: "native"`, where a worker thread imports the game from (an export that is a function receives `arguments` and returns the game, so the worker reads the player's own map and install as the main thread does): it then steps the game there, so the game's collections never delay the window's wake. Without it, or with `net`, the game steps on Bun's main thread. */
   readonly nativeGame?: NativeGameModule;
   /** With `window: "native"`, the `wisp-window` library the sound output loads, else the one the window uses. */
   readonly library?: string | undefined;

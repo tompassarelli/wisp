@@ -1,8 +1,9 @@
 // The thread that steps a native window's game: started by simPlayer.ts, which keeps Bun's main thread for the window's wake alone.
 import { Effect } from "effect";
-import { type StandaloneGame, openStandalone } from "../play/standalone";
+import { openStandalone } from "../play/standalone";
 import { attachNativeWindow, WAKE_ERROR, WAKE_FRAME } from "./binding";
 import { createFrameLoop } from "./frameLoop";
+import { loadGame } from "./gameModule";
 import { type RenderSeries, type RenderSeriesName, renderSeriesLengths, renderSeriesSince } from "./renderSeries";
 import { type WakeBox, takeWakes, wakeBox } from "./sharedWake";
 import type { SimWorkerAttach, SimWorkerInit, SimWorkerMessage } from "./simProtocol";
@@ -18,9 +19,7 @@ const problemOf = (cause: unknown) => (cause instanceof Error ? cause.message : 
 
 const run = async (init: SimWorkerInit) => {
   const began = performance.now();
-  const module = await import(init.game.module) as Record<string, StandaloneGame | undefined>;
-  const game = module[init.game.export];
-  if (game === undefined) throw new Error(`${init.game.module} exports no ${init.game.export}`);
+  const game = await loadGame(init.game);
   const box: WakeBox = wakeBox(init.box);
   await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
     const player = yield* openStandalone(game, { ...init.options, window: "native", library: init.library });
