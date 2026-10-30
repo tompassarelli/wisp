@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type { LinkEvent } from "../src/headless/lockstep";
 import type { TurnPacket } from "../src/headless/turnLedger";
 import { joinCode, joinTarget, relayChoice, relayCode, relayRegions } from "../host/net/joinCode";
+import { lineMatching } from "./headless/lineMatching";
 import { relayBinary } from "./headless/relayBinary";
 import { MAX_DATAGRAM, decodeDatagram, encodeDatagram, fitTurns } from "../host/net/wire";
 
@@ -101,22 +102,6 @@ const freePort = async () => {
 
 const sample = ["bun", join(root, "examples/sample/scripts/sample.ts"), "net"];
 
-async function lineMatching(stream: ReadableStream<Uint8Array>, pattern: RegExp, what: string): Promise<RegExpMatchArray> {
-  const reader = stream.getReader();
-  const decoder = new TextDecoder();
-  let seen = "";
-  for (;;) {
-    const { value, done } = await reader.read();
-    if (done) throw new Error(`${what} ended before it printed ${pattern}: ${seen}`);
-    seen += decoder.decode(value, { stream: true });
-    const found = pattern.exec(seen);
-    if (found !== null) {
-      reader.releaseLock();
-      return found;
-    }
-  }
-}
-
 type Piped = Bun.Subprocess<"ignore", "pipe", "pipe">;
 
 const outcome = async (child: Piped) => {
@@ -146,8 +131,8 @@ async function relayedMatch(binary: string, chatter: number) {
     const [hostLines, hostStderr] = host.stderr.tee();
     const code = (await lineMatching(hostLines, /net: join code (\S+)/, "the host"))[1] ?? "";
     expect(code).toMatch(/^127\.0\.0\.1:\d+\/[0-9A-Z-]+$/);
-    quiet([...sample, "proxy", "--listen", String(proxyPort), "--to", `127.0.0.1:${relayPort}`, "--rtt", "170"]);
-    await Bun.sleep(500);
+    const proxy = player([...sample, "proxy", "--listen", String(proxyPort), "--to", `127.0.0.1:${relayPort}`, "--rtt", "170"]);
+    await lineMatching(proxy.stderr, /net: proxy on UDP port/, "the proxy");
     const joiner = player([...sample, "join", code.replace(`:${relayPort}/`, `:${proxyPort}/`), ...flags]);
     const [hosted, joined] = await Promise.all([outcome(host), outcome(joiner)]);
     expect(hosted.outcome.failure).toBeUndefined();

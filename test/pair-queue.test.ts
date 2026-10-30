@@ -17,6 +17,16 @@ const world = (overrides: Partial<QueueWorld> = {}): QueueWorld => ({
   holder: () => undefined,
   ...overrides,
 });
+const until = async (check: () => boolean) => {
+  for (const deadline = Date.now() + 5000; !check() && Date.now() < deadline;) await Bun.sleep(10);
+};
+const trapped = async (script: string) => {
+  const child = Bun.spawn(["sh", "-c", `${script}; echo trapped; while :; do sleep 0.1; done`], { stdin: "ignore", stdout: "pipe", stderr: "ignore" });
+  const reader = child.stdout.getReader();
+  await reader.read();
+  reader.releaseLock();
+  return child;
+};
 const take = (state: QueueWorld, owner: string, pid: number, waitSeconds = 5, session = "") => Effect.runPromise(takePair(state, { owner, pid, waitSeconds, session }));
 
 test("[scenario] two concurrent requests land on different pairs, one on each host", async () => {
@@ -33,7 +43,7 @@ test("[scenario] a request waits in line for a released pair and the laptop is s
   const held = await take(state, "capture-a", 101);
   await expect(take(state, "capture-b", 102, 1)).rejects.toThrow("no free pair within 1 s");
   const waiting = take(state, "capture-b", 102);
-  await Bun.sleep(300);
+  await until(() => queueStatus(state).waiting === 1);
   expect(queueStatus(state).waiting).toBe(1);
   await Effect.runPromise(releasePair(state.directory, held));
   expect(await waiting).toEqual(held);
@@ -218,13 +228,11 @@ test("[scenario] a pool start on a pair leased to another session is refused nam
 
 test("[scenario] a lease on a pair whose pool outlived its custodian is granted only once that pool has exited, and fails when the pool will not stop", () => inStateHome(async () => {
   const claim = (pid: number) => writeJson(claimFile(7), { pair: 7, owner: "smashcraft-653", session: "smashcraft-653", ...markOf(pid), agent: { pid: 2999999, start: 1 } });
-  const pool = Bun.spawn(["sh", "-c", "trap 'sleep 1; exit 0' TERM; while :; do sleep 0.1; done"], { stdin: "ignore", stdout: "ignore", stderr: "ignore" });
-  await Bun.sleep(300);
+  const pool = await trapped("trap 'sleep 1; exit 0' TERM");
   claim(pool.pid);
   await Effect.runPromise(reclaimOrphan(7, 10));
   expect(alive(pool.pid)).toBe(false);
-  const stuck = Bun.spawn(["sh", "-c", "trap '' TERM; while :; do sleep 0.1; done"], { stdin: "ignore", stdout: "ignore", stderr: "ignore" });
-  await Bun.sleep(300);
+  const stuck = await trapped("trap '' TERM");
   claim(stuck.pid);
   await expect(Effect.runPromise(reclaimOrphan(7, 1))).rejects.toThrow("still running 1 s after its stop");
   stuck.kill("SIGKILL");

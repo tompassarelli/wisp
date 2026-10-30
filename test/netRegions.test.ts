@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { Effect } from "effect";
 import { join } from "node:path";
 import { relayRegions } from "../host/net/joinCode";
+import { lineMatching } from "./headless/lineMatching";
 import { relayBinary } from "./headless/relayBinary";
 import { describeRegions, nearest, pingRegions, pingRelay } from "../host/net/regionPing";
 
@@ -21,9 +22,14 @@ describe("relay region ping", () => {
     const [relayPort, farPort, deadPort] = [await freePort(), await freePort(), await freePort()];
     const children: { kill(): void }[] = [];
     try {
-      children.push(Bun.spawn([binary, "--bind", `127.0.0.1:${relayPort}`], { stdin: "ignore", stdout: "ignore", stderr: "ignore" }));
-      children.push(Bun.spawn([...sample, "proxy", "--listen", String(farPort), "--to", `127.0.0.1:${relayPort}`, "--rtt", "120"], { stdin: "ignore", stdout: "ignore", stderr: "ignore" }));
-      await Bun.sleep(600);
+      const relay = Bun.spawn([binary, "--bind", `127.0.0.1:${relayPort}`], { stdin: "ignore", stdout: "pipe", stderr: "ignore" });
+      children.push(relay);
+      await lineMatching(relay.stdout, /listening/, "the relay");
+      void relay.stdout.pipeTo(new WritableStream());
+      const proxy = Bun.spawn([...sample, "proxy", "--listen", String(farPort), "--to", `127.0.0.1:${relayPort}`, "--rtt", "120"], { stdin: "ignore", stdout: "ignore", stderr: "pipe" });
+      children.push(proxy);
+      await lineMatching(proxy.stderr, /net: proxy on UDP port/, "the proxy");
+      void proxy.stderr.pipeTo(new WritableStream());
       const regions = relayRegions({ WISP_RELAYS: `near=127.0.0.1:${relayPort},far=127.0.0.1:${farPort},dead=127.0.0.1:${deadPort}` });
       const pings = await Effect.runPromise(pingRegions(regions));
       const by = (name: string) => pings.find((ping) => ping.name === name)?.rttMs;
