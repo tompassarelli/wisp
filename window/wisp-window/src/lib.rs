@@ -16,6 +16,8 @@ mod pad;
 mod pad_gilrs;
 #[cfg(windows)]
 mod pad_windows;
+#[cfg(any(windows, test))]
+mod sdl_mapping;
 mod sync;
 pub mod texture;
 

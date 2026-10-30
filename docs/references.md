@@ -16,6 +16,9 @@ ships each licence text below.
   Linux pads. Ship the licence.
 - `windows` 0.62.2, MIT OR Apache-2.0, https://github.com/microsoft/windows-rs.
   Windows.Gaming.Input pad reads. Ship the licence.
+- SDL_GameControllerDB (the copy gilrs 0.11.2 ships), zlib, https://github.com/mdqinc/SDL_GameControllerDB.
+  Its Windows rows are vendored in `window/wisp-window/data/` and map Windows raw
+  controllers. Ship the licence beside the data.
 - `cpal` 0.18.2, Apache-2.0, https://github.com/RustAudio/cpal. Audio output.
   Ship the licence and any NOTICE.
 - `claxon` 0.4.3, Apache-2.0, https://github.com/ruuda/claxon. FLAC decoding.

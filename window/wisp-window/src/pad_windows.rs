@@ -1,6 +1,7 @@
 use windows::Gaming::Input::{Gamepad, GamepadButtons, GameControllerSwitchPosition, RawGameController};
 
 use crate::pad::{PadBackend, PadState};
+use crate::sdl_mapping::{Database, RawReading, HAT_DOWN, HAT_LEFT, HAT_RIGHT, HAT_UP};
 
 const TRIGGER_PRESSED: f64 = 0.5;
 
@@ -10,12 +11,16 @@ const GAMEPAD_BUTTONS: [GamepadButtons; 16] = [
     GamepadButtons::DPadUp, GamepadButtons::DPadDown, GamepadButtons::DPadLeft, GamepadButtons::DPadRight,
 ];
 
-/// DualShock-style raw controllers, by HID button index, onto the standard layout: Cross, Circle, Square, Triangle, L1, R1, L2, R2, Share, Options, L3, R3.
-const DUALSHOCK_BUTTONS: [usize; 12] = [2, 0, 1, 3, 4, 5, 6, 7, 8, 9, 10, 11];
-
 /// Windows pads, read straight from Windows.Gaming.Input at the sample point so no poll thread quantizes a press.
-#[derive(Default)]
-pub struct WindowsPads;
+pub struct WindowsPads {
+    database: Database,
+}
+
+impl Default for WindowsPads {
+    fn default() -> Self {
+        Self { database: Database::windows() }
+    }
+}
 
 impl PadBackend for WindowsPads {
     fn read(&mut self, index: Option<usize>) -> Option<PadState> {
@@ -33,7 +38,7 @@ impl PadBackend for WindowsPads {
         let (_, slot) = slots.into_iter().find(|(slot, _)| index.is_none_or(|wanted| wanted == *slot))?;
         match slot {
             Slot::Gamepad(pad) => gamepad_state(&pad),
-            Slot::Raw(raw) => raw_state(&raw),
+            Slot::Raw(raw) => raw_state(&self.database, &raw),
         }
     }
 }
@@ -52,24 +57,27 @@ fn gamepad_state(pad: &Gamepad) -> Option<PadState> {
     Some(PadState { axis_x: reading.LeftThumbstickX as f32, axis_y: reading.LeftThumbstickY as f32, ..state })
 }
 
-fn raw_state(raw: &RawGameController) -> Option<PadState> {
+fn raw_state(database: &Database, raw: &RawGameController) -> Option<PadState> {
+    let mapping = database.find(raw.HardwareVendorId().ok()?, raw.HardwareProductId().ok()?)?;
     let mut buttons = vec![false; raw.ButtonCount().ok()? as usize];
     let mut switches = vec![GameControllerSwitchPosition::Center; raw.SwitchCount().ok()? as usize];
     let mut axes = vec![0.0; raw.AxisCount().ok()? as usize];
     raw.GetCurrentReading(&mut buttons, &mut switches, &mut axes).ok()?;
-    let mut state = DUALSHOCK_BUTTONS.iter().enumerate().fold(PadState::default(), |state, (hid, standard)| state.with_button(*standard, buttons.get(hid).copied().unwrap_or(false)));
-    if let Some(position) = switches.first() {
-        for (index, down) in [(12, hat_has(position, &[GameControllerSwitchPosition::Up, GameControllerSwitchPosition::UpRight, GameControllerSwitchPosition::UpLeft])),
-            (13, hat_has(position, &[GameControllerSwitchPosition::Down, GameControllerSwitchPosition::DownRight, GameControllerSwitchPosition::DownLeft])),
-            (14, hat_has(position, &[GameControllerSwitchPosition::Left, GameControllerSwitchPosition::UpLeft, GameControllerSwitchPosition::DownLeft])),
-            (15, hat_has(position, &[GameControllerSwitchPosition::Right, GameControllerSwitchPosition::UpRight, GameControllerSwitchPosition::DownRight]))] {
-            state = state.with_button(index, down);
-        }
-    }
-    let stick = |axis: usize| axes.get(axis).map_or(0.0, |value| (*value as f32) * 2.0 - 1.0);
-    Some(PadState { axis_x: stick(0), axis_y: -stick(1), ..state })
+    let hats: Vec<u8> = switches.iter().map(hat_mask).collect();
+    let axes: Vec<f32> = axes.iter().map(|value| *value as f32 * 2.0 - 1.0).collect();
+    Some(mapping.apply(&RawReading { buttons: &buttons, hats: &hats, axes: &axes }))
 }
 
-fn hat_has(position: &GameControllerSwitchPosition, set: &[GameControllerSwitchPosition]) -> bool {
-    set.contains(position)
+fn hat_mask(position: &GameControllerSwitchPosition) -> u8 {
+    match *position {
+        GameControllerSwitchPosition::Up => HAT_UP,
+        GameControllerSwitchPosition::UpRight => HAT_UP | HAT_RIGHT,
+        GameControllerSwitchPosition::Right => HAT_RIGHT,
+        GameControllerSwitchPosition::DownRight => HAT_DOWN | HAT_RIGHT,
+        GameControllerSwitchPosition::Down => HAT_DOWN,
+        GameControllerSwitchPosition::DownLeft => HAT_DOWN | HAT_LEFT,
+        GameControllerSwitchPosition::Left => HAT_LEFT,
+        GameControllerSwitchPosition::UpLeft => HAT_UP | HAT_LEFT,
+        _ => 0,
+    }
 }
