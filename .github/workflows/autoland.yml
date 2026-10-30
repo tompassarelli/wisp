@@ -2,8 +2,10 @@ name: Autoland
 
 # A claude/** branch (a cloud worker's) lands on main by itself: rebased onto
 # main, checked, and run through the full suites (farm-test.yml); it lands when
-# it fails no test main's farm run doesn't also fail. Otherwise the branch stays
-# and the run's summary names the conflicting files or the new failures
+# it fails no test main's farm run doesn't also fail. Every waiting branch is
+# tested at once in its own run; only the push to main is serialized, and a tip
+# tested on a main that moved on its paths is tested again. Otherwise the branch
+# stays and the run's summary names the conflicting files or the new failures
 # (wisp:docs/ci.md).
 on:
   push:
@@ -21,10 +23,10 @@ permissions:
   actions: write
   statuses: write
 
-# One landing at a time; up to 100 branches wait their turn in order. A push
-# only queues the branch, so it never waits here itself.
+# One run per branch at a time, so branches test side by side; the land job holds
+# the one landing group. A push only queues the branch, so it never waits here itself.
 concurrency:
-  group: ${{ github.event_name == 'push' && format('autoland-push-{0}', github.ref) || 'autoland' }}
+  group: ${{ github.event_name == 'push' && format('autoland-push-{0}', github.ref) || format('autoland-test-{0}', inputs.branch) }}
   cancel-in-progress: false
   queue: max
 
@@ -210,11 +212,14 @@ jobs:
           { echo "detail<<AUTOLAND_EOF"; tail -40 gate.log; echo "AUTOLAND_EOF"; } >> "$GITHUB_OUTPUT"
           echo "code-health gate ${BASE:0:10}..${SHA:0:10}: $verdict" >> "$GITHUB_STEP_SUMMARY"
 
-  land:
+  # Everything that can refuse or hold a tip, outside the landing queue, so a branch waiting on its suite never holds another's landing.
+  judge:
     needs: [rebase, suite, baseline, code-health]
     if: ${{ !cancelled() && needs.rebase.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    outputs:
+      go: ${{ steps.judge.outputs.go }}
     env:
       VERDICT: ${{ needs.rebase.outputs.verdict }}
       BASELINE_FROM: ${{ needs.baseline.outputs.from }}
@@ -223,7 +228,6 @@ jobs:
       STATUS_STATE: ${{ needs.rebase.outputs.status-state }}
       STATUS_DESCRIPTION: ${{ needs.rebase.outputs.status-description }}
       BASE: ${{ needs.rebase.outputs.base }}
-      SCRATCH: ${{ needs.rebase.outputs.scratch }}
       DETAIL: ${{ needs.rebase.outputs.detail }}
       SUITE: ${{ needs.suite.result }}
       CODE_HEALTH: ${{ needs.code-health.result }}
@@ -250,11 +254,9 @@ jobs:
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.13
-      - id: land
+      - id: judge
         run: |
           set +e -uo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898183+github-actions[bot]@users.noreply.github.com"
           short=${SHA:0:10}
           refuse() {
             { echo "Autoland didn't land \`$BRANCH\`${SHA:+ ($short, rebased onto main ${BASE:0:10})}: $1"; echo; printf '%s\n' "$2" | head -60
@@ -301,22 +303,72 @@ jobs:
             success:*) refuse "the code-health gate failed to run:" "$(printf '```\n%s\n```' "$CODE_HEALTH_DETAIL")" ;;
             *) refuse "the code-health gate ended without a result." "" ;;
           esac
+          echo "go=true" >> "$GITHUB_OUTPUT"
+
+  # The only serialized job: a short push of an already-judged candidate. A tip tested on a main that has since
+  # moved lands only if the moved commits miss every path the tip changes (wisp:host/checks/autolandLanding.ts);
+  # otherwise it is tested again on the new main, as a train of one. Nothing lands untested.
+  land:
+    needs: [rebase, judge]
+    if: ${{ !cancelled() && needs.judge.outputs.go == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: autoland-land
+      cancel-in-progress: false
+      queue: max
+    env:
+      SHA: ${{ needs.rebase.outputs.sha }}
+      TIP: ${{ needs.rebase.outputs.tip }}
+      BASE: ${{ needs.rebase.outputs.base }}
+      SCRATCH: ${{ needs.rebase.outputs.scratch }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: farm-test-summary
+          path: candidate
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.13
+      - id: land
+        run: |
+          set +e -uo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898183+github-actions[bot]@users.noreply.github.com"
+          short=${SHA:0:10}
+          refuse() {
+            { echo "Autoland didn't land \`$BRANCH\` ($short, rebased onto main ${BASE:0:10}): $1"; echo; printf '%s\n' "$2" | head -60
+              echo; echo "The branch stays; push a fix to it and it tries again."; } >> "$GITHUB_STEP_SUMMARY"
+            echo "::error title=Autoland didn't land::$BRANCH ($short): $1"
+            exit 1
+          }
+          requeue() {
+            gh workflow run autoland.yml --ref main -f branch="$BRANCH"
+            echo "$1: queued $BRANCH to be tested again on the new main" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          }
           [ "$(bun host/checks/denylist.ts "$(gh api "repos/$GH_REPO/commits/$TIP/status")")" = test ] || refuse "${TIP:0:10} no longer carries a denylist success." ""
-          # Main moves while the suites run: replay the tested commits onto it, as a
-          # local landing would; a conflict sends the branch through again.
-          git fetch -q origin "$SCRATCH"
-          landed=$SHA
+          git fetch -q origin "$SCRATCH" "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH" || requeue "$BRANCH vanished or its scratch branch is gone"
+          if [ "$(git rev-parse "origin/$BRANCH")" != "$TIP" ]; then
+            echo "$BRANCH moved on from ${TIP:0:10}; the run for its new tip lands it" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          candidate=$(git diff --name-only "$BASE" "$SHA")
+          landed=
           pushed=
-          for attempt in 1 2 3; do
+          for _ in 1 2 3; do
             git fetch -q origin main
-            if ! git merge-base --is-ancestor origin/main "$landed"; then
-              git checkout -q -B land "$landed"
-              if ! git rebase -q origin/main; then
-                git rebase --abort
-                gh workflow run autoland.yml --ref main -f branch="$BRANCH"
-                echo "main moved and $BRANCH now conflicts with it: queued it again" >> "$GITHUB_STEP_SUMMARY"
-                exit 0
-              fi
+            if [ "$(git rev-parse origin/main)" = "$BASE" ]; then
+              landed=$SHA
+            else
+              [ "$(bun host/checks/autolandLanding.ts "$candidate" "$(git diff --name-only "$BASE" origin/main)")" = land ] || requeue "main moved on paths $BRANCH changes"
+              git checkout -q -B land "$SHA"
+              git rebase -q origin/main || { git rebase --abort; requeue "main moved and $BRANCH now conflicts with it"; }
               landed=$(git rev-parse HEAD)
             fi
             if git push origin "$landed:refs/heads/main" 2> push.log; then pushed=1; break; fi
@@ -336,5 +388,14 @@ jobs:
       # Pushes made with this token start no workflows: start main's CI (main-red follows it).
       - if: steps.land.outputs.pushed == 'true'
         run: gh workflow run ci.yml --ref main || echo "::warning::couldn't start main's CI"
-      - if: always() && env.SCRATCH != ''
-        run: git push origin --delete "$SCRATCH" || true
+
+  cleanup:
+    needs: [rebase, land]
+    if: ${{ always() && needs.rebase.outputs.scratch != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - run: git push origin --delete "${{ needs.rebase.outputs.scratch }}" || true

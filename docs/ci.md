@@ -293,14 +293,23 @@ it locally.
    `harness/code-health/cli.ts gate BASE SHA` on the rebased commit (Bun
    1.3.13, ast-grep 0.42.1); new debt (exit 1) or a gate error (exit 2)
    refuses the branch. The gate passes without `structure.toml`.
-5. **Land.** With no new failures, the rebased commits are pushed to main
-   (a plain fast-forward) and the branch is
-   deleted. Pushes made with the workflow token start no workflows, so the
+5. **Land.** Steps 1 to 4 end in the `judge` job, which refuses or passes a
+   tip. A passing tip goes to the `land` job, the only job the runs queue
+   on (group `autoland`, held for about a minute). If main is still the
+   tested base, the tested commits are pushed to it as a fast-forward. If
+   main moved while the suite ran, the job lands the tip rebased onto it
+   without another suite only when main's new commits touch none of the
+   paths the tip changed and none of the shared inputs (lockfiles,
+   `package.json`, tsconfigs, `Cargo.toml`, `knip.json`,
+   `structure.toml`, the clean-room allowlist, `.github/`;
+   `landing` in wisp:host/checks/autolandLanding.ts). Otherwise, or when
+   the rebase conflicts, it dispatches the branch again, so the tip is
+   tested on the new main as a train of one and never lands untested; a
+   tip pushed again meanwhile is left to the run for its new tip. The
+   branch is deleted on landing. Pushes made with the workflow token start no workflows, so the
    run dispatches main's CI for the landed commit. A dispatched run starts no
    `workflow_run` either, so that CI run's last job dispatches "Main is red"
-   with its own run ID. If main moved during the run, the tested commits are
-   replayed onto it, as a local landing would; only a conflict sends the
-   branch through again.
+   with its own run ID.
 6. **Refuse.** On a conflict, a failed check, new failures or new
    code-health debt, the branch stays and the run fails; its job summary
    says "Autoland didn't land" and names the conflicting files, failed
@@ -310,9 +319,12 @@ it locally.
    the same branch and it tries again.
 
 The push itself only queues a run of main's copy of the workflow, so a
-branch made from an older main still lands with the current rules. Runs
-share one concurrency group with a queue, so branches land one at a
-time in push order and never race main. The run's own status is red
+branch made from an older main still lands with the current rules. Each
+branch tests in its own run (group `autoland-test-BRANCH`), so every waiting
+branch is tested at once, as in smashcraft's Autoland, and a failing branch
+blocks no other; only the `land` job queues, one landing at a time, so
+landings never race main. The hosted-job limit below still applies: when
+several runs' shards exceed it, the shards wait in GitHub's queue. The run's own status is red
 whenever a suite shard fails, main's known failures included; its `land`
 job and summary say whether it landed. To retry a branch without a new
 commit: `gh workflow run autoland.yml -f branch=claude/NAME`. A commit that
@@ -348,8 +360,8 @@ unrelated workflow can still consume free account capacity. Other workflows keep
 their share bounded so a new run's first job starts within a minute: a large
 matrix sets `max-parallel` and packs enough work in each job that setup stays
 a small part of it, and CI runs once per ref (a newer push replaces the queued
-run). Autoland's group holds only Autoland runs; farm runs have no group, so
-landings never hold them back.
+run). Autoland's test runs hold one group per branch and its land job the one
+landing group; farm runs have no group, so landings never hold them back.
 
 `bun wisp farm ... --wait` (`waitFor` in wisp:host/farm/farm.ts) polls the
 run with one `gh run view` (two API calls). It polls 10 s after the dispatch,
