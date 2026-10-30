@@ -71,6 +71,7 @@ struct GpuModel {
     opaque_first: bool,
     rig: Box<dyn model::Rig>,
     bones: usize,
+    skin: sprite::Skin,
     emitters: Vec<(ModelEmitter, Option<Slot>)>,
 }
 
@@ -255,7 +256,7 @@ impl Renderer {
         let emitters = self.register_emitters(path, data.emitters);
         let bones = data.rig.bone_count().max(1);
         self.model_ids.insert(path.to_string(), self.models.len());
-        self.models.push(GpuModel { vertices, indices, draws, opaque_first, rig: data.rig, bones, emitters });
+        self.models.push(GpuModel { vertices, indices, draws, opaque_first, skin: sprite::Skin::new(data.vertices, data.indices, &data.parts), rig: data.rig, bones, emitters });
         self.counts.push(0);
     }
 

@@ -8,6 +8,7 @@ use serde::Deserialize;
 
 use super::gpu::{bone_storage, frame_group, instance_storage, opacity_storage, uv_storage};
 use super::math::{Mat4, IDENTITY};
+use super::model::{Part, Vertex};
 use super::scene::{Camera, Light, Scene};
 use super::{Instance, Renderer, DEPTH, HDR, SAMPLES};
 
@@ -53,6 +54,46 @@ pub(super) struct Slot {
     instance: wgpu::Buffer,
     group: wgpu::BindGroup,
     drawn: Option<Drawn>,
+    fit: Option<(String, [f32; 6])>,
+}
+
+/// A model's vertices, indices and geoset ranges kept on the CPU, so a sprite can fit its camera to the box the visible geosets fill in a pose.
+pub(super) struct Skin {
+    vertices: Vec<Vertex>,
+    indices: Vec<u32>,
+    parts: Vec<(u32, u32, u32)>,
+}
+
+impl Skin {
+    pub(super) fn new(vertices: Vec<Vertex>, indices: Vec<u32>, parts: &[Part]) -> Self {
+        Self { vertices, indices, parts: parts.iter().map(|part| (part.opacity_slot, part.first_index, part.index_count)).collect() }
+    }
+
+    /// The box of the skinned vertices of every geoset whose opacity in `opacities` is above a tenth; none when no geoset shows.
+    fn posed_bounds(&self, bones: &[Mat4], opacities: &[f32]) -> Option<[f32; 6]> {
+        let mut bounds = [f32::MAX, f32::MAX, f32::MAX, f32::MIN, f32::MIN, f32::MIN];
+        for &(slot, first, count) in &self.parts {
+            if opacities.get(slot as usize).is_some_and(|opacity| *opacity <= 0.1) {
+                continue;
+            }
+            let range = first as usize..(first + count) as usize;
+            for &index in self.indices.get(range).unwrap_or(&[]) {
+                let Some(vertex) = self.vertices.get(index as usize) else { continue };
+                let mut point = [0.0_f32; 3];
+                for (bone, weight) in vertex.bones.iter().zip(vertex.weights) {
+                    let Some(matrix) = bones.get(*bone as usize) else { continue };
+                    for (axis, out) in point.iter_mut().enumerate() {
+                        *out += weight * (matrix[axis] * vertex.position[0] + matrix[4 + axis] * vertex.position[1] + matrix[8 + axis] * vertex.position[2] + matrix[12 + axis]);
+                    }
+                }
+                for axis in 0..3 {
+                    bounds[axis] = bounds[axis].min(point[axis]);
+                    bounds[3 + axis] = bounds[3 + axis].max(point[axis]);
+                }
+            }
+        }
+        (bounds[3] > bounds[0]).then_some(bounds)
+    }
 }
 
 fn subtract(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
@@ -155,6 +196,7 @@ impl Renderer {
             instance: instance_storage(&self.device, 1),
             group,
             drawn: None,
+            fit: None,
         }
     }
 
@@ -166,23 +208,32 @@ impl Renderer {
     /// Draws `shot` into sprite `index`'s target of `size`, lit by the scene's light colours from the camera's upper left; a sprite already showing this pose is left as it is.
     pub(crate) fn draw_sprite(&mut self, encoder: &mut wgpu::CommandEncoder, index: usize, size: (u32, u32), shot: &Shot, scene_light: Option<&Light>) {
         let Some(&id) = self.model_ids.get(shot.model.as_str()) else { return };
-        let signature = scene_light.map(|light| (light.key, light.ambient));
-        let wanted = Drawn { shot: shot.clone(), light: signature };
-        let aspect = size.0 as f32 / size.1 as f32;
-        let (camera, light) = framing(shot.bounds, aspect, scene_light);
-        let far = camera.far;
-        let uniform = Self::frame_uniform(&Scene { camera, light: Some(light), ..Scene::default() }, aspect, aspect, far);
         let model = &mut self.models[id];
         let bones = model.bones;
         let mut posed = vec![IDENTITY; bones];
         model.rig.pose(shot.sequence, shot.frame, shot.clock * 1000.0, &mut posed);
         let opacities = model.rig.opacities().to_vec();
         let uv_rows = model.rig.uv_rows().to_vec();
+        let measured = model.skin.posed_bounds(&posed, &opacities);
         self.ensure_slot(index, size);
         let slot = &mut self.sprites[index];
+        let bounds = match (&slot.fit, measured) {
+            (Some((path, fit)), _) if *path == shot.model => *fit,
+            (_, Some(measured)) => {
+                slot.fit = Some((shot.model.clone(), measured));
+                measured
+            }
+            (_, None) => shot.bounds,
+        };
+        let signature = scene_light.map(|light| (light.key, light.ambient));
+        let wanted = Drawn { shot: Shot { bounds, ..shot.clone() }, light: signature };
         if slot.drawn.as_ref() == Some(&wanted) {
             return;
         }
+        let aspect = size.0 as f32 / size.1 as f32;
+        let (camera, light) = framing(bounds, aspect, scene_light);
+        let far = camera.far;
+        let uniform = Self::frame_uniform(&Scene { camera, light: Some(light), ..Scene::default() }, aspect, aspect, far);
         if bones > slot.bone_capacity {
             slot.bone_capacity = bones.next_power_of_two();
             slot.bones = bone_storage(&self.device, slot.bone_capacity);
@@ -259,5 +310,17 @@ mod tests {
         let to_camera = unit(subtract(camera.eye, [0.0, 0.0, 100.0]));
         assert!(dot(light.toward, to_camera) > 0.5);
         assert!(light.toward[2] > 0.0);
+    }
+
+    #[test]
+    fn the_posed_box_holds_only_the_visible_geosets_vertices_after_skinning() {
+        let vertex = |position: [f32; 3]| Vertex { position, normal: [0.0; 3], uv: [0.0; 2], bones: [0, 0, 0, 0], weights: [1.0, 0.0, 0.0, 0.0] };
+        let parts = [Part { opacity_slot: 0, first_index: 0, index_count: 3, layers: Vec::new() }, Part { opacity_slot: 1, first_index: 3, index_count: 3, layers: Vec::new() }];
+        let vertices = vec![vertex([0.0, 0.0, 0.0]), vertex([10.0, 0.0, 0.0]), vertex([0.0, 10.0, 20.0]), vertex([500.0, 500.0, 500.0]), vertex([501.0, 500.0, 500.0]), vertex([500.0, 501.0, 500.0])];
+        let skin = Skin::new(vertices, vec![0, 1, 2, 3, 4, 5], &parts);
+        let mut lifted = IDENTITY;
+        lifted[14] = 5.0;
+        assert_eq!(skin.posed_bounds(&[lifted], &[1.0, 0.0]), Some([0.0, 0.0, 5.0, 10.0, 10.0, 25.0]));
+        assert_eq!(skin.posed_bounds(&[lifted], &[0.0, 0.0]), None);
     }
 }

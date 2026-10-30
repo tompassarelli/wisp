@@ -284,7 +284,7 @@ impl UiRenderer {
                 let size = sprite_size(pixels);
                 if let Some(group) = self.image_group(&format!("sprite/{sprite}/{}x{}", size.0, size.1), textures) {
                     let tint = rgba(0xffff_ffff, frame.alpha as f32 / 255.0);
-                    self.emit(Source::Image(group), Quad { rect: [pixels[0].round(), pixels[1].round(), size.0 as f32, size.1 as f32], uv: [0.0, 0.0, 1.0, 1.0], color: tint, coverage: 2 });
+                    self.emit(Source::Image(group), Quad { rect: [pixels[0].round(), pixels[1].round(), size.0 as f32, size.1 as f32], uv: [0.0, 0.0, 1.0, 1.0], color: tint, coverage: 3 });
                 }
                 sprite += 1;
             }
