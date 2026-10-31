@@ -147,10 +147,11 @@ impl Pulse {
         }
         let seconds = elapsed_ns as f64 / 1e9;
         let line = format!(
-            "wisp-window: {:.1} frames/s (frame p50 {:.1} ms, p99 {:.1} ms), {:.1} ticks/s, acquire p99 {:.1} ms, draw p99 {:.1} ms, {}, {} late scenes, {} dropped samples over {seconds:.1} s",
+            "wisp-window: {:.1} frames/s (frame p50 {:.1} ms, p99 {:.1} ms, worst {:.1} ms), {:.1} ticks/s, acquire p99 {:.1} ms, draw p99 {:.1} ms, {}, {} late scenes, {} dropped samples over {seconds:.1} s",
             self.intervals.len() as f64 / seconds,
             percentile(&mut self.intervals, 0.5),
             percentile(&mut self.intervals, 0.99),
+            self.intervals.iter().copied().fold(0.0, f64::max),
             beat.step.saturating_sub(began_step) as f64 / seconds,
             percentile(&mut self.acquires, 0.99),
             percentile(&mut self.draws, 0.99),
@@ -185,7 +186,7 @@ mod tests {
             lines.extend(pulse.beat(beat));
         }
         assert_eq!(lines.len(), 1, "{lines:?}");
-        assert!(lines[0].starts_with("wisp-window: 120.0 frames/s (frame p50 8.3 ms, p99 8.3 ms), 60.0 ticks/s"), "{}", lines[0]);
+        assert!(lines[0].starts_with("wisp-window: 120.0 frames/s (frame p50 8.3 ms, p99 8.3 ms, worst 8.3 ms), 60.0 ticks/s"), "{}", lines[0]);
         assert!(lines[0].contains("draw p99 2.0 ms, gpu p99 1.5 ms,"), "{}", lines[0]);
     }
 }

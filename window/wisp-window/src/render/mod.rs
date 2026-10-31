@@ -36,7 +36,7 @@ use wgpu::util::DeviceExt;
 
 use crate::decode_pool::Pool;
 use crate::model::Facing;
-use crate::remaster::{self, Baker, Cache, Edges, Loaded, Quality, Role, Upscaler};
+use crate::remaster::{self, Baker, Cache, Edges, Quality, Role, Upscaler};
 use crate::settings::{Features, Shadows};
 use math::{mirrored, multiply, projection, Mat4, IDENTITY};
 use gpu::{bone_storage, frame_group, frame_uniform_buffer, instance_storage, color_storage, repeat_sampler, upload, uv_storage, white};
@@ -110,7 +110,7 @@ pub struct Renderer {
     quality: Quality,
     wanted: Quality,
     baker: Option<Baker>,
-    baked_at_build: usize,
+    rebuild: assets::Rebuild,
     playing: bool,
     unbaked: bool,
     upscaler: Arc<Upscaler>,
@@ -145,12 +145,12 @@ pub struct Renderer {
     order: Vec<usize>,
     groups: Vec<Group>,
     sky_group_of: Option<Group>,
-    decoder: Pool<Result<Loaded, String>>,
+    decoder: Pool<Result<assets::Decoded, String>>,
     decoding: HashMap<u64, String>,
     next_job: u64,
     waiting: Vec<(String, Arc<[u8]>)>,
     sources: Vec<(String, Arc<[u8]>)>,
-    incoming: Option<Box<Renderer>>,
+    incoming: assets::Incoming,
     features: Features,
     samples: u32,
     particles: Particles,
@@ -197,7 +197,7 @@ impl Renderer {
             quality,
             wanted: quality,
             baker: None,
-            baked_at_build: 0,
+            rebuild: assets::Rebuild::default(),
             playing: false,
             unbaked: false,
             upscaler: Arc::new(Upscaler::classical()),
@@ -237,7 +237,7 @@ impl Renderer {
             next_job: 0,
             waiting: Vec::new(),
             sources: Vec::new(),
-            incoming: None,
+            incoming: assets::Incoming::default(),
             features,
             samples,
             particles,
