@@ -27,6 +27,7 @@ declares (wisp:docs/architecture.md, "Where things live").
   and exports `standaloneWindowArgument` for a game's `--window chrome|native`
   flag; `bun wisp window probe` measures the window (wisp#105,
   wisp:docs/play.md, "Native window").
+- `StandaloneOptions.emulatedCalls` names a JSON file a standalone run ends by writing its client's emulated-native call counts to, and `standaloneEmulatedCallsArgument` reads a game's `--emulated-calls FILE` flag; it is how a game API family's native-window check reads zero (wisp#137, wisp#138, wisp:docs/game-api-plan.md).
 
 - `wisp/src/netcode/codec`, `frameRing`, `ledger`, `message`, `session` and
   `wire` export the generic rollback netcode Battlecraft proved: `RowCodec`,

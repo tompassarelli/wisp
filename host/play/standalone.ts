@@ -68,6 +68,8 @@ export interface StandaloneOptions {
   readonly captureFrames?: readonly number[];
   readonly recordChecksums?: boolean;
   readonly gamepadIndex?: number;
+  /** A JSON file the run ends by writing the client's emulated-native call counts to, one count per Warcraft-named native (wisp:docs/game-api-plan.md); a migrated family reads zero. */
+  readonly emulatedCalls?: string;
   readonly net?: StandaloneNet;
   /** False skips the gpu machine-capacity lease check, which otherwise applies only to a scripted, captured or headless run (`agentRender`). */
   readonly gpuLease?: boolean;
@@ -108,6 +110,10 @@ const failed = (problem: string) => new RenderFailure({ cause: new Error(problem
 const problemOf = (failure: RenderFailure) => (failure.cause instanceof Error ? failure.cause.message : String(failure.cause));
 const decode = <S extends Schema.Top & { readonly DecodingServices: never }>(schema: S, input: unknown) =>
   Schema.decodeUnknownEffect(schema)(input).pipe(Effect.mapError((cause) => failed(cause.message)));
+
+/** The file `emulatedCalls` names: an object of native name to call count, names in order. */
+export const emulatedCallsJson = (calls: ReadonlyMap<string, number>) =>
+  JSON.stringify(Object.fromEntries([...calls].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))), null, 2) + "\n";
 
 const thrownAsFailure = Effect.catchDefect((cause) => Effect.fail(new RenderFailure({ cause })));
 
@@ -151,6 +157,10 @@ export const openStandalone = (game: StandaloneGame, options: StandaloneOptions 
   });
   const finish = (result: Readonly<Record<string, unknown>>) => Effect.gen(function*() {
     if (soundPlayer !== undefined && result.error === undefined) result = { ...result, ...(yield* attempt(() => soundPlayer.settle())) };
+    if (options.emulatedCalls !== undefined) {
+      const path = options.emulatedCalls;
+      yield* attempt(() => Bun.write(path, emulatedCallsJson(session.client.emulatedCalls)));
+    }
     if (options.out !== undefined) {
       const out = options.out;
       if (recordChecksums) yield* attempt(() => Bun.write(join(out, "checksums.jsonl"), checksums.map((row) => JSON.stringify(row)).join("\n") + "\n"));
@@ -330,6 +340,15 @@ export function standaloneWindowArgument(args: readonly string[]): { readonly wi
   const value = args[at + 1];
   if (value !== "chrome" && value !== "native") return "--window needs chrome or native";
   return { window: value, rest: [...args.slice(0, at), ...args.slice(at + 2)] };
+}
+
+/** Reads `--emulated-calls FILE` from a play command's arguments; the rest come back untouched. */
+export function standaloneEmulatedCallsArgument(args: readonly string[]): { readonly emulatedCalls?: string; readonly rest: readonly string[] } | string {
+  const at = args.indexOf("--emulated-calls");
+  if (at < 0) return { rest: args };
+  const value = args[at + 1];
+  if (value === undefined || value.startsWith("--")) return "--emulated-calls needs a file";
+  return { emulatedCalls: value, rest: [...args.slice(0, at), ...args.slice(at + 2)] };
 }
 
 /** Reads `--host [--port N | --relay REGION]` or `--join CODE|ADDRESS:PORT` from a play command's arguments; the rest come back untouched. */

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
 import { installHeadless } from "../host/headless/headless";
-import { openStandalone, type StandaloneGame, type StandaloneOptions } from "../host/play/standalone";
+import { openStandalone, standaloneEmulatedCallsArgument, type StandaloneGame, type StandaloneOptions } from "../host/play/standalone";
 
 test("[spec docs/play.md] standalone records scripted checksums and skips live, networked or explicitly disabled checksums", async () => {
   const directory = await mkdtemp(join(tmpdir(), "wisp-checksums-"));
@@ -52,4 +52,38 @@ test("[spec docs/play.md] standalone records scripted checksums and skips live, 
       })));
     }
   } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test("[spec docs/game-api-plan.md] a run given emulatedCalls writes the client's emulated-native counts, one per native name in order, and an empty object when none ran", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "wisp-emulated-"));
+  try {
+    for (const [called, calls] of [[["PreloadGenEnd", "Preload", "Preload"], { Preload: 2, PreloadGenEnd: 1 }], [[], {}]] as const) {
+      const runtime = installHeadless({ filePrefix: "emulated-fixture", globalPrefixes: [] });
+      const clients = runtime.clients({ install() {}, start() {} }, [0]);
+      clients.start();
+      const client = clients.client(0);
+      const game: StandaloneGame = {
+        title: "Emulated fixture", render: { readAsset: async () => undefined },
+        create: async () => ({ client, step: () => clients.frames(1), checksum: () => client.checksum(), close: () => runtime.restore() }),
+      };
+      const emulatedCalls = join(directory, `calls-${Object.keys(calls).length}.json`);
+      await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+        const player = yield* openStandalone(game, { emulatedCalls });
+        const natives = client.natives as Record<string, (...args: unknown[]) => unknown>;
+        for (const name of called) natives[name]?.("line");
+        player.native.advance({ buttons: [], axisX: 0, axisY: 0 });
+        yield* Effect.promise(() => player.native.finish({ frames: 1 }));
+      })));
+      const written = await Bun.file(emulatedCalls).text();
+      expect(JSON.parse(written)).toEqual(calls);
+      expect(Object.keys(JSON.parse(written))).toEqual(Object.keys(calls));
+    }
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test("[spec docs/play.md] --emulated-calls takes a file and leaves the other arguments in order", () => {
+  expect(standaloneEmulatedCallsArgument(["--start", "select", "--emulated-calls", "calls.json", "--frames", "5"])).toEqual({ emulatedCalls: "calls.json", rest: ["--start", "select", "--frames", "5"] });
+  expect(standaloneEmulatedCallsArgument(["--frames", "5"])).toEqual({ rest: ["--frames", "5"] });
+  expect(standaloneEmulatedCallsArgument(["--emulated-calls"])).toBe("--emulated-calls needs a file");
+  expect(standaloneEmulatedCallsArgument(["--emulated-calls", "--frames"])).toBe("--emulated-calls needs a file");
 });

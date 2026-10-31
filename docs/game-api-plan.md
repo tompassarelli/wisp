@@ -247,11 +247,13 @@ for every later family, in `smashcraft/ts`:
 
 1. The pin update that brings the family's Wisp side lands alone first,
    because Wisp's own runtime is compiled into the bundle. On that commit:
-   `bun wisp perf playable-human-four --out build/before.perf` and
-   `bun wisp map build`, keeping the playable bundle it compiles
-   (`build/playable.lua`) as `build/before.lua`.
-2. On the codemod commit: the same, writing `build/after.perf` and
-   `build/after.lua`.
+   `bun wisp perf playable-human-four --out build/before.perf`. The run
+   compiles the playable profile's bundle to `build/playable.lua`, which is
+   the before Lua: copy it to `build/before.lua`. (`bun wisp map build`
+   takes `--profile`, and `map build --profile playable` writes the same
+   file; a bare `map build` is refused.)
+2. On the codemod commit: the same, writing `build/after.perf` and copying
+   `build/playable.lua` to `build/after.lua`.
 3. Normalize both bundles and diff them; the result prints nothing:
    `sed -E 's/(SOURCE_STAMP = )"[0-9a-f]{12}"/\1"STAMP"/; s/("src\/[^"]*\.ts):[0-9]+"/\1:N"/g'`.
    Two fields legitimately change. The source stamp is a hash of every
@@ -265,6 +267,11 @@ for every later family, in `smashcraft/ts`:
    passes. Instructions (mean and top 1% mean), native calls, allocation and
    predicted native time do not rise at all. Those counts are deterministic
    (frame-cost.md), so zero is a fair gate.
+
+A diff in step 3 that is nothing but the hoist below is allowed: G2's
+codemod puts the one TypeScriptToLua hoist difference at
+`SettingsPanel.showNameBox` (12 lines, one instruction cheaper), which step
+4 reads as an improvement.
 
 Steps 3 and 4 are the evidence the box reports. Step 3 is the stronger check.
 Step 4 shows the same result in the units that Smashcraft's frame budget is
@@ -559,8 +566,12 @@ update and codemod. Both backends are green after each step:
 - **Warcraft backend green:** Smashcraft's suite (sim, headless Bun, Lua32),
   the empty bundle diff and `perf compare --threshold 0`.
 - **Native backend green:** `wisp play --standalone --window native`
-  scripted run, in which the Bun run's call log shows no emulated native of the
-  migrated family.
+  scripted run with `--emulated-calls FILE`, which writes the headless
+  client's emulated-native call count per native name as a JSON object
+  (`{ "Preload": 2 }`; a native never called is absent) when the run ends, so
+  the file shows no emulated native of the migrated family. A run that ends
+  needs `--frames N`; `--start match`, `--start select` or `--start results`
+  chooses the screen it begins on.
 
 Per Smashcraft's policy, the step lands on those checks and takes its
 native capture on main's build afterwards.
@@ -665,8 +676,9 @@ Done when:
    exits 0.
 4. Smashcraft's `bun run test` passes in Bun and Lua32, with Bun/Lua parity
    checksums equal on playable-human-four.
-5. The native window's scripted standalone run draws the match's effects,
-   and its headless client counts zero emulated calls of those 34 natives.
+5. The native window's scripted standalone run (`--start match --emulated-calls
+   FILE`) draws the match's effects, and the file counts zero emulated calls of
+   those 34 natives.
 
 Not required:
 
@@ -697,14 +709,15 @@ Done when:
 
 1. In smashcraft `ts/`, `rg -o '\b(BJDebugMsg|BlzConvertColor|BlzCreateFrame|BlzCreateFrameByType|BlzDestroyFrame|BlzFrameClearAllPoints|BlzFrameGetChild|BlzFrameGetChildrenCount|BlzFrameGetEnable|BlzFrameGetName|BlzFrameGetText|BlzFrameGetTextSizeLimit|BlzFrameIsVisible|BlzFrameSetAbsPoint|BlzFrameSetAlpha|BlzFrameSetEnable|BlzFrameSetFocus|BlzFrameSetFont|BlzFrameSetLevel|BlzFrameSetModel|BlzFrameSetPoint|BlzFrameSetScale|BlzFrameSetSize|BlzFrameSetSpriteAnimate|BlzFrameSetText|BlzFrameSetTextAlignment|BlzFrameSetTextSizeLimit|BlzFrameSetTexture|BlzFrameSetVertexColor|BlzFrameSetVisible|BlzGetFrameByName|BlzGetLocalClientHeight|BlzGetLocalClientWidth|BlzGetOriginFrame|BlzGetTriggerFrame|BlzGetTriggerFrameEvent|BlzGetTriggerFrameText|BlzHideOriginFrames|BlzLoadTOCFile|BlzTriggerRegisterFrameEvent|ClearTextMessages|CreateQuest|DisplayTextToPlayer|DisplayTimedTextToPlayer|QuestSetCompleted|QuestSetDescription|QuestSetDiscovered|QuestSetIconPath|QuestSetRequired|QuestSetTitle|WispFrameSetSpriteTime|CreateTrigger|TriggerAddAction|DestroyTrigger)\(' src | wc -l`
    prints `0`. It prints 765 at 6782827367 with the 48 names the pattern held then, and 775 with the three model and sprite names (`BlzFrameSetModel`, `BlzFrameSetSpriteAnimate`, `WispFrameSetSpriteTime`, all in `game/ui/liveCard.ts`) at 5cff2f5fad.
-2. The normalized bundle diff prints nothing.
+2. The normalized bundle diff prints nothing, apart from the hoist at
+   `SettingsPanel.showNameBox` named under the measurement (allowed).
 3. `bun wisp perf compare build/before.perf build/after.perf --threshold 0`
    exits 0.
 4. Smashcraft's `bun run test` passes in Bun and Lua32, with parity
    checksums equal.
-5. The native window's scripted standalone run shows character select and
-   the match HUD, and its headless client counts zero emulated calls of
-   those 51 natives.
+5. The native window's scripted standalone run (`--emulated-calls FILE`, on
+   `--start select` and on `--start match`) shows character select and the
+   match HUD, and the file counts zero emulated calls of those 51 natives.
 
 Not required:
 
@@ -739,8 +752,9 @@ Done when:
    equal on playable-human-four.
 4. A Bun test and a Lua32 test of `src/game/native/text.ts` give the same text
    for the same table of values, ties included.
-5. The native window's scripted standalone run shows character select, and its
-   headless client counts zero emulated calls of those 8 natives.
+5. The native window's scripted standalone run (`--start select
+   --emulated-calls FILE`) shows character select, and the file counts zero
+   emulated calls of those 8 natives.
 
 Not required:
 
@@ -784,9 +798,9 @@ Done when:
    and `bun wisp net pair --humans 4 --relay local --script
    test/native/pads/trailer/online-rollback.pad --frames 600` ends with
    `checksums match on all 4`.
-5. The native window's scripted standalone run reaches a match with the
-   lobby's slots, and its headless client counts zero emulated calls of those
-   8 natives.
+5. The native window's scripted standalone run (`--emulated-calls FILE`)
+   reaches a match with the lobby's slots, and the file counts zero emulated
+   calls of those 8 natives.
 
 Not required:
 
@@ -860,9 +874,9 @@ Done when:
    and `bun wisp net pair --humans 4 --relay local --script
    test/native/pads/trailer/online-rollback.pad --frames 600` ends with
    `checksums match on all 4`.
-5. The native window's scripted standalone run moves a fighter by key and
-   selects a card by mouse, and its headless client counts zero emulated calls
-   of those 17 natives.
+5. The native window's scripted standalone run (`--emulated-calls FILE`) moves a
+   fighter by key and selects a card by mouse, and the file counts zero
+   emulated calls of those 17 natives.
 
 Not required:
 
@@ -899,9 +913,9 @@ Done when:
    and `bun wisp net pair --humans 4 --relay local --script
    test/native/pads/trailer/online-rollback.pad --frames 600` ends with
    `checksums match on all 4`.
-5. The native window's scripted standalone run holds 60 ticks/s through a
-   match, and its headless client counts zero emulated calls of those 9
-   natives.
+5. The native window's scripted standalone run (`--emulated-calls FILE`) holds
+   60 ticks/s through a match, and the file counts zero emulated calls of
+   those 9 natives.
 
 Not required:
 
@@ -932,9 +946,9 @@ Done when:
    equal on playable-human-four.
 4. `bun wisp headless --sound-cues FILE --json` lists the same cues before and
    after the codemod.
-5. The native window's scripted standalone run reports `audioPlayed` above 0
-   and no missing sound, and its headless client counts zero emulated calls of
-   those 19 natives.
+5. The native window's scripted standalone run (`--emulated-calls FILE`) reports
+   `audioPlayed` above 0 and no missing sound, and the file counts zero
+   emulated calls of those 19 natives.
 
 Not required:
 
@@ -967,9 +981,9 @@ Done when:
    exits 0.
 3. Smashcraft's `bun run test` passes in Bun and Lua32, with parity checksums
    equal on playable-human-four.
-4. The native window's scripted standalone run frames a match with the same
-   camera pose as before the codemod, and its headless client counts zero
-   emulated calls of those 35 natives.
+4. The native window's scripted standalone run (`--emulated-calls FILE`) frames a
+   match with the same camera pose as before the codemod, and the file counts
+   zero emulated calls of those 35 natives.
 
 Not required:
 
@@ -1003,9 +1017,9 @@ Done when:
    exits 0.
 3. Smashcraft's `bun run test` passes in Bun and Lua32, with parity checksums
    equal on playable-human-four.
-4. The native window's scripted standalone run draws the fighters in their team
-   colours, and its headless client counts zero emulated calls of those 35
-   natives.
+4. The native window's scripted standalone run (`--emulated-calls FILE`) draws the
+   fighters in their team colours, and the file counts zero emulated calls of
+   those 35 natives.
 
 Not required:
 
@@ -1100,8 +1114,8 @@ Done when:
    same normalizing `sed`.
 3. Wisp's `bun test` passes in Bun and Lua32, and smashcraft's `bun run test`
    passes on a pin of this commit.
-4. `examples/sample` runs in the native window's scripted standalone run with
-   no emulated call of any native.
+4. `examples/sample` runs in the native window's scripted standalone run, whose
+   `--emulated-calls FILE` lists no emulated call of any native.
 
 Not required:
 
@@ -1173,8 +1187,8 @@ Done when:
 4. The normalized bundle diff prints nothing, and
    `bun wisp perf compare build/before.perf build/after.perf --threshold 0`
    exits 0.
-5. The native window's scripted standalone run plays a match on the pinned
-   build.
+5. The native window's scripted standalone run (`--emulated-calls FILE`) plays a
+   match on the pinned build.
 
 Not required:
 
