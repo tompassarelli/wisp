@@ -49,3 +49,7 @@ The rules, which both backends keep:
 - `formatRealWidth` pads on the left to `width + 1` characters and keeps at least one decimal, so a precision of 0 prints `1.0` for 0.5.
 - `parseInt` skips leading spaces, reads a sign and digits and stops at the first other character, and truncates toward zero; `parseReal` does not skip spaces, reads one fraction point and returns the binary32 value.
 - `truncate` rounds toward zero.
+
+## Files
+
+`wisp/game/files`: the game's file output in its data folder, one call per Warcraft native because sites add lines in loops and between other calls: `clearFileLines`, `startFile`, `addFileLine(text)` and `endFile(path)`, and `preloadAsset(path)` for loading a model, texture or sound ahead of its first use. All five are local. `preloadAsset` lowers to `Preload` too, because Warcraft preloads an asset with the call that adds a file line, but it writes no file: the native backend only logs it, because Wisp loads an asset when it is first needed and an asset path must not become a line of the next file. Reads stay in `src/map/fileio.ts`. The store is `src/game/native/fileLines.ts`: it holds the lines added since the last `clearFileLines` and gives the host's sink a copy when `endFile` names the path. A line is kept whole, because the 259-byte line cut is a Warcraft quirk that stays in `src/headless/natives/preloadText.ts` for the Warcraft-named natives.

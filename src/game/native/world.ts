@@ -1,6 +1,7 @@
 import type { Effects } from "./effectStore";
 import type { EventStore } from "./eventStore";
 import type { FrameUi } from "./frameUi";
+import type { FileLines } from "./fileLines";
 import type { Lightnings } from "./lightnings";
 import type { Quests } from "./quests";
 import type { Sounds } from "./soundStore";
@@ -17,6 +18,7 @@ export interface World {
   /** Puts a line in the message area of the client that `player` plays, if this world is that client's. */
   readonly display: (this: void, player: unknown, text: string) => void;
   readonly sounds: Sounds;
+  readonly files: FileLines;
   /** Records the Warcraft native a call stands for; only the headless client installs it. */
   readonly log?: (this: void, native: string, args: readonly unknown[]) => void;
 }

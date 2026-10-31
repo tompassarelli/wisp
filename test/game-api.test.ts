@@ -8,6 +8,7 @@ import * as nativeEvents from "../src/game/native/events";
 import * as nativeFrames from "../src/game/native/frames";
 import * as nativeSound from "../src/game/native/sound";
 import * as nativeText from "../src/game/native/text";
+import * as filesApi from "../src/game/native/files";
 import { bindWorld } from "../src/game/native/world";
 import { HeadlessClient } from "../src/headless/client";
 import { readNativeDeclarations } from "../host/headless/headless";
@@ -18,6 +19,7 @@ import { frames } from "../src/game/warcraft/frames";
 import { sound } from "../src/game/warcraft/sound";
 import type { VolumeGroup } from "../src/game/sound";
 import { text } from "../src/game/warcraft/text";
+import { files } from "../src/game/warcraft/files";
 
 const root = join(import.meta.dir, "..");
 
@@ -75,6 +77,7 @@ const families = [
   { name: "events", table: events, backend: nativeEvents },
   { name: "sound", table: sound, backend: nativeSound },
   { name: "text", table: text, backend: nativeText },
+  { name: "files", table: files, backend: filesApi },
 ] as const;
 
 test.each(families)("every $name lowering row names a declared native with the arity of its Wisp function and an implemented backend call", ({ name, table, backend }) => {
@@ -249,4 +252,42 @@ test("the native backend plays sounds through the bound world's cue log and logs
   expect(second.soundLog.map(cue => cue.event)).toEqual(["create", "start"]);
   expect(first.log.map(call => call.name)).toEqual(["CreateSoundFromLabel", "GetSoundFileDuration", "SetSoundDuration", "SetSoundPosition", "SetSoundDistances", "StartSound", "StopSound", "PlayMusic", "PlayThematicMusic", "VolumeGroupSetVolume"]);
   expect([...first.emulatedCalls.keys(), ...second.emulatedCalls.keys()]).toEqual([]);
+});
+
+test("the files family lowers one to one and its native backend keeps a 300-byte line whole", () => {
+  const lowered = compile(`import { clearFileLines, startFile, addFileLine, endFile, preloadAsset } from "../../src/game/files";\n` + wrap(`
+  clearFileLines();
+  startFile();
+  addFileLine(model);
+  preloadAsset(model);
+  endFile("out.txt");`));
+  const raw = compile(wrap(`
+  PreloadGenClear();
+  PreloadGenStart();
+  Preload(model);
+  Preload(model);
+  PreloadGenEnd("out.txt");`));
+  expect(lowered.diagnostics).toBe("");
+  expect(lowered.lua).toBe(raw.lua);
+  const line = "x".repeat(300);
+  const written: [string, readonly string[]][] = [];
+  const client = new HeadlessClient({ slot: 0, humans: [0], declarations: readNativeDeclarations(), filePrefix: "game-api", localNatives: {}, network: [],
+    files: { written: (name, lines) => { written.push([name, lines]); }, read: () => undefined } });
+  bindWorld(client.world);
+  filesApi.clearFileLines();
+  filesApi.startFile();
+  filesApi.addFileLine(line);
+  filesApi.preloadAsset("model.mdx");
+  filesApi.endFile("out.txt");
+  bindWorld(undefined);
+  expect(client.files.get("out.txt")?.[0]?.length).toBe(300);
+  expect(written).toEqual([["out.txt", [line]]]);
+  expect(client.log.map(call => call.name)).toEqual(["PreloadGenClear", "PreloadGenStart", "Preload", "Preload", "PreloadGenEnd"]);
+  expect([...client.emulatedCalls.keys()]).toEqual([]);
+  const natives = client.natives as Record<string, (...args: unknown[]) => unknown>;
+  natives.PreloadGenClear?.();
+  natives.Preload?.(line);
+  natives.PreloadGenEnd?.("cut.txt");
+  expect(client.files.get("cut.txt")?.[0]?.length).toBe(259);
+  expect(Object.fromEntries(client.emulatedCalls)).toEqual({ PreloadGenClear: 1, Preload: 1, PreloadGenEnd: 1 });
 });

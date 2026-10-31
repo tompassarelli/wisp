@@ -14,6 +14,7 @@ import { Lightnings } from "../game/native/lightnings";
 import { Weathers } from "./weather";
 import { CameraCine } from "./natives/cameraCine";
 import { Effects } from "../game/native/effectStore";
+import { FileLines } from "../game/native/fileLines";
 import { effectNatives, lightningNatives, textTagNatives } from "./natives/effects";
 import { frameNatives, type FrameContext, inputNatives } from "./natives/frames";
 import { mathNatives } from "./natives/math";
@@ -188,6 +189,7 @@ export class HeadlessClient {
     const log = this.log;
     this.world = {
       effects: this.effects, beams: this.lightnings, floatingText: this.textTags, sounds: this.sounds, frames: this.frameUi, events: this.timers, quests: this.quests,
+      files: new FileLines((path, lines) => this.preloadText.write(path, lines)),
       display: (player, text) => { if (player === this.slot) this.messages.push(text); },
       log: logUnlessLocal(log, local),
     };

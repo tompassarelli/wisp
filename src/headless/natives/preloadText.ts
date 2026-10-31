@@ -41,13 +41,21 @@ export class PreloadText {
     return [...this.preloaded.keys()];
   }
 
+  /** Stores a finished file for the client, as both the Warcraft-named natives and the game API end one. */
+  write(name: string, lines: string[]): void {
+    const { slot, filePrefix, stored, files } = this.context;
+    files.set(name, lines);
+    if (name === errorFile(slot, filePrefix)) this.report(lines);
+    stored?.written(name, lines);
+  }
+
   private report(lines: readonly string[]): void {
     const heading = lines[0] ?? "";
     this.context.errors.push(`error in ${heading.slice(heading.indexOf(" in ") + 4)}: ${lines[1] ?? ""}`);
   }
 
   behaviors(): Readonly<Record<string, NativeBehavior>> {
-    const { slot, filePrefix, stored, files, published, messages } = this.context;
+    const { slot, published, messages, stored } = this.context;
     const show = (text: string): void => { messages.push(text); };
     return {
       DisplayTextToPlayer: (player: number, _x: number, _y: number, text: string) => {
@@ -66,9 +74,7 @@ export class PreloadText {
         this.preload.push(preloadLine(line));
       },
       PreloadGenEnd: (name: string) => {
-        files.set(name, this.preload);
-        if (name === errorFile(slot, filePrefix)) this.report(this.preload);
-        stored?.written(name, this.preload);
+        this.write(name, this.preload);
       },
 
       Preloader: (name: string) => {
