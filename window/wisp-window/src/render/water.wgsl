@@ -94,31 +94,25 @@ fn noise(p: vec2<f32>) -> f32 {
     return mix(mix(hash(cell), hash(cell + vec2<f32>(1.0, 0.0)), u.x), mix(hash(cell + vec2<f32>(0.0, 1.0)), hash(cell + vec2<f32>(1.0, 1.0)), u.x), u.y);
 }
 
-// Cooled crust as plates with cracks between them: x is the distance to the nearest crack in cell units, y whether the nearest plate is crust at all.
-fn plates(p: vec2<f32>, time: f32, cover: f32) -> vec2<f32> {
-    let warped = p + (vec2<f32>(noise(p * 0.017 + 3.0), noise(p * 0.017 + 11.0)) - 0.5) * 70.0;
-    let scaled = warped / 170.0;
-    let cell = floor(scaled);
-    var nearest = 8.0;
-    var second = 8.0;
-    var crust = 0.0;
-    for (var oy = -1; oy <= 1; oy++) {
-        for (var ox = -1; ox <= 1; ox++) {
-            let c = cell + vec2<f32>(f32(ox), f32(oy));
-            let h = hash(c);
-            let slide = vec2<f32>(sin(time * 0.045 + h * 6.28), cos(time * 0.037 + h * 11.0)) * 0.12;
-            let point = c + vec2<f32>(0.5) + (vec2<f32>(h, hash(c + vec2<f32>(7.7, 1.3))) - 0.5) * 0.7 + slide;
-            let d = length(scaled - point);
-            if (d < nearest) {
-                second = nearest;
-                nearest = d;
-                crust = step(hash(c + vec2<f32>(19.1, 4.7)), cover);
-            } else if (d < second) {
-                second = d;
-            }
-        }
+fn fbm(p: vec2<f32>) -> f32 {
+    var sum = 0.0;
+    var amplitude = 0.5;
+    var q = p;
+    for (var octave = 0; octave < 4; octave++) {
+        sum += amplitude * noise(q);
+        q = q * 2.03 + vec2<f32>(17.1, 9.3);
+        amplitude *= 0.5;
     }
-    return vec2<f32>(second - nearest, crust);
+    return sum;
+}
+
+// A molten surface as one drifting field with no cell edges: x is the field that cooled crust takes where it runs high, y how hot the melt is, z a fine grain for the crust.
+fn lava_field(p: vec2<f32>, time: f32) -> vec3<f32> {
+    let warp = vec2<f32>(fbm(p * 0.0031 + vec2<f32>(5.0, time * 0.004)), fbm(p * 0.0031 + vec2<f32>(21.0, -time * 0.003))) - 0.47;
+    let crust = fbm((p + vec2<f32>(time * 2.6, time * 1.1) + warp * 360.0) * 0.0038);
+    let heat = fbm((p - vec2<f32>(time * 5.0, -time * 2.0) + warp * 200.0) * 0.0085 + 40.0);
+    let grain = fbm(p * 0.03 + warp * 4.0);
+    return vec3<f32>(crust, heat, grain);
 }
 
 // Bubbles that swell, then pop with a flash, on a jittered grid; x is the rim of a live bubble, y the flash of a popping one.
@@ -347,19 +341,28 @@ fn fragment_main(in: Surface) -> @location(0) vec4<f32> {
 
     var plate = 0.0;
     var rim = 0.0;
+    var melt = 1.0;
     if (water.look.x > 0.0) {
-        let cells = plates(in.world.xy, time, water.look.x);
+        let field = lava_field(in.world.xy, time);
         let hazed = clamp((own - 2500.0) / 5000.0, 0.0, 1.0);
-        plate = mix(smoothstep(0.02, 0.1, cells.x) * cells.y, water.look.x * 0.8, hazed);
-        rim = (1.0 - smoothstep(0.02, 0.2, cells.x)) * cells.y * (1.0 - hazed);
+        let level = 0.68 - 0.4 * water.look.x;
+        let soft = max(fwidth(field.x) * 1.5, 0.012);
+        let edge = smoothstep(level - soft, level + soft, field.x);
+        let reach = max(fwidth(field.x) * 2.5, 0.05);
+        plate = mix(edge, water.look.x * 0.8, hazed);
+        rim = edge * (1.0 - smoothstep(0.0, reach, field.x - level)) * (1.0 - hazed);
+        let seam = pow(1.0 - abs(2.0 * field.z - 1.0), 6.0) * edge * (1.0 - hazed) * 0.6;
+        melt = mix(0.55 + 0.9 * smoothstep(0.25, 0.7, field.y), 1.0, hazed);
         let toward = select(0.5, max(dot(normal, frame.light_toward.xyz), 0.0), frame.light_key.w > 0.5);
-        let cooled = vec3<f32>(0.085, 0.05, 0.042) * (0.6 + 0.9 * toward) * (0.75 + 0.5 * noise(in.world.xy * 0.045));
+        let cooled = vec3<f32>(0.13, 0.055, 0.04) * (0.6 + 0.9 * toward) * (0.55 + 0.9 * field.z);
         colour = mix(colour, cooled, plate);
+        rim += seam;
     }
     if (water.glow.w > 0.0) {
         let pulse = 0.85 + 0.15 * sin(time * 0.8 + noise(in.world.xy * 0.02) * 6.28);
-        let source = (0.35 + 0.65 * ramp) * (1.0 - plate) * pulse * (1.0 - 0.55 * step(0.0001, water.sparks.y));
+        let source = (0.35 + 0.65 * ramp) * (1.0 - plate) * pulse * melt * (1.0 - 0.55 * step(0.0001, water.sparks.y));
         colour += water.glow.rgb * water.glow.w * (source + rim * 1.6);
+        colour += water.foam.rgb * max(melt - 1.0, 0.0) * (1.0 - plate) * 0.5;
     }
     if (water.sparks.y > 0.0) {
         let lit = swirl(in.world.xy, time);
@@ -367,7 +370,7 @@ fn fragment_main(in: Surface) -> @location(0) vec4<f32> {
     }
     let mirror = screen + vec2<f32>(normal.x, -normal.y) * 0.5 * water.shine.w + wobble * 2.5;
     let sky = textureSampleLevel(reflected, clamped, clamp(mirror, vec2<f32>(0.002), vec2<f32>(0.998)), 0.0).rgb;
-    colour = mix(colour, sky, clamp(fresnel * water.wave.w, 0.0, 1.0));
+    colour = mix(colour, sky, clamp(fresnel * water.wave.w * (1.0 - 0.85 * plate), 0.0, 1.0));
 
     let lit_scene = frame.light_key.w > 0.5;
     let sun = select(normalize(vec3<f32>(0.2, 0.55, 0.8)), frame.light_toward.xyz, lit_scene);
