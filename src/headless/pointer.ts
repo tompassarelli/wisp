@@ -1,5 +1,5 @@
 import type { HeadlessClient } from "./client";
-import type { Frame } from "../game/native/frameStore";
+import type { Frame, Frames } from "../game/native/frameStore";
 import { f32 } from "../sim/f32";
 
 const UI_HALF_WIDTH = f32(0.4), UI_HEIGHT = f32(0.6);
@@ -38,7 +38,8 @@ export function screenPoint(reading: Pick<PointerReading, "x" | "y" | "width" | 
   return { x: Math.round((reading.x - reading.width / 2) * scale + screen.width / 2), y: Math.round(reading.y * scale) };
 }
 
-export type PointerClient = Pick<HeadlessClient, "natives" | "screen" | "mouseScreenX" | "mouseScreenY" | "heldMouseButtons" | "clickTarget" | "frames">;
+/** Only the frame store's `point`: Frames has private members, so a consumer that sees Wisp through both its source and its published types would find the whole class incompatible with itself. */
+export type PointerClient = Pick<HeadlessClient, "natives" | "screen" | "mouseScreenX" | "mouseScreenY" | "heldMouseButtons" | "clickTarget"> & { readonly frames: Pick<Frames, "point"> };
 
 /** The clients a window's mouse drives; `LockstepClients` is one. */
 export interface PointerClients {
