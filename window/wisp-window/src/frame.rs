@@ -61,6 +61,7 @@ pub struct FrameLoop<S: Surface, C: Clock> {
     phase: Phase,
     pulse: Pulse,
     pub problem: Option<String>,
+    pub pulse_line: Option<String>,
     scene_failing: bool,
     _timer: TimerResolution,
 }
@@ -85,6 +86,7 @@ impl<S: Surface, C: Clock> FrameLoop<S, C> {
             phase: Phase::default(),
             pulse: Pulse::default(),
             problem: None,
+            pulse_line: None,
             scene_failing: false,
             _timer: TimerResolution::raise(),
         }
@@ -139,10 +141,8 @@ impl<S: Surface, C: Clock> FrameLoop<S, C> {
         if mode != Mode::Loading {
             let times = Times { asked, acquired, drawing, drawn, presented };
             self.publish(&outcome, &times, &timings, interval, missed);
-            let beat = Beat { presented_ns: presented, interval_ms: interval, step: self.drawn_step, late: outcome.late, dropped: outcome.dropped, acquire_ms: ms(asked, acquired), draw_ms: ms(drawing, drawn), gpu_ms: timings.gpu.iter().map(|frame| frame.span_ms).collect() };
-            if let Some(line) = self.pulse.beat(beat) {
-                eprintln!("{line}");
-            }
+            let beat = Beat { presented_ns: presented, interval_ms: interval, step: self.stepper.next(presented).0 as u64, late: outcome.late, dropped: outcome.dropped, acquire_ms: ms(asked, acquired), draw_ms: ms(drawing, drawn), gpu_ms: timings.gpu.iter().map(|frame| frame.span_ms).collect() };
+            self.pulse_line = self.pulse.beat(beat);
         }
         self.previous_frame_late = outcome.late;
         self.previous_acquire = Some(stamp);
@@ -178,7 +178,7 @@ impl<S: Surface, C: Clock> FrameLoop<S, C> {
         metrics.flag(Series::MissedPresents, missed);
         metrics.flag(Series::MissedPresentsAfterLateScene, missed && self.previous_frame_late);
         metrics.flag(Series::LateScenes, outcome.late);
-        metrics.flag(Series::DroppedSamples, outcome.dropped);
+        metrics.flag(Series::DroppedSamples, outcome.dropped > 0);
     }
 
     /// Waits until the pacer's deadline for the scene of the newest step aimed at the vblank this frame presents at, whether the step clock has taken it or has it still due, then loads the newest scene that has arrived, so a late scene costs one frame of latency and never the present.
@@ -220,10 +220,11 @@ impl<S: Surface, C: Clock> FrameLoop<S, C> {
 
     /// Takes the steps the clock took since the last look, each aimed at the vblank its lead reaches; one a frame already waited for is only measured.
     fn collect(&mut self, outcome: &mut Outcome, lead_ns: u64, period_ms: f64) {
-        for taken in self.stepper.take() {
+        let steps = self.stepper.take();
+        outcome.dropped += steps.dropped;
+        for taken in steps.taken {
             self.sample_times[taken.frame as usize % SAMPLE_MEMORY] = Some((taken.frame, taken.sampled_ns));
             self.pacer.record_wake(taken.late_ns as f64 / 1e6);
-            outcome.dropped |= taken.dropped;
             let aimed = Aimed { frame: taken.frame, sampled_ns: taken.sampled_ns, vblank_ns: self.vblank_of(taken.sampled_ns, lead_ns, period_ms) };
             match self.waited {
                 Some(waited) if taken.frame < waited => {}
@@ -291,7 +292,7 @@ struct Aimed {
 
 #[derive(Default)]
 struct Outcome {
-    dropped: bool,
+    dropped: u32,
     late: bool,
     ready_ns: Option<u64>,
     parse_ms: Option<f64>,

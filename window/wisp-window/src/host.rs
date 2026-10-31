@@ -460,6 +460,9 @@ fn render_loop(shared: Arc<Shared>, windows: mpsc::Receiver<Arc<Window>>, aspect
             eprintln!("wisp-window: a scene did not load, so the window keeps the last one until one does: {problem}");
             *lock(&shared.error) = Some(problem);
         }
+        if let Some(line) = frames.pulse_line.take() {
+            eprintln!("{line}");
+        }
     }
 }
 

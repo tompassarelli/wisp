@@ -6,7 +6,9 @@ use std::time::Duration;
 use crate::input::Input;
 use crate::sync::lock;
 
-pub const QUEUE_CAPACITY: usize = 8;
+/// How many samples wait for the game at most: one, so a game that falls behind is never more than a step behind and never runs a backlog of steps at once.
+pub const QUEUE_CAPACITY: usize = 1;
+
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct Sample {
     pub frame: u32,
@@ -64,6 +66,11 @@ pub struct Mailbox {
 }
 
 impl Mailbox {
+    /// Whether a sample pushed now would be queued.
+    pub(crate) fn has_room(&self) -> bool {
+        lock(&self.samples).queue.len() < QUEUE_CAPACITY
+    }
+
     pub(crate) fn push_sample(&self, sample: Sample) -> bool {
         let mut samples = lock(&self.samples);
         if samples.queue.len() >= QUEUE_CAPACITY {

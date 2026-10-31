@@ -99,9 +99,10 @@ const PULSE_NS: u64 = 5_000_000_000;
 pub struct Beat {
     pub presented_ns: u64,
     pub interval_ms: Option<f64>,
+    /// How many steps the clock has given the game, so ticks/s is the game's own rate and not the scenes the presents happened to show.
     pub step: u64,
     pub late: bool,
-    pub dropped: bool,
+    pub dropped: u32,
     pub acquire_ms: f64,
     pub draw_ms: f64,
     pub gpu_ms: Vec<f64>,
@@ -138,7 +139,7 @@ impl Pulse {
         self.draws.push(beat.draw_ms);
         self.gpus.extend(beat.gpu_ms);
         self.late += beat.late as u32;
-        self.dropped += beat.dropped as u32;
+        self.dropped += beat.dropped;
         let elapsed_ns = beat.presented_ns.saturating_sub(began_ns);
         if elapsed_ns < PULSE_NS {
             return None;
@@ -179,7 +180,7 @@ mod tests {
         let mut pulse = Pulse::default();
         let mut lines = Vec::new();
         for frame in 0..=600u64 {
-            let beat = Beat { presented_ns: frame * 8_333_334, interval_ms: (frame > 0).then_some(8.333), step: frame / 2, late: false, dropped: false, acquire_ms: 0.1, draw_ms: 2.0, gpu_ms: (frame > 2).then_some(1.5).into_iter().collect() };
+            let beat = Beat { presented_ns: frame * 8_333_334, interval_ms: (frame > 0).then_some(8.333), step: frame / 2, late: false, dropped: 0, acquire_ms: 0.1, draw_ms: 2.0, gpu_ms: (frame > 2).then_some(1.5).into_iter().collect() };
             lines.extend(pulse.beat(beat));
         }
         assert_eq!(lines.len(), 1, "{lines:?}");

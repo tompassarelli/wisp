@@ -761,20 +761,47 @@ never on the display's acquire or present, so a window the compositor
 throttles, covers or stops handing images to keeps stepping at 60 a second.
 At each due time the thread reads input (pads through SDL on that thread, the
 keys and the pointer) and queues the sample: its frame number, its time on the
-library's clock and the button mask. The queue is bounded at 8. When it is
-full, the oldest samples stay and the new one is counted in `droppedSamples`.
+library's clock and the button mask.
 
-Due times are one sixtieth of a second apart. While the render thread aims
-the clock, each due time moves at most 0.25 ms toward the aimed phase, so the
-rate stays within 1.5 % of 60 Hz and settles on a display slightly off it,
-such as 59.94 Hz. An aim older than 100 ms is dropped, and the clock then runs
-free at exactly 60 Hz. A clock more than six steps behind, as after a suspend,
-starts again from now instead of running the steps it missed.
+The game never takes more than 60 steps in any second, and offline it never
+makes up a step it missed by running steps faster afterwards:
 
-The game's thread takes samples in order, oldest first. A step that ran late
-catches up by stepping twice in one frame. Every sample still becomes exactly
-one sim frame, as a fighter's input needs, and the render thread shows the
-newest scene.
+- Due times are at least a sixtieth of a second apart. While the render thread
+  aims the clock, each due time moves at most 0.25 ms later toward the aimed
+  phase, never earlier. The clock therefore settles on a display at or a little
+  under 60 Hz, such as 59.94 Hz. Against a display a little over it, such as
+  60.05 Hz, the phase slips and comes round about every 20 s, which shows as
+  one repeated frame. An aim older than 100 ms is dropped, and the clock then
+  runs free at 60 Hz.
+- A step the clock wakes too late for is dropped: the clock takes the step it
+  woke for and goes on at the next due time still ahead, so a suspend or a
+  stalled thread never replays the steps it missed.
+- At most one sample waits for the game. A step that falls due while the game
+  still holds the one before is dropped with its input left unread, so a click
+  carries to the next sample. A game that stalls for 300 ms therefore loses
+  about 17 steps and then runs at 60 again, instead of running a backlog of
+  steps at once. Both kinds of drop count in `droppedSamples`.
+
+The game's thread takes samples in order, oldest first. Every sample becomes
+exactly one sim frame, as a fighter's input needs, and the render thread shows
+the newest scene.
+
+Online, the window keeps the same rule: it never hands the game more than 60
+samples a second and never a backlog. The lockstep has a catch-up rule of its
+own, because every peer must run every frame. The peer (`runNetPeer`,
+host/net/peer.ts) waits for every peer's turns for a frame, and once they are
+in it runs every frame that came due back to back. So after late turns or a
+long frame, online play can show the stall's frames run faster than 60 a
+second, for as many frames as the arrived turns cover. The schedule is checked
+again only after a frame runs: a side then more than three frames behind it
+pushes the schedule later (`paceShift`, counted in `slips`) and stops chasing
+the rest, and a side ahead of its peer slows by up to 1 ms a frame.
+
+The window's five-second line counts ticks as the steps the clock gave the
+game. It used to count the scene each present showed. A present the compositor
+held for a second, as niri holds a window it does not show, returned with a
+scene a second old. So the line read about 49 ticks a second as the window was
+hidden and 72 as it came back, while the game itself ran at 60 throughout.
 
 A scene that misses its deadline is drawn on the next frame, so its sample
 waits one frame longer. A new figure, `inputToPresentMs`, records that cost.
@@ -1247,7 +1274,7 @@ yet are created by that box. Each graphics run takes the gpu lease as
   builds "Who owns the frame" behind today's wake:
   - the frame loop behind a surface and clock it can be tested against, and
     the late-scene test with its fake surface;
-  - the sample queue of 8, the scene deadline, the redraw of the last scene,
+  - the sample queue (now one sample, "The step clock"), the scene deadline, the redraw of the last scene,
     and `wisp_window_next_event` as a non-blocking take that the worker drains
     in order on each wake;
   - `missedPresents`, `missedPresentsAfterLateScene`, `lateScenes`,
