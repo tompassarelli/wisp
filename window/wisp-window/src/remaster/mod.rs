@@ -2,6 +2,7 @@
 
 mod bake;
 mod cache;
+pub mod check;
 mod cugan;
 mod relief;
 mod upscale;
