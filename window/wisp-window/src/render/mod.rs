@@ -180,11 +180,9 @@ impl Renderer {
             FrameSet { buffer, group }
         };
         let (main, sky, mirror, mirror_sky) = (set("main frame"), set("sky frame"), set("mirrored frame"), set("mirrored sky frame"));
-        let water = Water::new(&device, HDR, &frame_layout, samples);
+        let (water, post) = (Water::new(&device, HDR, &frame_layout, samples), Post::new(&device, &queue, format, HDR, DEPTH, samples));
         let particles = Particles::new(&device, HDR, samples);
-        let lightning = Lightning::new(&device, HDR, &particles, samples);
-        let weather = Weather::new(&device, HDR, &particles, samples);
-        let post = Post::new(&device, &queue, format, HDR, DEPTH, samples);
+        let (lightning, weather) = (Lightning::new(&device, HDR, &particles, samples), Weather::new(&device, HDR, &particles, samples));
         Self {
             white: upload(&device, &queue, &white()),
             sampler: repeat_sampler(&device),

@@ -145,24 +145,29 @@ impl Renderer {
         if held || self.incoming.is_some() {
             return;
         }
+        let rebuild = self.art_rebuild();
+        if rebuild.is_none() && self.samples == samples {
+            return;
+        }
+        if let Some(baked) = rebuild {
+            self.baked_at_build = baked;
+        }
+        let quality = if rebuild.is_some() { self.wanted } else { self.quality };
+        let mut incoming = Box::new(Renderer::new(self.device.clone(), self.queue.clone(), self.format, quality, self.features).with_upscaler(self.upscaler.clone()));
+        for (path, bytes) in &self.sources {
+            incoming.ingest_shared(path, bytes.clone());
+        }
+        self.incoming = Some(incoming);
+    }
+
+    fn art_rebuild(&self) -> Option<usize> {
         let baked = self.bake_progress().filter(|progress| progress.ready()).map(|progress| progress.done);
         let rebuild = match (self.wanted, baked) {
             (Quality::Off, _) => self.quality != Quality::Off,
             (_, Some(baked)) => self.quality != self.wanted || (self.unbaked && baked > self.baked_at_build),
             (_, None) => false,
         };
-        if !rebuild && self.samples == samples {
-            return;
-        }
-        if rebuild {
-            self.baked_at_build = baked.unwrap_or(0);
-        }
-        let quality = if rebuild { self.wanted } else { self.quality };
-        let mut incoming = Box::new(Renderer::new(self.device.clone(), self.queue.clone(), self.format, quality, self.features).with_upscaler(self.upscaler.clone()));
-        for (path, bytes) in &self.sources {
-            incoming.ingest_shared(path, bytes.clone());
-        }
-        self.incoming = Some(incoming);
+        rebuild.then(|| baked.unwrap_or(0))
     }
 
     pub(super) fn settled(&self) -> bool {

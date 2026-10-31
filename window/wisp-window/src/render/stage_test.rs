@@ -152,9 +152,7 @@ struct Stage {
 }
 
 impl Stage {
-    fn new(size: (u32, u32)) -> Option<Self> {
-        Self::with(size, crate::settings::Preset::High.features())
-    }
+    fn new(size: (u32, u32)) -> Option<Self> { Self::with(size, crate::settings::Preset::High.features()) }
 
     fn with(size: (u32, u32), features: crate::settings::Features) -> Option<Self> {
         let (device, queue) = super::gpu_tests::device()?;
