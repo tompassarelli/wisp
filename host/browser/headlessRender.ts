@@ -76,9 +76,8 @@ interface WorldLight { readonly toward: readonly number[]; readonly key: readonl
 let environmentLight: Promise<number[]> | undefined;
 
 function environmentAmbient(): Promise<number[]> {
-  environmentLight ??= textureAt("ReplaceableTextures\\EnvironmentMap.blp").then((texture) => {
-    const context = texture.getContext("2d"); if (context === null) throw new Error("no 2D texture context");
-    const { data, width, height } = context.getImageData(0, 0, texture.width, texture.height), sum = [0, 0, 0];
+  environmentLight ??= textureAt("ReplaceableTextures\\EnvironmentMap.blp").then(({ data, width, height }) => {
+    const sum = [0, 0, 0];
     const linear = (value: number) => { const c = value / 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
     let weights = 0;
     for (let row = 0; row < height; row++) {
@@ -152,7 +151,8 @@ let sceneBuffer: SceneTarget;
 let compose: ReturnType<typeof postProcessor>;
 let sunMap: DepthTarget | undefined;
 const models = new Map<string, Promise<model.Model>>();
-const textures = new Map<string, Promise<HTMLCanvasElement>>();
+const textures = new Map<string, Promise<ImageData>>();
+const pictures = new Map<string, HTMLCanvasElement>();
 const tinted = new Map<string, HTMLCanvasElement>();
 
 interface ModelInstance { renderer: ModelRenderer; model: model.Model; path: string; sequences: AnimationSequence[]; sequence: number; clock: number; posed: number }
@@ -191,25 +191,34 @@ function tga(bytes: ArrayBuffer): ImageData {
   }
   return out;
 }
-function textureAt(path: string): Promise<HTMLCanvasElement> {
+/** A texture's pixels with straight alpha: a 2D canvas premultiplies, which blackens the colour under alpha 0 that an opaque layer still draws, as Warcraft does. */
+function textureAt(path: string): Promise<ImageData> {
   let result = textures.get(path);
   if (result === undefined) {
     result = asset(path).then(async (bytes) => {
-      const texture = document.createElement("canvas"), context = texture.getContext("2d");
-      if (context === null) throw new Error("no 2D texture context");
       const magic = new Uint8Array(bytes, 0, Math.min(4, bytes.byteLength));
-      if (magic[0] === 137 || magic[0] === 255) {
-        const image = await createImageBitmap(new Blob([bytes])); texture.width = image.width; texture.height = image.height; context.drawImage(image, 0, 0); image.close();
-      } else {
-        const decoded = magic[0] === 66 && magic[1] === 76 ? getBLPImageData(decodeBLP(bytes), 0)
-          : magic[0] === 68 && magic[1] === 68 && magic[2] === 83 && magic[3] === 32 ? ddsTexture(bytes) : tga(bytes);
-        texture.width = decoded.width; texture.height = decoded.height;
-        context.putImageData(new ImageData(new Uint8ClampedArray(decoded.data), decoded.width, decoded.height), 0, 0);
-      }
-      return texture;
+      if (magic[0] === 137 || magic[0] === 255) return straightPixels(await createImageBitmap(new Blob([bytes]), { premultiplyAlpha: "none", colorSpaceConversion: "none" }));
+      const decoded = magic[0] === 66 && magic[1] === 76 ? getBLPImageData(decodeBLP(bytes), 0)
+        : magic[0] === 68 && magic[1] === 68 && magic[2] === 83 && magic[3] === 32 ? ddsTexture(bytes) : tga(bytes);
+      return new ImageData(new Uint8ClampedArray(decoded.data), decoded.width, decoded.height);
     }); textures.set(path, result);
   }
   return result;
+}
+/** Reads a decoded image back through an unpremultiplied WebGL upload, the one browser path that keeps its colour where alpha is 0. */
+function straightPixels(image: ImageBitmap): ImageData {
+  const framebuffer = gl.getParameter(gl.FRAMEBUFFER_BINDING) as WebGLFramebuffer | null, bound = gl.getParameter(gl.TEXTURE_BINDING_2D) as WebGLTexture | null;
+  const texture = gl.createTexture(), target = gl.createFramebuffer();
+  gl.bindTexture(gl.TEXTURE_2D, texture);
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false); gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, target); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+  const data = new Uint8ClampedArray(image.width * image.height * 4);
+  gl.readPixels(0, 0, image.width, image.height, gl.RGBA, gl.UNSIGNED_BYTE, data);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer); gl.bindTexture(gl.TEXTURE_2D, bound);
+  gl.deleteFramebuffer(target); gl.deleteTexture(texture);
+  const pixels = new ImageData(data, image.width, image.height); image.close();
+  return pixels;
 }
 const teams = [[255, 3, 3], [0, 66, 255], [28, 230, 185], [84, 0, 129], [255, 252, 1], [254, 138, 14], [32, 192, 0], [229, 91, 176], [149, 150, 151], [126, 191, 241], [16, 98, 70], [78, 42, 4]];
 
@@ -247,7 +256,7 @@ const pixels = new Map<string, Promise<ImageData | undefined>>();
 function texturePixels(path: string): Promise<ImageData | undefined> {
   let result = pixels.get(path);
   if (result === undefined) {
-    result = textureAt(path).then((bitmap) => bitmap.getContext("2d")?.getImageData(0, 0, bitmap.width, bitmap.height));
+    result = textureAt(path);
     pixels.set(path, result);
   }
   return result;
@@ -472,7 +481,13 @@ function uiTextureLoad(path: string, color: number): Promise<HTMLCanvasElement> 
   return load;
 }
 async function uiTexture(path: string, color: number): Promise<HTMLCanvasElement> {
-  const original = await textureAt(path);
+  let original = pictures.get(path);
+  if (original === undefined) {
+    const pixels = await textureAt(path);
+    original = document.createElement("canvas"); original.width = pixels.width; original.height = pixels.height;
+    const context = original.getContext("2d"); if (context === null) throw new Error("no 2D texture context");
+    context.putImageData(pixels, 0, 0); pictures.set(path, original);
+  }
   if ((color & 0xffffff) === 0xffffff) return original;
   const key = `${path}:${color}`;
   let result = tinted.get(key);

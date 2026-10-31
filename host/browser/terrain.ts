@@ -5,7 +5,7 @@ import { terrainTileLayers, terrainTileUV, terrainBlightPath } from "../terrain/
 import { cliffGround, cliffShape } from "../terrain/terrainCliffs";
 import { linkProgram } from "./gl";
 
-type TextureReader = (path: string) => Promise<HTMLCanvasElement>;
+type TextureReader = (path: string) => Promise<ImageData>;
 type AssetReader = (path: string) => Promise<ArrayBuffer>;
 interface Batch { texture: WebGLTexture; buffer: WebGLBuffer; count: number }
 interface Prepared { program: WebGLProgram; vao: WebGLVertexArrayObject; batches: Batch[] }
@@ -34,14 +34,14 @@ async function prepare(gl: WebGL2RenderingContext, terrain: Terrain, readTexture
   terrain = cliffGround(terrain, cliffRows);
   const blightPath = terrain.points.some(point => (point.flags & 2) !== 0)
     ? terrainBlightPath(new Uint8Array(await readAsset("UI\\WorldEditData.txt")), terrain.tileset) : undefined;
-  const meshes = new Map<string, { texture: HTMLCanvasElement; vertices: number[]; order: number }>();
-  const textures = new Map<string, HTMLCanvasElement>();
+  const meshes = new Map<string, { texture: ImageData; vertices: number[]; order: number }>();
+  const textures = new Map<string, ImageData>();
   const texture = async (path: string) => {
     let value = textures.get(path);
     if (value === undefined) { value = await readTexture(path); textures.set(path, value); }
     return value;
   };
-  const add = (path: string, image: HTMLCanvasElement, order: number, vertices: number[]) => {
+  const add = (path: string, image: ImageData, order: number, vertices: number[]) => {
     const key = `${order}:${path}`;
     let mesh = meshes.get(key);
     if (mesh === undefined) meshes.set(key, mesh = { texture: image, vertices: [], order });

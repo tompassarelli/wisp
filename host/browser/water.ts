@@ -3,7 +3,7 @@ import { terrainRows } from "../terrain/terrainMesh";
 import { waterMesh, waterTable, waterTexture, type WaterTable } from "../terrain/water";
 import { linkProgram } from "./gl";
 
-type TextureReader = (path: string) => Promise<HTMLCanvasElement>;
+type TextureReader = (path: string) => Promise<ImageData>;
 type AssetReader = (path: string) => Promise<ArrayBuffer>;
 
 export interface WaterFog {
