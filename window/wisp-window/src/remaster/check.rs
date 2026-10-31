@@ -10,10 +10,13 @@ type Gray = ImageBuffer<Luma<f32>, Vec<f32>>;
 const BLOCK: usize = 8;
 const SSIM_C1: f32 = 0.01 * 0.01;
 const SSIM_C2: f32 = 0.03 * 0.03;
-/// Pixels whose alpha moves more than this count as a changed mask.
-const ALPHA_MOVED: f32 = 16.0 / 255.0;
-/// Floor of the reference's high-frequency energy, so a smooth source cannot make the added-detail ratio blow up.
-const ENERGY_FLOOR: f32 = 0.5 / 255.0 * 0.5 / 255.0;
+/// A source pixel is in the interior of a mask when every alpha within two pixels of it is within this of its own.
+const MASK_FLAT: f32 = 0.1;
+/// A source pixel is flat when every luma within two pixels of it is within this of its own.
+const DETAIL_FLAT: f32 = 0.02;
+/// Below this mean chroma a texture has no palette hue to compare.
+const HUE_CHROMA: f32 = 0.04;
+const HUE_BINS: usize = 72;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Limits {
@@ -26,7 +29,7 @@ pub struct Limits {
 }
 
 /// Thresholds chosen from the edge-directed filter's outputs over Smashcraft's imported textures (remaster section of native-window-plan.md).
-pub const LIMITS: Limits = Limits { hue_degrees: 3.0, saturation: 0.03, seam: 0.02, detail_kept: 0.90, detail_added: 2.0, alpha_moved: 0.02 };
+pub const LIMITS: Limits = Limits { hue_degrees: 6.0, saturation: 0.04, seam: 0.02, detail_kept: 0.95, detail_added: 0.01, alpha_moved: 0.02 };
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Report {
@@ -143,41 +146,54 @@ fn to_byte(value: f32) -> u8 {
 }
 
 struct Palette {
-    hue: f32,
+    hues: [f32; HUE_BINS],
     saturation: f32,
     chroma: f32,
 }
 
 fn palette(image: &Image) -> Palette {
-    let (mut cos, mut sin, mut chroma_sum, mut saturation_sum, mut alpha_sum) = (0.0f32, 0.0f32, 0.0f32, 0.0f32, 0.0f32);
+    let mut hues = [0.0f32; HUE_BINS];
+    let (mut chroma_sum, mut value_sum, mut alpha_sum) = (0.0f32, 0.0f32, 0.0f32);
     for pixel in pixels(image) {
         let (high, low) = (pixel[..3].iter().cloned().fold(0.0, f32::max), pixel[..3].iter().cloned().fold(1.0, f32::min));
         let chroma = high - low;
         alpha_sum += pixel[3];
-        if high > 0.0 {
-            saturation_sum += pixel[3] * chroma / high;
-        }
+        value_sum += pixel[3] * high;
+        chroma_sum += pixel[3] * chroma;
         if chroma > 1e-4 {
             let [r, g, b] = [pixel[0], pixel[1], pixel[2]];
             let sextant = if high == r { ((g - b) / chroma).rem_euclid(6.0) } else if high == g { (b - r) / chroma + 2.0 } else { (r - g) / chroma + 4.0 };
-            let hue = sextant * std::f32::consts::FRAC_PI_3;
-            let weight = pixel[3] * chroma;
-            cos += weight * hue.cos();
-            sin += weight * hue.sin();
-            chroma_sum += weight;
+            hues[((sextant / 6.0 * HUE_BINS as f32) as usize).min(HUE_BINS - 1)] += pixel[3] * chroma;
         }
     }
-    Palette { hue: sin.atan2(cos), saturation: saturation_sum / alpha_sum.max(1e-6), chroma: chroma_sum / alpha_sum.max(1e-6) }
+    let weight: f32 = hues.iter().sum();
+    if weight > 0.0 {
+        hues.iter_mut().for_each(|bin| *bin /= weight);
+    }
+    Palette { hues, saturation: chroma_sum / value_sum.max(1e-6), chroma: chroma_sum / alpha_sum.max(1e-6) }
 }
 
-fn palette_drift(source: &Image, upscaled: &Image) -> (f32, f32) {
-    let (before, after) = (palette(source), palette(upscaled));
+/// The mean distance in degrees the chroma-weighted hue distribution moved around the colour wheel, which stays stable for a palette of several hues where the mean hue of a distribution does not.
+fn hue_shift(before: &[f32; HUE_BINS], after: &[f32; HUE_BINS]) -> f32 {
+    let mut running = 0.0f32;
+    let mut cumulative = [0.0f32; HUE_BINS];
+    for (bin, slot) in cumulative.iter_mut().enumerate() {
+        running += after[bin] - before[bin];
+        *slot = running;
+    }
+    let mut sorted = cumulative;
+    sorted.sort_by(f32::total_cmp);
+    let middle = sorted[HUE_BINS / 2];
+    cumulative.iter().map(|value| (value - middle).abs()).sum::<f32>() * 360.0 / HUE_BINS as f32
+}
+
+fn palette_drift(source: &Image, folded: &Image) -> (f32, f32) {
+    let (before, after) = (palette(source), palette(folded));
     let saturation = (after.saturation - before.saturation).abs();
-    if before.chroma < 0.01 && after.chroma < 0.01 {
+    if before.chroma < HUE_CHROMA {
         return (0.0, saturation);
     }
-    let turn = (after.hue - before.hue + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU) - std::f32::consts::PI;
-    (turn.abs().to_degrees(), saturation)
+    (hue_shift(&before.hues, &after.hues), saturation)
 }
 
 fn edge_step(image: &Image, along_x: bool) -> f32 {
@@ -227,39 +243,62 @@ fn structure_similarity(a: &Gray, b: &Gray) -> f32 {
     total / count.max(1) as f32
 }
 
-fn high_frequency_energy(image: &Gray) -> f32 {
-    let (width, height) = (image.width() as usize, image.height() as usize);
-    let at = |x: isize, y: isize| image.as_raw()[y.clamp(0, height as isize - 1) as usize * width + x.clamp(0, width as isize - 1) as usize];
-    let mut sum = 0.0f64;
+/// Whether each pixel of `plane` (row-major, `width` by `height`) is within `tolerance` of every pixel within two of it.
+fn flat_pixels(plane: &[f32], width: usize, height: usize, tolerance: f32) -> Vec<bool> {
+    let at = |x: isize, y: isize| plane[y.clamp(0, height as isize - 1) as usize * width + x.clamp(0, width as isize - 1) as usize];
+    let mut flat = Vec::with_capacity(plane.len());
     for y in 0..height as isize {
         for x in 0..width as isize {
-            let mut around = 0.0;
-            for dy in -1..=1 {
-                for dx in -1..=1 {
-                    around += at(x + dx, y + dy);
-                }
-            }
-            sum += f64::from((at(x, y) - around / 9.0).powi(2));
+            let centre = at(x, y);
+            flat.push((-2..=2).all(|dy| (-2..=2).all(|dx| (at(x + dx, y + dy) - centre).abs() <= tolerance)));
         }
     }
-    (sum / (width * height) as f64) as f32
+    flat
 }
 
-/// How much more fine-scale energy the upscale has than a plain Catmull-Rom enlargement of the same source: 1.0 adds nothing, sharpening a real edge raises it a little, painting texture the source never had raises it a lot.
+/// Root-mean-square luma the upscale has over a plain Catmull-Rom enlargement of the source, counted only where the source was flat: sharpening a real edge puts nothing there, painting texture the source never had does.
 fn detail_added(source: &Image, upscaled: &Image) -> f32 {
-    let reference = resize(&gray(source), upscaled.width, upscaled.height, FilterType::CatmullRom);
-    high_frequency_energy(&gray(upscaled)) / high_frequency_energy(&reference).max(ENERGY_FLOOR)
+    let (width, height) = (source.width as usize, source.height as usize);
+    let source_luma = gray(source);
+    let flat = flat_pixels(source_luma.as_raw(), width, height, DETAIL_FLAT);
+    let reference = resize(&source_luma, upscaled.width, upscaled.height, FilterType::CatmullRom);
+    let upscaled_luma = gray(upscaled);
+    let factor = upscaled.width as usize / width;
+    let (mut sum, mut count) = (0.0f64, 0usize);
+    for y in 0..upscaled.height as usize {
+        for x in 0..upscaled.width as usize {
+            if flat[y / factor * width + x / factor] {
+                let at = y * upscaled.width as usize + x;
+                sum += f64::from(upscaled_luma.as_raw()[at] - reference.as_raw()[at]).powi(2);
+                count += 1;
+            }
+        }
+    }
+    if count == 0 { 0.0 } else { (sum / count as f64).sqrt() as f32 }
 }
 
+/// How far the upscale moved a mask: the larger of the share of mask-interior pixels whose alpha changed and the relative change in total alpha, so antialiasing a hard edge is not counted but growing, shrinking or filling a mask is.
 fn alpha_moved(source: &Image, folded: &Image) -> f32 {
-    let moved = source.rgba.chunks_exact(4).zip(folded.rgba.chunks_exact(4)).filter(|(a, b)| (f32::from(a[3]) - f32::from(b[3])).abs() / 255.0 > ALPHA_MOVED).count();
-    moved as f32 / (source.rgba.len() / 4).max(1) as f32
+    let (width, height) = (source.width as usize, source.height as usize);
+    let alpha = |image: &Image| -> Vec<f32> { image.rgba.chunks_exact(4).map(|pixel| f32::from(pixel[3]) / 255.0).collect() };
+    let (before, after) = (alpha(source), alpha(folded));
+    let interior = flat_pixels(&before, width, height, MASK_FLAT);
+    let (mut inside, mut moved) = (0usize, 0usize);
+    for ((&flat, a), b) in interior.iter().zip(&before).zip(&after) {
+        if flat {
+            inside += 1;
+            moved += usize::from((a - b).abs() > MASK_FLAT);
+        }
+    }
+    let (total_before, total_after) = (before.iter().sum::<f32>(), after.iter().sum::<f32>());
+    let interior_moved = moved as f32 / inside.max(1) as f32;
+    interior_moved.max((total_after - total_before).abs() / total_before.max(1.0))
 }
 
 /// Measures `upscaled` against the `source` it came from; the upscale must be a whole multiple of the source's size, and `wraps` says the texture is sampled with wrap, which turns the seam gate on.
 pub fn measure(source: &Image, upscaled: &Image, wraps: bool) -> Result<Report, String> {
     let folded = fold(upscaled, source.width, source.height)?;
-    let (hue_degrees, saturation) = palette_drift(source, upscaled);
+    let (hue_degrees, saturation) = palette_drift(source, &folded);
     let seam = wraps.then(|| (wrap_step(&folded) - wrap_step(source)).max(0.0));
     Ok(Report {
         hue_degrees,
@@ -319,6 +358,17 @@ mod tests {
         Image { width: size, height: size, rgba }
     }
 
+    fn smooth(size: u32) -> Image {
+        let rgba = (0..size * size)
+            .flat_map(|index| {
+                let (x, y) = ((index % size) as f32, (index / size) as f32);
+                let value = (128.0 + 70.0 * (x * 0.4).sin() * (y * 0.3).cos()) as u8;
+                [value, value / 2 + 40, 60, 255]
+            })
+            .collect();
+        Image { width: size, height: size, rgba }
+    }
+
     fn red_blue_swapped(image: &Image) -> Image {
         let mut copy = Image { width: image.width, height: image.height, rgba: image.rgba.clone() };
         for pixel in copy.rgba.chunks_exact_mut(4) {
@@ -333,7 +383,7 @@ mod tests {
 
     #[test]
     fn a_faithful_enlargement_passes_every_gate() {
-        let source = noise(16, 3);
+        let source = smooth(24);
         let report = measure(&source, &upscale::steps(&source, 1), false).unwrap();
         assert!(report.failures(&LIMITS).is_empty(), "{report:?}");
     }

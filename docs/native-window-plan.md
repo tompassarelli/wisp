@@ -962,6 +962,31 @@ Quality is PSNR of each upscaler restoring the original from a copy of half its 
 
 Edge-directed beats bilinear by about 1 dB and ties plain Catmull-Rom within 0.11 dB; PSNR does not measure stair-step smoothness, which is what the edge averaging is for, so it is kept. Learned upscalers were measured separately on twelve Classic textures; [remaster-upscaler.md](remaster-upscaler.md) records the bake-off and adopts Real-CUGAN 2x on wgpu, with this filter kept for alpha and as the fallback.
 
+### Measured gates: an upscaler may sharpen the concept, never change it
+
+Tom shared a professional artist's critique of an AI-remastered building set (2026-10-31): smeared stone edges, visible seams, a palette and style unlike the original, blurry or invented texture. `remaster/check.rs` turns the parts a texture upscaler can cause into measured gates, and `cargo run --release -p wisp-window --example remaster_check -- --out DIR [--quality standard|high] [--worst N] [--classical] (--imports MAP_IMPORTS_DIR | TEXTURE...)` runs them with the upscaler the window would run (Real-CUGAN on the machine's GPU, else the edge-directed filter; `--classical` forces the filter). It prints one row per texture, sorted worst first, lists the failing gates, saves a crop of the worst N as `DIR/remaster-check-NAME.png` (original | remaster | colour error x4, nearest-neighbour zoom; a seam failure is cropped on the wrapped seam), and exits 1 when any texture fails. Textures 1024 px or more on a side and textures under 8 px (palette strips) are left alone. Judged art (stages, fighters, effects) is the rubric in smashcraft:docs/design/visual-quality.md.
+
+Every gate compares the upscale folded back to the source's size by premultiplied box average, so a faithful upscale scores as the source itself:
+
+- **Palette drift** (`hue`, `saturation`): `hue` is how far the chroma-weighted hue distribution moved around the colour wheel in degrees (a circular earth-mover distance over 72 bins, so a palette of several hues stays stable where a mean hue swings); it is not read for a texture whose mean chroma is under 0.04. `saturation` is the change in colour-weighted saturation, sum of chroma over sum of brightness.
+- **Seam** (`seam`, only for textures sampled with wrap, which `Edges::for_path` names: terrain art): the excess of the folded upscale's colour step across the wrap edge over the source's, the larger of the two axes.
+- **Detail kept** (`detail kept`): structure similarity (8 px windows, stride 4, luma over mid grey) of the folded upscale against the source.
+- **Detail added** (`detail added`): root-mean-square luma by which the upscale differs from a plain Catmull-Rom enlargement of the source, counted only at pixels whose 5x5 source neighbourhood is flat within 0.02. Sharpening a real edge puts nothing there; texture the source never had does.
+- **Alpha** (`alpha`): the larger of the share of mask-interior pixels (alpha flat within 0.1 across 5x5) whose alpha moved more than 0.1, and the relative change in total alpha, so team-colour and cutout masks stay put while edges antialias.
+
+Limits, chosen from the edge-directed filter's outputs over Smashcraft's imports (706 textures at 8 px or more, 3 fail on the filter): hue 6 degrees (filter p50 1.3, p90 3.5, p99 7.7 degrees, the limit sitting past the bulk), saturation 0.04, seam 0.02, detail kept 0.95, detail added 0.01 (filter max 0.005), alpha 0.02.
+
+Measured on the laptop's Radeon 890M, 31 October 2026, the newest unpacked Smashcraft map under `~/.cache/wisp/map-imports` (721 textures):
+
+| upscaler | measured | fail | failing gates |
+|---|---|---|---|
+| edge-directed (`--classical`) | 706 | 3 | alpha 1, hue 1, saturation 1 |
+| Real-CUGAN 2x conservative | 706 | 35 | detail kept 9, hue 24, saturation 3, detail added 2, alpha 1 |
+
+Worst under Real-CUGAN: stage water and sky, where the network paints streaks into smooth gradients and structure similarity falls: `StageTombSea` 0.66 (detail added 0.034), `StageTombWater` 0.79 (0.023), `StagePlague` 0.86, `StageLava` 0.91, `ParasolShaft` 0.93, `StageSky`, `StageSea` and `StageGround` 0.95; the Lich King, Lady Vashj and Illidan skins and the Lich King cards and busts drift 6 to 7 degrees of hue (the four player slots of each share one image); `BTNLichKing` drifts 11 degrees and its score-screen portrait 10 degrees and 0.06 saturation; one `FighterWhite` mask moves 0.043 of its alpha. Terrain art (199 tiles from the install, 31 October): the seam gate passes on every tile under both upscalers (largest excess 0.006 under Real-CUGAN, 0.0003 under the filter), so wrap padding holds; detail kept fails on 162 tiles under Real-CUGAN (dirt tiles 0.72 to 0.75) and 39 under the filter, because both smooth grain the source has.
+
+Findings filed: a 2x2 texture makes Real-CUGAN stop for every later texture (wisp#150, with the stage-water finding). Not measured: atlas island borders bleeding (the check has no island map), and the Real-CUGAN 4x path.
+
 ### Silhouette before and after (one subdivision, bind pose, orthographic)
 
 Pixels of a 512x512 mask of the model's bind-pose silhouette, scaled to the same bounds; "only before" is area the tessellated model lost, "only after" area it gained. Models are Smashcraft's `LichKing2.mdx`, `IllidanTimelineBody` and `PeonTimelineBody` from the map imports (612, 590, 629 in the unpacked cache). Overlay PNGs (grey both, red only before, green only after) come from `cargo run --release -p wisp-window --example silhouette_report -- OUT_DIR MODELS...` and stay outside the repository.

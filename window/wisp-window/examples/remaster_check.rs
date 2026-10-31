@@ -17,6 +17,7 @@ use wisp_window::texture::{decode, Image};
 const THREADS: usize = 4;
 const CROP: usize = 32;
 const PANEL: u32 = 256;
+const MIN_SIDE: u32 = 8;
 const TEXTURE_EXTENSIONS: [&str; 4] = [".blp", ".dds", ".tga", ".png"];
 
 struct Row {
@@ -91,8 +92,17 @@ fn check(name: &str, path: &Path, quality: Quality, upscaler: &Upscaler) -> Outc
         Ok(source) => source,
         Err(error) => return Outcome::Unreadable(name.into(), error),
     };
+    if source.width.min(source.height) < MIN_SIDE {
+        return Outcome::Left;
+    }
     let edges = Edges::for_path(&logical_path(name));
-    let Some(maps) = enhance(&source, quality, upscaler, edges, name) else { return Outcome::Left };
+    let enhanced = enhance(&source, quality, upscaler, edges, name);
+    let mut notice = Vec::new();
+    upscaler.announce(&mut notice);
+    if !notice.is_empty() {
+        eprint!("while upscaling {name} ({}x{}): {}", source.width, source.height, String::from_utf8_lossy(&notice));
+    }
+    let Some(maps) = enhanced else { return Outcome::Left };
     match measure(&source, &maps.albedo, edges == Edges::Wrap) {
         Ok(report) => Outcome::Measured(Row { name: name.into(), size: (source.width, source.height), report, path: path.into(), edges }),
         Err(error) => Outcome::Unreadable(name.into(), error),
@@ -175,7 +185,7 @@ fn write_crop(row: &Row, quality: Quality, upscaler: &Upscaler, out: &Path) -> R
 
 fn describe(report: &Report) -> String {
     let seam = report.seam.map_or("   -  ".into(), |seam| format!("{seam:6.4}"));
-    format!("{:5.2} {:6.4} {seam} {:6.4} {:6.2} {:6.4}", report.hue_degrees, report.saturation, report.detail_kept, report.detail_added, report.alpha_moved)
+    format!("{:5.2} {:6.4} {seam} {:6.4} {:6.4} {:6.4}", report.hue_degrees, report.saturation, report.detail_kept, report.detail_added, report.alpha_moved)
 }
 
 fn main() {
@@ -198,7 +208,7 @@ fn main() {
         }
     }
     rows.sort_by(|a, b| b.report.worst(&LIMITS).ratio().total_cmp(&a.report.worst(&LIMITS).ratio()).then_with(|| a.name.cmp(&b.name)));
-    println!("limits: hue {}deg, saturation {}, seam {}, detail kept >= {}, detail added <= {}x, alpha moved {}", LIMITS.hue_degrees, LIMITS.saturation, LIMITS.seam, LIMITS.detail_kept, LIMITS.detail_added, LIMITS.alpha_moved);
+    println!("limits: hue {}deg, saturation {}, seam {}, detail kept >= {}, detail added <= {}, alpha moved {}", LIMITS.hue_degrees, LIMITS.saturation, LIMITS.seam, LIMITS.detail_kept, LIMITS.detail_added, LIMITS.alpha_moved);
     println!("{:<48} {:>9}  {:>5} {:>6} {:>6} {:>6} {:>6} {:>6}  verdict", "texture", "size", "hue", "sat", "seam", "kept", "added", "alpha");
     let mut failing = 0;
     let mut by_gate = std::collections::BTreeMap::<&str, usize>::new();
