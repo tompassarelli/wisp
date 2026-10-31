@@ -454,6 +454,23 @@ The native window takes over the page's whole job, not only its drawing
 - **Keyboard.** Use winit's physical `KeyCode`, which matches the browser's
   `event.code`. The key table and button names stay as in play.md. Held keys
   clear when the window loses focus.
+- **Mouse.** winit's cursor and button events reach the window thread, which
+  keeps the cursor in physical pixels, the buttons held and the presses and
+  releases since the last sample (`pointer.rs`); the render thread reads them
+  at the sample point with the keys, and a sample that repeats the one before
+  it (a slow frame queues up to six) carries the position but no press, so a
+  click is delivered once. The sample carries the window's size, and
+  `src/headless/pointer.ts` maps the cursor onto Warcraft's 0.8 by 0.6 UI
+  screen (the window draws frames across its whole client area) and
+  into the client's screen pixels, inverting the game's `pointerX`/`pointerY`, for `BlzGetMouseScreenPosX/Y` and
+  `BlzIsMouseButtonPressed`. A left press and release on the same frame that
+  takes clicks is `FRAMEEVENT_CONTROL_CLICK` for the player, sent through the
+  lockstep like a key; the frame is the topmost one that takes clicks (frame
+  level, then creation order). A session reads the mouse from the
+  `StandaloneInput.pointer` of its `step` with `createPointerFeed`. Not yet:
+  `FRAMEEVENT_MOUSE_ENTER`, `MOUSE_LEAVE`, `MOUSE_DOWN`, `MOUSE_UP`, wheel and
+  drag, and the world-coordinate `EVENT_PLAYER_MOUSE_*` events (hover and drag
+  are the second box of this work).
 - **Pads.** SDL3's gamepad API reads every pad on Linux and Windows, the
   stack padbridge feeds Warcraft with, so a pad has the same layout in both
   and the window gets SDL's controller database and its HIDAPI drivers

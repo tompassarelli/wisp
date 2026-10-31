@@ -428,7 +428,13 @@ and the Smashcraft call sites that move (counted above).
     `BlzEnableSelections`, `EnableUserControl`.
   - Native owner: `window/wisp-window`'s SDL3 keyboard and pad sampling at
     the render thread's sample point (607fc2fd), delivered by
-    `host/window/frameLoop.ts`.
+    `host/window/frameLoop.ts`. The native window's mouse (cursor,
+    held buttons, left click on a frame) reaches the map the same way and is
+    not part of G1 or G2: it adds no `wisp/game` surface, because
+    `BlzGetMouseScreenPosX/Y`, `BlzIsMouseButtonPressed` and
+    `FRAMEEVENT_CONTROL_CLICK` already lower through the Input and frames
+    families above; it is a host feed (`src/headless/pointer.ts`,
+    native-window-plan.md "Mouse") and G2 does not wait for it.
 - **Events** (`wisp/game/events`). 51 sites in 13 files, 3 natives:
   `createEvents`, `onEvents` and `destroyEvents`, lowering to
   `CreateTrigger`, `TriggerAddAction` and `DestroyTrigger`. Native owner:

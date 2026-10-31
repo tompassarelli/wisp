@@ -214,8 +214,10 @@ impl<S: Surface, C: Clock> FrameLoop<S, C> {
         let input = seam.input();
         outcome.sampled_ns = sampled_ns;
         let mut last = self.frame;
+        let mut input = input;
         for _ in 0..steps {
             let sample = Sample { frame: self.frame, sampled_ns, input };
+            input = input.repeated();
             last = sample.frame;
             self.frame = self.frame.wrapping_add(1);
             self.sample_times[sample.frame as usize % SAMPLE_MEMORY] = Some((sample.frame, sample.sampled_ns));

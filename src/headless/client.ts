@@ -94,6 +94,8 @@ export class HeadlessClient {
   readonly weathers = new Weathers();
   readonly textAreaAutoScroll = new Map<Handle, boolean>();
   readonly heldMouseButtons = new Set<unknown>();
+  /** Pixels `BlzGetLocalClientWidth/Height` report, which a window's cursor is mapped into. */
+  readonly screen: { readonly width: number; readonly height: number };
   mouseScreenX = 0;
   mouseScreenY = 0;
   private heldMeta = 0;
@@ -141,6 +143,7 @@ export class HeadlessClient {
   readonly frames: Frames;
 
   constructor(options: ClientOptions) {
+    this.screen = options.screen;
     this.abilities = new Warcraft3Abilities(options.abilityObjects);
     this.scenery = new Scenery(options.scenery);
     this.inventory = new Warcraft3Inventory({

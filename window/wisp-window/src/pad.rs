@@ -3,6 +3,7 @@
 use padbridge_model::{pad_bindings, pad_key, Control, PadKind, PadPreset, Press, RightStick, TriggerShields};
 
 use crate::input::Input;
+use crate::pointer::PointerSample;
 
 pub const STANDARD_BUTTONS: usize = 16;
 
@@ -111,7 +112,7 @@ impl Pads {
     /// The pad's input at this sample point, merged over `keys`. The pad is always read, so events do not pile up while the window is unfocused, but an unfocused window gets no pad input.
     pub fn sample(&mut self, index: Option<usize>, focused: bool, keys: u32) -> Input {
         let pad = self.backend.read(index).filter(|_| focused).unwrap_or_default();
-        Input { buttons: keys | self.layout.page_mask(pad), axis_x: pad.axis_x, axis_y: pad.axis_y }
+        Input { buttons: keys | self.layout.page_mask(pad), axis_x: pad.axis_x, axis_y: pad.axis_y, pointer: PointerSample::default() }
     }
 }
 

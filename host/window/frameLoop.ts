@@ -77,7 +77,7 @@ export function createFrameLoop(player: NativePlayer, window: WindowView, option
     if (previous !== 0) series.intervals.push(began - previous);
     previous = began;
     try {
-      const input: StandaloneInput = options.scripted ? { buttons: [], axisX: 0, axisY: 0 } : { buttons: window.buttons(sample.mask), axisX: sample.axisX, axisY: sample.axisY };
+      const input: StandaloneInput = options.scripted ? { buttons: [], axisX: 0, axisY: 0 } : { buttons: window.buttons(sample.mask), axisX: sample.axisX, axisY: sample.axisY, pointer: sample.pointer };
       const frame = player.advance(input);
       const stepped = performance.now();
       window.submit(options.encodeScene === undefined ? JSON.stringify(frame.scene) : options.encodeScene(frame.scene), frame.step, sample.frame);

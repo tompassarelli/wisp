@@ -1,15 +1,25 @@
 use std::sync::atomic::{AtomicU32, Ordering};
 use winit::keyboard::KeyCode;
 
+use crate::pointer::PointerSample;
+
 /// The buttons the page names, in the bit order of the mask the frame callback carries.
 pub const BUTTONS: [&str; 12] = ["left", "right", "up", "down", "attack", "special", "jump", "grab", "shield", "walk", "start", "view"];
 
-/// What one sample point reads: the held buttons as a bit mask and the left stick, Y up, raw.
+/// What one sample point reads: the held buttons as a bit mask, the left stick, Y up, raw, and the mouse.
 #[derive(Clone, Copy, Default, PartialEq, Debug)]
 pub struct Input {
     pub buttons: u32,
     pub axis_x: f32,
     pub axis_y: f32,
+    pub pointer: PointerSample,
+}
+
+impl Input {
+    /// The same reading for a sample that repeats the one before it: a click is delivered once.
+    pub fn repeated(self) -> Self {
+        Self { pointer: self.pointer.repeated(), ..self }
+    }
 }
 
 /// The bit of the button a physical key presses, from the table the page keeps for `event.code`.

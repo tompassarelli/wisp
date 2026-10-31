@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { type Pointer, dlopen } from "bun:ffi";
 import { Effect } from "effect";
+import type { PointerReading } from "../../src/headless/pointer";
 import { buildWindowLibrary, cachedWindowLibrary } from "./library";
 
 const root = join(import.meta.dir, "../..");
@@ -67,6 +68,8 @@ export interface InputSample {
   readonly frame: number;
   readonly sampleNs: number;
   readonly mask: number;
+  /** The mouse over the window at the sample. */
+  readonly pointer: PointerReading;
   /** The left stick, Y up, as the pad reports it. */
   readonly axisX: number;
   readonly axisY: number;
@@ -133,12 +136,18 @@ const textFrom = (read: (pointer: Uint8Array, capacity: number) => number | bigi
 
 const vocabularyOf = (library: Library) => JSON.parse(textFrom((out, capacity) => library.symbols.wisp_window_vocabulary(out, capacity))) as { buttons: string[]; metrics: string[] };
 
+/** The sample's mouse fields (`wisp_window_next_event`): the cursor and window size, then the bits `PointerSample::bits` packs: held 0 to 2, pressed 4 to 6, released 8 to 10, inside 12. */
+const pointerOf = (sample: Float64Array): PointerReading => {
+  const bits = sample[9]!;
+  return { x: sample[5]!, y: sample[6]!, width: sample[7]!, height: sample[8]!, inside: (bits & 1 << 12) !== 0, held: bits & 7, pressed: bits >> 4 & 7, released: bits >> 8 & 7 };
+};
+
 const viewOf = (library: Library, handle: Pointer, vocabulary: { buttons: string[]; metrics: string[] }): WindowView => {
   const call = library.symbols;
   const encoder = new TextEncoder();
   // A fresh array per frame reports external memory to the collector, which then collects every frame; one reused buffer keeps the pause count to what the frame allocates.
   let sceneBuffer = new Uint8Array(64 * 1024);
-  const sample = new Float64Array(5);
+  const sample = new Float64Array(10);
   return {
     handle: handle as number,
     start: () => call.wisp_window_start(handle),
@@ -147,7 +156,7 @@ const viewOf = (library: Library, handle: Pointer, vocabulary: { buttons: string
     selectPad: (slot) => call.wisp_window_select_pad(handle, slot ?? -1),
     nextEvent: (timeoutMs) => {
       const kind = EVENT_KINDS[call.wisp_window_next_event(handle, sample, timeoutMs)] ?? "failed";
-      return kind === "frame" ? { kind, sample: { frame: sample[0]!, sampleNs: sample[1]!, mask: sample[2]!, axisX: sample[3]!, axisY: sample[4]! } } : { kind };
+      return kind === "frame" ? { kind, sample: { frame: sample[0]!, sampleNs: sample[1]!, mask: sample[2]!, axisX: sample[3]!, axisY: sample[4]!, pointer: pointerOf(sample) } } : { kind };
     },
     asset: (path, bytes) => { const name = Buffer.from(path); call.wisp_window_asset(handle, name, name.length, bytes, bytes.length); },
     assetsPending: () => Number(call.wisp_window_assets_pending(handle)),
