@@ -22,7 +22,7 @@ jobs:
     steps:
       - run: |
           read -r load1 _ < /proc/loadavg
-          printf '{"load1":%s,"cores":%s,"at":%s}\n' "$load1" "$(nproc)" "$(date +%s)" | tee farm-load.json
+          printf '{"load1":%s,"cores":%s,"at":%s}\n' "$load1" "$(nproc --all)" "$(date +%s)" | tee farm-load.json
       - uses: actions/cache/save@v4
         with:
           path: farm-load.json
