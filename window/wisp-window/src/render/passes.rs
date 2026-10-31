@@ -4,6 +4,7 @@ use crate::post::Look;
 
 use super::ripples::Placement;
 use super::scene::Scene;
+use super::water::WaterSettings;
 use super::{fitted, linear_of, Draw, Group, Renderer};
 
 /// Which layers a pass draws: with water, the solid ones first, then the water, then the layers that blend over it.
@@ -97,9 +98,9 @@ impl Renderer {
     }
 
     /// The sky and the scene seen from under the water plane, at the reflection's size, for the water pass to read.
-    fn draw_reflection(&self, encoder: &mut wgpu::CommandEncoder, clear: wgpu::Color) {
+    fn draw_reflection(&self, encoder: &mut wgpu::CommandEncoder, clear: wgpu::Color, procedural_sky: bool) {
         let (Some(water), true) = (self.water.targets.as_ref(), self.water_level.is_some()) else { return };
-        let sky = self.sky_group_of.as_ref();
+        let sky = self.sky_group_of.as_ref().filter(|_| !procedural_sky);
         if let Some(group) = sky {
             let mut pass = Attachments { label: "reflected sky", color: &water.reflect_color, depth: &water.reflect_depth, load: wgpu::LoadOp::Clear(clear), resolve: None, depth_ops: fresh(wgpu::StoreOp::Discard), size: water.reflect_size }.begin(encoder);
             pass.set_bind_group(0, &self.mirror_sky.group, &[]);
@@ -107,6 +108,9 @@ impl Renderer {
         }
         let load = if sky.is_some() { wgpu::LoadOp::Load } else { wgpu::LoadOp::Clear(clear) };
         let mut pass = Attachments { label: "reflection", color: &water.reflect_color, depth: &water.reflect_depth, load, resolve: Some(&water.reflect_resolved), depth_ops: fresh(wgpu::StoreOp::Discard), size: water.reflect_size }.begin(encoder);
+        if procedural_sky {
+            self.post.draw_reflected_sky(&mut pass);
+        }
         pass.set_bind_group(0, &self.mirror.group, &[]);
         self.draw_both(&mut pass, &self.groups, Stage::Everything, None);
     }
@@ -131,14 +135,14 @@ impl Renderer {
             let seconds = self.started.elapsed().as_secs_f32();
             let plane = self.water_level.unwrap_or(0.0);
             self.ripples.follow(scene.poses.iter().map(|pose| Placement { id: pose.id, model: &pose.model, matrix: pose.matrix, alpha: pose.alpha }), |model| self.model_ids.get(model).and_then(|&id| self.models[id].body), plane, scene.frame, seconds);
-            self.water.write(&self.queue, &scene.water, seconds, &self.ripples.sources());
+            self.water.write(&self.queue, &WaterSettings::of(self.water.liquid), seconds, &self.ripples.sources());
         } else {
             self.water_level = None;
         }
         let targets = self.targets.as_ref().expect("fit_targets ran");
         let images = self.water_level.and_then(|_| self.water.group(&self.device, &targets.depth));
 
-        self.draw_reflection(encoder, clear);
+        self.draw_reflection(encoder, clear, procedural_sky);
         if procedural_sky {
             self.post.draw_clouds(encoder);
         }

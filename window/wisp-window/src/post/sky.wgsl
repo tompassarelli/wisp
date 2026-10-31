@@ -48,3 +48,9 @@ fn sky_main(@builtin(position) at: vec4<f32>) -> @location(0) vec4<f32> {
     }
     return vec4<f32>(color, 1.0);
 }
+
+@fragment
+fn reflected_sky_main(@builtin(position) at: vec4<f32>) -> @location(0) vec4<f32> {
+    let ray = view_ray(picture_ndc(at.xy * REFLECTION_SHRINK));
+    return vec4<f32>(sky_color(vec3<f32>(ray.xy, -ray.z), at.xy), 1.0);
+}

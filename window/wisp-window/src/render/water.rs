@@ -6,9 +6,9 @@ use std::collections::BTreeMap;
 use std::mem::size_of;
 
 use bytemuck::{Pod, Zeroable};
-use serde::{Deserialize, Deserializer, Serialize};
 use wgpu::util::DeviceExt;
 
+use crate::post::REFLECTION_SHRINK;
 use crate::texture::Image;
 
 use super::gpu::upload_layers;
@@ -25,18 +25,16 @@ pub fn is_frame(path: &str) -> bool {
     path.starts_with(FRAME_PREFIX) && path.ends_with(".blp")
 }
 
-/// A liquid the water pass draws; a scene names one with `preset` and may still set any single field over it.
-#[derive(Deserialize, Serialize, Clone, Copy, Debug, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
+/// A liquid the water pass draws.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Preset {
     Water,
     Poison,
     Lava,
 }
 
-/// What a stage may set about its water; every field has the default that reads as Warcraft's own water seen from the side.
-#[derive(Deserialize, Serialize, Clone, Debug, PartialEq)]
-#[serde(default, rename_all = "camelCase")]
+/// How a liquid looks; every field has the default that reads as Warcraft's own water seen from the side.
+#[derive(Clone, Debug, PartialEq)]
 pub struct WaterSettings {
     pub shallow: [f32; 3],
     pub deep: [f32; 3],
@@ -109,6 +107,21 @@ impl Default for WaterSettings {
             embers: 0.0,
             swell: 1.0,
             swirl: 0.0,
+        }
+    }
+}
+
+impl Preset {
+    /// The liquid a water model's own path names: a lava or poison model is drawn with its look, any other as water.
+    pub fn of_model(path: &str) -> Self {
+        let path = path.to_ascii_lowercase();
+        let names = |words: &[&str]| words.iter().any(|word| path.contains(word));
+        if names(&["lava", "magma", "molten"]) {
+            Self::Lava
+        } else if names(&["poison", "plague", "ooze", "slime", "toxic"]) {
+            Self::Poison
+        } else {
+            Self::Water
         }
     }
 }
@@ -195,19 +208,6 @@ impl Glow {
     pub const NONE: Self = Self { light: [0.0; 4], at: [0.0; 4] };
 }
 
-/// Reads a scene's `water`: `preset` picks the liquid and any other field is set over it.
-pub fn scene_water<'de, D: Deserializer<'de>>(deserializer: D) -> Result<WaterSettings, D::Error> {
-    use serde::de::Error;
-    use serde_json::{Map, Value};
-    let mut given = Map::<String, Value>::deserialize(deserializer)?;
-    let preset = given.remove("preset").map(serde_json::from_value).transpose().map_err(D::Error::custom)?.unwrap_or(Preset::Water);
-    let Value::Object(mut merged) = serde_json::to_value(WaterSettings::of(preset)).map_err(D::Error::custom)? else {
-        return Err(D::Error::custom("water settings are not an object"));
-    };
-    merged.extend(given);
-    serde_json::from_value(Value::Object(merged)).map_err(D::Error::custom)
-}
-
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
@@ -260,7 +260,7 @@ pub(super) struct Targets {
 
 impl Targets {
     pub fn new(device: &wgpu::Device, format: wgpu::TextureFormat, size: (u32, u32)) -> Self {
-        let reflect_size = ((size.0 / 2).max(1), (size.1 / 2).max(1));
+        let reflect_size = ((size.0 / REFLECTION_SHRINK).max(1), (size.1 / REFLECTION_SHRINK).max(1));
         let make = |label, size: (u32, u32), format, samples, usage| {
             device
                 .create_texture(&wgpu::TextureDescriptor {
@@ -297,6 +297,8 @@ pub(super) struct Water {
     array: Option<wgpu::TextureView>,
     dirty: bool,
     pub targets: Option<Targets>,
+    /// The liquid the water model on screen names.
+    pub liquid: Preset,
 }
 
 impl Water {
@@ -353,6 +355,7 @@ impl Water {
             array: None,
             dirty: false,
             targets: None,
+            liquid: Preset::Water,
         }
     }
 
@@ -422,30 +425,10 @@ mod tests {
     }
 
     #[test]
-    fn a_scene_may_set_part_of_the_water() {
-        let settings: WaterSettings = serde_json::from_str(r#"{"fps": 24, "deep": [0, 0, 1]}"#).unwrap();
-        assert_eq!(settings.fps, 24.0);
-        assert_eq!(settings.deep, [0.0, 0.0, 1.0]);
-        assert_eq!(settings.tile, WaterSettings::default().tile);
-    }
-
-    #[derive(Deserialize)]
-    struct Wrapped {
-        #[serde(deserialize_with = "scene_water")]
-        water: WaterSettings,
-    }
-
-    fn scene_water_of(json: &str) -> WaterSettings {
-        serde_json::from_str::<Wrapped>(json).unwrap().water
-    }
-
-    #[test]
-    fn a_scene_picks_a_liquid_and_may_still_set_a_field_over_it() {
-        assert_eq!(scene_water_of(r#"{"water": {}}"#), WaterSettings::default());
-        assert_eq!(scene_water_of(r#"{"water": {"preset": "lava"}}"#), WaterSettings::of(Preset::Lava));
-        let poison = scene_water_of(r#"{"water": {"preset": "poison", "fps": 9}}"#);
-        assert_eq!(poison.fps, 9.0);
-        assert_eq!(poison.deep, WaterSettings::of(Preset::Poison).deep);
+    fn a_water_model_names_its_liquid_by_its_path() {
+        assert_eq!(Preset::of_model("war3mapImported\\StageTombSea-090f18c4.mdx"), Preset::Water);
+        assert_eq!(Preset::of_model("war3mapImported\\StagePlague-0c4383c6.mdx"), Preset::Poison);
+        assert_eq!(Preset::of_model("war3mapImported\\StageLava-8f94e15b.mdx"), Preset::Lava);
     }
 
     #[test]

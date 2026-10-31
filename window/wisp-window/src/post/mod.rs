@@ -46,6 +46,9 @@ fn sampler_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
     wgpu::BindGroupLayoutEntry { binding, visibility: wgpu::ShaderStages::FRAGMENT, ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering), count: None }
 }
 
+/// The reflection the water pass reads is drawn at the picture's size divided by this, so the mirrored sky maps its pixels back by it.
+pub const REFLECTION_SHRINK: u32 = 2;
+
 struct Layouts {
     cloud: wgpu::BindGroupLayout,
     sky: wgpu::BindGroupLayout,
@@ -58,6 +61,7 @@ struct Layouts {
 struct Pipelines {
     cloud: wgpu::RenderPipeline,
     sky: wgpu::RenderPipeline,
+    reflected_sky: wgpu::RenderPipeline,
     depth: wgpu::RenderPipeline,
     occlusion: wgpu::RenderPipeline,
     prefilter: wgpu::RenderPipeline,
@@ -157,7 +161,8 @@ impl Post {
                 &[params_entry(), sampler_entry(1), texture_entry(2, false, flat, false), texture_entry(3, false, flat, false), texture_entry(4, false, flat, false), texture_entry(5, false, wgpu::TextureViewDimension::D3, false), texture_entry(6, true, flat, true)],
             ),
         };
-        let sky = module(device, "sky", &[NOISE, include_str!("sky.wgsl")]);
+        let shrink = format!("const REFLECTION_SHRINK: f32 = {REFLECTION_SHRINK}.0;\n");
+        let sky = module(device, "sky", &[NOISE, &shrink, include_str!("sky.wgsl")]);
         let cloud = module(device, "cloud", &[NOISE, include_str!("clouds.wgsl")]);
         let depth = module(device, "depth", &[include_str!("depth.wgsl")]);
         let occlusion = module(device, "occlusion", &[include_str!("occlusion.wgsl")]);
@@ -167,6 +172,7 @@ impl Post {
         let pipelines = Pipelines {
             cloud: pipeline(device, "cloud", &cloud, &layouts.cloud, "cloud_main", colour(BLOOM_FORMAT, None), 1, None),
             sky: pipeline(device, "sky", &sky, sky_layout, "sky_main", colour(scene_format, None), samples, Some(depth_format)),
+            reflected_sky: pipeline(device, "reflected sky", &sky, sky_layout, "reflected_sky_main", colour(scene_format, None), samples, Some(depth_format)),
             depth: pipeline(device, "depth", &depth, &layouts.depth, "depth_main", colour(HALF_DEPTH_FORMAT, None), 1, None),
             occlusion: pipeline(device, "occlusion", &occlusion, &layouts.occlusion, "occlusion_main", colour(OCCLUSION_FORMAT, None), 1, None),
             prefilter: pipeline(device, "prefilter", &bloom, &layouts.bloom, "prefilter_main", colour(BLOOM_FORMAT, None), 1, None),
@@ -273,6 +279,14 @@ impl Post {
     pub fn draw_sky(&self, pass: &mut wgpu::RenderPass<'_>) {
         let targets = self.targets.as_ref().expect("fit ran");
         pass.set_pipeline(&self.pipelines.sky);
+        pass.set_bind_group(0, &targets.sky_group, &[]);
+        pass.draw(0..3, 0..1);
+    }
+
+    /// Draws the sky as the water mirrors it, first in the reflection pass: each ray through the reflection is turned about the level water plane.
+    pub fn draw_reflected_sky(&self, pass: &mut wgpu::RenderPass<'_>) {
+        let targets = self.targets.as_ref().expect("fit ran");
+        pass.set_pipeline(&self.pipelines.reflected_sky);
         pass.set_bind_group(0, &targets.sky_group, &[]);
         pass.draw(0..3, 0..1);
     }

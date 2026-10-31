@@ -184,13 +184,6 @@ function fogOf(scene: RenderScene) {
   return { color: fog.color, start: height ? fog.linearStart ?? fog.zStart : fog.zStart, end: height ? fog.linearEnd ?? fog.zEnd : fog.zEnd, max: fog.maxLinearDensity ?? 1 };
 }
 
-/** Which liquid the water pass draws, told from the model paths a scene names: a lava or poison model asks for its own look, anything else is water. */
-export function liquidPreset(models: readonly string[]): "water" | "poison" | "lava" {
-  if (models.some((model) => /lava|magma|molten/i.test(model))) return "lava";
-  if (models.some((model) => /poison|plague|ooze|slime|toxic/i.test(model))) return "poison";
-  return "water";
-}
-
 /** The scene the native renderer draws: the camera, the fog, the sky and each model that is already loaded, with the sequence and frame the game's animation rules pick for it. */
 export function drawScene(scene: RenderScene, library: ModelLibrary) {
   const view = camera(scene, 1);
@@ -208,7 +201,7 @@ export function drawScene(scene: RenderScene, library: ModelLibrary) {
   const environment = scene.environment;
   const sky = environment.sky !== "" && environment.skyVisible ? place({ handle: { id: 0 }, model: environment.sky, x: 0, y: 0, z: 0, alpha: 255, scale: 1, flat: false, animation: undefined, subAnimations: [], animationElapsed: 0, animationClock: 0, color: [255, 255, 255], teamColor: 0, matrixScale: [1, 1, 1], yaw: 0, pitch: 0, roll: 0 } as unknown as DrawnPose) : undefined;
   const poses = drawnPoses(scene.effects, view.eye, view.far, scene.world).flatMap((pose) => place(pose) ?? []);
-  return { frame: scene.frame, pending: library.loading(), playing: scene.playing === true, camera: { view: Array.from(view.view), eye: view.eye, tangent: view.shadow.tangent, near: view.near, far: view.far, skyFar: SKY_FAR, rise: NATIVE_RISE, reach: view.shadow.reach }, fog: fogOf(scene), light: library.light(environment.dayNight.unit, environment.timeOfDay), sky, skyLook: environment.skyLook, poses, lightnings: (scene.lightnings ?? []).map((bolt) => ({ from: bolt.from, to: bolt.to, color: bolt.color })), weathers: (scene.weathers ?? []).map((weather) => ({ id: weather.id, rect: weather.rect })), ui, water: { preset: liquidPreset(poses.map((pose) => pose.model)) } };
+  return { frame: scene.frame, pending: library.loading(), playing: scene.playing === true, camera: { view: Array.from(view.view), eye: view.eye, tangent: view.shadow.tangent, near: view.near, far: view.far, skyFar: SKY_FAR, rise: NATIVE_RISE, reach: view.shadow.reach }, fog: fogOf(scene), light: library.light(environment.dayNight.unit, environment.timeOfDay), sky, skyLook: environment.skyLook, poses, lightnings: (scene.lightnings ?? []).map((bolt) => ({ from: bolt.from, to: bolt.to, color: bolt.color })), weathers: (scene.weathers ?? []).map((weather) => ({ id: weather.id, rect: weather.rect })), ui };
 }
 
 const PRELOAD_MS = 120_000;

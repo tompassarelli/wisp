@@ -57,18 +57,21 @@ fn counter_vertices(step: u64) -> Vec<Vertex> {
     vertices
 }
 
-/// `WISP_WINDOW_CAPTURE=FILE.png` saves the window's image at the first scene from game frame `WISP_WINDOW_CAPTURE_AFTER` (default 30) on that has every model it names.
+/// `WISP_WINDOW_CAPTURE=FILE.png` saves the window's image at the first scene from game frame `WISP_WINDOW_CAPTURE_AFTER` (default 30) on that has every model it names;
+/// `WISP_WINDOW_CAPTURE_FRAMES=N` saves that frame and the N - 1 drawn after it as FILE-0000.png on, for flickers a single image misses.
 struct Capture {
     path: PathBuf,
     after: u32,
-    drawn: bool,
+    frames: u32,
+    taken: u32,
 }
 
 impl Capture {
     fn from_environment() -> Option<Self> {
         let path = PathBuf::from(std::env::var_os("WISP_WINDOW_CAPTURE")?);
         let after = std::env::var("WISP_WINDOW_CAPTURE_AFTER").ok().and_then(|value| value.parse().ok()).unwrap_or(30);
-        Some(Self { path, after, drawn: false })
+        let frames = std::env::var("WISP_WINDOW_CAPTURE_FRAMES").ok().and_then(|value| value.parse().ok()).unwrap_or(1);
+        Some(Self { path, after, frames, taken: 0 })
     }
 }
 
@@ -406,10 +409,11 @@ impl Gpu {
 impl Gpu {
     fn save_capture(&mut self, texture: &wgpu::Texture) {
         let Some(capture) = self.capture.as_mut() else { return };
-        if std::mem::replace(&mut capture.drawn, true) {
+        if capture.taken >= capture.frames {
             return;
         }
-        let path = capture.path.clone();
+        let path = if capture.frames == 1 { capture.path.clone() } else { capture.path.with_file_name(format!("{}-{:04}.png", capture.path.file_stem().unwrap_or_default().to_string_lossy(), capture.taken)) };
+        capture.taken += 1;
         self.write_picture(texture, &path);
     }
 

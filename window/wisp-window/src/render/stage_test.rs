@@ -7,7 +7,7 @@ use std::time::Instant;
 use super::math::{Mat4, IDENTITY};
 use super::model::{EmitterSample, Filter, Layer, ModelData, Paint, Part, Rig, Vertex};
 use super::scene::{Camera, Fog, Light, Pose, Scene};
-use super::water::{Preset, WaterSettings};
+use super::water::Preset;
 use super::Renderer;
 use crate::capture;
 use crate::remaster::Quality;
@@ -126,6 +126,17 @@ fn placed(model: &str, x: f32, y: f32, z: f32, color: [f32; 3]) -> Pose {
     Pose { id: 0, model: model.into(), matrix, sequence: 0, frame: 0.0, clock: 0.0, alpha: 1.0, color, team: [1.0; 3] }
 }
 
+/// A fighter's effect whose path names a liquid without being one.
+const PLAGUE_CLOUD: &str = "Abilities\\Spells\\Undead\\PlagueCloud\\PlagueCloudCaster.mdx";
+
+fn sea(preset: Preset) -> &'static str {
+    match preset {
+        Preset::Water => "war3mapImported\\StageTombSea.mdx",
+        Preset::Poison => "war3mapImported\\StagePlague.mdx",
+        Preset::Lava => "war3mapImported\\StageLava.mdx",
+    }
+}
+
 struct Stage {
     renderer: Renderer,
     device: wgpu::Device,
@@ -143,7 +154,10 @@ impl Stage {
             renderer.water.keep(format!("replaceabletextures\\water\\water{index:02}.blp"), frame);
         }
         assert_eq!(renderer.water.build(&device, &queue), None);
-        renderer.add_model("sea", model(block([-6000.0, -1300.0, -0.01], [6000.0, 6000.0, 0.0]), Paint::Water, Filter::Blend));
+        for preset in [Preset::Water, Preset::Poison, Preset::Lava] {
+            renderer.add_model(sea(preset), model(block([-6000.0, -1300.0, -0.01], [6000.0, 6000.0, 0.0]), Paint::Water, Filter::Blend));
+        }
+        renderer.add_model(PLAGUE_CLOUD, model(block([-60.0, -60.0, 0.0], [60.0, 60.0, 120.0]), Paint::None, Filter::Opaque));
         renderer.add_model("bed", model(block([-6000.0, -1300.0, -520.0], [6000.0, 300.0, -500.0]), Paint::None, Filter::Opaque));
         renderer.add_model("shore", model(shore(), Paint::None, Filter::Opaque));
         renderer.add_model("land", model(block([-6000.0, 1500.0, -520.0], [6000.0, 9000.0, 12.0]), Paint::None, Filter::Opaque));
@@ -171,9 +185,8 @@ impl Stage {
             camera: Camera { view: look_at(eye, [0.0, 0.0, 120.0]), eye, tangent: 0.5, near: 20.0, far: 12000.0, sky_far: 12000.0, rise: 0.0, ..Default::default() },
             light: Some(Light { toward: [0.3, -0.5, 0.8], key: [0.9, 0.85, 0.8], ambient: [0.45, 0.5, 0.55] }),
             fog: Some(Fog { color: [0.55, 0.7, 0.85], start: 2500.0, end: 9000.0, max: 0.75 }),
-            poses: vec![placed("bed", 0.0, 0.0, 0.0, [0.55, 0.5, 0.35]), placed("shore", 0.0, 0.0, 0.0, [0.78, 0.68, 0.45]), placed("land", 0.0, 0.0, 0.0, [0.72, 0.62, 0.42]), placed("sea", 0.0, 0.0, 0.0, [1.0; 3]), placed("deck", 0.0, 0.0, 0.0, [0.45, 0.4, 0.5]), fighter, placed("fighter", 260.0, 0.0, 0.0, [0.2, 0.4, 0.95])],
+            poses: vec![placed("bed", 0.0, 0.0, 0.0, [0.55, 0.5, 0.35]), placed("shore", 0.0, 0.0, 0.0, [0.78, 0.68, 0.45]), placed("land", 0.0, 0.0, 0.0, [0.72, 0.62, 0.42]), placed(sea(preset), 0.0, 0.0, 0.0, [1.0; 3]), placed("deck", 0.0, 0.0, 0.0, [0.45, 0.4, 0.5]), fighter, placed("fighter", 260.0, 0.0, 0.0, [0.2, 0.4, 0.95])],
             clear: [0.55, 0.7, 0.85],
-            water: WaterSettings::of(preset),
             ..Scene::default()
         }
     }
@@ -387,4 +400,34 @@ fn bodies_in_the_water_send_rings_a_splash_and_a_wake() {
         }
         capture::write(&PathBuf::from(dir).join("splash-strip.png"), (width * 3) as u32, (height * 2) as u32, &strip).unwrap();
     }
+}
+
+#[test]
+fn an_effect_whose_path_names_a_liquid_leaves_the_sea_water() {
+    let size = (960, 640);
+    let Some(mut stage) = Stage::new(size) else { return };
+    let mut scene = Stage::scene(1.0, Preset::Water);
+    scene.poses.push(placed(PLAGUE_CLOUD, -240.0, -200.0, 0.0, [0.4, 0.9, 0.3]));
+    stage.draw(&scene);
+    assert_eq!(stage.renderer.water.liquid, Preset::Water);
+    let sea = mean(&stage.read(), size.0, 40..200, 520..620);
+    assert!(sea[2] > sea[1], "the sea stays water under a plague cloud, got {sea:?}");
+    stage.draw(&Stage::scene(1.0, Preset::Poison));
+    assert_eq!(stage.renderer.water.liquid, Preset::Poison);
+}
+
+#[test]
+fn the_far_sea_mirrors_the_sky_and_not_the_clear_colour() {
+    let size = (960, 640);
+    let Some(mut stage) = Stage::new(size) else { return };
+    let mut scene = Stage::scene(1.0, Preset::Water);
+    scene.clear = [0.0; 3];
+    stage.draw(&scene);
+    let rgba = stage.read();
+    if let Ok(dir) = std::env::var("WISP_WATER_CAPTURE_DIR") {
+        std::fs::create_dir_all(&dir).unwrap();
+        capture::write(&PathBuf::from(dir).join("far-sea.png"), size.0, size.1, &rgba).unwrap();
+    }
+    let darkest = (300..340).flat_map(|y| (0..280).map(move |x| (x, y))).map(|(x, y)| pixel(&rgba, size.0, x, y).iter().map(|&channel| u32::from(channel)).sum::<u32>()).min().unwrap();
+    assert!(darkest > 150, "the far sea shows the dark clear colour, its darkest pixel sums to {darkest}");
 }

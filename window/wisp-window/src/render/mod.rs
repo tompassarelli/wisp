@@ -43,7 +43,7 @@ use {lightning::Lightning, weather::Weather};
 use model::{Filter, ModelData, ModelEmitter, Paint, Vertex};
 use shadow::Shadow;
 use uniforms::{lighting_of, FrameUniform, Instance, LayerUniform, Lit, SceneFrame};
-use water::{Glow, Water};
+use water::{Glow, Water, WaterSettings};
 use particles::{ParticleFrame, Particles, Slot};
 use scene::{Pose, Scene};
 use targets::Targets;
@@ -83,7 +83,8 @@ struct GpuModel {
     bones: usize,
     skin: sprite::Skin,
     emitters: Vec<(ModelEmitter, Option<Slot>)>,
-    water: bool,
+    /// The liquid its water layer is drawn as, for a model that has one.
+    liquid: Option<water::Preset>,
     /// The model's box when it has a layer that writes depth, which is what makes it a body that disturbs water.
     body: Option<ripples::Extent>,
 }
@@ -277,7 +278,7 @@ impl Renderer {
         let emitters = self.register_emitters(path, data.emitters);
         let bones = data.rig.bone_count().max(1);
         self.model_ids.insert(path.to_string(), self.models.len());
-        self.models.push(GpuModel { vertices, indices, draws, opaque_first, skin: sprite::Skin::new(data.vertices, data.indices, &data.parts), rig: data.rig, bones, emitters, water, body });
+        self.models.push(GpuModel { vertices, indices, draws, opaque_first, skin: sprite::Skin::new(data.vertices, data.indices, &data.parts), rig: data.rig, bones, emitters, liquid: water.then(|| water::Preset::of_model(path)), body });
         self.counts.push(0);
     }
 
@@ -364,8 +365,9 @@ impl Renderer {
         self.water_level = None;
         for pose in poses {
             if let Some(&id) = self.model_ids.get(pose.model.as_str()) {
-                if self.models[id].water && self.water_level.is_none() {
+                if let (Some(liquid), None) = (self.models[id].liquid, self.water_level) {
                     self.water_level = Some(pose.matrix[14]);
+                    self.water.liquid = liquid;
                 }
                 if self.counts[id] == 0 {
                     self.order.push(id);
@@ -449,7 +451,7 @@ impl Renderer {
         self.queue.write_buffer(&self.instance_buffer, 0, bytemuck::cast_slice(&self.instance_scratch));
         let plane = self.water_level.filter(|_| self.water.ready()).unwrap_or(0.0);
         let seconds = self.started.elapsed().as_secs_f32();
-        let glow = if self.water_level.is_some() && self.water.ready() { scene.water.glow(plane, seconds) } else { Glow::NONE };
+        let glow = if self.water_level.is_some() && self.water.ready() { WaterSettings::of(self.water.liquid).glow(plane, seconds) } else { Glow::NONE };
         let sun = scene.light.as_ref().filter(|light| light.key.iter().any(|&channel| channel > 0.0)).filter(|_| self.shadow.side > 0).and_then(|light| scene.camera.sun_corners(aspect).map(|corners| shadow::sun(corners, light.toward, self.shadow.side)));
         let lit = sun.as_ref().map_or(Lit::Ambient, Lit::Sunlit);
         let main = Self::scene_frame(scene, aspect, window, scene.camera.far, size, plane, false, glow, lit);
