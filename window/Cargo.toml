@@ -10,6 +10,9 @@ publish = false
 [profile.release]
 debug = false
 
+[profile.release.package.wisp-window]
+incremental = true
+
 [profile.dev]
 debug = "line-tables-only"
 
