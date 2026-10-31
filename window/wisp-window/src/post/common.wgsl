@@ -15,6 +15,7 @@ struct Params {
     misc: vec4<f32>,
     cloud: vec4<f32>,
     eye: vec4<f32>,
+    scale: vec4<f32>,
 };
 
 const CLOUD_SCALE: f32 = 4.0;

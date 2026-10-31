@@ -38,10 +38,10 @@ impl Preset {
     /// The features this preset runs.
     pub fn features(self) -> Features {
         match self {
-            Preset::Low => Features { shadows: Shadows::Off, msaa: 1, ssao: false, contact_shadows: false, fighter_shadows: 0, bloom: false, volumetrics: false, cloud_layers: 1, weather_percent: 25, water: Water::Reflective, render_scale_percent: 75 },
-            Preset::Medium => Features { shadows: Shadows::Map(1024), msaa: 2, ssao: false, contact_shadows: false, fighter_shadows: 0, bloom: false, volumetrics: false, cloud_layers: 2, weather_percent: 50, water: Water::Reflective, render_scale_percent: 100 },
-            Preset::High => Features { shadows: Shadows::Map(2048), msaa: 4, ssao: true, contact_shadows: true, fighter_shadows: 1024, bloom: true, volumetrics: false, cloud_layers: 3, weather_percent: 100, water: Water::Reflective, render_scale_percent: 100 },
-            Preset::Ultra => Features { shadows: Shadows::Map(4096), msaa: 8, ssao: true, contact_shadows: true, fighter_shadows: 2048, bloom: true, volumetrics: true, cloud_layers: 3, weather_percent: 100, water: Water::Refractive, render_scale_percent: 100 },
+            Preset::Low => Features { shadows: Shadows::Off, msaa: 1, ssao: false, contact_shadows: false, fighter_shadows: 0, bloom: false, volumetrics: false, cloud_layers: 1, weather_percent: 25, water: Water::Reflective, render_scale: RenderScale::Fixed(75) },
+            Preset::Medium => Features { shadows: Shadows::Map(1024), msaa: 2, ssao: false, contact_shadows: false, fighter_shadows: 0, bloom: false, volumetrics: false, cloud_layers: 2, weather_percent: 50, water: Water::Reflective, render_scale: RenderScale::Auto { floor: AUTO_FLOOR } },
+            Preset::High => Features { shadows: Shadows::Map(2048), msaa: 4, ssao: true, contact_shadows: true, fighter_shadows: 1024, bloom: true, volumetrics: false, cloud_layers: 3, weather_percent: 100, water: Water::Reflective, render_scale: RenderScale::Auto { floor: AUTO_FLOOR } },
+            Preset::Ultra => Features { shadows: Shadows::Map(4096), msaa: 8, ssao: true, contact_shadows: true, fighter_shadows: 2048, bloom: true, volumetrics: true, cloud_layers: 3, weather_percent: 100, water: Water::Refractive, render_scale: RenderScale::Fixed(100) },
         }
     }
 
@@ -95,11 +95,42 @@ pub enum Water {
     Refractive,
 }
 
+/// The lowest scene resolution, in percent of the window's, that `RenderScale::Auto` steps down to.
+pub const AUTO_FLOOR: u8 = 50;
+
+/// How large the scene is drawn before the final-image pass upsamples it to the window.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum RenderScale {
+    /// This percentage of the window's width and height.
+    Fixed(u8),
+    /// As large as holds the GPU frame inside the display's budget, from `floor` percent up to the window's own resolution.
+    Auto { floor: u8 },
+}
+
+impl RenderScale {
+    /// The largest percentage this setting draws at.
+    pub fn ceiling(self) -> u8 {
+        match self {
+            RenderScale::Fixed(percent) => percent,
+            RenderScale::Auto { .. } => 100,
+        }
+    }
+}
+
+impl std::fmt::Display for RenderScale {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RenderScale::Fixed(percent) => write!(f, "{percent}%"),
+            RenderScale::Auto { floor } => write!(f, "auto ({floor}% to 100%)"),
+        }
+    }
+}
+
 /// What the renderer may spend. A field is the setting's key: a feature reads `renderer.features().<field>` and draws nothing when it is off.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Features {
     pub shadows: Shadows,
-    /// Samples per pixel: 1 draws the scene without multisampling, and any more draws it at 4, the count every adapter offers for the scene's formats.
+    /// Samples per pixel: 1 draws the scene without multisampling; 2, 4 and 8 draw it at that count where the device offers it, else at 4, which every adapter offers.
     pub msaa: u32,
     pub ssao: bool,
     /// Screen-space shadows from the sun: a short ray march in the depth that seats feet, weapons and small props where the shadow map is too coarse.
@@ -114,8 +145,8 @@ pub struct Features {
     /// Weather particles drawn, as a percentage of what the weather emits.
     pub weather_percent: u8,
     pub water: Water,
-    /// The scene's resolution as a percentage of the window's, upscaled to fill it. Unread until the final-image pass takes a scene smaller than the window.
-    pub render_scale_percent: u8,
+    /// The scene's resolution against the window's; the UI and the options screen stay at the window's.
+    pub render_scale: RenderScale,
 }
 
 impl Features {
@@ -135,7 +166,7 @@ impl Features {
             ("cloudLayers", self.cloud_layers.to_string()),
             ("weather", format!("{}%", self.weather_percent)),
             ("water", format!("{:?}", self.water).to_ascii_lowercase()),
-            ("renderScale", format!("{}%", self.render_scale_percent)),
+            ("renderScale", self.render_scale.to_string()),
         ]
     }
 }
@@ -171,7 +202,7 @@ mod tests {
     #[test]
     fn each_preset_costs_no_less_than_the_one_below() {
         let cost = |features: Features| {
-            (matches!(features.shadows, Shadows::Map(_)) as u32 + features.ssao as u32 + features.contact_shadows as u32 + u32::from(features.fighter_shadows > 0) + features.bloom as u32 + features.volumetrics as u32, features.msaa, features.weather_percent, features.render_scale_percent, features.cloud_layers)
+            (matches!(features.shadows, Shadows::Map(_)) as u32 + features.ssao as u32 + features.contact_shadows as u32 + u32::from(features.fighter_shadows > 0) + features.bloom as u32 + features.volumetrics as u32, features.msaa, features.weather_percent, features.render_scale.ceiling(), features.cloud_layers)
         };
         for pair in PRESETS.windows(2) {
             let (low, high) = (cost(pair[0].features()), cost(pair[1].features()));

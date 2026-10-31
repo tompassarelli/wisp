@@ -118,26 +118,56 @@ fn gather(pixel: vec2<i32>, w: f32) -> vec3<f32> {
     return select(sum / weight, fallback, weight < 1.0e-3);
 }
 
+fn catmull_rom_weights(t: vec2<f32>) -> array<vec2<f32>, 4> {
+    return array<vec2<f32>, 4>(
+        t * (-0.5 + t * (1.0 - 0.5 * t)),
+        1.0 + t * t * (-2.5 + 1.5 * t),
+        t * (0.5 + t * (2.0 - 1.5 * t)),
+        t * t * (-0.5 + 0.5 * t),
+    );
+}
+
+fn scene_light(scene_at: vec2<f32>, pixel: vec2<i32>) -> vec3<f32> {
+    if (p.scale.x >= 1.0 && p.scale.y >= 1.0) {
+        return textureLoad(hdr, pixel, 0).rgb;
+    }
+    let size = vec2<f32>(textureDimensions(hdr));
+    let centre = floor(scene_at - 0.5) + 0.5;
+    let w = catmull_rom_weights(scene_at - centre);
+    let middle = w[1] + w[2];
+    let before = (centre - 1.0) / size;
+    let between = (centre + w[2] / middle) / size;
+    let after = (centre + 2.0) / size;
+    var sum = textureSampleLevel(hdr, linear_sampler, between, 0.0).rgb * middle.x * middle.y;
+    sum += textureSampleLevel(hdr, linear_sampler, vec2<f32>(before.x, between.y), 0.0).rgb * w[0].x * middle.y;
+    sum += textureSampleLevel(hdr, linear_sampler, vec2<f32>(after.x, between.y), 0.0).rgb * w[3].x * middle.y;
+    sum += textureSampleLevel(hdr, linear_sampler, vec2<f32>(between.x, before.y), 0.0).rgb * middle.x * w[0].y;
+    sum += textureSampleLevel(hdr, linear_sampler, vec2<f32>(between.x, after.y), 0.0).rgb * middle.x * w[3].y;
+    let total = middle.x * middle.y + (w[0].x + w[3].x) * middle.y + middle.x * (w[0].y + w[3].y);
+    return max(sum / total, vec3<f32>(0.0));
+}
+
 @fragment
 fn composite_main(@builtin(position) at: vec4<f32>) -> @location(0) vec4<f32> {
-    let pixel = vec2<i32>(at.xy);
-    var color = textureLoad(hdr, pixel, 0).rgb;
+    let scene_at = at.xy * p.scale.xy;
+    let pixel = vec2<i32>(scene_at);
+    var color = scene_light(scene_at, pixel);
     var w = SKY_DEPTH;
     if (p.occlusion.y > 0.0 || p.occlusion.w > 0.0) {
-        w = scene_w(at.xy);
+        w = scene_w(scene_at);
     }
     if (w < SKY_DEPTH) {
         let seen = gather(pixel, w);
         var shade = select(1.0, seen.x, p.occlusion.y > 0.0);
         if (p.occlusion.w > 0.0) {
-            shade *= 1.0 - contact_shadow(at.xy - 0.5, w, seen.yz) * p.occlusion.w;
+            shade *= 1.0 - contact_shadow(scene_at - 0.5, w, seen.yz) * p.occlusion.w;
         }
         if ((textureLoad(scene_stencil, pixel, 0).r & UNIT) != 0u) {
             shade = mix(1.0, shade, FIGHTER_OCCLUSION);
         }
         color *= mix(shade, 1.0, smoothstep(0.8, 2.5, luminance(color)));
     }
-    let uv = (at.xy) / vec2<f32>(textureDimensions(hdr));
+    let uv = scene_at / vec2<f32>(textureDimensions(hdr));
     color += textureSampleLevel(bloom, linear_sampler, uv, 0.0).rgb * p.bloom.z;
     var display = display_of(color * p.misc.w) + blue_noise(at.xy) / 255.0;
     if (p.misc.y > 0.5) {

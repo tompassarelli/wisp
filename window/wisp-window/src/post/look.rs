@@ -156,6 +156,7 @@ pub struct Params {
     misc: [f32; 4],
     cloud: [f32; 4],
     eye: [f32; 4],
+    scale: [f32; 4],
 }
 
 fn linear(display: f32) -> f32 {
@@ -221,8 +222,15 @@ impl Look {
             misc: [scene.frame as f32 / 60.0, if srgb_surface { 1.0 } else { 0.0 }, t.contact_reach, t.exposure],
             cloud: [cover, stars, glow, if cover > 0.0 { t.cloud_layers as f32 } else { 0.0 }],
             eye: with(camera.eye, 0.0),
+            scale: [1.0, 1.0, 0.0, 0.0],
         };
         Look { params, grade, occluding: t.occlusion_strength > 0.0 || t.contact_strength > 0.0, glowing: t.bloom_strength > 0.0, clouded: cover > 0.0 && t.cloud_layers > 0 }
+    }
+
+    /// The look of a scene drawn at `scene` pixels that the composite stretches over a `window`-sized surface.
+    pub fn upsampled(mut self, scene: (u32, u32), window: (u32, u32)) -> Look {
+        self.params.scale = [scene.0 as f32 / window.0.max(1) as f32, scene.1 as f32 / window.1.max(1) as f32, 0.0, 0.0];
+        self
     }
 }
 

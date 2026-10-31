@@ -235,7 +235,7 @@ impl Renderer {
 
     /// Starts building the wanted set beside the drawn one when it would differ and every texture it needs is in the cache. A quality the player chose applies at once, mid-match too; textures that arrived since the art was built wait for the match to end. A change of samples per pixel rebuilds the drawn set the same way.
     pub(super) fn steer(&mut self) {
-        let samples = samples_of(self.features);
+        let samples = samples_of(self.features, self.offered_samples);
         if self.incoming.samples().is_some_and(|building| building != samples) {
             self.incoming = Incoming::Idle;
         }
@@ -308,6 +308,7 @@ impl Renderer {
         let Incoming::Ready(mut next) = std::mem::take(&mut self.incoming) else { return None };
         next.sources = std::mem::take(&mut self.sources);
         next.baker = self.baker.take();
+        std::mem::swap(&mut next.resolution, &mut self.resolution);
         (next.wanted, next.playing, next.rebuild) = (self.wanted, self.playing, Rebuild { baked_at: self.rebuild.baked_at, ..Rebuild::default() });
         next.problems.append(&mut self.problems);
         let features = self.features;
@@ -325,10 +326,11 @@ impl Renderer {
     /// Applies a preset's features. Bloom and ambient occlusion are the final-image pass's strengths, and a strength of zero skips that effect's passes; the other keys are read by their features as they land.
     pub fn set_features(&mut self, features: Features) {
         self.features = features;
+        self.resolution.set(features.render_scale);
         self.set_shadow_side(match features.shadows { Shadows::Off => 0, Shadows::Map(side) => side });
         self.set_fighter_side(features.fighter_shadows);
         self.set_post_tuning(tuning_of(features, self.tuning));
-        if samples_of(features) != self.samples {
+        if samples_of(features, self.offered_samples) != self.samples {
             self.steer();
         }
         if let Incoming::Ready(incoming) = &mut self.incoming {

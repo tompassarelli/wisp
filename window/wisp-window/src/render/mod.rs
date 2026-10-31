@@ -20,6 +20,7 @@ mod pipelines;
 mod ripples;
 mod scene;
 mod shadow;
+mod resolution;
 mod targets;
 pub mod source;
 mod sprite;
@@ -49,10 +50,11 @@ use uniforms::{lighting_of, FrameUniform, Instance, LayerUniform, Lit, SceneFram
 use {liquid::{Glow, WaterSettings}, water::Water};
 use particles::{ParticleFrame, Particles, Slot};
 use scene::{Pose, Scene};
+use resolution::Resolution;
 use crate::post::{Post, Tuning, TUNING};
 
 pub use gpu::fitted;
-pub(crate) use targets::depth_shader;
+pub(crate) use targets::{depth_shader, multisample_features};
 pub use sprite::Shot;
 pub use scene::Scene as DrawScene;
 
@@ -153,6 +155,7 @@ pub struct Renderer {
     water_level: Option<f32>,
     ripples: ripples::Ripples,
     targets: Option<Targets>,
+    resolution: Resolution,
     post: Post,
     shadow: Shadow,
     /// The fighters' own map, drawn at High and Ultra.
@@ -173,6 +176,7 @@ pub struct Renderer {
     incoming: assets::Incoming,
     features: Features,
     samples: u32,
+    offered_samples: u32,
     particles: Particles,
     lightning: Lightning,
     weather: Weather,
@@ -187,11 +191,9 @@ impl Renderer {
     }
 
     pub fn new(device: wgpu::Device, queue: wgpu::Queue, format: wgpu::TextureFormat, quality: Quality, features: Features) -> Self {
-        let samples = samples_of(features);
+        let (offered_samples, samples) = targets::sample_counts(&device, features);
         let (pipelines, frame_layout, layer_layout) = pipelines::build(&device, HDR, samples);
-        let bone_buffer = bone_storage(&device, BONES_AT_START);
-        let color_buffer = color_storage(&device, SLOTS_AT_START);
-        let uv_buffer = uv_storage(&device, SLOTS_AT_START);
+        let (bone_buffer, color_buffer, uv_buffer) = (bone_storage(&device, BONES_AT_START), color_storage(&device, SLOTS_AT_START), uv_storage(&device, SLOTS_AT_START));
         let instance_buffer = instance_storage(&device, INSTANCES_AT_START);
         let storage = [&bone_buffer, &color_buffer, &uv_buffer];
         let (shadow, fighters) = (Shadow::new(&device, &layer_layout, storage, match features.shadows { Shadows::Off => 0, Shadows::Map(side) => side }), Shadow::new(&device, &layer_layout, storage, features.fighter_shadows));
@@ -238,6 +240,7 @@ impl Renderer {
             water_level: None,
             ripples: ripples::Ripples::default(),
             targets: None,
+            resolution: Resolution::new(features.render_scale),
             post,
             shadow,
             fighters,
@@ -257,6 +260,7 @@ impl Renderer {
             incoming: assets::Incoming::default(),
             features,
             samples,
+            offered_samples,
             particles,
             lightning,
             weather,
@@ -329,15 +333,6 @@ impl Renderer {
 
     pub fn has_model(&self, path: &str) -> bool {
         self.model_ids.contains_key(path)
-    }
-
-    fn fit_targets(&mut self, size: (u32, u32)) {
-        if self.targets.as_ref().is_some_and(|targets| targets.size == size) {
-            return;
-        }
-        let targets = Targets::new(&self.device, size, self.samples);
-        self.post.fit(size, &targets.resolved, &targets.depth_only, &targets.stencil);
-        self.targets = Some(targets);
     }
 
     /// Lays every resident pose out by model: bone matrices into the scratch, instances grouped so each model's are contiguous.

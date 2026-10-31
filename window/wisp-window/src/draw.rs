@@ -139,7 +139,7 @@ impl Gpu {
             apply_limit_buckets: false,
         }))
         .map_err(|e| format!("adapter: {e}"))?;
-        let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor { required_features: GpuClock::features(adapter.features()), required_limits: crate::remaster::device_limits(&adapter.limits()), ..Default::default() })).map_err(|e| format!("device: {e}"))?;
+        let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor { required_features: GpuClock::features(adapter.features()) | crate::render::multisample_features(adapter.features()), required_limits: crate::remaster::device_limits(&adapter.limits()), ..Default::default() })).map_err(|e| format!("device: {e}"))?;
         let mut config = surface.get_default_config(&adapter, size.width.max(1), size.height.max(1)).ok_or("surface not supported by the adapter")?;
         let formats = surface.get_capabilities(&adapter).formats;
         let plain = config.format.remove_srgb_suffix();
@@ -353,9 +353,11 @@ impl Gpu {
         self.encode_ms = Some(submit(&mut self.clock, &self.queue, encoder, timer, began));
     }
 
-    /// The last frame's encode time and the GPU times that came back since the last call.
-    pub fn timings(&mut self) -> Timings {
-        Timings { cpu_encode_ms: self.encode_ms.take(), gpu: self.clock.as_mut().map_or_else(|_| Vec::new(), GpuClock::collect) }
+    /// The last frame's encode time and the GPU times that came back since the last call, which also steer the automatic render scale against a display of `refresh_ms`.
+    pub fn timings(&mut self, refresh_ms: Option<f64>) -> Timings {
+        let gpu = self.clock.as_mut().map_or_else(|_| Vec::new(), GpuClock::collect);
+        gpu.iter().for_each(|frame| self.renderer.observe_gpu(frame.span_ms, refresh_ms));
+        Timings { cpu_encode_ms: self.encode_ms.take(), render_scale: Some(self.renderer.render_scale()), gpu }
     }
 
     /// Why this window cannot time its passes on the GPU, if it cannot.

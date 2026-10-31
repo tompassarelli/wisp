@@ -388,7 +388,7 @@ impl Surface for WindowSurface {
     }
 
     fn timings(&mut self) -> Timings {
-        self.gpu.timings()
+        self.gpu.timings(self.refresh_ms)
     }
 
     fn present(&self, image: Self::Image) {

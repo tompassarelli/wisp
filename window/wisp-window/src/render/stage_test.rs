@@ -18,6 +18,7 @@ mod liquids;
 mod low;
 mod mirror;
 mod pool;
+mod settings;
 
 struct Clocked(std::sync::Arc<std::sync::atomic::AtomicU32>);
 

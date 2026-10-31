@@ -138,6 +138,6 @@ fn volumetrics_off_draws_no_fog_or_rays_and_a_quarter_of_the_snow() {
     assert_eq!(marked(High.features(), "FDwh"), 0, "fog needs volumetrics");
     assert_eq!(marked(High.features(), "LRma"), 0, "rays need volumetrics");
     assert!(marked(Ultra.features(), "FDwh") > 1000 && marked(Ultra.features(), "LRma") > 50, "Ultra draws both");
-    let (full, quarter) = (marked(High.features(), "SNhs"), marked(Low.features(), "SNhs"));
+    let (full, quarter) = (marked(High.features(), "SNhs"), marked(crate::settings::Features { render_scale: crate::settings::RenderScale::Fixed(100), ..Low.features() }, "SNhs"));
     assert!(quarter > 0 && quarter * 2 < full, "Low draws a quarter of the flakes: {quarter} against {full}");
 }

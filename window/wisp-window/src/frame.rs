@@ -141,7 +141,7 @@ impl<S: Surface, C: Clock> FrameLoop<S, C> {
         if mode != Mode::Loading {
             let times = Times { asked, acquired, drawing, drawn, presented };
             self.publish(&outcome, &times, &timings, interval, missed);
-            let beat = Beat { presented_ns: presented, interval_ms: interval, step: self.stepper.next(presented).0 as u64, late: outcome.late, dropped: outcome.dropped, acquire_ms: ms(asked, acquired), draw_ms: ms(drawing, drawn), gpu_ms: timings.gpu.iter().map(|frame| frame.span_ms).collect() };
+            let beat = Beat { presented_ns: presented, interval_ms: interval, step: self.stepper.next(presented).0 as u64, late: outcome.late, dropped: outcome.dropped, acquire_ms: ms(asked, acquired), draw_ms: ms(drawing, drawn), gpu_ms: timings.gpu.iter().map(|frame| frame.span_ms).collect(), render_scale: timings.render_scale };
             self.pulse_line = self.pulse.beat(beat);
         }
         self.previous_frame_late = outcome.late;
@@ -165,6 +165,9 @@ impl<S: Surface, C: Clock> FrameLoop<S, C> {
         metrics.push(Series::Draw, ms(times.drawing, times.drawn));
         if let Some(encode) = timings.cpu_encode_ms {
             metrics.push(Series::CpuEncode, encode);
+        }
+        if let Some(percent) = timings.render_scale {
+            metrics.push(Series::RenderScale, f64::from(percent));
         }
         for frame in &timings.gpu {
             metrics.gpu(frame);

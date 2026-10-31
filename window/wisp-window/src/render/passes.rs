@@ -153,8 +153,8 @@ impl Renderer {
     }
 
     /// `draw`, with each pass writing its stamps through `timer`.
-    pub fn draw_timed(&mut self, encoder: &mut wgpu::CommandEncoder, timer: &mut PassTimer, target: &wgpu::TextureView, size: (u32, u32), aspect: f32, scene: &Scene) {
-        self.fit_targets(size);
+    pub fn draw_timed(&mut self, encoder: &mut wgpu::CommandEncoder, timer: &mut PassTimer, target: &wgpu::TextureView, window_size: (u32, u32), aspect: f32, scene: &Scene) {
+        let size = self.fit_targets(window_size);
         self.particles.begin(scene.frame);
         let window = size.0 as f32 / size.1.max(1) as f32;
         let maps = self.prepare(scene, aspect, window, size);
@@ -167,7 +167,7 @@ impl Renderer {
 
         let clear = (if scene.clear == [0.0; 3] { super::CLEAR } else { scene.clear.map(f64::from) }).map(linear_of);
         let clear = wgpu::Color { r: clear[0], g: clear[1], b: clear[2], a: 1.0 };
-        let look = Look::of(scene, aspect, fitted(size, aspect).map(|edge| edge as f32), self.post.srgb_surface(), &self.tuning);
+        let look = Look::of(scene, aspect, fitted(size, aspect).map(|edge| edge as f32), self.post.srgb_surface(), &self.tuning).upsampled(size, window_size);
         let procedural_sky = scene.sky.is_some() || scene.fog.is_some();
         self.post.prepare(&look);
         if self.water_level.is_some() && self.water.ready() {

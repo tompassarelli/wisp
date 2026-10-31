@@ -65,7 +65,7 @@ export function createFrameLoop(player: NativePlayer, window: WindowView, option
         gpu: window.info().adapter, ...window.info(), isolated: false, startupMs: options.startupMs, prepared: { models: prepared.models.length, step: prepared.step },
         frames: series.frames.length, elapsedMs, fps: series.frames.length * 1000 / elapsedMs,
         frameMs: spread(series.frames), intervalMs: spread(series.intervals), presentedMs: spread(Array.from(window.metric("presentedMs"))),
-        requestMs: spread(series.steps), renderMs: spread(Array.from(window.metric("drawMs"))), cpuEncodeMs: spread(Array.from(window.metric("cpuEncodeMs"))),
+        requestMs: spread(series.steps), renderMs: spread(Array.from(window.metric("drawMs"))), cpuEncodeMs: spread(Array.from(window.metric("cpuEncodeMs"))), renderScalePercent: spread(Array.from(window.metric("renderScalePercent"))),
         ...gpuReport((name) => Array.from(window.metric(name)), window.info().gpuTimingUnavailable), stageMs: spreads(series.stages), inputToPresentMs: spread(Array.from(window.metric("inputToPresentMs"))),
         wakeMs: spread(series.wakes), encodeMs: spread(series.encodes), parseMs: spread(Array.from(window.metric("parseMs"))),
         audioEvents: 0, audioReadyEvents: 0, audioPlayed: 0, audioDecodedAssets: 0, missingSounds: [] as string[],

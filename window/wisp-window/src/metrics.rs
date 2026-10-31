@@ -13,10 +13,11 @@ pub enum Series {
     DroppedSamples,
     CpuEncode,
     GpuFrame,
+    RenderScale,
     GpuPass(Pass),
 }
 
-const FIXED: usize = 11;
+const FIXED: usize = 12;
 
 impl Series {
     pub fn index(self) -> usize {
@@ -32,17 +33,19 @@ impl Series {
             Self::DroppedSamples => 8,
             Self::CpuEncode => 9,
             Self::GpuFrame => 10,
+            Self::RenderScale => 11,
             Self::GpuPass(pass) => FIXED + pass as usize,
         }
     }
 }
 
 /// The metric series `wisp_window_metric` serves, by the number Bun asks for, in `Series` order. The four flag series hold a 1 for each frame that counted and a 0 for each that did not;
-/// `cpuEncodeMs` is the render thread's time to record and finish a frame's commands, and the `gpu` series are GPU times that come back a few frames after the frame they time.
+/// `cpuEncodeMs` is the render thread's time to record and finish a frame's commands, `renderScalePercent` is the scene's size against the window's for each frame, and the `gpu` series are GPU times that come back a few frames after the frame they time.
 pub const SERIES: [&str; FIXED + PASSES.len()] = [
     "presentedMs", "acquireMs", "parseMs", "drawMs", "inputToPresentMs", "missedPresents", "missedPresentsAfterLateScene", "lateScenes", "droppedSamples",
     "cpuEncodeMs",
     "gpuFrameMs",
+    "renderScalePercent",
     "gpuShadowMs",
     "gpuFighterShadowMs",
     "gpuReflectionMs",
@@ -92,6 +95,8 @@ pub fn ms(from_ns: u64, to_ns: u64) -> f64 {
 #[derive(Default)]
 pub struct Timings {
     pub cpu_encode_ms: Option<f64>,
+    /// The scene's scale the frame was drawn at, in percent of the window's sides.
+    pub render_scale: Option<u8>,
     pub gpu: Vec<FrameGpu>,
 }
 
@@ -108,6 +113,7 @@ pub struct Beat {
     pub acquire_ms: f64,
     pub draw_ms: f64,
     pub gpu_ms: Vec<f64>,
+    pub render_scale: Option<u8>,
 }
 
 /// The rates a player's window prints every five seconds, so a slow window says whether it lacks presents, ticks or scenes without a scripted run.
@@ -148,7 +154,7 @@ impl Pulse {
         }
         let seconds = elapsed_ns as f64 / 1e9;
         let line = format!(
-            "wisp-window: {:.1} frames/s (frame p50 {:.1} ms, p99 {:.1} ms, worst {:.1} ms), {:.1} ticks/s, acquire p99 {:.1} ms, draw p99 {:.1} ms, {}, {} late scenes, {} dropped samples over {seconds:.1} s",
+            "wisp-window: {:.1} frames/s (frame p50 {:.1} ms, p99 {:.1} ms, worst {:.1} ms), {:.1} ticks/s, acquire p99 {:.1} ms, draw p99 {:.1} ms, {}{}, {} late scenes, {} dropped samples over {seconds:.1} s",
             self.intervals.len() as f64 / seconds,
             percentile(&mut self.intervals, 0.5),
             percentile(&mut self.intervals, 0.99),
@@ -157,6 +163,7 @@ impl Pulse {
             percentile(&mut self.acquires, 0.99),
             percentile(&mut self.draws, 0.99),
             if self.gpus.is_empty() { "gpu untimed".to_string() } else { format!("gpu p99 {:.1} ms", percentile(&mut self.gpus, 0.99)) },
+            beat.render_scale.map_or(String::new(), |percent| format!(", scene at {percent}%")),
             self.late,
             self.dropped,
         );
@@ -183,11 +190,11 @@ mod tests {
         let mut pulse = Pulse::default();
         let mut lines = Vec::new();
         for frame in 0..=600u64 {
-            let beat = Beat { presented_ns: frame * 8_333_334, interval_ms: (frame > 0).then_some(8.333), step: frame / 2, late: false, dropped: 0, acquire_ms: 0.1, draw_ms: 2.0, gpu_ms: (frame > 2).then_some(1.5).into_iter().collect() };
+            let beat = Beat { presented_ns: frame * 8_333_334, interval_ms: (frame > 0).then_some(8.333), step: frame / 2, late: false, dropped: 0, acquire_ms: 0.1, draw_ms: 2.0, gpu_ms: (frame > 2).then_some(1.5).into_iter().collect(), render_scale: Some(75) };
             lines.extend(pulse.beat(beat));
         }
         assert_eq!(lines.len(), 1, "{lines:?}");
         assert!(lines[0].starts_with("wisp-window: 120.0 frames/s (frame p50 8.3 ms, p99 8.3 ms, worst 8.3 ms), 60.0 ticks/s"), "{}", lines[0]);
-        assert!(lines[0].contains("draw p99 2.0 ms, gpu p99 1.5 ms,"), "{}", lines[0]);
+        assert!(lines[0].contains("draw p99 2.0 ms, gpu p99 1.5 ms, scene at 75%,"), "{}", lines[0]);
     }
 }

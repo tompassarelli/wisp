@@ -3,7 +3,7 @@
 use crate::capture;
 use crate::remaster::{device_limits, Quality};
 use crate::render::{DrawScene, Renderer};
-use crate::settings::Preset;
+use crate::settings::{Features, Preset, RenderScale};
 
 const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 
@@ -23,12 +23,12 @@ impl Offscreen {
     pub fn new(width: u32, height: u32) -> Result<Self, String> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
         let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions { power_preference: wgpu::PowerPreference::HighPerformance, ..Default::default() })).map_err(|error| format!("adapter: {error}"))?;
-        let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor { required_limits: device_limits(&adapter.limits()), ..Default::default() })).map_err(|error| format!("device: {error}"))?;
+        let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor { required_features: crate::render::multisample_features(adapter.features()), required_limits: device_limits(&adapter.limits()), ..Default::default() })).map_err(|error| format!("device: {error}"))?;
         Ok(Self::with_device(adapter.get_info(), device, queue, width, height))
     }
 
     pub fn with_device(info: wgpu::AdapterInfo, device: wgpu::Device, queue: wgpu::Queue, width: u32, height: u32) -> Self {
-        let renderer = Renderer::new(device.clone(), queue.clone(), FORMAT, Quality::Off, Preset::Low.features());
+        let renderer = Renderer::new(device.clone(), queue.clone(), FORMAT, Quality::Off, Features { render_scale: RenderScale::Fixed(100), ..Preset::Low.features() });
         Self { device, queue, renderer, size: (width.max(1), height.max(1)), ingested: 0, finished: 0, picture: Vec::new(), adapter: info.name, backend: format!("{:?}", info.backend) }
     }
 
