@@ -210,7 +210,9 @@ without particles or ribbons keeps nothing between frames, so when its effect
 leaves the scene its instance waits for the next effect with that model instead
 of being rebuilt. Each frame poses a model once, for its shadow pass and its
 draw, and poses only the bones and emitters that place something. Model initialization leaves animation clocks and particles unchanged;
-`render.preloadModels` lists any additional models the map creates later.
+`render.preloadModels` lists any additional models the map creates later, and
+`render.preloadTextures` any texture files it shows outside a model, such as
+interface images, so the native window remasters both while the player is in the menus.
 `standalone.json` records startup time and the prepared asset counts separately
 from the match's frame timing.
 The page is cross-origin isolated (`isolated` in `standalone.json`), so its

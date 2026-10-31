@@ -40,6 +40,8 @@ export interface HeadlessRenderProject {
   readonly chromeEnv?: Readonly<Record<string, string>>;
   /** Models the game can draw beyond its first scene; the native window reads them in after it starts, so their textures are remastered while the player is in the menus. */
   readonly preloadModels?: readonly string[];
+  /** Texture files the game can show beyond its first scene and outside any model, such as interface images; the native window reads them in after it starts with the models, for the same reason. */
+  readonly preloadTextures?: readonly string[];
 
   readonly terrain?: { readonly w3e?: Uint8Array; readonly bounds?: WorldBounds; readonly origin?: readonly [number, number] };
 

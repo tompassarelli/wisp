@@ -2,7 +2,7 @@
 import { Effect } from "effect";
 import { openStandalone } from "../play/standalone";
 import { type WindowView, adoptNativeWindow } from "./binding";
-import { createModelLibrary, drawScene, preloadScene } from "./drawScene";
+import { createModelLibrary, drawScene, preloadAssets, preloadScene } from "./drawScene";
 import { type FrameLoop, createFrameLoop } from "./frameLoop";
 import { loadGame } from "./gameModule";
 import { type RenderSeries, type RenderSeriesName, renderSeriesLengths, renderSeriesSince } from "./renderSeries";
@@ -80,7 +80,7 @@ const run = async (init: SimWorkerInit) => {
     });
     yield* preloadScene(player.native.prepare().scene, library, () => view.assetsPending());
     view.start();
-    for (const model of game.render.preloadModels ?? []) library.sequences(model);
+    preloadAssets(game.render, library);
     yield* serve(view, loop, finished.promise);
   })));
 };

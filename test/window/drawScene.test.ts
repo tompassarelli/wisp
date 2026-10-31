@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { AnimationSequence } from "../../src/headless/animation";
-import { createModelLibrary, drawScene } from "../../host/window/drawScene";
+import { createModelLibrary, drawScene, preloadAssets } from "../../host/window/drawScene";
 import type { RenderScene } from "../../host/render/renderScene";
 
 const until = async (check: () => boolean) => {
@@ -88,4 +88,11 @@ test("drawScene_plays_a_destroyed_effect_once_and_then_drops_it", () => {
   expect(drawn(withDeath, 71, 9)).toHaveLength(0);
   expect(drawn(noDeath, 40, 2.5)).toHaveLength(1);
   expect(drawn(noDeath, 400, 3.5)).toHaveLength(0);
+});
+
+test("preloadAssets_reads_the_listed_models_and_pushes_the_listed_textures", () => {
+  const read: string[] = [], shown: string[] = [];
+  preloadAssets({ preloadModels: ["a.mdx", "b.mdx"], preloadTextures: ["hud.blp", "plate.tga"] }, { sequences: (path) => { read.push(path); return undefined; }, show: (paths) => { shown.push(...paths); }, loading: () => 0, light: () => undefined });
+  expect(read).toEqual(["a.mdx", "b.mdx"]);
+  expect(shown).toEqual(["hud.blp", "plate.tga"]);
 });

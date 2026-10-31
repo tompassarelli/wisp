@@ -223,3 +223,9 @@ export const preloadScene = (scene: RenderScene, library: ModelLibrary, pending:
     yield* Effect.sleep("5 millis");
   }
 });
+
+/** Starts reading every model and texture the game lists beyond its first scene, so the window has them, and remasters them, before a match shows them. */
+export function preloadAssets(render: { readonly preloadModels?: readonly string[]; readonly preloadTextures?: readonly string[] }, library: ModelLibrary): void {
+  for (const model of render.preloadModels ?? []) library.sequences(model);
+  library.show(render.preloadTextures ?? []);
+}
