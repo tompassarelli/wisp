@@ -113,11 +113,11 @@ fn post_grades_with_the_stages_light() {
 #[test]
 fn post_lets_a_hot_spot_glow_into_its_surroundings_but_not_a_lit_surface() {
     let Some((device, queue)) = gpu() else { return };
-    let spark = |x: u32, y: u32| if x.abs_diff(SIDE / 2) <= 2 && y.abs_diff(SIDE / 2) <= 2 { [40.0; 3] } else { [0.05; 3] };
+    let spark = |x: u32, y: u32| if x == SIDE / 2 && y == SIDE / 2 { [40.0; 3] } else { [0.05; 3] };
     let glowing = run(&device, &queue, spark, false, TUNING);
     let plain = display_bytes([0.05; 3], &Grade::NEUTRAL);
-    let beside = glowing[(SIDE / 2 * SIDE + SIDE / 2 + 5) as usize];
-    assert!(beside[0] > plain[0] + 8, "three pixels from the spark the image is lifted: {beside:?} against {plain:?}");
+    let beside = glowing[(SIDE / 2 * SIDE + SIDE / 2 + 4) as usize];
+    assert!(beside[0] > plain[0] + 8, "four pixels from the spark the image is lifted: {beside:?} against {plain:?}");
     let lit = run(&device, &queue, |_, _| [0.7; 3], false, TUNING);
     let want = display_bytes([0.7; 3], &Grade::NEUTRAL);
     assert!(near(lit[(SIDE / 2 * SIDE + SIDE / 2) as usize], want), "a surface under the threshold does not bloom");
