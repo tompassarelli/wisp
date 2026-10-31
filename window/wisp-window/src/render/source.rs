@@ -126,6 +126,14 @@ fn layers_of(model: &model::Model, material: usize, layer_draws: &[Vec<Vec<(Opti
             layers.push(Layer { paint, filter: Filter::from_index(layer.filter_mode), color_slot, unshaded });
         }
     }
+    without_stand_in(layers)
+}
+
+/// A material with a water layer lists the surface Warcraft's own client draws (a base texture) before it; the water pass is that surface here, so the layers before it are not drawn.
+fn without_stand_in(mut layers: Vec<Layer>) -> Vec<Layer> {
+    if let Some(water) = layers.iter().position(|layer| layer.paint == Paint::Water) {
+        layers.drain(..water);
+    }
     layers
 }
 
@@ -206,5 +214,15 @@ mod tests {
         assert_eq!(paint(&model, 1), Paint::TeamGlow);
         assert_eq!(paint(&model, 2), Paint::Texture("Textures\\Smoke.blp".to_string()));
         assert_eq!(paint(&model, 3), Paint::None);
+    }
+
+    #[test]
+    fn a_water_layer_replaces_the_base_surface_listed_before_it_and_keeps_the_layers_after() {
+        let layer = |paint, filter| Layer { paint, filter, color_slot: 0, unshaded: true };
+        let layers = vec![layer(Paint::Texture("base.tga".into()), Filter::Opaque), layer(Paint::Texture("glow.tga".into()), Filter::Additive), layer(Paint::Water, Filter::Additive), layer(Paint::Texture("spark.tga".into()), Filter::Additive)];
+        let kept = without_stand_in(layers);
+        assert_eq!(kept.iter().map(|layer| layer.paint.clone()).collect::<Vec<_>>(), vec![Paint::Water, Paint::Texture("spark.tga".into())]);
+        let plain = vec![layer(Paint::Texture("base.tga".into()), Filter::Opaque)];
+        assert_eq!(without_stand_in(plain).len(), 1);
     }
 }

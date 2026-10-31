@@ -72,13 +72,16 @@ pub struct WaterSettings {
     /// Bubbles that swell and pop, and embers that drift over the surface, per area.
     pub bubbles: f32,
     pub embers: f32,
+    /// How strongly long swells streak the surface, and how bright the spiral whirlpools and veins lit from within shine, 0 for none.
+    pub swell: f32,
+    pub swirl: f32,
 }
 
 impl Default for WaterSettings {
     fn default() -> Self {
         Self {
-            shallow: [0.38, 0.78, 0.82],
-            deep: [0.03, 0.24, 0.62],
+            shallow: [0.30, 0.74, 0.72],
+            deep: [0.02, 0.22, 0.34],
             foam: [0.93, 0.97, 1.0],
             absorption: 0.012,
             depth_rate: 0.0035,
@@ -103,6 +106,8 @@ impl Default for WaterSettings {
             shimmer: 0.0,
             bubbles: 0.0,
             embers: 0.0,
+            swell: 1.0,
+            swirl: 0.0,
         }
     }
 }
@@ -125,15 +130,17 @@ impl WaterSettings {
                 specular: 0.55,
                 caustics: 0.15,
                 refraction: 0.015,
-                reflection: 0.5,
+                reflection: 0.3,
                 wave_height: 7.0,
                 wave_speed: 0.22,
                 glow: [0.42, 1.0, 0.10],
                 emissive: 0.32,
                 glow_reach: 260.0,
                 glow_light: 0.32,
-                opacity: 0.8,
+                opacity: 0.92,
                 bubbles: 0.45,
+                swell: 0.5,
+                swirl: 0.9,
                 ..Self::default()
             },
             // Molten rock: a slow dark crust drifting over a bright core, lighting what is near it, with heat shimmer, bubbles and embers.
@@ -163,6 +170,7 @@ impl WaterSettings {
                 shimmer: 0.7,
                 bubbles: 0.8,
                 embers: 0.7,
+                swell: 0.0,
                 ..Self::default()
             },
         }
@@ -227,7 +235,7 @@ impl WaterUniform {
             wave: [settings.wave_height, settings.wave_number, settings.wave_speed, settings.reflection],
             glow: [glow[0], glow[1], glow[2], settings.emissive],
             look: [settings.crust, settings.shimmer, settings.opacity, settings.bubbles],
-            sparks: [settings.embers, 0.0, 0.0, 0.0],
+            sparks: [settings.embers, settings.swirl, settings.swell, 0.0],
         }
     }
 }

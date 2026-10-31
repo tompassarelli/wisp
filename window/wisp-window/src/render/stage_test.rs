@@ -244,20 +244,51 @@ fn frame_time_with_water_at_the_laptop_panel() {
         return;
     }
     let Some(mut stage) = Stage::new((2880, 1920)) else { return };
-    let scene = Stage::scene(1.0, Preset::Water);
-    for _ in 0..20 {
-        stage.draw(&scene);
-    }
-    stage.device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
-    let frames = 200;
-    let began = Instant::now();
-    for _ in 0..frames {
-        stage.draw(&scene);
+    for preset in [Preset::Water, Preset::Poison] {
+        let scene = Stage::scene(1.0, preset);
+        for _ in 0..20 {
+            stage.draw(&scene);
+        }
         stage.device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
+        let frames = 200;
+        let began = Instant::now();
+        for _ in 0..frames {
+            stage.draw(&scene);
+            stage.device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
+        }
+        let milliseconds = began.elapsed().as_secs_f64() * 1000.0 / f64::from(frames);
+        println!("{preset:?} frame: {milliseconds:.2} ms over {frames} frames");
+        assert!(milliseconds < 8.3, "{preset:?} at 2880x1920 took {milliseconds:.2} ms a frame, over the 8.3 ms of 120 Hz");
     }
-    let milliseconds = began.elapsed().as_secs_f64() * 1000.0 / f64::from(frames);
-    println!("water frame: {milliseconds:.2} ms over {frames} frames");
-    assert!(milliseconds < 8.3, "water at 2880x1920 took {milliseconds:.2} ms a frame, over the 8.3 ms of 120 Hz");
+}
+
+/// Three frames half a second apart of each liquid, both facings; both liquids must visibly move, and `WISP_WATER_STRIPS` names a folder that gets the lower part of each stacked into one strip.
+#[test]
+fn liquid_strips_for_the_eye() {
+    let dir = std::env::var("WISP_WATER_STRIPS").ok();
+    let size = (1280, 720);
+    let Some(mut stage) = Stage::new(size) else { return };
+    let top = 300;
+    for (label, preset) in [("tomb", Preset::Water), ("naxx", Preset::Poison)] {
+        for (name, facing) in [("right", 1.0), ("left", -1.0)] {
+            let mut strip = Vec::new();
+            let mut frames = Vec::new();
+            for _ in 0..3 {
+                stage.draw(&Stage::scene(facing, preset));
+                let rgba = stage.read();
+                strip.extend_from_slice(&rgba[(top * size.0 * 4) as usize..]);
+                frames.push(rgba);
+                std::thread::sleep(std::time::Duration::from_millis(500));
+            }
+            let water_rows = (size.0 * 4 * 560) as usize..(size.0 * 4 * size.1) as usize;
+            let moved = frames[0][water_rows.clone()].chunks(4).zip(frames[2][water_rows].chunks(4)).filter(|(a, b)| a[..3].iter().zip(&b[..3]).any(|(x, y)| x.abs_diff(*y) > 6)).count();
+            assert!(moved > (size.0 * (size.1 - 560)) as usize / 10, "the {label} surface barely moves in a second: {moved} pixels changed");
+            if let Some(dir) = &dir {
+                std::fs::create_dir_all(dir).unwrap();
+                capture::write(&PathBuf::from(dir).join(format!("waterlook-{label}-{name}.png")), size.0, (size.1 - top) * 3, &strip).unwrap();
+            }
+        }
+    }
 }
 
 fn mean(rgba: &[u8], width: u32, x: std::ops::Range<u32>, y: std::ops::Range<u32>) -> [f32; 3] {

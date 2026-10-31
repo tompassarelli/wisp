@@ -170,6 +170,55 @@ fn embers(p: vec2<f32>, time: f32, density: f32) -> f32 {
     return min(glow, 1.0);
 }
 
+// Long low swells stretched along the stage and drifting both ways, whose strength wanders with a slow noise so the crests never repeat: the gradient of four skewed sines, so the surface streaks and rolls instead of shimmering as grain.
+fn swell(p: vec2<f32>, time: f32) -> vec2<f32> {
+    var gradient = vec2<f32>(0.0);
+    for (var layer = 0; layer < 4; layer++) {
+        let w = f32(layer);
+        let k = vec2<f32>(0.0026 + 0.0011 * w, 0.0105 + 0.0045 * w) * select(vec2<f32>(1.0, 1.0), vec2<f32>(-1.0, 1.0), (layer & 1) == 1);
+        let phase = dot(k, p) + w * 2.1 - time * (0.35 + 0.18 * w);
+        gradient += k * (cos(phase) * 21.0 / (1.0 + w * 0.8));
+    }
+    return gradient * (0.55 + 0.9 * noise(p * 0.0011 + vec2<f32>(time * 0.02, 4.0)));
+}
+
+// Thin bright lines where two drifting noise fields, warped by slow waves, cross their middle: caustic light gathered into a moving web, widening with distance so it never aliases.
+fn web(p: vec2<f32>, time: f32, spread: f32) -> f32 {
+    let q = p * 0.0085;
+    let warped = q + vec2<f32>(sin(q.y * 2.3 + time * 0.5), sin(q.x * 2.7 - time * 0.4)) * 0.55;
+    let a = abs(noise(warped + vec2<f32>(time * 0.07, 0.0)) - 0.5);
+    let b = abs(noise(warped * 1.9 + vec2<f32>(9.0, -time * 0.09)) - 0.5);
+    let wide = min(spread, 3.0);
+    return (1.0 - smoothstep(0.0, 0.06 * wide, min(a, b))) / wide;
+}
+
+// Poison's inner light: spiral arms around slowly wandering whirlpool centres over drifting ridged veins. x is the veins, y the arms.
+fn swirl(p: vec2<f32>, time: f32) -> vec2<f32> {
+    let q = p * 0.005;
+    let turn = noise(q * 0.6 + vec2<f32>(time * 0.02, 3.0)) * 12.5;
+    let warped = q + vec2<f32>(cos(turn), sin(turn)) * 0.8;
+    let vein = pow(1.0 - abs(2.0 * noise(warped * 2.0 - vec2<f32>(0.0, time * 0.07)) - 1.0), 4.0);
+    let size = 760.0;
+    let cell = floor(p / size);
+    var arms = 0.0;
+    let toward = step(vec2<f32>(0.5), fract(p / size)) * 2.0 - 1.0;
+    for (var oy = 0; oy <= 1; oy++) {
+        for (var ox = 0; ox <= 1; ox++) {
+            let c = cell + vec2<f32>(f32(ox), f32(oy)) * toward;
+            let h = hash(c + vec2<f32>(2.1, 8.4));
+            let h2 = hash(c + vec2<f32>(15.3, 1.9));
+            let centre = (c + vec2<f32>(0.2 + 0.6 * h, 0.2 + 0.6 * h2) + vec2<f32>(sin(time * 0.05 + h * 6.28), cos(time * 0.04 + h2 * 6.28)) * 0.08) * size;
+            let offset = p - centre;
+            let r = length(offset);
+            let spin = select(1.0, -1.0, h2 > 0.5);
+            let angle = atan2(offset.y, offset.x) * (2.0 + floor(h * 2.0)) + spin * (r * 0.018 - time * 0.55);
+            let reach = 150.0 + 140.0 * h2;
+            arms += (0.5 + 0.5 * sin(angle)) * smoothstep(reach, reach * 0.15, r) * smoothstep(2.0, 40.0, r);
+        }
+    }
+    return vec2<f32>(vein, min(arms, 1.0));
+}
+
 @fragment
 fn fragment_main(in: Surface) -> @location(0) vec4<f32> {
     let time = water.flow.w;
@@ -186,7 +235,7 @@ fn fragment_main(in: Surface) -> @location(0) vec4<f32> {
     let near = 1.0 / spread;
     let fine = slope(uv * 1.0 + vec2<f32>(time * 0.011, time * 0.006), time, 0.004, spread);
     let coarse = slope(uv * 0.37 - vec2<f32>(time * 0.007, -time * 0.004), time * 0.7, 0.01, spread);
-    let broad = gerstner(in.world.xy, time);
+    let broad = gerstner(in.world.xy, time) + swell(in.world.xy, time) * water.sparks.z * (1.0 - 0.9 * smoothstep(1800.0, 6000.0, own));
     let strength = water.flow.y * 3.0 * calm * near;
     let n1 = normalize(vec3<f32>(-fine * strength, 1.0));
     let n2 = normalize(vec3<f32>(-coarse * strength, 1.0));
@@ -207,11 +256,13 @@ fn fragment_main(in: Surface) -> @location(0) vec4<f32> {
     let beneath = max(scene_depth(vec2<i32>(look * frame.screen.xy)) - own, 0.0);
     let bed = textureSampleLevel(refracted, clamped, look, 0.0).rgb;
     let absorb = max(1.0 - exp(-beneath * water.shallow.w), water.look.z);
-    let ramp = 1.0 - exp(-beneath * water.deep.w);
+    let ramp = max(1.0 - exp(-beneath * water.deep.w), 0.85 * (1.0 - exp(-max(own - 900.0, 0.0) * 0.00055)));
     let body = mix(water.shallow.rgb, water.deep.rgb, ramp);
     let glow = min(frame_height(uv * 1.7 + vec2<f32>(0.3, time * 0.01), time), frame_height(uv * 1.3 - vec2<f32>(time * 0.013, 0.1), time * 1.3));
     let caustic = pow(clamp(glow * 1.6, 0.0, 1.0), 3.0) * (1.0 - absorb) * water.shine.z;
     var colour = mix(bed + caustic * vec3<f32>(0.5, 0.9, 1.0), body, absorb);
+    let lines = web(in.world.xy, time, spread) * calm * water.shine.z * (1.0 - 0.45 * ramp);
+    colour += mix(vec3<f32>(0.55, 0.95, 1.0), water.glow.rgb * 1.5, step(0.0001, water.glow.w)) * lines * 0.55;
 
     var plate = 0.0;
     var rim = 0.0;
@@ -226,17 +277,24 @@ fn fragment_main(in: Surface) -> @location(0) vec4<f32> {
     }
     if (water.glow.w > 0.0) {
         let pulse = 0.85 + 0.15 * sin(time * 0.8 + noise(in.world.xy * 0.02) * 6.28);
-        let source = (0.35 + 0.65 * ramp) * (1.0 - plate) * pulse;
+        let source = (0.35 + 0.65 * ramp) * (1.0 - plate) * pulse * (1.0 - 0.55 * step(0.0001, water.sparks.y));
         colour += water.glow.rgb * water.glow.w * (source + rim * 1.6);
+    }
+    if (water.sparks.y > 0.0) {
+        let lit = swirl(in.world.xy, time);
+        colour += water.glow.rgb * water.sparks.y * (lit.x * 0.55 + lit.y * 1.1) * (0.4 + 0.6 * ramp) * (1.0 - 0.6 * smoothstep(4000.0, 9000.0, own));
     }
     let mirror = screen + vec2<f32>(normal.x, -normal.y) * 0.5 * water.shine.w + wobble * 2.5;
     let sky = textureSampleLevel(reflected, clamped, clamp(mirror, vec2<f32>(0.002), vec2<f32>(0.998)), 0.0).rgb;
     colour = mix(colour, sky, clamp(fresnel * water.wave.w, 0.0, 1.0));
 
-    if (frame.light_key.w > 0.5) {
-        let half = normalize(frame.light_toward.xyz + view);
+    let lit_scene = frame.light_key.w > 0.5;
+    let sun = select(normalize(vec3<f32>(0.2, 0.55, 0.8)), frame.light_toward.xyz, lit_scene);
+    let sun_colour = select(vec3<f32>(1.0, 0.95, 0.85), frame.light_key.rgb, lit_scene);
+    {
+        let half = normalize(sun + view);
         let glints = mix(0.7, 0.45 + 0.55 * (noise(in.world.xy * 0.4 + time * 0.8) * noise(in.world.xy * 1.1 - time * 0.5) * 2.2), near);
-        colour += frame.light_key.rgb * pow(max(dot(normal, half), 0.0), water.shine.x) * water.shine.y * glints;
+        colour += sun_colour * pow(max(dot(normal, half), 0.0), water.shine.x) * water.shine.y * glints;
     }
 
     if (water.look.w > 0.0) {
@@ -246,6 +304,9 @@ fn fragment_main(in: Surface) -> @location(0) vec4<f32> {
     if (water.sparks.x > 0.0) {
         colour += water.foam.rgb * 3.0 * embers(in.world.xy, time, water.sparks.x * 0.6);
     }
+
+    let haze = smoothstep(3500.0, 11000.0, own) * 0.6 * (1.0 - step(0.0001, water.glow.w));
+    colour = mix(colour, mix(water.shallow.rgb, vec3<f32>(0.75, 0.9, 0.95), 0.35), haze);
 
     let edge = 1.0 - smoothstep(0.0, water.foam.w, thickness);
     let crest = smoothstep(0.55, 0.9, frame_height(uv * 2.3 + vec2<f32>(0.0, time * 0.02), time)) * smoothstep(0.92, 1.0, normal.z) * 0.25 * near;
