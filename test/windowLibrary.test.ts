@@ -59,10 +59,11 @@ test("[spec docs/native-window-plan.md] every revision builds in one shared fold
   }
 });
 
-test("[spec docs/native-window-plan.md] the library builds incrementally with no rustc wrapper, since sccache set in the player's environment refuses an incremental build", () => {
-  const environment = windowBuildEnvironment("/target", "hash");
-  expect(environment.CARGO_INCREMENTAL).toBe("1");
-  expect(environment.RUSTC_WRAPPER).toBe("");
+test("[spec docs/native-window-plan.md] the library builds incrementally through build.incremental and keeps the player's rustc wrapper, since sccache refuses any build under CARGO_INCREMENTAL", () => {
+  const environment: Record<string, string> = windowBuildEnvironment("/target", "hash");
+  expect(environment.CARGO_BUILD_INCREMENTAL).toBe("true");
+  expect("CARGO_INCREMENTAL" in environment).toBe(false);
+  expect("RUSTC_WRAPPER" in environment).toBe(false);
   expect(environment.CARGO_TARGET_DIR).toBe("/target");
   expect(environment.WISP_WINDOW_SOURCE).toBe("hash");
 });

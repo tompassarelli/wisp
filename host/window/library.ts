@@ -47,11 +47,11 @@ const buildCommand = (windowDirectory: string) => hasNix()
   ? ["nix", "develop", "--extra-experimental-features", "nix-command flakes", `path:${windowDirectory}`, "--command", "cargo", "build", "--release", "--locked"]
   : ["cargo", "build", "--release", "--locked"];
 
-/** The variables the library's cargo build adds to the player's environment: the shared target folder, an incremental build and the source hash the library embeds. */
+/** The variables the library's cargo build adds to the player's environment: the shared target folder, an incremental build of wisp-window beside a compiler cache for its dependencies, and the source hash the library embeds. */
 export const windowBuildEnvironment = (target: string, source: string) => ({
   CARGO_TARGET_DIR: target,
-  // CARGO_INCREMENTAL beats a user-level build.incremental = false; sccache refuses an incremental build, and an empty RUSTC_WRAPPER turns off a wrapper set anywhere
-  CARGO_INCREMENTAL: "1", RUSTC_WRAPPER: "",
+  // CARGO_BUILD_INCREMENTAL beats a user-level build.incremental = false; sccache refuses any build under CARGO_INCREMENTAL but passes an incremental crate through and caches the rest
+  CARGO_BUILD_INCREMENTAL: "true",
   WISP_WINDOW_SOURCE: source,
 });
 
