@@ -1,5 +1,8 @@
 // A chat panel a map draws in place of Warcraft's: it only reads received lines and writes its own frames.
 
+import { addChatEvent, addKeyEvent, type OsKey } from "../game/input";
+import type { Events } from "../game/events";
+import { player } from "../game/players";
 import { f32 } from "../sim/f32";
 import { addChatLine, advanceChat, chatAge, chatOpacity, createChatLog, type ChatLog, type ChatRow, type GlyphWidths, visibleChatRows } from "./chatLog";
 
@@ -39,12 +42,12 @@ export interface ChatBox {
   readonly rows: number;
 }
 
-export function registerChatEvents(trigger: trigger, slots: readonly number[]): void {
-  for (const slot of slots) TriggerRegisterPlayerChatEvent(trigger, Player(slot), "", false);
+export function registerChatEvents(events: Events, slots: readonly number[]): void {
+  for (const slot of slots) addChatEvent(events, player(slot), "", false);
 }
 
-export function registerChatHistoryKey(trigger: trigger, slots: readonly number[], key: oskeytype): void {
-  for (const slot of slots) BlzTriggerRegisterPlayerKeyEvent(trigger, Player(slot), key, 0, true);
+export function registerChatHistoryKey(events: Events, slots: readonly number[], key: OsKey): void {
+  for (const slot of slots) addKeyEvent(events, player(slot), key, 0, true);
 }
 
 export class ChatPanel {
