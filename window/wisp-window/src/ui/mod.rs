@@ -61,7 +61,7 @@ pub struct UiRenderer {
     texture_layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
     glyph_group: wgpu::BindGroup,
-    image_index: HashMap<String, usize>,
+    image_index: HashMap<String, (usize, wgpu::TextureView)>,
     image_groups: Vec<wgpu::BindGroup>,
     runs: Vec<Run>,
     glyphs: Glyphs,
@@ -248,14 +248,18 @@ impl UiRenderer {
         }
     }
 
-    /// The bind group for the image at `path`, made the first time the renderer has it; `None` while it is still decoding.
+    /// The bind group for the image at `path`, made again whenever the renderer's view for it changes (a sprite slot remade at a new size, a texture swapped); `None` while the renderer has none, such as a sprite whose model is not built.
     fn image_group(&mut self, path: &str, textures: &dyn UiTextures) -> Option<usize> {
-        if let Some(&index) = self.image_index.get(path) {
-            return Some(index);
-        }
         let view = textures.view(path)?;
+        if let Some((index, bound)) = self.image_index.get_mut(path) {
+            if *bound != *view {
+                self.image_groups[*index] = Self::texture_group(&self.device, &self.texture_layout, view, &self.sampler);
+                *bound = view.clone();
+            }
+            return Some(*index);
+        }
         self.image_groups.push(Self::texture_group(&self.device, &self.texture_layout, view, &self.sampler));
-        self.image_index.insert(path.to_string(), self.image_groups.len() - 1);
+        self.image_index.insert(path.to_string(), (self.image_groups.len() - 1, view.clone()));
         Some(self.image_groups.len() - 1)
     }
 

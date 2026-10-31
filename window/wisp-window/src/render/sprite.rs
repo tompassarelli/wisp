@@ -207,9 +207,14 @@ impl Renderer {
         self.sprites.get(index).filter(|slot| slot.size == size && slot.drawn.is_some()).map(|slot| &slot.resolved)
     }
 
-    /// Draws `shot` into sprite `index`'s target of `size`, lit by the scene's light colours from the camera's upper left; a sprite already showing this pose is left as it is.
+    /// Draws `shot` into sprite `index`'s target of `size`, lit by the scene's light colours from the camera's upper left; a sprite already showing this pose is left as it is, and one whose model is not built yet shows nothing rather than its last picture, which may be another frame's model.
     pub(crate) fn draw_sprite(&mut self, encoder: &mut wgpu::CommandEncoder, timer: &mut crate::gpu_time::PassTimer, index: usize, size: (u32, u32), shot: &Shot, scene_light: Option<&Light>) {
-        let Some(&id) = self.model_ids.get(shot.model.as_str()) else { return };
+        let Some(&id) = self.model_ids.get(shot.model.as_str()) else {
+            if let Some(slot) = self.sprites.get_mut(index) {
+                slot.drawn = None;
+            }
+            return;
+        };
         let model = &mut self.models[id];
         let bones = model.bones;
         let mut posed = vec![IDENTITY; bones];
@@ -326,3 +331,6 @@ mod tests {
         assert_eq!(skin.posed_bounds(&[lifted], &[[1.0, 1.0, 1.0, 0.0]; 2]), None);
     }
 }
+
+#[cfg(test)]
+mod gpu_tests;

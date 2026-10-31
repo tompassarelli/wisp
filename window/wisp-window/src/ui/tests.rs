@@ -47,7 +47,7 @@ fn built(hovered: bool) -> Option<(UiRenderer, Vec<(Source, Quad)>)> {
 }
 
 fn image(ui: &UiRenderer, path: &str) -> Source {
-    Source::Image(ui.image_index[path])
+    Source::Image(ui.image_index[path].0)
 }
 
 #[test]
