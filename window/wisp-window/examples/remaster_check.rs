@@ -10,7 +10,7 @@ use std::sync::Mutex;
 
 use image::imageops::{resize, FilterType};
 use image::RgbaImage;
-use wisp_window::remaster::check::{fold, measure, most_changed_block, Report, LIMITS};
+use wisp_window::remaster::check::{fold, measure, most_changed_block, limits_for, Report, FIGURE_LIMITS, LIMITS};
 use wisp_window::remaster::{device_limits, enhance, Edges, Quality, Role, Upscaler};
 use wisp_window::texture::{decode, Image};
 
@@ -165,7 +165,7 @@ fn write_crop(row: &Row, quality: Quality, upscaler: &Upscaler, out: &Path) -> R
     let source = decode(&std::fs::read(&row.path).map_err(|error| error.to_string())?)?;
     let upscaled = enhance(&source, quality, upscaler, row.edges, row.role, &row.name).ok_or("left alone")?.albedo;
     let factor = (upscaled.width / source.width) as usize;
-    let seam_worst = row.report.worst(&LIMITS).name == "seam";
+    let seam_worst = row.report.worst(limits_for(row.role)).name == "seam";
     let (source, upscaled) = if seam_worst { (roll(&source, source.width as usize / 2, source.height as usize / 2), roll(&upscaled, upscaled.width as usize / 2, upscaled.height as usize / 2)) } else { (source, upscaled) };
     let folded = fold(&upscaled, source.width, source.height)?;
     let size = CROP.min(source.width as usize).min(source.height as usize);
@@ -210,13 +210,13 @@ fn main() {
     for (role, label) in [(Role::Figure, "figures (fighters, effects)"), (Role::Scenery, "scenery (stages, terrain)")] {
         println!("upscaler for {label}: {} on {} textures", upscaler.method(role), rows.iter().filter(|row| row.role == role).count());
     }
-    rows.sort_by(|a, b| b.report.worst(&LIMITS).ratio().total_cmp(&a.report.worst(&LIMITS).ratio()).then_with(|| a.name.cmp(&b.name)));
-    println!("limits: hue {}deg, saturation {}, seam {}, detail kept >= {}, detail added <= {}, alpha moved {}", LIMITS.hue_degrees, LIMITS.saturation, LIMITS.seam, LIMITS.detail_kept, LIMITS.detail_added, LIMITS.alpha_moved);
+    rows.sort_by(|a, b| b.report.worst(limits_for(b.role)).ratio().total_cmp(&a.report.worst(limits_for(a.role)).ratio()).then_with(|| a.name.cmp(&b.name)));
+    println!("limits: hue {}deg (figures {}deg), saturation {}, seam {}, detail kept >= {}, detail added <= {}, alpha moved {}", LIMITS.hue_degrees, FIGURE_LIMITS.hue_degrees, LIMITS.saturation, LIMITS.seam, LIMITS.detail_kept, LIMITS.detail_added, LIMITS.alpha_moved);
     println!("{:<48} {:>9}  {:>5} {:>6} {:>6} {:>6} {:>6} {:>6}  verdict", "texture", "size", "hue", "sat", "seam", "kept", "added", "alpha");
     let mut failing = 0;
     let mut by_gate = std::collections::BTreeMap::<&str, usize>::new();
     for row in &rows {
-        let failures = row.report.failures(&LIMITS);
+        let failures = row.report.failures(limits_for(row.role));
         failing += usize::from(!failures.is_empty());
         for gate in &failures {
             *by_gate.entry(gate.name).or_default() += 1;
@@ -227,7 +227,7 @@ fn main() {
     println!("\n{} textures measured, {failing} fail, {left} left alone, {unreadable} unreadable; failures by gate: {by_gate:?}", rows.len());
     println!("\nworst {worst} (crops: original | remaster | colour error x4):");
     for row in rows.iter().take(worst) {
-        let gate = row.report.worst(&LIMITS);
+        let gate = row.report.worst(limits_for(row.role));
         match write_crop(row, quality, &upscaler, &out) {
             Ok(path) => println!("{:<48} {} {:.3} against {:.3}  {}", row.name, gate.name, gate.value, gate.limit, path.display()),
             Err(error) => eprintln!("crop for {} failed: {error}", row.name),

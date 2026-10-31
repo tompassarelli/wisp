@@ -3,6 +3,7 @@
 use image::imageops::{resize, FilterType};
 use image::{ImageBuffer, Luma};
 
+use super::Role;
 use crate::texture::Image;
 
 type Gray = ImageBuffer<Luma<f32>, Vec<f32>>;
@@ -30,6 +31,16 @@ pub struct Limits {
 
 /// Thresholds chosen from the edge-directed filter's outputs over Smashcraft's imported textures (remaster section of native-window-plan.md).
 pub const LIMITS: Limits = Limits { hue_degrees: 6.0, saturation: 0.04, seam: 0.02, detail_kept: 0.95, detail_added: 0.01, alpha_moved: 0.02 };
+
+/// Figures are doubled by Real-CUGAN, whose skins drift 6 to 7 degrees of hue, so their hue limit is 8.0 (gate 141, 2026-10-31).
+pub const FIGURE_LIMITS: Limits = Limits { hue_degrees: 8.0, ..LIMITS };
+
+pub fn limits_for(role: Role) -> &'static Limits {
+    match role {
+        Role::Figure => &FIGURE_LIMITS,
+        Role::Scenery => &LIMITS,
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Report {
@@ -379,6 +390,17 @@ mod tests {
 
     fn failed(report: &Report, name: &str) -> bool {
         report.failures(&LIMITS).iter().any(|gate| gate.name == name)
+    }
+
+    #[test]
+    fn seven_degrees_of_hue_fail_scenery_and_pass_a_figure() {
+        let source = smooth(24);
+        let mut report = measure(&source, &upscale::steps(&source, 1), false).unwrap();
+        report.hue_degrees = 7.0;
+        assert!(report.failures(limits_for(Role::Scenery)).iter().any(|gate| gate.name == "hue"));
+        assert!(report.failures(limits_for(Role::Figure)).is_empty(), "{report:?}");
+        report.hue_degrees = 8.5;
+        assert!(report.failures(limits_for(Role::Figure)).iter().any(|gate| gate.name == "hue"));
     }
 
     #[test]
