@@ -575,8 +575,8 @@ executable, else `window/target/release` in a checkout, else the build in
 `~/.cache/wisp/window/HASH/release/`, where HASH covers the Cargo files, the flake and
 the crate's source and assets. `play --standalone --window native` and `window probe` first run
 `prepareWindowLibrary` (wisp:host/window/library.ts): when nothing exists at that path it runs
-`cargo build --release --locked` there with `CARGO_TARGET_DIR` set to the cache folder, once per
-revision of the source. On Linux with nix the command runs in `window/flake.nix`'s dev shell, which
+`cargo build --release --locked` with `CARGO_INCREMENTAL=1` and `CARGO_TARGET_DIR` set to one shared folder, `~/.cache/wisp/window/target`, once per
+revision of the source, then publishes the built library to that revision's `HASH/release/`. Every revision builds in the shared folder because a copied folder loses rustc's incremental state (rebuilding the crate took 26 s instead of 3 s), so a played edit rebuilds only `wisp-window` incrementally (wisp#162). On Linux with nix the command runs in `window/flake.nix`'s dev shell, which
 gives the toolchain and cmake and puts the Wayland, X11, xkbcommon, udev, Vulkan and GL store
 paths into the library's RUNPATH (`RUSTFLAGS`), so the process needs no `LD_LIBRARY_PATH`.
 On Windows cargo builds with the runner's toolchain and no runtime libraries are needed.

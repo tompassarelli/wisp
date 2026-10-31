@@ -1,5 +1,5 @@
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { Effect, Schema } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
@@ -21,7 +21,20 @@ const sourceHash = (windowDirectory: string) => {
   return hasher.digest("hex").slice(0, 16);
 };
 
-const cacheDirectory = (windowDirectory: string) => join(cacheHome(), "wisp/window", sourceHash(windowDirectory));
+const cacheRoot = () => join(cacheHome(), "wisp/window");
+
+const cacheDirectory = (windowDirectory: string) => join(cacheRoot(), sourceHash(windowDirectory));
+
+/** The one folder every revision builds in, so cargo and rustc reuse the previous revision's artifacts and incremental state; a copied folder loses the incremental state (rebuilding the crate took 26 s instead of 3 s). */
+export const workingTarget = () => join(cacheRoot(), "target");
+
+/** Moves a finished library to `path` in one rename, so a reader never sees a partial file. */
+export const publishLibrary = (built: string, path: string) => {
+  mkdirSync(dirname(path), { recursive: true });
+  const staging = `${path}.publishing`;
+  copyFileSync(built, staging);
+  renameSync(staging, path);
+};
 
 /** Where the build of `windowDirectory`'s source lands: the user cache, keyed by a hash of the source, so one package revision builds once however many checkouts consume it. */
 export const cachedWindowLibrary = (windowDirectory: string, libraryFile: string) => join(cacheDirectory(windowDirectory), "release", libraryFile);
@@ -40,11 +53,14 @@ export const buildWindowLibrary = (path: string, windowDirectory: string) => Eff
     return yield* new WindowLibraryFailure({ problem: `no wisp-window library at ${path} and no source at ${windowDirectory} to build one; set WISP_WINDOW_LIBRARY to a built library` });
   }
   const [program, ...args] = buildCommand(windowDirectory);
-  const target = cacheDirectory(windowDirectory);
-  console.log(`building wisp-window into ${target} (first run of this revision)`);
+  const target = workingTarget();
+  console.log(`building wisp-window in ${target} for ${dirname(dirname(path))} (first run of this revision)`);
+  // CARGO_INCREMENTAL beats a user-level build.incremental = false, which would leave every rebuild non-incremental
   const code = yield* ChildProcessSpawner.ChildProcessSpawner.use((spawner) => spawner.exitCode(ChildProcess.make(program!, args, {
-    cwd: windowDirectory, env: { CARGO_TARGET_DIR: target }, extendEnv: true, stdin: "ignore", stdout: "inherit", stderr: "inherit",
+    cwd: windowDirectory, env: { CARGO_TARGET_DIR: target, CARGO_INCREMENTAL: "1" }, extendEnv: true, stdin: "ignore", stdout: "inherit", stderr: "inherit",
   }))).pipe(Effect.mapError((failure) => new WindowLibraryFailure({ problem: `${program}: ${failure.message}` })));
-  if (Number(code) !== 0 || !existsSync(path)) return yield* new WindowLibraryFailure({ problem: `building wisp-window with ${program} exited ${Number(code)}` });
+  const built = join(target, "release", basename(path));
+  if (Number(code) !== 0 || !existsSync(built)) return yield* new WindowLibraryFailure({ problem: `building wisp-window with ${program} exited ${Number(code)}` });
+  publishLibrary(built, path);
   return path;
 }).pipe(Effect.provide(BunServices.layer));
