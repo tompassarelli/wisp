@@ -8,6 +8,8 @@ import * as nativeSound from "../src/game/native/sound";
 import * as nativeText from "../src/game/native/text";
 import * as filesApi from "../src/game/native/files";
 import * as nativePlayers from "../src/game/native/players";
+import * as nativeClock from "../src/game/native/clock";
+import { clock } from "../src/game/warcraft/clock";
 import * as nativeInput from "../src/game/native/input";
 import { input } from "../src/game/warcraft/input";
 import * as nativeSync from "../src/game/native/sync";
@@ -69,6 +71,7 @@ const families = [
   { name: "players", table: players, backend: nativePlayers },
   { name: "sync", table: sync, backend: nativeSync },
   { name: "input", table: input, backend: nativeInput },
+  { name: "clock", table: clock, backend: nativeClock },
   { name: "bodies", table: bodies, backend: nativeBodies },
 ] as const;
 

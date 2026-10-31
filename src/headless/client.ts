@@ -13,6 +13,7 @@ import { EmulatedCalls, logUnlessLocal } from "./nativeCalls";
 import { Lightnings } from "../game/native/lightnings";
 import { Weathers } from "./weather";
 import { ViewNatives } from "./natives/view";
+import { Clock } from "../game/native/clockStore";
 import { Effects } from "../game/native/effectStore";
 import { FileLines } from "../game/native/fileLines";
 import { effectNatives, lightningNatives, textTagNatives } from "./natives/effects";
@@ -169,6 +170,7 @@ export class HeadlessClient {
 
   readonly frames: Frames;
   readonly players: Players;
+  readonly clock: Clock;
   readonly sync: Sync;
   readonly bodies: Bodies;
 
@@ -200,12 +202,13 @@ export class HeadlessClient {
     this.frameUi = new FrameUi(() => this.frames, handle, () => this.natives.ORIGIN_FRAME_GAME_UI, options.screen);
     this.quests = new Quests(handle);
     this.players = new Players({ slot: options.slot, humans: options.humans, names: options.playerNames });
+    this.clock = new Clock(handle);
     this.sync = new Sync(options.slot, options.network);
     const behaviors = this.behaviors();
     const local = options.localNatives;
     const log = this.log;
     this.world = {
-      effects: this.effects, beams: this.lightnings, floatingText: this.textTags, view: this.view, sounds: this.sounds, frames: this.frameUi, events: this.timers, quests: this.quests, players: this.players, bodies: this.bodies, sync: this.sync, input: this.input,
+      effects: this.effects, beams: this.lightnings, floatingText: this.textTags, view: this.view, sounds: this.sounds, frames: this.frameUi, events: this.timers, quests: this.quests, players: this.players, bodies: this.bodies, sync: this.sync, input: this.input, clock: this.clock,
       files: new FileLines((path, lines) => this.preloadText.write(path, lines)),
       display: (player, text) => { if (player === this.slot) this.messages.push(text); },
       log: logUnlessLocal(log, local),
@@ -393,7 +396,10 @@ export class HeadlessClient {
     if (draw) this.draw(f32(1 / FRAMES_PER_SECOND));
     this.effects.expire(this.frame);
     this.sounds.tick();
-    this.run(() => this.timers.runDue(this.frame));
+    this.run(() => {
+      this.timers.runDue(this.frame);
+      this.clock.runDue(this.frame);
+    });
     this.bodies.settleRemovals();
   }
 
