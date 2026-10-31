@@ -118,6 +118,7 @@
     "./src/headless/nativeCost": "./src/headless/nativeCost.ts",
     "./src/headless/keyInput": "./src/headless/keyInput.ts",
     "./src/headless/pointer": "./src/headless/pointer.ts",
+    "./src/headless/pointerScript": "./src/headless/pointerScript.ts",
     "./src/headless/random": "./src/headless/random.ts",
     "./src/headless/syncChannel": "./src/headless/syncChannel.ts",
     "./src/headless/turnLedger": "./src/headless/turnLedger.ts",
