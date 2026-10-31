@@ -40,6 +40,11 @@ export function sceneryFixture(this: void, declarations: NativeDeclarations, tes
   call("ResetTerrainFog");
   equal(scenery.fog.style, undefined, "reset fog");
   call("SetSkyModel", "sky.mdx");
+  call("WispSetSkyLook", 0.125, 0.25, 0.375, 0.625, 90, 15, 1, 0.5, 0.25, 0.75, 0.5);
+  equal(scenery.environment.skyLook?.cover, 0.625, "sky look cloud cover");
+  equal(scenery.environment.skyLook?.sun[1], 0.5, "sky look sun green");
+  call("WispResetSkyLook");
+  equal(scenery.environment.skyLook, undefined, "reset sky look");
   call("BlzShowSkyBox", false);
   call("BlzShowTerrain", false);
   call("SetDayNightModels", "terrain.mdl", "unit.mdl");
