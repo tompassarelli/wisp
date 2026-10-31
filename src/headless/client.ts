@@ -22,6 +22,7 @@ import { Playing } from "./natives/playing";
 import { playerNatives } from "./natives/players";
 import { Players } from "../game/native/playerStore";
 import { Sync } from "../game/native/syncStore";
+import { Bodies } from "../game/native/bodyStore";
 import { PreloadText } from "./natives/preloadText";
 import { Sounds } from "../game/native/soundStore";
 import { soundNatives } from "./natives/sound";
@@ -166,6 +167,7 @@ export class HeadlessClient {
   readonly frames: Frames;
   readonly players: Players;
   readonly sync: Sync;
+  readonly bodies: Bodies;
 
   constructor(options: ClientOptions) {
     this.screen = options.screen;
@@ -181,12 +183,13 @@ export class HeadlessClient {
     }, options.inventory);
     const handle = (kind: string): Handle => this.handle(kind);
     const frame = (): number => this.frame;
-    this.units = new Units(options.unitStates ?? {}, handle, this.abilities);
+    this.bodies = new Bodies(handle, options.unitStates ?? {});
+    this.units = new Units(this.bodies, handle, this.abilities);
     this.effects = new Effects(handle, options.effectDeaths, frame);
     this.sounds = new Sounds(handle, options.musicSlider ?? 1, frame);
     this.soundLog = this.sounds.log;
     this.viewNatives = new ViewNatives(this.view, this.scenery);
-    this.timers = new TriggersTimers(handle, this.units);
+    this.timers = new TriggersTimers(handle, this.units, this.bodies);
     this.slot = options.slot;
     this.scope = options.scope;
     this.preloadText = new PreloadText({ slot: options.slot, filePrefix: options.filePrefix, stored: options.files, files: this.files, published: this.published,
@@ -199,7 +202,7 @@ export class HeadlessClient {
     const local = options.localNatives;
     const log = this.log;
     this.world = {
-      effects: this.effects, beams: this.lightnings, floatingText: this.textTags, view: this.view, sounds: this.sounds, frames: this.frameUi, events: this.timers, quests: this.quests, players: this.players, sync: this.sync,
+      effects: this.effects, beams: this.lightnings, floatingText: this.textTags, view: this.view, sounds: this.sounds, frames: this.frameUi, events: this.timers, quests: this.quests, players: this.players, bodies: this.bodies, sync: this.sync,
       files: new FileLines((path, lines) => this.preloadText.write(path, lines)),
       display: (player, text) => { if (player === this.slot) this.messages.push(text); },
       log: logUnlessLocal(log, local),
@@ -369,7 +372,7 @@ export class HeadlessClient {
   }
 
   unitPoses(): UnitPose[] {
-    return this.units.poses();
+    return this.bodies.poses();
   }
 
   run(body: (this: void) => void): void {
@@ -392,12 +395,12 @@ export class HeadlessClient {
     this.effects.expire(this.frame);
     this.sounds.tick();
     this.run(() => this.timers.runDue(this.frame));
-    this.units.settleRemovals();
+    this.bodies.settleRemovals();
   }
 
   draw(seconds: number): void {
     this.effects.draw(f32(seconds));
-    this.units.draw(seconds);
+    this.bodies.draw(seconds);
   }
 
   deliverSync(message: SyncMessage): void {

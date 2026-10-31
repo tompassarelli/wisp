@@ -1,8 +1,6 @@
 import { expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { basename, join } from "node:path";
-import { transpileProject } from "typescript-to-lua";
-import { report } from "../host/toolchain/compiler";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import * as native from "../src/game/native/effects";
 import * as nativeEvents from "../src/game/native/events";
 import * as nativeFrames from "../src/game/native/frames";
@@ -25,33 +23,13 @@ import { text } from "../src/game/warcraft/text";
 import { files } from "../src/game/warcraft/files";
 import { players } from "../src/game/warcraft/players";
 import { sync } from "../src/game/warcraft/sync";
+import { bodies } from "../src/game/warcraft/bodies";
+import * as nativeBodies from "../src/game/native/bodies";
+import { compile, root, wrap } from "./gameApiCompile";
 import { view } from "../src/game/warcraft/view";
 import type { CameraField } from "../src/game/view";
 import type { SyncMessage } from "../src/headless/clientTypes";
 
-const root = join(import.meta.dir, "..");
-
-function compile(source: string): { readonly diagnostics: string; readonly lua: string } {
-  mkdirSync(join(root, "build"), { recursive: true });
-  const directory = mkdtempSync(join(root, "build/game-api-"));
-  try {
-    writeFileSync(join(directory, "main.ts"), source);
-    const config = join(directory, "tsconfig.json");
-    writeFileSync(config, JSON.stringify({
-      compilerOptions: { target: "ESNext", module: "ESNext", moduleResolution: "Bundler", strict: true, types: [], skipLibCheck: true, rootDir: "../..", outDir: "out" },
-      files: ["main.ts", "../../src/natives/warcraft.d.ts"],
-      tstl: { luaTarget: "5.3", luaBundle: "map.lua", luaBundleEntry: "main.ts", noImplicitSelf: true, noHeader: true,
-        luaPlugins: [{ name: "../../plugins/warcraft-numbers.ts" }, { name: "../../plugins/game-api.ts" }] },
-    }));
-    const result = transpileProject(config);
-    const diagnostics = report(result.diagnostics);
-    return { diagnostics, lua: diagnostics === "" ? readFileSync(join(directory, "out/map.lua"), "utf8").replaceAll(basename(directory), "fixture") : "" };
-  } finally {
-    rmSync(directory, { recursive: true, force: true });
-  }
-}
-
-const wrap = (body: string) => `export function run(model: string, owner: player): void {\n${body}\n}\n`;
 
 test("a lowered call compiles to the native call it replaced, byte for byte", () => {
   const lowered = compile(`import { createEffect, setEffectScale, setEffectTeamColor, createBeam, destroyBeam } from "../../src/game/effects";\n` + wrap(`
@@ -88,6 +66,7 @@ const families = [
   { name: "files", table: files, backend: filesApi },
   { name: "players", table: players, backend: nativePlayers },
   { name: "sync", table: sync, backend: nativeSync },
+  { name: "bodies", table: bodies, backend: nativeBodies },
 ] as const;
 
 test.each(families)("every $name lowering row names a declared native with the arity of its Wisp function and an implemented backend call", ({ name, table, backend }) => {

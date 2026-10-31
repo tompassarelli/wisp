@@ -1,3 +1,4 @@
+import type { Bodies } from "./bodyStore";
 import type { Effects } from "./effectStore";
 import type { EventStore } from "./eventStore";
 import type { FrameUi } from "./frameUi";
@@ -20,6 +21,7 @@ export interface World {
   readonly quests: Quests;
   readonly players: Players;
   readonly sync: Sync;
+  readonly bodies: Bodies;
   /** Puts a line in the message area of the client that `player` plays, if this world is that client's. */
   readonly display: (this: void, player: unknown, text: string) => void;
   readonly sounds: Sounds;

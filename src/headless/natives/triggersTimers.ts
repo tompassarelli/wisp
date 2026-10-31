@@ -8,6 +8,7 @@ import { FRAMES_PER_SECOND } from "../../game/native/frameRate";
 import { isFrame } from "../../game/native/frameUi";
 import { type Sync, SYNC_LIMIT } from "../../game/native/syncStore";
 import { after } from "./timerDeadline";
+import type { Bodies } from "../../game/native/bodyStore";
 import type { Unit, Units } from "./units";
 
 type Callback = (this: void) => void;
@@ -87,7 +88,7 @@ export class TriggersTimers implements EventStore {
   private readonly registrations: Registration[] = [];
   private readonly event: EventContext = { player: 0, syncPrefix: "", syncData: "", chat: "", key: 0, mouseX: 0, mouseY: 0, mouseButton: undefined, timer: undefined, frame: undefined, frameEvent: undefined };
 
-  constructor(private readonly handle: HandleFactory, private readonly units: Units) {}
+  constructor(private readonly handle: HandleFactory, private readonly units: Units, private readonly bodies: Bodies) {}
 
   time(): number {
     return this.now;
@@ -324,7 +325,7 @@ export class TriggersTimers implements EventStore {
       BlzGetTriggerPlayerKey: () => this.event.key,
       BlzGetTriggerPlayerMouseX: () => this.event.mouseX,
       BlzGetTriggerPlayerMouseY: () => this.event.mouseY,
-      BlzGetTriggerPlayerMousePosition: () => this.units.location(this.event.mouseX, this.event.mouseY),
+      BlzGetTriggerPlayerMousePosition: () => this.bodies.location(this.event.mouseX, this.event.mouseY),
       BlzGetTriggerPlayerMouseButton: () => this.event.mouseButton,
       GetExpiredTimer: () => this.event.timer,
       CreateTrigger: () => this.create(),

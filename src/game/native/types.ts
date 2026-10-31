@@ -31,6 +31,32 @@ export interface EffectPose extends AnimationState {
   death?: number;
 }
 
+export interface UnitPose extends AnimationState {
+  readonly handle: Handle;
+  readonly typeId: number;
+  owner: number;
+  x: number;
+  y: number;
+  z: number;
+
+  facing: number;
+  scale: [number, number, number];
+  alpha: number;
+  color: [number, number, number];
+  teamColor: number;
+  timeScale: number;
+  visible: boolean;
+}
+
+export interface UnitStateFixture {
+  readonly life: number;
+  readonly maxLife: number;
+  readonly mana: number;
+  readonly maxMana: number;
+}
+
+export type UnitStateFixtures = Readonly<Record<number, UnitStateFixture>>;
+
 export interface SoundCue {
   readonly event: "create" | "start" | "stop" | "volume";
   readonly kind: "sound" | "music";

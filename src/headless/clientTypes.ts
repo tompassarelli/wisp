@@ -1,5 +1,4 @@
 import type { Handle } from "../game/native/types";
-import type { AnimationState } from "../game/native/animation";
 
 export interface NativeCall {
   readonly name: string;
@@ -39,31 +38,7 @@ export type NativeBehaviors = Readonly<Record<string, unknown>>;
 
 export type { SoundCue } from "../game/native/types";
 
-export interface UnitPose extends AnimationState {
-  readonly handle: Handle;
-  readonly typeId: number;
-  owner: number;
-  x: number;
-  y: number;
-  z: number;
-
-  facing: number;
-  scale: [number, number, number];
-  alpha: number;
-  color: [number, number, number];
-  teamColor: number;
-  timeScale: number;
-  visible: boolean;
-}
-
-export interface UnitStateFixture {
-  readonly life: number;
-  readonly maxLife: number;
-  readonly mana: number;
-  readonly maxMana: number;
-}
-
-export type UnitStateFixtures = Readonly<Record<number, UnitStateFixture>>;
+export type { UnitPose, UnitStateFixture, UnitStateFixtures } from "../game/native/types";
 
 export interface ClientFiles {
 
