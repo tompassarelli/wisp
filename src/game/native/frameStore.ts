@@ -5,6 +5,8 @@ export interface Frame extends Handle {
 
   readonly type: string;
   readonly name: string;
+  /** The template the frame was made from: `BlzCreateFrame`'s name or `BlzCreateFrameByType`'s inherits, empty for a plain frame. */
+  template: string;
   readonly context: number;
   readonly parent: Frame | undefined;
   text: string;
@@ -141,6 +143,10 @@ export interface FrameSnapshot {
   readonly handle: Handle;
   readonly name: string;
   readonly type: string;
+  /** Set only on a frame made from a template; the native window draws a Warcraft control template's backdrop and highlight from it. */
+  readonly template?: string;
+  /** Set only on a templated frame that is under the local cursor, held down by it, or disabled. */
+  readonly control?: ControlState;
   readonly parentId: number | undefined;
   readonly rectangle: Rectangle | undefined;
   readonly text: string;
@@ -190,9 +196,13 @@ class Placements {
   cycles = 0;
 }
 
+export type ControlState = "hover" | "pushed" | "disabled";
+
 export class Frames {
   private readonly all: Frame[] = [];
   private focused: Frame | undefined;
+  private hovered: Frame | undefined;
+  private pushed: Frame | undefined;
   private readonly templates = new Map<string, FrameTemplate>();
   /** `BlzGetOriginFrame(ORIGIN_FRAME_GAME_UI, i)`: its children are drawn only inside the 4:3 area. */
   readonly gameUi = new Set<Frame>();
@@ -201,7 +211,7 @@ export class Frames {
 
   add(handle: Handle, type: string, name: string, parent: Frame | undefined, context: number): Frame {
     const frame: Frame = {
-      ...handle, type, name, context, parent, text: "", visible: true, enabled: true, level: 0, textLimit: DEFAULT_TEXT_LIMIT,
+      ...handle, type, name, template: "", context, parent, text: "", visible: true, enabled: true, level: 0, textLimit: DEFAULT_TEXT_LIMIT,
       width: 0, height: 0, points: new Map(), anchors: [], destroyed: false,
       texture: "", color: 0xffffffff, textColor: 0xffffffff, alpha: 255,
       font: { file: "", height: 0, flags: 0 }, alignment: undefined, scale: 1, plain: true,
@@ -219,6 +229,7 @@ export class Frames {
     const definition = this.templates.get(name);
     const root = this.add(handle(), definition?.type ?? name, name, parent, context);
     root.plain = false;
+    root.template = name;
     if (definition === undefined) return root;
     root.width = definition.width;
     root.height = definition.height;
@@ -279,6 +290,18 @@ export class Frames {
     else if (this.focused === frame) this.focused = undefined;
   }
 
+  /** The local cursor's control: the one under it, and the one a left press began on and still holds. */
+  point(hovered: Frame | undefined, pushed: Frame | undefined): void {
+    this.hovered = hovered;
+    this.pushed = pushed;
+  }
+
+  private control(frame: Frame): ControlState | undefined {
+    if (!frame.enabled) return "disabled";
+    if (frame !== this.hovered) return undefined;
+    return frame === this.pushed ? "pushed" : "hover";
+  }
+
   shown(frame: Frame): boolean {
     for (let at: Frame | undefined = frame; at !== undefined; at = at.parent) if (at.destroyed || !at.visible) return false;
     return true;
@@ -297,7 +320,9 @@ export class Frames {
       if (frame.destroyed) continue;
       const visible = this.shown(frame);
       if (options.visibleOnly && (!visible || frame.alpha <= 0)) continue;
+      const control = frame.template === "" ? undefined : this.control(frame);
       snapshots.push({ handle: { kind: frame.kind, id: frame.id }, name: frame.name, type: frame.type,
+        ...(frame.template === "" ? {} : { template: frame.template }), ...(control === undefined ? {} : { control }),
         parentId: frame.parent?.id, rectangle: this.rectangle(frame, placements), text: frame.text, texture: frame.texture,
         color: frame.color, textColor: frame.textColor, alpha: frame.alpha, visible, level: this.drawLevel(frame),
         font: frame.font, alignment: frameAlignment(frame), scale: frame.scale, plain: frame.plain,

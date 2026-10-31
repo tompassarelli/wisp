@@ -4,7 +4,8 @@ import { parseMDX } from "../../vendor/war3-model.mjs";
 import { lightAtHour } from "../render/dayNightLight";
 import { parsableModel } from "../models/models";
 import { drawnPoses } from "../render/culling";
-import { nativeUi, uiAssets } from "./nativeUi";
+import { nativeUi, skinned, uiAssets } from "./nativeUi";
+import { type ControlSkin, createControlSkins } from "./controlSkin";
 import { destroyedSample } from "./destroyedEffect";
 import type { FrameSnapshot } from "../../src/game/native/frameStore";
 import type { DrawnPose, RenderScene } from "../render/renderScene";
@@ -47,6 +48,8 @@ export interface ModelLibrary {
   extent(path: string, sequence: number): Extent | undefined;
   /** Reads and pushes each file once, so the window can draw the frames that name them. */
   show(paths: readonly string[]): void;
+  /** The look of a Warcraft control template read from the install, once it is read. */
+  controlSkin(template: string): ControlSkin | undefined;
   loading(): number;
   /** The key light and ambient the day-night model at `path` gives at `hours`, once the model is read. */
   light(path: string, hours: number): NativeLight | undefined;
@@ -93,6 +96,7 @@ function createDayNightLights(read: AssetReader, report: (problem: string) => vo
 export function createModelLibrary(read: AssetReader, sink: AssetSink, report: (problem: string) => void): ModelLibrary {
   const entries = new Map<string, Entry>();
   const lights = createDayNightLights(read, report);
+  const controls = createControlSkins(read, report);
   const pushed = new Map<string, Promise<void>>();
   const push = (path: string): Promise<void> => {
     const known = pushed.get(path);
@@ -145,6 +149,7 @@ export function createModelLibrary(read: AssetReader, sink: AssetSink, report: (
       }
     },
     light: lights.light,
+    controlSkin: controls.skin,
     sequences(path: string): readonly AnimationSequence[] | undefined {
       const known = entries.get(path);
       if (known === undefined) {
@@ -195,7 +200,7 @@ export function drawScene(scene: RenderScene, library: ModelLibrary) {
     const sample = destroyed ?? animationSample(sequences, { animation: pose.animation, subAnimations: pose.subAnimations, elapsed: pose.animationElapsed }, pose.unit === true ? "unit" : "effect");
     return { id: pose.handle.id, model: pose.model, matrix: Array.from(transform(pose)), sequence: sample.sequence, frame: sample.frame, clock: pose.animationClock, alpha: pose.alpha / 255, color: pose.color.map((value) => value / 255), team: (TEAMS[pose.teamColor] ?? NEUTRAL_TEAM).map((value) => value / 255) };
   };
-  const frames = nativeUi(scene.ui);
+  const frames = nativeUi(scene.ui.map((frame) => skinned(frame, library.controlSkin)));
   library.show(uiAssets(frames));
   const ui = frames.map((frame) => (frame.sprite === undefined ? frame : { ...frame, sprite: spriteOf(frame, library, scene.frame / 60) }));
   const environment = scene.environment;

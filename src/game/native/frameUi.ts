@@ -60,6 +60,7 @@ export class FrameUi {
   createByType(type: string, name: string, owner: unknown, inherits: string, context: number): Frame {
     const frame = this.made(type, name, owner, context);
     frame.plain = inherits === "";
+    frame.template = inherits;
     return frame;
   }
 

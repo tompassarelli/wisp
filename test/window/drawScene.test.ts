@@ -16,7 +16,7 @@ const scene = { frame: 0, client: 0, effects: [pose("loaded.mdx"), pose("loading
 
 test("drawScene_reduces_to_loaded_poses", () => {
   const sequences = new Map<string, readonly AnimationSequence[]>([["loaded.mdx", [STAND]]]);
-  const drawn = drawScene(scene, { sequences: (path) => sequences.get(path), show: () => undefined, loading: () => 0, light: () => undefined });
+  const drawn = drawScene(scene, { sequences: (path) => sequences.get(path), show: () => undefined, loading: () => 0, light: () => undefined, controlSkin: () => undefined });
   expect(drawn.poses.map((placed) => placed.model)).toEqual(["loaded.mdx"]);
   expect(drawn.poses[0]?.sequence).toBe(0);
   expect(drawn.poses[0]?.frame).toBe(599);
@@ -39,7 +39,7 @@ test("drawScene_sends_only_the_ui_frames_that_draw_and_asks_for_their_files", ()
   const frame = (name: string, over: object) => ({ name, rectangle: [0, 0.1, 0.1, 0], text: "", texture: "", alpha: 255, visible: true, font: { file: "", height: 0, flags: 0 }, ...over });
   const withUi = { ...scene, ui: [frame("tile", { texture: "tile.tga" }), frame("hidden", { texture: "gone.tga", visible: false }), frame("label", { text: "x", font: { file: "Fonts\\a.ttf", height: 0.01, flags: 1 } })] } as unknown as RenderScene;
   const shown: string[][] = [];
-  const drawn = drawScene(withUi, { sequences: () => undefined, show: (paths) => shown.push([...paths]), loading: () => 0, light: () => undefined });
+  const drawn = drawScene(withUi, { sequences: () => undefined, show: (paths) => shown.push([...paths]), loading: () => 0, light: () => undefined, controlSkin: () => undefined });
   expect(drawn.ui.map((each) => each.name)).toEqual(["tile", "label"]);
   expect(shown).toEqual([["tile.tga", "Fonts\\a.ttf"]]);
 });
@@ -81,7 +81,7 @@ test("drawScene_plays_a_destroyed_effect_once_and_then_drops_it", () => {
   const withDeath = [sequence("Birth", 0, 1000, false), sequence("Stand", 1000, 3000, true), sequence("Death", 3000, 4000, false)];
   const noDeath = [sequence("Birth", 0, 1000, false), sequence("Stand", 1000, 3000, true)];
   const destroyed = (frame: number, elapsed: number) => ({ ...scene, frame, effects: [{ ...pose("fx.mdx"), destroyed: 10, animationElapsed: elapsed }] } as unknown as RenderScene);
-  const drawn = (sequences: readonly AnimationSequence[], frame: number, elapsed: number) => drawScene(destroyed(frame, elapsed), { sequences: () => sequences, show: () => undefined, loading: () => 0, light: () => undefined }).poses;
+  const drawn = (sequences: readonly AnimationSequence[], frame: number, elapsed: number) => drawScene(destroyed(frame, elapsed), { sequences: () => sequences, show: () => undefined, loading: () => 0, light: () => undefined, controlSkin: () => undefined }).poses;
   expect(drawn(withDeath, 40, 9)[0]?.sequence).toBe(2);
   expect(Math.abs((drawn(withDeath, 40, 9)[0]?.frame ?? 0) - 3500)).toBeLessThanOrEqual(1);
   expect(drawn(withDeath, 40, 9)).toHaveLength(1);
@@ -92,7 +92,7 @@ test("drawScene_plays_a_destroyed_effect_once_and_then_drops_it", () => {
 
 test("preloadAssets_reads_the_listed_models_and_pushes_the_listed_textures", () => {
   const read: string[] = [], shown: string[] = [];
-  preloadAssets({ preloadModels: ["a.mdx", "b.mdx"], preloadTextures: ["hud.blp", "plate.tga"] }, { sequences: (path) => { read.push(path); return undefined; }, show: (paths) => { shown.push(...paths); }, loading: () => 0, light: () => undefined });
+  preloadAssets({ preloadModels: ["a.mdx", "b.mdx"], preloadTextures: ["hud.blp", "plate.tga"] }, { sequences: (path) => { read.push(path); return undefined; }, show: (paths) => { shown.push(...paths); }, loading: () => 0, light: () => undefined, controlSkin: () => undefined });
   expect(read).toEqual(["a.mdx", "b.mdx"]);
   expect(shown).toEqual(["hud.blp", "plate.tga"]);
 });

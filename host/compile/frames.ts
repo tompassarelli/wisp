@@ -9,7 +9,7 @@ const FRAME_POINTS = ["TOPLEFT", "TOP", "TOPRIGHT", "LEFT", "CENTER", "RIGHT", "
 type FramePoint = (typeof FRAME_POINTS)[number];
 
 const WARCRAFT_TEMPLATES = ["ScriptDialogButton", "EscMenuBackdrop"] as const;
-const WARCRAFT_TEMPLATE_FDFS = new Map<string, string>([
+export const WARCRAFT_TEMPLATE_FDFS = new Map<string, string>([
   ["ScriptDialogButton", "UI\\FrameDef\\UI\\ScriptDialog.fdf"],
   ["EscMenuBackdrop", "UI\\FrameDef\\UI\\EscMenuTemplates.fdf"],
 ]);

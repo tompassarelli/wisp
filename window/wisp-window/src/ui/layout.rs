@@ -14,6 +14,11 @@ const UNITS_WIDE: f32 = 0.8;
 /// A rectangle in pixels: x, y, width, height.
 pub type Pixels = [f32; 4];
 
+/// Pixels per UI unit in a UI area `area_height` pixels high.
+pub fn unit_pixels(area_height: f32) -> f32 {
+    area_height / UNITS_HIGH
+}
+
 /// UI units are 0.8 x 0.6 at 4:3, scaled by the screen height and centred horizontally.
 pub fn pixels(rectangle: [f32; 4], area: Pixels) -> Pixels {
     let [left, top, right, bottom] = rectangle;

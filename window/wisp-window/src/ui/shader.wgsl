@@ -21,13 +21,21 @@ struct Out {
     let pixel = quad.rect.xy + at * quad.rect.zw;
     var out: Out;
     out.position = vec4<f32>(pixel.x / screen.size.x * 2.0 - 1.0, 1.0 - pixel.y / screen.size.y * 2.0, 0.0, 1.0);
-    out.uv = mix(quad.uv.xy, quad.uv.zw, at);
+    out.uv = mix(quad.uv.xy, quad.uv.zw, select(at, at.yx, quad.coverage == 4u));
     out.color = quad.color;
     out.coverage = quad.coverage;
     return out;
 }
 
 @fragment fn fs(input: Out) -> @location(0) vec4<f32> {
+    let straight = shade(input);
+    if (input.coverage == 5u) {
+        return vec4<f32>(straight.rgb * straight.a, 0.0);
+    }
+    return vec4<f32>(straight.rgb * straight.a, straight.a);
+}
+
+fn shade(input: Out) -> vec4<f32> {
     let sample = textureSample(image, pick, input.uv);
     if (input.coverage == 2u) {
         return input.color;

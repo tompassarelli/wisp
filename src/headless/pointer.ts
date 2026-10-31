@@ -38,7 +38,7 @@ export function screenPoint(reading: Pick<PointerReading, "x" | "y" | "width" | 
   return { x: Math.round((reading.x - reading.width / 2) * scale + screen.width / 2), y: Math.round(reading.y * scale) };
 }
 
-export type PointerClient = Pick<HeadlessClient, "natives" | "screen" | "mouseScreenX" | "mouseScreenY" | "heldMouseButtons" | "clickTarget">;
+export type PointerClient = Pick<HeadlessClient, "natives" | "screen" | "mouseScreenX" | "mouseScreenY" | "heldMouseButtons" | "clickTarget" | "frames">;
 
 /** The clients a window's mouse drives; `LockstepClients` is one. */
 export interface PointerClients {
@@ -66,11 +66,12 @@ export function createPointerFeed(clients: PointerClients, slot: number): (readi
       else client.heldMouseButtons.delete(button);
     }
     const at = uiPoint(reading);
-    if ((reading.pressed & POINTER_LEFT) !== 0) pressedOn = client.clickTarget(at.x, at.y);
+    const target = client.clickTarget(at.x, at.y);
+    if ((reading.pressed & POINTER_LEFT) !== 0) pressedOn = target;
     if ((reading.released & POINTER_LEFT) !== 0) {
-      const target = client.clickTarget(at.x, at.y);
       if (target !== undefined && target === pressedOn) clients.click(slot, at.x, at.y);
       pressedOn = undefined;
     }
+    client.frames.point(reading.inside ? target : undefined, pressedOn);
   };
 }

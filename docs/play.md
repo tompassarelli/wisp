@@ -320,6 +320,18 @@ seconds)`, a Wisp native the Warcraft build does not have, so it calls it only f
 code. A sprite is drawn again only when its pose, size or light changes. A map tells the native window that a match is on with `WispSetPlaying(true)` and that it is back in its menus with `WispSetPlaying(false)`; the window bakes remastered art only while not playing and never changes the art mid-match (native-window-plan.md, "Remaster at load"). Chrome does not draw
 SPRITE frames.
 
+A frame made from one of Warcraft's control templates (`BlzCreateFrame("ScriptDialogButton", ...)`,
+or `BlzCreateFrameByType` inheriting it) draws as Warcraft draws it: Bun reads the template's
+frame definition file and `UI\war3skins.txt` from the player's install when the window first
+shows the frame (wisp:host/window/controlSkin.ts; the template-to-file table is
+`WARCRAFT_TEMPLATE_FDFS` in wisp:host/compile/frames.ts), follows `INHERITS` and the skin
+names, and sends the frame's backdrop with it. The window draws the background inside its
+insets, tiled at its background size, then the edge file's eight square pieces (left, right,
+top and bottom sides, the top and bottom stored upright, then the four corners) at the corner
+size. The local cursor picks the state: over the button its mouse-over highlight is added on
+top, while a left press that began on it is held its pushed backdrop shows, and a disabled
+button shows its disabled backdrop. Nothing from the install is stored.
+
 `bun wisp window probe [--baseline] [--frames N] [--out DIR]` runs the sample map's scene
 through the production player and window on a display, for N frames after 120
 warm-up frames, and writes `probe.json` with the counts `missedPresents`,
