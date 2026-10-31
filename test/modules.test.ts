@@ -48,10 +48,10 @@ farmTest("[invariant] full and incremental module reloads end in the same module
       compilerOptions: {
         target: "ESNext", lib: ["ESNext"], module: "ESNext", moduleResolution: "Bundler", strict: true,
         noUncheckedIndexedAccess: true, exactOptionalPropertyTypes: true, noEmitOnError: true, skipLibCheck: true,
-        types: ["lua-types/5.3"], rootDir: "../..", outDir: "out", sourceMap: true,
+        types: ["lua-types/5.3"], paths: { "wisp/*": ["../../*"] }, rootDir: "../..", outDir: "out", sourceMap: true,
       },
       include: ["src/**/*.ts", "../../src/natives/warcraft.d.ts"],
-      tstl: { luaTarget: "5.3", luaBundle: "map.lua", luaBundleEntry: "src/main.ts", noImplicitSelf: true, noHeader: true, luaPlugins: [{ name: "../../plugins/warcraft-numbers.ts" }] },
+      tstl: { luaTarget: "5.3", luaBundle: "map.lua", luaBundleEntry: "src/main.ts", noImplicitSelf: true, noHeader: true, luaPlugins: [{ name: "../../plugins/warcraft-numbers.ts" }, { name: "../../plugins/game-api.ts" }] },
     }));
     const compile = mapCompiler(join(directory, "tsconfig.json"));
 

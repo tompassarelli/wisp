@@ -97,6 +97,8 @@ export declare function frameColor(alpha: number, red: number, green: number, bl
 export declare function addFrameEvent(events: Events, frame: Frame, event: FrameEvent): void;
 export declare function displayText(player: Player, x: number, y: number, message: string): void;
 export declare function displayTimedText(player: Player, x: number, y: number, seconds: number, message: string): void;
+/** Shows `message` to every player; the native backend shows it to this client. */
+export declare function displayTextToAll(message: string): void;
 export declare function clearTextMessages(): void;
 export declare function debugMessage(message: string): void;
 export declare function createQuest(): Quest;

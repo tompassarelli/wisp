@@ -1,6 +1,12 @@
 // The map's TypeScript entry. The map's main() calls start() once; every hot
 // reload calls the new bundle's install(), which registers the handlers again.
 // Timers and triggers made in start() keep calling them through trampolines.
+import { abilityTooltip, bodyAbilityLevel, bodyName, createBody, mapCenterX, mapCenterY, setBodyAbilityLevel, setBodyX, setBodyY, type Body } from "wisp/game/bodies";
+import { createTimer, startTimer } from "wisp/game/clock";
+import { createEvents, onEvents } from "wisp/game/events";
+import { displayTextToAll } from "wisp/game/frames";
+import { addChatEvent } from "wisp/game/input";
+import { player as playerAt } from "wisp/game/players";
 import { configureRuntime } from "wisp/src/runtime/config";
 import { at } from "wisp/src/runtime/lookup";
 import { installDispatch, on, trampoline } from "wisp/src/map/dispatch";
@@ -18,7 +24,7 @@ interface SampleState {
   pings: number;
   readonly centerX: number;
   readonly centerY: number;
-  readonly units: readonly unit[];
+  readonly units: readonly Body[];
 }
 
 declare global {
@@ -37,25 +43,25 @@ function move(): void {
   for (let player = 0; player < sample.units.length; player++) {
     const point = pathPoint(sample.tick, player);
     const unit = at(sample.units, player);
-    SetUnitX(unit, sample.centerX + point.x);
-    SetUnitY(unit, sample.centerY + point.y);
+    setBodyX(unit, sample.centerX + point.x);
+    setBodyY(unit, sample.centerY + point.y);
   }
 }
 
 function ping(): void {
   const sample = state();
   sample.pings++;
-  DisplayTextToForce(GetPlayersAll(), `ping ${sample.pings}`);
+  displayTextToAll(`ping ${sample.pings}`);
 }
 
 function objects(): void {
   const lines: string[] = [];
   for (let player = 0; player < PLAYERS; player++) {
     const unit = at(state().units, player);
-    const level = GetUnitAbilityLevel(unit, SNOW_ID);
-    const line = `p${player}: ${GetUnitName(unit)}, ability level ${level}, ${BlzGetAbilityTooltip(SNOW_ID, level - 1)}`;
+    const level = bodyAbilityLevel(unit, SNOW_ID);
+    const line = `p${player}: ${bodyName(unit)}, ability level ${level}, ${abilityTooltip(SNOW_ID, level - 1)}`;
     lines.push(line);
-    DisplayTextToForce(GetPlayersAll(), line);
+    displayTextToAll(line);
   }
   writeLines("sample-objects.txt", lines);
 }
@@ -71,21 +77,21 @@ export function install(this: void): void {
 
 export function start(this: void): void {
   install();
-  const centerX = GetRectCenterX(bj_mapInitialPlayableArea);
-  const centerY = GetRectCenterY(bj_mapInitialPlayableArea);
-  const units: unit[] = [];
+  const centerX = mapCenterX();
+  const centerY = mapCenterY();
+  const units: Body[] = [];
   for (let player = 0; player < PLAYERS; player++) {
-    const unit = CreateUnit(Player(player), WALKER_ID, centerX, centerY, 270.0);
-    SetUnitAbilityLevel(unit, SNOW_ID, player + 1);
+    const unit = createBody(playerAt(player), WALKER_ID, centerX, centerY, 270.0);
+    setBodyAbilityLevel(unit, SNOW_ID, player + 1);
     units.push(unit);
   }
   globalThis.__sampleState = { tick: 0, pings: 0, centerX, centerY, units };
-  TimerStart(CreateTimer(), f32(0.1), true, trampoline("sample.move"));
-  const chat = CreateTrigger();
-  for (let player = 0; player < PLAYERS; player++) TriggerRegisterPlayerChatEvent(chat, Player(player), "-ping", true);
-  TriggerAddAction(chat, trampoline("sample.ping"));
-  const objectChat = CreateTrigger();
-  for (let player = 0; player < PLAYERS; player++) TriggerRegisterPlayerChatEvent(objectChat, Player(player), "-objects", true);
-  TriggerAddAction(objectChat, trampoline("sample.objects"));
+  startTimer(createTimer(), f32(0.1), true, trampoline("sample.move"));
+  const chat = createEvents();
+  for (let player = 0; player < PLAYERS; player++) addChatEvent(chat, playerAt(player), "-ping", true);
+  onEvents(chat, trampoline("sample.ping"));
+  const objectChat = createEvents();
+  for (let player = 0; player < PLAYERS; player++) addChatEvent(objectChat, playerAt(player), "-objects", true);
+  onEvents(objectChat, trampoline("sample.objects"));
   startHotReload();
 }

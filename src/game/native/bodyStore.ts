@@ -45,6 +45,11 @@ export class Bodies {
   readonly live = new Map<Handle, Body>();
   private removals: Body[] = [];
   private readonly locations = new Map<Handle, { x: number; y: number }>();
+  /** The rect `bj_mapInitialPlayableArea` holds, which `GetRectCenterX` is asked about. */
+  playableArea: unknown;
+  private readonly names = new Map<Body, string>();
+  private readonly abilities = new Map<Body, Map<number, number>>();
+  private readonly tooltips = new Map<string, string>();
 
   constructor(private readonly handle: HandleFactory, private readonly states: UnitStateFixtures) {}
 
@@ -143,6 +148,41 @@ export class Bodies {
 
   setAttackCooldown(body: Body, cooldown: number): void {
     body.attackCooldown = f32(cooldown);
+  }
+
+  setName(body: Body, name: string): void {
+    this.names.set(body, name);
+  }
+
+  name(body: Body): string {
+    return this.names.get(body) ?? "";
+  }
+
+  addAbility(body: Body, ability: number): void {
+    const levels = this.abilities.get(body) ?? new Map<number, number>();
+    if (!levels.has(ability)) levels.set(ability, 1);
+    this.abilities.set(body, levels);
+  }
+
+  removeAbility(body: Body, ability: number): void {
+    this.abilities.get(body)?.delete(ability);
+  }
+
+  abilityLevel(body: Body, ability: number): number {
+    return this.abilities.get(body)?.get(ability) ?? 0;
+  }
+
+  setAbilityLevel(body: Body, ability: number, level: number): void {
+    const levels = this.abilities.get(body);
+    if (levels?.has(ability) === true) levels.set(ability, level);
+  }
+
+  setTooltip(ability: number, level: number, tooltip: string): void {
+    this.tooltips.set(`${ability} ${level}`, tooltip);
+  }
+
+  tooltip(ability: number, level: number): string {
+    return this.tooltips.get(`${ability} ${level}`) ?? "";
   }
 
   kind(body: Body): number {

@@ -1,7 +1,7 @@
 /**
  * A family's Warcraft lowering table: the Wisp export's name to the one expression it stands for.
  * A template is `Native(arg, ...)` where each arg is `$n` (the call's nth argument, 1-based, each at most once and in order),
- * the literal `false`, `true` or an integer, a global such as `EVENT_PLAYER_LEAVE`, or a nested `Native(arg, ...)`;
+ * the literal `false`, `true` or an integer, a global such as `EVENT_PLAYER_LEAVE` or `bj_mapInitialPlayableArea`, or a nested `Native(arg, ...)`;
  * wisp:plugins/game-api.ts substitutes the arguments in place.
  */
 export type Lowering = Readonly<Record<string, string>>;
@@ -53,7 +53,7 @@ export function parseTemplate(text: string): Template {
     }
     if (/^(false|true|-?[0-9]+)$/.test(token)) return { literal: token };
     if (peek() === "(") return { call: call(token) };
-    if (/^[A-Z][A-Z0-9_]*$/.test(token)) return { global: token };
+    if (/^([A-Z][A-Z0-9_]*|bj_[A-Za-z]+)$/.test(token)) return { global: token };
     throw fail(`has an argument ${token} that is not $n, a literal, a global or a call`);
   };
   const call = (native: string): Template => {

@@ -1,3 +1,7 @@
+import { createTimer, startTimer } from "wisp/game/clock";
+import { effectX, effectY, effectZ, type Effect } from "wisp/game/effects";
+import { addFileLine, clearFileLines, endFile, startFile } from "wisp/game/files";
+import { localPlayer, playerSlot } from "wisp/game/players";
 import { runtimeConfiguration } from "../runtime/config";
 import { type SceneModel, reportedModel, sceneFile, sceneHeading, sceneModelLine, sceneReportGlobal } from "../runtime/scene";
 import { on, trampoline } from "./dispatch";
@@ -26,6 +30,9 @@ interface Recorded {
   since: number | undefined;
   drawn: boolean;
 }
+
+/** The scene report wraps Warcraft's own natives, so it holds their effect handles; the API reads them as the same effects. */
+const effectOf = (handle: unknown): Effect => handle as Effect;
 
 interface RecordedUnit extends Recorded {
   hidden: boolean;
@@ -103,7 +110,7 @@ function wrapNatives(state: SceneState): void {
       leftView(state, effect, now(state));
       state.effects.delete(handle);
       // Warcraft plays the death animation where the effect stands, and its emitters with it.
-      if (!state.options.parked(BlzGetLocalSpecialEffectX(handle), BlzGetLocalSpecialEffectY(handle), BlzGetLocalSpecialEffectZ(handle))) {
+      if (!state.options.parked(effectX(effectOf(handle)), effectY(effectOf(handle)), effectZ(effectOf(handle)))) {
         state.destroyed.set(effect.model, (state.destroyed.get(effect.model) ?? 0) + 1);
       }
     }
@@ -159,17 +166,17 @@ function wrapNatives(state: SceneState): void {
   natives.BlzSetSpecialEffectX = (handle: effect, x: number) => {
     setX(handle, x);
     const effect = state.effects.get(handle);
-    if (effect !== undefined) placed(state, effect, x, BlzGetLocalSpecialEffectY(handle), BlzGetLocalSpecialEffectZ(handle));
+    if (effect !== undefined) placed(state, effect, x, effectY(effectOf(handle)), effectZ(effectOf(handle)));
   };
   natives.BlzSetSpecialEffectY = (handle: effect, y: number) => {
     setY(handle, y);
     const effect = state.effects.get(handle);
-    if (effect !== undefined) placed(state, effect, BlzGetLocalSpecialEffectX(handle), y, BlzGetLocalSpecialEffectZ(handle));
+    if (effect !== undefined) placed(state, effect, effectX(effectOf(handle)), y, effectZ(effectOf(handle)));
   };
   natives.BlzSetSpecialEffectZ = (handle: effect, z: number) => {
     setZ(handle, z);
     const effect = state.effects.get(handle);
-    if (effect !== undefined) placed(state, effect, BlzGetLocalSpecialEffectX(handle), BlzGetLocalSpecialEffectY(handle), z);
+    if (effect !== undefined) placed(state, effect, effectX(effectOf(handle)), effectY(effectOf(handle)), z);
   };
   const { unitModel } = state.options;
   if (unitModel !== undefined) wrapUnitNatives(state, unitModel);
@@ -226,7 +233,7 @@ function wrapUnitNatives(state: SceneState, unitModel: (this: void, unitType: nu
 function observe(state: SceneState, frame: number): void {
   const { parked } = state.options;
   state.effects.forEach(function (this: unknown, effect, handle) {
-    const inView = !parked(BlzGetLocalSpecialEffectX(handle), BlzGetLocalSpecialEffectY(handle), BlzGetLocalSpecialEffectZ(handle));
+    const inView = !parked(effectX(effectOf(handle)), effectY(effectOf(handle)), effectZ(effectOf(handle)));
     if (!inView) leftView(state, effect, frame);
     else effect.since ??= frame;
     effect.drawn = inView && effect.alpha > 0 && effect.scale > 0 && !effect.flat;
@@ -285,11 +292,11 @@ function writeReport(): void {
   const frame = now(state);
   observe(state, frame);
   state.serial++;
-  PreloadGenClear();
-  PreloadGenStart();
-  Preload(sceneHeading(state.serial, frame, state.effects.size));
-  for (const model of sceneModels(state, frame)) Preload(sceneModelLine(model));
-  PreloadGenEnd(sceneFile(GetPlayerId(GetLocalPlayer()), runtimeConfiguration().filePrefix));
+  clearFileLines();
+  startFile();
+  addFileLine(sceneHeading(state.serial, frame, state.effects.size));
+  for (const model of sceneModels(state, frame)) addFileLine(sceneModelLine(model));
+  endFile(sceneFile(playerSlot(localPlayer()), runtimeConfiguration().filePrefix));
 }
 
 export function installSceneReport(): void {
@@ -304,5 +311,5 @@ export function startSceneReport(options: SceneOptions): void {
   globals[key] = state;
   wrapNatives(state);
   installSceneReport();
-  TimerStart(CreateTimer(), REPORT_SECONDS, true, trampoline(REPORT));
+  startTimer(createTimer(), REPORT_SECONDS, true, trampoline(REPORT));
 }

@@ -2,12 +2,18 @@
 
 // Poll timers must tick alike across clients regardless of their local files.
 
+import { createTimer, localElapsed, startTimer, type Timer } from "wisp/game/clock";
+import { createEvents, onEvents } from "wisp/game/events";
+import { addFileLine, clearFileLines, endFile, startFile } from "wisp/game/files";
+import { displayText } from "wisp/game/frames";
+import { localPlayer, eventPlayer, player as playerAt, playerControl, PlayerControl, playerSlot, playerSlotState, PlayerSlotState } from "wisp/game/players";
+import { addSyncEvent, sendSync, syncData } from "wisp/game/sync";
 import { acknowledgementLine, ackFile, deltaFile, formatManifest, hostFile, manifestFile, parseManifest, payloadFile, payloadKey, type Manifest } from "../runtime/gameFiles";
 import { runtimeConfiguration } from "../runtime/config";
 import { moduleHashText, parsePayload } from "../runtime/modules";
 import { floorDiv, floorMod } from "../sim/intMath";
 import { on, trampoline } from "./dispatch";
-import { readChunk } from "./fileio";
+import { readChunk } from "wisp/src/map/fileio";
 import { stringChecksum } from "./payloadChecksum";
 import { pollModelFailures } from "./modelFailures";
 
@@ -58,7 +64,7 @@ interface HotState {
   modules?: ModuleTable;
   state?: string;
 
-  clock?: timer;
+  clock?: Timer;
 }
 
 function hot(): HotState {
@@ -91,20 +97,20 @@ function latestVersion(): number {
 function playingHumans(): number {
   let count = 0;
   for (let slot = 0; slot < MAX_SLOTS; slot++) {
-    const player = Player(slot);
-    if (GetPlayerSlotState(player) === PLAYER_SLOT_STATE_PLAYING && GetPlayerController(player) === MAP_CONTROL_USER) count++;
+    const player = playerAt(slot);
+    if (playerSlotState(player) === PlayerSlotState.playing && playerControl(player) === PlayerControl.user) count++;
   }
   return count;
 }
 
-function startClock(): timer {
-  const clock = CreateTimer();
-  TimerStart(clock, 86400.0, false, () => {});
+function startClock(): Timer {
+  const clock = createTimer();
+  startTimer(clock, 86400.0, false, () => {});
   return clock;
 }
 
 function report(text: string): void {
-  DisplayTextToPlayer(GetLocalPlayer(), 0, 0, text);
+  displayText(localPlayer(), 0, 0, text);
 }
 
 function link(modules: ModuleTable): Require {
@@ -157,7 +163,7 @@ function answer(state: HotState, manifest: Manifest): void {
   if (state.next <= manifest.version) state.next = manifest.version + 1;
   const { bundle, modules } = loadLocal(state, manifest);
   state.prepared = { version: manifest.version, state: manifest.state, bundle, modules };
-  BlzSendSyncData(runtimeConfiguration().readyPrefix, `${formatManifest(manifest)} ${typeof bundle === "string" ? "refuse" : "ready"}`);
+  sendSync(runtimeConfiguration().readyPrefix, `${formatManifest(manifest)} ${typeof bundle === "string" ? "refuse" : "ready"}`);
 }
 
 function poll(): void {
@@ -185,10 +191,10 @@ function poll(): void {
 }
 
 function acknowledge(version: number, elapsed: number): void {
-  PreloadGenClear();
-  PreloadGenStart();
-  Preload(acknowledgementLine(version, elapsed));
-  PreloadGenEnd(ackFile(GetPlayerId(GetLocalPlayer()), runtimeConfiguration().filePrefix));
+  clearFileLines();
+  startFile();
+  addFileLine(acknowledgementLine(version, elapsed));
+  endFile(ackFile(playerSlot(localPlayer()), runtimeConfiguration().filePrefix));
 }
 
 function decide(state: HotState, pending: Pending): void {
@@ -210,13 +216,13 @@ function decide(state: HotState, pending: Pending): void {
   bundle.install();
   state.applied = version;
   state.clock ??= startClock();
-  acknowledge(version, TimerGetElapsed(state.clock));
+  acknowledge(version, localElapsed(state.clock));
   report(`hot reload ${version} applied`);
 }
 
 function answered(): void {
   const state = hot();
-  const text = BlzGetTriggerSyncData();
+  const text = syncData();
   const manifest = parseManifest(text);
   const verdict = text.split(" ")[5];
   if (manifest === undefined || manifest.version <= state.decided) return;
@@ -227,7 +233,7 @@ function answered(): void {
     pending = { manifest, answered: 0, waiting: playingHumans(), refused: false };
     state.pending = pending;
   }
-  const bit = 1 << GetPlayerId(GetTriggerPlayer());
+  const bit = 1 << playerSlot(eventPlayer());
   if ((pending.answered & bit) !== 0) return;
   pending.answered |= bit;
   pending.waiting--;
@@ -249,10 +255,10 @@ export function startHotReload(): void {
   const unseen = published > 0 || hostSeen() ? undefined : 1;
   globals[`${configuration.globalPrefix}Hot`] = { applied: 0, decided: 0, pending: undefined, next: published + 1, prepared: undefined, unseen };
   installHotReload();
-  const trigger = CreateTrigger();
-  for (let slot = 0; slot < MAX_SLOTS; slot++) BlzTriggerRegisterPlayerSyncEvent(trigger, Player(slot), configuration.readyPrefix, false);
-  TriggerAddAction(trigger, trampoline("hotReload.answered"));
-  TimerStart(CreateTimer(), POLL_SECONDS, true, trampoline("hotReload.poll"));
+  const trigger = createEvents();
+  for (let slot = 0; slot < MAX_SLOTS; slot++) addSyncEvent(trigger, playerAt(slot), configuration.readyPrefix);
+  onEvents(trigger, trampoline("hotReload.answered"));
+  startTimer(createTimer(), POLL_SECONDS, true, trampoline("hotReload.poll"));
 
   acknowledge(0, 0);
 }

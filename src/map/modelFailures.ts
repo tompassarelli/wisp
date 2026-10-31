@@ -1,6 +1,7 @@
+import { localPlayer, playerSlot } from "wisp/game/players";
 import { runtimeConfiguration } from "../runtime/config";
 import { modelFailureFile, modelFailureRequestFile, modelFailureTokenFile } from "../runtime/gameFiles";
-import { readChunk, writeLine } from "./fileio";
+import { readChunk, writeLine } from "wisp/src/map/fileio";
 
 interface ModelFailures {
   token: string;
@@ -17,7 +18,7 @@ function state(): ModelFailures | undefined {
 export function startModelFailures(): void {
   const config = runtimeConfiguration();
   const globals = globalThis as Record<`${string}ModelFailures`, ModelFailures | undefined>;
-  const slot = GetPlayerId(GetLocalPlayer());
+  const slot = playerSlot(localPlayer());
   let ordinal = 1;
   while (readChunk(modelFailureTokenFile(slot, ordinal, config.filePrefix)) !== undefined) ordinal++;
   const token = `${slot}-${ordinal}`;

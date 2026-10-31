@@ -43,6 +43,7 @@ export const frames: Lowering = {
   addFrameEvent: "BlzTriggerRegisterFrameEvent($1, $2, $3)",
   displayText: "DisplayTextToPlayer($1, $2, $3, $4)",
   displayTimedText: "DisplayTimedTextToPlayer($1, $2, $3, $4, $5)",
+  displayTextToAll: "DisplayTextToForce(GetPlayersAll(), $1)",
   clearTextMessages: "ClearTextMessages()",
   debugMessage: "BJDebugMsg($1)",
   createQuest: "CreateQuest()",

@@ -274,6 +274,13 @@ export function clearTextMessages(): void {
   boundWorld().log?.("ClearTextMessages", []);
 }
 
+export function displayTextToAll(message: string): void {
+  const world = boundWorld();
+  world.log?.("GetPlayersAll", []);
+  world.log?.("DisplayTextToForce", [world.players.all(), message]);
+  world.display(world.players.local(), message);
+}
+
 export function debugMessage(message: string): void {
   boundWorld().log?.("BJDebugMsg", [message]);
 }

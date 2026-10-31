@@ -4,7 +4,8 @@
     "moduleResolution": "Bundler", "strict": true, "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true, "noEmitOnError": true,
     "skipLibCheck": true, "types": ["lua-types/5.3"],
-    "rootDir": ".", "outDir": "build/package", "declaration": true
+    "rootDir": ".", "outDir": "build/package", "declaration": true,
+    "paths": { "wisp/*": ["./*"] }
   },
   "include": ["src/runtime/*.ts", "src/sim/*.ts", "src/ui/*.ts", "src/netcode/*.ts", "src/map/*.ts", "src/headless/*.ts", "src/game/native/*.ts", "src/game/*.d.ts", "src/natives/*.d.ts"],
   "exclude": ["src/**/*.test.ts", "src/**/*.tests.ts"],

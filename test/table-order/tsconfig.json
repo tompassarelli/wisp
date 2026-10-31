@@ -1,6 +1,7 @@
 {
   "extends": "../../examples/sample/tsconfig.map.json",
   "compilerOptions": {
+    "paths": { "wisp/*": ["../../*"] },
     "rootDir": "../..",
     "outDir": "../../build/table-order"
   },
@@ -8,6 +9,6 @@
   "tstl": {
     "luaBundle": "map.lua",
     "luaBundleEntry": "main.ts",
-    "luaPlugins": [{ "name": "../../plugins/warcraft-numbers.ts" }]
+    "luaPlugins": [{ "name": "../../plugins/warcraft-numbers.ts" }, { "name": "../../plugins/game-api.ts" }]
   }
 }

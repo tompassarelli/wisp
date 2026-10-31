@@ -1,3 +1,8 @@
+import { addChatEvent } from "wisp/game/input";
+import { createEvents, onEvents } from "wisp/game/events";
+import { addFileLine, clearFileLines, endFile, startFile } from "wisp/game/files";
+import { createFrameByType, FramePoint, type Frame, originFrame, OriginFrame, setFrameAbsPoint, setFrameFont, setFrameSize, setFrameText, setFrameTextAlignment, setFrameVisible, TextAlignment } from "wisp/game/frames";
+import { eventPlayer, localPlayer, player, playerSlot } from "wisp/game/players";
 import { FILE_SLOTS } from "../runtime/gameFiles";
 import { runtimeConfiguration } from "../runtime/config";
 import { type FrameWindow, frameCostFile, frameCostHeading, frameWindowLine, reportNumber, spread } from "../runtime/frameCost";
@@ -95,7 +100,7 @@ interface MeterState {
   version: number;
 
   before: { readonly version: number; readonly window: FrameWindow } | undefined;
-  readonly overlay: framehandle;
+  readonly overlay: Frame;
   shown: boolean;
   frames: number;
   capture: Capture | undefined;
@@ -196,12 +201,12 @@ function microseconds(window: FrameWindow): FrameWindow {
 }
 
 function writeReport(state: MeterState, before: { readonly version: number; readonly window: FrameWindow }): void {
-  PreloadGenClear();
-  PreloadGenStart();
-  Preload(frameCostHeading(state.version, before.version, state.step * 1000000));
-  Preload(frameWindowLine("before", microseconds(before.window)));
-  Preload(frameWindowLine("after", microseconds(summary(state, state.current))));
-  PreloadGenEnd(frameCostFile(GetPlayerId(GetLocalPlayer()), runtimeConfiguration().filePrefix));
+  clearFileLines();
+  startFile();
+  addFileLine(frameCostHeading(state.version, before.version, state.step * 1000000));
+  addFileLine(frameWindowLine("before", microseconds(before.window)));
+  addFileLine(frameWindowLine("after", microseconds(summary(state, state.current))));
+  endFile(frameCostFile(playerSlot(localPlayer()), runtimeConfiguration().filePrefix));
 }
 
 export function startFrameCostCapture(frames: number): number {
@@ -228,18 +233,18 @@ function writeCapture(state: MeterState, capture: Capture): void {
   const count = state.sections.length;
   const stampCount = state.stamps.length;
   const elapsed = state.clock === undefined ? 0 : state.clock() - capture.started;
-  PreloadGenClear();
-  PreloadGenStart();
-  Preload(frameCostCaptureHeading(capture.run, capture.limit, capture.version, state.step * 1000000, elapsed * 1000, capture.changed, state.sections, state.stamps.map(({ name }) => name)));
+  clearFileLines();
+  startFile();
+  addFileLine(frameCostCaptureHeading(capture.run, capture.limit, capture.version, state.step * 1000000, elapsed * 1000, capture.changed, state.sections, state.stamps.map(({ name }) => name)));
   for (let index = 0; index < capture.limit; index++) {
     const sections: number[] = [];
     for (let section = 0; section < count; section++) sections.push((capture.sections[index * count + section] ?? 0) * 1000000);
     const stamps: number[] = [];
     for (let stamp = 0; stamp < stampCount; stamp++) stamps.push(capture.stamps[index * stampCount + stamp] ?? 0);
-    Preload(frameCostCaptureSample(index + 1, state.clock === undefined ? undefined : (capture.lua[index] ?? 0) * 1000000, capture.natives[index] ?? 0, capture.catchUp[index] ?? 0,
+    addFileLine(frameCostCaptureSample(index + 1, state.clock === undefined ? undefined : (capture.lua[index] ?? 0) * 1000000, capture.natives[index] ?? 0, capture.catchUp[index] ?? 0,
       state.heap === undefined ? undefined : capture.gc[index] ?? 0, sections, stamps));
   }
-  PreloadGenEnd(frameCostCaptureFile(GetPlayerId(GetLocalPlayer()), capture.run, runtimeConfiguration().filePrefix));
+  endFile(frameCostCaptureFile(playerSlot(localPlayer()), capture.run, runtimeConfiguration().filePrefix));
 }
 
 function captureFrame(state: MeterState, calls: number, catchUp: number, version: number): void {
@@ -294,7 +299,7 @@ function endFrame(state: MeterState): void {
     }
   }
   state.frames++;
-  if (state.shown && floorMod(state.frames, OVERLAY_FRAMES) === 0) BlzFrameSetText(state.overlay, overlayText(state));
+  if (state.shown && floorMod(state.frames, OVERLAY_FRAMES) === 0) setFrameText(state.overlay, overlayText(state));
   state.lua = 0;
   state.frameCalls = state.calls;
 }
@@ -318,13 +323,13 @@ function measure(state: MeterState, name: string): void {
 function toggle(): void {
   const state = meter();
   const calls = state.calls;
-  if (GetTriggerPlayer() !== GetLocalPlayer()) {
+  if (eventPlayer() !== localPlayer()) {
     state.frameCalls += state.calls - calls;
     return;
   }
   state.shown = !state.shown;
-  if (state.shown) BlzFrameSetText(state.overlay, overlayText(state));
-  BlzFrameSetVisible(state.overlay, state.shown);
+  if (state.shown) setFrameText(state.overlay, overlayText(state));
+  setFrameVisible(state.overlay, state.shown);
 
   state.frameCalls += state.calls - calls;
 }
@@ -347,13 +352,13 @@ function countCalls(state: MeterState): void {
   }
 }
 
-function createOverlay(): framehandle {
-  const frame = BlzCreateFrameByType("TEXT", "WispFrameMeter", BlzGetOriginFrame(ORIGIN_FRAME_GAME_UI, 0), "", 0);
-  BlzFrameSetAbsPoint(frame, FRAMEPOINT_TOPLEFT, f32(0.58), f32(0.56));
-  BlzFrameSetSize(frame, f32(0.21), f32(0.08));
-  BlzFrameSetFont(frame, "Fonts\\FRIZQT__.TTF", f32(0.009), 0);
-  BlzFrameSetTextAlignment(frame, TEXT_JUSTIFY_TOP, TEXT_JUSTIFY_LEFT);
-  BlzFrameSetVisible(frame, false);
+function createOverlay(): Frame {
+  const frame = createFrameByType("TEXT", "WispFrameMeter", originFrame(OriginFrame.gameUi, 0), "", 0);
+  setFrameAbsPoint(frame, FramePoint.topLeft, f32(0.58), f32(0.56));
+  setFrameSize(frame, f32(0.21), f32(0.08));
+  setFrameFont(frame, "Fonts\\FRIZQT__.TTF", f32(0.009), 0);
+  setFrameTextAlignment(frame, TextAlignment.top, TextAlignment.left);
+  setFrameVisible(frame, false);
   return frame;
 }
 
@@ -396,7 +401,7 @@ export function startFrameMeter(options: FrameMeterOptions): void {
   globals[key] = state;
   countCalls(state);
   installFrameMeter();
-  const trigger = CreateTrigger();
-  for (let slot = 0; slot < FILE_SLOTS; slot++) TriggerRegisterPlayerChatEvent(trigger, Player(slot), options.toggle, true);
-  TriggerAddAction(trigger, trampoline(TOGGLE));
+  const trigger = createEvents();
+  for (let slot = 0; slot < FILE_SLOTS; slot++) addChatEvent(trigger, player(slot), options.toggle, true);
+  onEvents(trigger, trampoline(TOGGLE));
 }

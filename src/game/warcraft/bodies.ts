@@ -5,6 +5,8 @@ export const bodies: Lowering = {
   locationX: "GetLocationX($1)",
   locationY: "GetLocationY($1)",
   removeLocation: "RemoveLocation($1)",
+  mapCenterX: "GetRectCenterX(bj_mapInitialPlayableArea)",
+  mapCenterY: "GetRectCenterY(bj_mapInitialPlayableArea)",
   createBody: "CreateUnit($1, $2, $3, $4, $5)",
   removeBody: "RemoveUnit($1)",
   setBodyX: "SetUnitX($1, $2)",
@@ -34,4 +36,8 @@ export const bodies: Lowering = {
   addBodyAbility: "UnitAddAbility($1, $2)",
   removeBodyAbility: "UnitRemoveAbility($1, $2)",
   setAbilityTooltip: "BlzSetAbilityTooltip($1, $2, $3)",
+  abilityTooltip: "BlzGetAbilityTooltip($1, $2)",
+  bodyName: "GetUnitName($1)",
+  bodyAbilityLevel: "GetUnitAbilityLevel($1, $2)",
+  setBodyAbilityLevel: "SetUnitAbilityLevel($1, $2, $3)",
 };

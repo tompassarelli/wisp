@@ -1,5 +1,6 @@
 {
   "compilerOptions": {
+    "paths": { "wisp/*": ["../*"] },
     "target": "ESNext", "lib": ["ES2015"], "module": "ESNext",
     "moduleResolution": "Bundler", "strict": true, "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true, "noEmitOnError": true,
@@ -10,6 +11,6 @@
   "tstl": {
     "luaTarget": "5.3", "luaBundle": "map.lua", "luaBundleEntry": "runtime/entry.ts",
     "noImplicitSelf": true, "noHeader": true,
-    "luaPlugins": [{ "name": "../plugins/warcraft-numbers.ts" }]
+    "luaPlugins": [{ "name": "../plugins/warcraft-numbers.ts" }, { "name": "../plugins/game-api.ts" }]
   }
 }

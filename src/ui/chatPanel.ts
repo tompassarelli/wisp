@@ -1,8 +1,9 @@
 // A chat panel a map draws in place of Warcraft's: it only reads received lines and writes its own frames.
 
-import { addChatEvent, addKeyEvent, type OsKey } from "wisp/game/input";
+import { addChatEvent, addKeyEvent, chatText, type OsKey } from "wisp/game/input";
 import type { Events } from "wisp/game/events";
-import { player } from "wisp/game/players";
+import { clearFramePoints, createFrameByType, FramePoint, originFrame, OriginFrame, setFrameAbsPoint, setFrameAlpha, setFrameEnabled, setFrameFont, setFrameLevel, setFrameSize, setFrameText, setFrameTextAlignment, setFrameTexture, setFrameVisible, TextAlignment, type Frame } from "wisp/game/frames";
+import { eventPlayer, localPlayer, player, playerName, playerSlot } from "wisp/game/players";
 import { f32 } from "../sim/f32";
 import { addChatLine, advanceChat, chatAge, chatOpacity, createChatLog, type ChatLog, type ChatRow, type GlyphWidths, visibleChatRows } from "./chatLog";
 
@@ -52,8 +53,8 @@ export function registerChatHistoryKey(events: Events, slots: readonly number[],
 
 export class ChatPanel {
   private readonly log: ChatLog;
-  private readonly backdrop: framehandle;
-  private readonly rowFrames: framehandle[] = [];
+  private readonly backdrop: Frame;
+  private readonly rowFrames: Frame[] = [];
   private readonly shownText: string[] = [];
   private readonly shownAlpha: number[] = [];
   private rows: ChatRow[] = [];
@@ -65,19 +66,19 @@ export class ChatPanel {
 
   constructor(private readonly style: ChatStyle) {
     this.log = createChatLog(style.capacity);
-    const parent = BlzGetOriginFrame(ORIGIN_FRAME_GAME_UI, 0);
-    this.backdrop = BlzCreateFrameByType("BACKDROP", `${style.name}Panel`, parent, "", 0);
-    BlzFrameSetTexture(this.backdrop, style.panelTexture, 0, true);
-    BlzFrameSetLevel(this.backdrop, style.level);
-    BlzFrameSetEnable(this.backdrop, false);
-    BlzFrameSetVisible(this.backdrop, false);
+    const parent = originFrame(OriginFrame.gameUi, 0);
+    this.backdrop = createFrameByType("BACKDROP", `${style.name}Panel`, parent, "", 0);
+    setFrameTexture(this.backdrop, style.panelTexture, 0, true);
+    setFrameLevel(this.backdrop, style.level);
+    setFrameEnabled(this.backdrop, false);
+    setFrameVisible(this.backdrop, false);
     for (let index = 0; index < style.historyRows; index++) {
-      const row = BlzCreateFrameByType("TEXT", `${style.name}Row${index}`, parent, "", 0);
-      BlzFrameSetLevel(row, style.level + 1);
-      BlzFrameSetFont(row, style.font, style.fontSize, 0);
-      BlzFrameSetTextAlignment(row, TEXT_JUSTIFY_MIDDLE, TEXT_JUSTIFY_LEFT);
-      BlzFrameSetEnable(row, false);
-      BlzFrameSetVisible(row, false);
+      const row = createFrameByType("TEXT", `${style.name}Row${index}`, parent, "", 0);
+      setFrameLevel(row, style.level + 1);
+      setFrameFont(row, style.font, style.fontSize, 0);
+      setFrameTextAlignment(row, TextAlignment.middle, TextAlignment.left);
+      setFrameEnabled(row, false);
+      setFrameVisible(row, false);
       this.rowFrames.push(row);
       this.shownText.push("");
       this.shownAlpha.push(-1);
@@ -86,15 +87,15 @@ export class ChatPanel {
 
   /** Adds the line the running chat event carries; call it from the trigger's action. */
   receive(): void {
-    const text = GetEventPlayerChatString();
+    const text = chatText();
     if (this.style.ignore(text)) return;
-    const player = GetTriggerPlayer();
-    addChatLine(this.log, this.style.colour(GetPlayerId(player)), GetPlayerName(player), text);
+    const player = eventPlayer();
+    addChatLine(this.log, this.style.colour(playerSlot(player)), playerName(player), text);
   }
 
   /** Opens or closes the scrollback on the machine of the player whose key event is running. */
   toggleHistory(): void {
-    if (GetTriggerPlayer() === GetLocalPlayer()) this.historyOpen = !this.historyOpen;
+    if (eventPlayer() === localPlayer()) this.historyOpen = !this.historyOpen;
   }
 
   /** Draws the panel in `box`, or hides it when `box` is undefined; `seconds` is the time since the last call. */
@@ -131,14 +132,14 @@ export class ChatPanel {
     this.placedKey = key;
     const { rowHeight, margin, fontSize } = this.style;
     const edge = Math.max(0.0, f32(margin - f32(f32(rowHeight - fontSize) * 0.5)));
-    BlzFrameClearAllPoints(this.backdrop);
-    BlzFrameSetAbsPoint(this.backdrop, FRAMEPOINT_BOTTOMLEFT, f32(box.left - margin), f32(box.bottom - edge));
-    BlzFrameSetAbsPoint(this.backdrop, FRAMEPOINT_TOPRIGHT, f32(box.left + box.width + margin), f32(box.bottom + f32(rowHeight * count) + edge));
+    clearFramePoints(this.backdrop);
+    setFrameAbsPoint(this.backdrop, FramePoint.bottomLeft, f32(box.left - margin), f32(box.bottom - edge));
+    setFrameAbsPoint(this.backdrop, FramePoint.topRight, f32(box.left + box.width + margin), f32(box.bottom + f32(rowHeight * count) + edge));
     for (let index = 0; index < count; index++) {
-      const row = this.rowFrames[index] as framehandle;
-      BlzFrameClearAllPoints(row);
-      BlzFrameSetAbsPoint(row, FRAMEPOINT_BOTTOMLEFT, box.left, f32(box.bottom + f32(rowHeight * (count - 1 - index))));
-      BlzFrameSetSize(row, box.width, rowHeight);
+      const row = this.rowFrames[index] as Frame;
+      clearFramePoints(row);
+      setFrameAbsPoint(row, FramePoint.bottomLeft, box.left, f32(box.bottom + f32(rowHeight * (count - 1 - index))));
+      setFrameSize(row, box.width, rowHeight);
     }
   }
 
@@ -146,31 +147,31 @@ export class ChatPanel {
     const history = this.historyOpen;
     let newest = 0.0;
     for (let index = 0; index < this.rowFrames.length; index++) {
-      const row = this.rowFrames[index] as framehandle;
+      const row = this.rowFrames[index] as Frame;
       const shown = rows[index];
       if (shown === undefined) {
-        if (index < this.shownRows) BlzFrameSetVisible(row, false);
+        if (index < this.shownRows) setFrameVisible(row, false);
         continue;
       }
       if (this.shownText[index] !== shown.text) {
         this.shownText[index] = shown.text;
-        BlzFrameSetText(row, shown.text);
+        setFrameText(row, shown.text);
       }
       const opacity = history ? 1.0 : chatOpacity(chatAge(this.log, shown.born), this.style.recentSeconds, this.style.fadeSeconds);
       newest = Math.max(newest, opacity);
       const alpha = Math.floor(f32(opacity * 255.0));
       if (this.shownAlpha[index] !== alpha) {
         this.shownAlpha[index] = alpha;
-        BlzFrameSetAlpha(row, alpha);
+        setFrameAlpha(row, alpha);
       }
-      if (index >= this.shownRows) BlzFrameSetVisible(row, true);
+      if (index >= this.shownRows) setFrameVisible(row, true);
     }
     const backdropAlpha = Math.floor(f32(newest * this.style.panelAlpha));
     if (backdropAlpha !== this.backdropAlpha) {
       this.backdropAlpha = backdropAlpha;
-      BlzFrameSetAlpha(this.backdrop, backdropAlpha);
+      setFrameAlpha(this.backdrop, backdropAlpha);
     }
-    if (this.shownRows === 0) BlzFrameSetVisible(this.backdrop, true);
+    if (this.shownRows === 0) setFrameVisible(this.backdrop, true);
     this.shownRows = rows.length;
   }
 
@@ -178,7 +179,7 @@ export class ChatPanel {
     if (this.shownRows === 0) return;
     this.shownRows = 0;
     this.placedKey = "";
-    BlzFrameSetVisible(this.backdrop, false);
-    for (const row of this.rowFrames) BlzFrameSetVisible(row, false);
+    setFrameVisible(this.backdrop, false);
+    for (const row of this.rowFrames) setFrameVisible(row, false);
   }
 }

@@ -49,13 +49,25 @@ export class PreloadText {
     stored?.written(name, lines);
   }
 
+  /** The chunks of the file at `name`, which the session keeps from the first read on. */
+  read(name: string): readonly string[] | undefined {
+    const { published, stored } = this.context;
+    const chunks = this.preloaded.get(name) ?? published.get(name) ?? stored?.read(name);
+    if (chunks === undefined) {
+      this.context.missed();
+      return undefined;
+    }
+    this.preloaded.set(name, chunks);
+    return chunks;
+  }
+
   private report(lines: readonly string[]): void {
     const heading = lines[0] ?? "";
     this.context.errors.push(`error in ${heading.slice(heading.indexOf(" in ") + 4)}: ${lines[1] ?? ""}`);
   }
 
   behaviors(): Readonly<Record<string, NativeBehavior>> {
-    const { slot, published, messages, stored } = this.context;
+    const { slot, messages } = this.context;
     const show = (text: string): void => { messages.push(text); };
     return {
       DisplayTextToPlayer: (player: number, _x: number, _y: number, text: string) => {
@@ -78,12 +90,8 @@ export class PreloadText {
       },
 
       Preloader: (name: string) => {
-        const chunks = this.preloaded.get(name) ?? published.get(name) ?? stored?.read(name);
-        if (chunks === undefined) {
-          this.context.missed();
-          return;
-        }
-        this.preloaded.set(name, chunks);
+        const chunks = this.read(name);
+        if (chunks === undefined) return;
         for (let level = 0; level < chunks.length; level++) this.tooltips.set(`${FILE_IO_ABILITY} ${level}`, chunks[level] ?? "");
       },
       BlzSetAbilityTooltip: (ability: number, text: string, level: number) => {

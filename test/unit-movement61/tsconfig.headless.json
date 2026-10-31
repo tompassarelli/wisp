@@ -1,9 +1,10 @@
 {
   "extends": "../../examples/sample/tsconfig.headless.json",
-  "compilerOptions": { "rootDir": "../..", "outDir": "../../build/unit-movement61/headless" },
+  "compilerOptions": {
+    "paths": { "wisp/*": ["../../*"] }, "rootDir": "../..", "outDir": "../../build/unit-movement61/headless" },
   "include": ["headless-lua.ts", "../../src/natives/warcraft.d.ts"],
   "tstl": {
     "luaBundle": "headless.lua", "luaBundleEntry": "headless-lua.ts",
-    "luaPlugins": [{ "name": "../../plugins/warcraft-numbers.ts" }]
+    "luaPlugins": [{ "name": "../../plugins/warcraft-numbers.ts" }, { "name": "../../plugins/game-api.ts" }]
   }
 }

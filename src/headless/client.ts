@@ -201,7 +201,7 @@ export class HeadlessClient {
       messages: this.messages, errors: this.errors, missed: () => { this.missedLookups++; } });
     this.frameUi = new FrameUi(() => this.frames, handle, () => this.natives.ORIGIN_FRAME_GAME_UI, options.screen);
     this.quests = new Quests(handle);
-    this.players = new Players({ slot: options.slot, humans: options.humans, names: options.playerNames });
+    this.players = new Players({ slot: options.slot, humans: options.humans, names: options.playerNames, forces: this.units });
     this.clock = new Clock(handle);
     this.sync = new Sync(options.slot, options.network);
     const behaviors = this.behaviors();
@@ -209,7 +209,7 @@ export class HeadlessClient {
     const log = this.log;
     this.world = {
       effects: this.effects, beams: this.lightnings, floatingText: this.textTags, view: this.view, sounds: this.sounds, frames: this.frameUi, events: this.timers, quests: this.quests, players: this.players, bodies: this.bodies, sync: this.sync, input: this.input, clock: this.clock,
-      files: new FileLines((path, lines) => this.preloadText.write(path, lines)),
+      files: new FileLines(this.preloadText),
       display: (player, text) => { if (player === this.slot) this.messages.push(text); },
       log: logUnlessLocal(log, local),
     };
@@ -236,6 +236,7 @@ export class HeadlessClient {
 
     for (const [name, type] of options.declarations.constants) this.natives[name] = WARCRAFT3_ENUM_VALUES[name] ?? (type === "number" ? 0 : type === "boolean" ? name === "TRUE" : name);
     for (const [name, type] of options.declarations.variables) this.natives[name] = this.defaultValue(type);
+    this.bodies.playableArea = this.natives.bj_mapInitialPlayableArea;
     const points = new Map<unknown, readonly [number, number]>();
     for (let index = 0; index < FRAME_POINTS.length; index++) {
       const [name, fromLeft, fromTop] = FRAME_POINTS[index] ?? ["", 0, 0];

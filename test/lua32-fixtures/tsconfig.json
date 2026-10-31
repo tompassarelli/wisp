@@ -1,9 +1,10 @@
 {
   "extends": "../../examples/sample/tsconfig.headless.json",
-  "compilerOptions": { "rootDir": "../..", "outDir": "../../build/lua32-fixtures" },
+  "compilerOptions": {
+    "paths": { "wisp/*": ["../../*"] }, "rootDir": "../..", "outDir": "../../build/lua32-fixtures" },
   "include": ["fixtures-lua.ts", "../../src/natives/warcraft.d.ts"],
   "tstl": {
     "luaBundle": "fixtures.lua", "luaBundleEntry": "fixtures-lua.ts",
-    "luaPlugins": [{ "name": "../../plugins/warcraft-numbers.ts" }]
+    "luaPlugins": [{ "name": "../../plugins/warcraft-numbers.ts" }, { "name": "../../plugins/game-api.ts" }]
   }
 }

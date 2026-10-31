@@ -79,7 +79,7 @@ const families = [
 test.each(families)("every $name lowering row names a declared native with the arity of its Wisp function and an implemented backend call", ({ name, table, backend, constants: families }) => {
   const declarations = readNativeDeclarations();
   const declared = new Map(declarations.functions.map(([native, , parameters]) => [native, parameters] as const));
-  const constants = new Set(declarations.constants.map(([constant]) => constant));
+  const constants = new Set([...declarations.constants, ...declarations.variables].map(([constant]) => constant));
   const dts = readFileSync(join(root, `src/game/${name}.d.ts`), "utf8");
   const exported = [...dts.matchAll(/export declare function (\w+)\(([^)]*)\)/g)].map(match => [match[1]!, (match[2] ?? "").trim() === "" ? 0 : (match[2] ?? "").split(/,(?![^()]*\))/).length] as const);
   expect(exported.map(([fn]) => fn).sort()).toEqual(Object.keys(table).sort());

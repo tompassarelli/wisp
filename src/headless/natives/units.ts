@@ -15,6 +15,12 @@ export class Units {
 
   constructor(private readonly bodies: Bodies, private readonly handle: HandleFactory, private readonly abilities: Warcraft3Abilities) {}
 
+  /** The force of every player, which Warcraft's `GetPlayersAll` hands out and the game API's all-player display names. */
+  playersAll(): Handle {
+    if (this.allPlayers === undefined) this.allPlayers = this.handle("force");
+    return this.allPlayers;
+  }
+
   liveHandleCounts(): { readonly locations: number; readonly groups: number } {
     return { locations: this.bodies.liveLocations(), groups: this.groups.size };
   }
@@ -62,10 +68,7 @@ export class Units {
         return handle;
       },
       DestroyGroup: (handle: Handle) => { this.groups.delete(handle); },
-      GetPlayersAll: () => {
-        if (this.allPlayers === undefined) this.allPlayers = this.handle("force");
-        return this.allPlayers;
-      },
+      GetPlayersAll: () => this.playersAll(),
       SetPlayerAlliance: (source: number, target: number, which: string, allied: boolean) => {
         if (which !== "ALLIANCE_PASSIVE") throw new Error(`SetPlayerAlliance: unsupported alliance ${which}`);
         this.passiveAlliances.set(`${source} ${target}`, allied);

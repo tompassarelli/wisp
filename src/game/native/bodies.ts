@@ -137,7 +137,9 @@ export function bodyAttackCooldown(body: Body): number {
 }
 
 export function setBodyName(body: Body, name: string): void {
-  boundWorld().log?.("BlzSetUnitName", [body, name]);
+  const world = boundWorld();
+  world.log?.("BlzSetUnitName", [body, name]);
+  world.bodies.setName(stored(body), name);
 }
 
 export function setBodySelectionScale(body: Body, scale: number): void {
@@ -175,13 +177,55 @@ export function pauseBody(body: Body, paused: boolean): void {
 }
 
 export function addBodyAbility(body: Body, ability: number): void {
-  boundWorld().log?.("UnitAddAbility", [body, ability]);
+  const world = boundWorld();
+  world.log?.("UnitAddAbility", [body, ability]);
+  world.bodies.addAbility(stored(body), ability);
 }
 
 export function removeBodyAbility(body: Body, ability: number): void {
-  boundWorld().log?.("UnitRemoveAbility", [body, ability]);
+  const world = boundWorld();
+  world.log?.("UnitRemoveAbility", [body, ability]);
+  world.bodies.removeAbility(stored(body), ability);
 }
 
 export function setAbilityTooltip(ability: number, tooltip: string, level: number): void {
-  boundWorld().log?.("BlzSetAbilityTooltip", [ability, tooltip, level]);
+  const world = boundWorld();
+  world.log?.("BlzSetAbilityTooltip", [ability, tooltip, level]);
+  world.bodies.setTooltip(ability, level, tooltip);
+}
+
+export function abilityTooltip(ability: number, level: number): string {
+  const world = boundWorld();
+  world.log?.("BlzGetAbilityTooltip", [ability, level]);
+  return world.bodies.tooltip(ability, level);
+}
+
+export function bodyName(body: Body): string {
+  const world = boundWorld();
+  world.log?.("GetUnitName", [body]);
+  return world.bodies.name(stored(body));
+}
+
+export function bodyAbilityLevel(body: Body, ability: number): number {
+  const world = boundWorld();
+  world.log?.("GetUnitAbilityLevel", [body, ability]);
+  return world.bodies.abilityLevel(stored(body), ability);
+}
+
+export function setBodyAbilityLevel(body: Body, ability: number, level: number): void {
+  const world = boundWorld();
+  world.log?.("SetUnitAbilityLevel", [body, ability, level]);
+  world.bodies.setAbilityLevel(stored(body), ability, level);
+}
+
+export function mapCenterX(): number {
+  const world = boundWorld();
+  world.log?.("GetRectCenterX", [world.bodies.playableArea]);
+  return 0;
+}
+
+export function mapCenterY(): number {
+  const world = boundWorld();
+  world.log?.("GetRectCenterY", [world.bodies.playableArea]);
+  return 0;
 }

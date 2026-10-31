@@ -2,6 +2,8 @@ export interface PlayerSlots {
   readonly slot: number;
   readonly humans: readonly number[];
   readonly names: Readonly<Record<number, string>> | undefined;
+  /** The handle of the force of every player. */
+  readonly forces: { playersAll(): unknown };
 }
 
 /** The players of one running game: who this client is, who plays, their names and the colour the map gave each slot. */
@@ -12,6 +14,10 @@ export class Players {
 
   local(): number {
     return this.slots.slot;
+  }
+
+  all(): unknown {
+    return this.slots.forces.playersAll();
   }
 
   playing(slot: number): boolean {

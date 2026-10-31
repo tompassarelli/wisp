@@ -8,6 +8,9 @@ export declare function mapCenter(): Location;
 export declare function locationX(location: Location): number;
 export declare function locationY(location: Location): number;
 export declare function removeLocation(location: Location): void;
+/** The playable map's centre along x, as `GetRectCenterX` reads it; 0 on the native backend. */
+export declare function mapCenterX(): number;
+export declare function mapCenterY(): number;
 
 export declare function createBody(player: Player, kind: number, x: number, y: number, facing: number): Body;
 export declare function removeBody(body: Body): void;
@@ -46,3 +49,10 @@ export declare function pauseBody(body: Body, paused: boolean): void;
 export declare function addBodyAbility(body: Body, ability: number): void;
 export declare function removeBodyAbility(body: Body, ability: number): void;
 export declare function setAbilityTooltip(ability: number, tooltip: string, level: number): void;
+/** The tooltip set at `level`; the native backend holds the tooltips the game set and answers an empty string for the rest. */
+export declare function abilityTooltip(ability: number, level: number): string;
+/** The name set with `setBodyName`; the native backend holds no object data, so a body not named answers an empty string. */
+export declare function bodyName(body: Body): string;
+/** 0 when the body lacks the ability; `addBodyAbility` gives level 1. */
+export declare function bodyAbilityLevel(body: Body, ability: number): number;
+export declare function setBodyAbilityLevel(body: Body, ability: number, level: number): void;

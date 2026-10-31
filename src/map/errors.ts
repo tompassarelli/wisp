@@ -1,3 +1,6 @@
+import { addFileLine, clearFileLines, endFile, startFile } from "wisp/game/files";
+import { displayText } from "wisp/game/frames";
+import { localPlayer, playerSlot } from "wisp/game/players";
 import { errorFile, errorHeading } from "../runtime/gameFiles";
 import { runtimeConfiguration } from "../runtime/config";
 
@@ -74,10 +77,10 @@ export function reportError(handler: string, error: unknown, stack: string): voi
   if (message === state.last) return;
   state.last = message;
   state.count++;
-  if (configuration.errorsOnScreen !== false) DisplayTextToPlayer(GetLocalPlayer(), 0, 0, `error in ${handler}: ${message}`);
-  PreloadGenClear();
-  PreloadGenStart();
-  Preload(errorHeading(state.count, handler));
-  for (const line of [message, ...stack.split("\n")]) if (line !== "") Preload(line.slice(0, MAX_LINE));
-  PreloadGenEnd(errorFile(GetPlayerId(GetLocalPlayer()), configuration.filePrefix));
+  if (configuration.errorsOnScreen !== false) displayText(localPlayer(), 0, 0, `error in ${handler}: ${message}`);
+  clearFileLines();
+  startFile();
+  addFileLine(errorHeading(state.count, handler));
+  for (const line of [message, ...stack.split("\n")]) if (line !== "") addFileLine(line.slice(0, MAX_LINE));
+  endFile(errorFile(playerSlot(localPlayer()), configuration.filePrefix));
 }

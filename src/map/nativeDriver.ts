@@ -1,9 +1,12 @@
+import { createEvents, onEvents } from "wisp/game/events";
+import { eventPlayer, localPlayer, player, playerSlot } from "wisp/game/players";
+import { addSyncEvent, sendSync, syncData } from "wisp/game/sync";
 import { runtimeConfiguration } from "../runtime/config";
 import { driverCommandFile, driverReadyFile, driverStatusFile } from "../runtime/nativeDriver";
 import { checksum } from "../runtime/payload";
 import { floorDiv } from "../sim/intMath";
 import { on, trampoline } from "./dispatch";
-import { readChunk, writeLine } from "./fileio";
+import { readChunk, writeLine } from "wisp/src/map/fileio";
 
 const SYNC = "wisp.nativeDriver";
 const PREFIX = "WISP_DRIVE";
@@ -29,7 +32,7 @@ declare global {
 }
 
 function status(state: DriverState): void {
-  writeLine(driverStatusFile(runtimeConfiguration().filePrefix), `drive ${state.serial} ${state.frame} ${state.checksum} ${state.paused ? 1 : 0} ${state.players} ${GetPlayerId(GetLocalPlayer())} ${state.refused ? 1 : 0}`);
+  writeLine(driverStatusFile(runtimeConfiguration().filePrefix), `drive ${state.serial} ${state.frame} ${state.checksum} ${state.paused ? 1 : 0} ${state.players} ${playerSlot(localPlayer())} ${state.refused ? 1 : 0}`);
 }
 
 function prepare(state: DriverState): void {
@@ -45,9 +48,9 @@ export function installNativeDriver(handler: (text: string) => void): void {
   on(SYNC, () => {
     const state = globalThis.__wispDrive;
     if (state === undefined) return;
-    const fields = BlzGetTriggerSyncData().split(" ");
+    const fields = syncData().split(" ");
     const serial = Number(fields[1]);
-    const sender = GetPlayerId(GetTriggerPlayer());
+    const sender = playerSlot(eventPlayer());
     if (serial !== state.serial + 1 || (state.players & (1 << sender)) === 0) return;
     if (fields[0] === "offer") {
       if (sender !== state.leader) return;
@@ -98,9 +101,9 @@ export function startNativeDriver(players: readonly number[], leader = 0): void 
   for (const slot of players) mask |= 1 << slot;
   const state: DriverState = { serial, players: mask, leader, frame: 0, checksum: "00000000", paused: true, payload: undefined, digest: undefined, answers: 0, sent: false, polls: 0, refused: false, offered: false };
   globalThis.__wispDrive = state;
-  const trigger = CreateTrigger();
-  for (const slot of players) BlzTriggerRegisterPlayerSyncEvent(trigger, Player(slot), PREFIX, false);
-  TriggerAddAction(trigger, trampoline(SYNC));
+  const trigger = createEvents();
+  for (const slot of players) addSyncEvent(trigger, player(slot), PREFIX);
+  onEvents(trigger, trampoline(SYNC));
   status(state);
 }
 
@@ -112,11 +115,11 @@ export function serviceNativeDriver(): void {
   if (state.polls < 2) return;
   state.polls = 0;
   if (state.offered) {
-    if (!state.sent) state.sent = BlzSendSyncData(PREFIX, `ready ${state.serial + 1} ${state.refused ? "refuse" : state.digest ?? "refuse"}`);
-  } else if (GetPlayerId(GetLocalPlayer()) === state.leader && !state.sent
+    if (!state.sent) state.sent = sendSync(PREFIX, `ready ${state.serial + 1} ${state.refused ? "refuse" : state.digest ?? "refuse"}`);
+  } else if (playerSlot(localPlayer()) === state.leader && !state.sent
     && readChunk(driverReadyFile(runtimeConfiguration().filePrefix, state.serial + 1)) !== undefined) {
     prepare(state);
-    if (state.payload !== undefined && BlzSendSyncData(PREFIX, `offer ${state.serial + 1} ${state.digest ?? ""}`)) state.sent = true;
+    if (state.payload !== undefined && sendSync(PREFIX, `offer ${state.serial + 1} ${state.digest ?? ""}`)) state.sent = true;
   }
 }
 
