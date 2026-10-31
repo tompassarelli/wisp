@@ -9,13 +9,15 @@ pub const MAX_VOICES: usize = 64;
 
 pub struct Voice {
     pub clip: Arc<Clip>,
+    pub owner: String,
     pub gain: f32,
     pub pitch: f64,
+    pub looping: bool,
 }
 
 impl Voice {
-    pub fn new(clip: Arc<Clip>, volume: f64, pitch: f64) -> Voice {
-        Voice { clip, gain: (volume / 127.0).clamp(0.0, 1.0) as f32, pitch: pitch.max(0.01) }
+    pub fn new(clip: Arc<Clip>, owner: &str, volume: f64, pitch: f64, looping: bool) -> Voice {
+        Voice { clip, owner: owner.to_owned(), gain: (volume / 127.0).clamp(0.0, 1.0) as f32, pitch: pitch.max(0.01), looping }
     }
 }
 
@@ -44,6 +46,11 @@ impl Mixer {
         self.playing.push(Playing { voice, position: 0.0, step });
     }
 
+    /// Ends every voice `owner` started, as a stop cue ends its handle's sound.
+    pub fn stop(&mut self, owner: &str) {
+        self.playing.retain(|playing| playing.voice.owner != owner);
+    }
+
     pub fn render(&mut self, out: &mut [f32]) {
         out.fill(0.0);
         let channels = self.channels;
@@ -52,11 +59,14 @@ impl Mixer {
             let source = clip.channels as usize;
             let frames = clip.frames();
             for frame in out.chunks_exact_mut(channels) {
+                if playing.voice.looping && frames > 0 {
+                    playing.position %= frames as f64;
+                }
                 let index = playing.position as usize;
                 if index >= frames {
                     return false;
                 }
-                let next = (index + 1).min(frames - 1);
+                let next = if playing.voice.looping { (index + 1) % frames } else { (index + 1).min(frames - 1) };
                 let fraction = (playing.position - index as f64) as f32;
                 let at = |frame_index: usize, channel: usize| clip.samples[frame_index * source + channel];
                 for (channel, slot) in frame.iter_mut().enumerate() {
@@ -66,7 +76,7 @@ impl Mixer {
                 }
                 playing.position += playing.step;
             }
-            (playing.position as usize) < frames
+            (playing.voice.looping && frames > 0) || (playing.position as usize) < frames
         });
         for sample in out.iter_mut() {
             *sample = sample.clamp(-1.0, 1.0);
@@ -84,19 +94,35 @@ mod tests {
 
     #[test]
     fn volume_is_over_127_and_clamped() {
-        assert_eq!(Voice::new(ramp(8, 8), 127.0, 1.0).gain, 1.0);
-        assert_eq!(Voice::new(ramp(8, 8), 200.0, 1.0).gain, 1.0);
-        assert_eq!(Voice::new(ramp(8, 8), -5.0, 1.0).gain, 0.0);
-        assert!((Voice::new(ramp(8, 8), 63.5, 1.0).gain - 0.5).abs() < 1e-6);
+        assert_eq!(Voice::new(ramp(8, 8), "s", 127.0, 1.0, false).gain, 1.0);
+        assert_eq!(Voice::new(ramp(8, 8), "s", 200.0, 1.0, false).gain, 1.0);
+        assert_eq!(Voice::new(ramp(8, 8), "s", -5.0, 1.0, false).gain, 0.0);
+        assert!((Voice::new(ramp(8, 8), "s", 63.5, 1.0, false).gain - 0.5).abs() < 1e-6);
     }
 
     #[test]
     fn resampling_interpolates_linearly() {
         let mut mixer = Mixer::new(1, 16);
-        mixer.start(Voice::new(Arc::new(Clip { channels: 1, rate: 8, samples: vec![0.0, 1.0, 0.0] }), 127.0, 1.0));
+        mixer.start(Voice::new(Arc::new(Clip { channels: 1, rate: 8, samples: vec![0.0, 1.0, 0.0] }), "s", 127.0, 1.0, false));
         let mut out = [0.0; 6];
         mixer.render(&mut out);
         assert_eq!(out, [0.0, 0.5, 1.0, 0.5, 0.0, 0.0]);
+    }
+
+    #[test]
+    fn a_looping_voice_wraps_until_its_owner_stops_it() {
+        let clip = Arc::new(Clip { channels: 1, rate: 8, samples: vec![0.25, 0.5] });
+        let mut mixer = Mixer::new(1, 8);
+        mixer.start(Voice::new(clip.clone(), "music", 127.0, 1.0, true));
+        mixer.start(Voice::new(clip, "sound:4", 127.0, 1.0, false));
+        let mut out = [0.0; 6];
+        mixer.render(&mut out);
+        assert_eq!(out, [0.5, 1.0, 0.25, 0.5, 0.25, 0.5]);
+        assert_eq!(mixer.playing.len(), 1);
+        mixer.stop("music");
+        mixer.render(&mut out);
+        assert_eq!(out, [0.0; 6]);
+        assert!(mixer.playing.is_empty());
     }
 
 }

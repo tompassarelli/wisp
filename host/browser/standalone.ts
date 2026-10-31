@@ -29,6 +29,7 @@ function input(): StandaloneInput {
 
 const audio = new AudioContext();
 const buffers = new Map<string, Promise<AudioBuffer>>();
+const voices = new Map<string, AudioBufferSourceNode[]>();
 const decodedAssets = new Map<string, Promise<AudioBuffer>>();
 const pendingAudio = new Set<Promise<void>>();
 const missing = new Set<string>();
@@ -66,12 +67,19 @@ function sound(cue: SoundCue): void {
     });
     buffers.set(key, buffer);
   }
+  const owner = `${cue.handle.kind}:${cue.handle.id}`;
   const task = buffer.then(async (decoded) => {
     audioReadyEvents++;
+    if (cue.event === "stop") {
+      for (const voice of voices.get(owner) ?? []) voice.stop();
+      voices.delete(owner);
+    }
     if (cue.event !== "start") return;
     if (audio.state === "suspended") await audio.resume();
     const source = audio.createBufferSource(), gain = audio.createGain();
-    source.buffer = decoded; source.playbackRate.value = Math.max(0.01, cue.pitch);
+    source.buffer = decoded; source.loop = cue.looping; source.playbackRate.value = Math.max(0.01, cue.pitch);
+    voices.set(owner, [...voices.get(owner) ?? [], source]);
+    source.onended = () => voices.set(owner, (voices.get(owner) ?? []).filter((voice) => voice !== source));
     gain.gain.value = Math.max(0, Math.min(1, cue.volume / 127));
     source.connect(gain).connect(audio.destination); source.start(); audioPlayed++;
   }).catch((cause: unknown) => { missing.add(cause instanceof Error ? cause.message : String(cause)); });

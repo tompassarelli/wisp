@@ -389,13 +389,29 @@ pub unsafe extern "C" fn wisp_audio_error(out: *mut u8, capacity: usize) -> usiz
     guard(0, || copy_text(&AUDIO_ERROR.lock().unwrap_or_else(|poisoned| poisoned.into_inner()), out, capacity))
 }
 
-/// Starts the sound loaded under `key` with the page's volume (over 127) and pitch (a playback rate); returns 1 when it started and 0 when `key` isn't loaded.
+/// Starts the sound loaded under `key` as a voice of `owner` with the page's volume (over 127) and pitch (a playback rate), looping when `looping` is 1;
+/// returns 1 when it started and 0 when `key` isn't loaded.
 ///
 /// # Safety
-/// `handle` comes from `wisp_audio_open`; `key` points to `key_length` readable bytes.
+/// `handle` comes from `wisp_audio_open`; `key` and `owner` point to readable bytes of the given lengths.
 #[no_mangle]
-pub unsafe extern "C" fn wisp_audio_play(handle: *mut c_void, key: *const c_char, key_length: usize, volume: f64, pitch: f64) -> u32 {
-    guard(0, || audio(handle).map_or(0, |audio| audio.play(text(key, key_length), volume, pitch) as u32))
+pub unsafe extern "C" fn wisp_audio_play(
+    handle: *mut c_void, key: *const c_char, key_length: usize, owner: *const c_char, owner_length: usize, volume: f64, pitch: f64, looping: u32,
+) -> u32 {
+    guard(0, || audio(handle).map_or(0, |audio| audio.play(text(key, key_length), text(owner, owner_length), volume, pitch, looping != 0) as u32))
+}
+
+/// Ends every voice `owner` started.
+///
+/// # Safety
+/// `handle` comes from `wisp_audio_open`; `owner` points to `owner_length` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn wisp_audio_stop(handle: *mut c_void, owner: *const c_char, owner_length: usize) {
+    guard((), || {
+        if let Some(audio) = audio(handle) {
+            audio.stop(text(owner, owner_length));
+        }
+    })
 }
 
 /// The output, its format and the decoded and started counts as JSON; returns its full length.

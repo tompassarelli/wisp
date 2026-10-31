@@ -12,6 +12,7 @@ import { extractMapImports } from "../host/play/mapImports";
 import { createSoundResolver } from "../host/render/standaloneSound";
 import { loadGame } from "../host/window/gameModule";
 import { createSoundPlayer } from "../host/window/soundPlayer";
+import { Sounds } from "../src/game/native/soundStore";
 
 const cue = (overrides: Partial<SoundCue> & { handle: { kind: string; id: number } }): SoundCue => ({
   event: "start", kind: "sound", frame: 1, source: "Sound\\a.flac", label: undefined, volume: 127, effectiveVolume: 127, looping: false, pitch: 1, x: 0, y: 0, z: 0, ...overrides,
@@ -19,13 +20,15 @@ const cue = (overrides: Partial<SoundCue> & { handle: { kind: string; id: number
 
 const fakeAudio = () => {
   const loads: string[] = [], plays: { key: string; volume: number; pitch: number }[] = [];
+  let voices: { key: string; owner: string; looping: boolean }[] = [];
   const audio: NativeAudio = {
     load: (key) => { if (key.includes("broken")) throw new Error("not audio"); if (!loads.includes(key)) loads.push(key); },
-    play: (key, volume, pitch) => { plays.push({ key, volume, pitch }); return true; },
+    play: (key, owner, volume, pitch, looping) => { plays.push({ key, volume, pitch }); voices.push({ key, owner, looping }); return true; },
+    stop: (owner) => { voices = voices.filter((voice) => voice.owner !== owner); },
     info: () => ({ output: "fake", channels: 2, sampleRate: 48_000, bufferFrames: 256, decoded: loads.length, started: plays.length }),
     close: () => undefined,
   };
-  return { audio, loads, plays };
+  return { audio, loads, plays, voices: () => voices };
 };
 
 test("[spec docs/native-window-plan.md] a start plays at the cue's volume and pitch, and a second handle with the same resolved file decodes nothing new", async () => {
@@ -38,13 +41,39 @@ test("[spec docs/native-window-plan.md] a start plays at the cue's volume and pi
   expect(figures).toMatchObject({ audioEvents: 3, audioReadyEvents: 3, audioPlayed: 2, audioDecodedAssets: 1, missingSounds: [], audioOutput: "fake" });
 });
 
+test("[spec docs/native-window-plan.md] changing the music, from menu to stage to victory theme and back, leaves exactly one music voice, and stopping the music silences it", async () => {
+  const { audio, voices } = fakeAudio();
+  let id = 0;
+  const sounds = new Sounds((kind) => ({ kind, id: id++ }), 1, () => 0);
+  const player = createSoundPlayer(async (cue) => ({ path: cue.source ?? "", bytes: new Uint8Array(4) }), audio);
+  const music = async () => {
+    player.cues(sounds.log.splice(0));
+    await player.settle();
+    return voices().map((voice) => `${voice.key}${voice.looping ? " (looping)" : ""}`);
+  };
+  sounds.playMusic("Menu.mp3");
+  sounds.playMusic("Menu.mp3");
+  expect(await music()).toEqual(["menu.mp3 (looping)"]);
+  sounds.stopMusic();
+  sounds.playMusic("Stage.mp3");
+  expect(await music()).toEqual(["stage.mp3 (looping)"]);
+  sounds.stopMusic();
+  sounds.playMusic("Victory.mp3", false);
+  expect(await music()).toEqual(["victory.mp3"]);
+  sounds.playMusic("Menu.mp3");
+  expect(await music()).toEqual(["menu.mp3 (looping)"]);
+  sounds.stopMusic();
+  expect(await music()).toEqual([]);
+});
+
 test.skipIf(!existsSync(windowLibraryPath()))("[spec docs/native-window-plan.md] the library decodes Vorbis, plays it and reports the output it used", () => {
   const audio = openNativeAudio();
   try {
-    expect(audio.play("tone", 127, 1)).toBe(false);
+    expect(audio.play("tone", "sound:1", 127, 1, false)).toBe(false);
     audio.load("tone", new Uint8Array(readFileSync(join(import.meta.dir, "fixtures/tone.ogg"))));
     audio.load("tone", new Uint8Array(0));
-    expect(audio.play("tone", 127, 0.5)).toBe(true);
+    expect(audio.play("tone", "sound:1", 127, 0.5, true)).toBe(true);
+    audio.stop("sound:1");
     expect(() => audio.load("bad", new TextEncoder().encode("not audio"))).toThrow();
     expect(audio.info()).toMatchObject({ decoded: 1, started: 1, bufferFrames: expect.any(Number) });
     expect(audio.info().bufferFrames).toBeLessThanOrEqual(256);

@@ -26,12 +26,20 @@ struct Output {
     buffer_frames: u32,
 }
 
-type Voices = Arc<Mutex<Receiver<Voice>>>;
+enum Command {
+    Start(Voice),
+    Stop(String),
+}
+
+type Voices = Arc<Mutex<Receiver<Command>>>;
 
 fn drain(voices: &Voices, mixer: &mut Mixer) {
     if let Ok(voices) = voices.try_lock() {
-        while let Ok(voice) = voices.try_recv() {
-            mixer.start(voice);
+        while let Ok(command) = voices.try_recv() {
+            match command {
+                Command::Start(voice) => mixer.start(voice),
+                Command::Stop(owner) => mixer.stop(&owner),
+            }
         }
     }
 }
@@ -104,7 +112,7 @@ fn serve(voices: Voices, stop: Receiver<()>, ready: SyncSender<Output>) {
 
 pub struct Audio {
     clips: Mutex<HashMap<String, Arc<Clip>>>,
-    voices: Sender<Voice>,
+    voices: Sender<Command>,
     stop: Sender<()>,
     thread: Option<JoinHandle<()>>,
     output: Output,
@@ -139,13 +147,18 @@ impl Audio {
         Ok(())
     }
 
-    pub fn play(&self, key: &str, volume: f64, pitch: f64) -> bool {
+    /// Starts the clip under `key` as a voice of `owner`, the handle whose stop ends it; a looping voice plays until then.
+    pub fn play(&self, key: &str, owner: &str, volume: f64, pitch: f64, looping: bool) -> bool {
         let Some(clip) = self.clips().get(key).cloned() else { return false };
-        if self.voices.send(Voice::new(clip, volume, pitch)).is_err() {
+        if self.voices.send(Command::Start(Voice::new(clip, owner, volume, pitch, looping))).is_err() {
             return false;
         }
         self.started.fetch_add(1, Ordering::Relaxed);
         true
+    }
+
+    pub fn stop(&self, owner: &str) {
+        let _ = self.voices.send(Command::Stop(owner.to_owned()));
     }
 
     pub fn info(&self) -> String {

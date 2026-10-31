@@ -569,11 +569,15 @@ Playback follows the page's rules:
 - pitch as a playback-rate change, done with linear resampling in the mixer
   as WebAudio's `playbackRate` does;
 - decoded assets reused by resolved path, keeping each handle's variation;
+- a `stop` cue ends every voice its handle started, and a looping cue (the
+  music, a looping sound) repeats until then; the music has one handle, so
+  `StopMusic` and the next `PlayMusic` leave one track playing;
 - a machine with no output device mixes at the same pace into nothing, and
   `audioOutput` in `standalone.json` names what played.
 
 The library holds the output and the decoded clips (`wisp_audio_open`,
-`wisp_audio_load`, `wisp_audio_play`, `wisp_audio_info`, `wisp_audio_close`),
+`wisp_audio_load`, `wisp_audio_play`, `wisp_audio_stop`, `wisp_audio_info`,
+`wisp_audio_close`),
 apart from the window's handle, so the wake and present path is untouched. The
 thread that steps the game takes each step's cues, resolves and loads them, and
 starts the sound when its file is ready, as the page's `sound` does.
