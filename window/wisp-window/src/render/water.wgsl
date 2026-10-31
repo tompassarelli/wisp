@@ -9,7 +9,7 @@ struct Water {
     look: vec4<f32>,
     sparks: vec4<f32>,
     calm: vec4<f32>,
-    fall: array<vec4<f32>, 2>,
+    fall: array<vec4<f32>, 5>,
     mid: vec4<f32>,
     ripples: array<vec4<f32>, 32>,
 };
@@ -485,9 +485,10 @@ fn fragment_fall(in: Surface) -> @location(0) vec4<f32> {
 
     let s = streaks(along, in.world.z, time);
     let band = smoothstep(0.42, 0.5, s) * 0.55 + smoothstep(0.6, 0.68, s) * 0.45;
-    let body = mix(water.shallow.rgb, water.foam.rgb, aeration * 0.5);
-    var colour = mix(body, water.foam.rgb, band * aeration);
-    colour = mix(colour, water.deep.rgb * 1.6, pow(1.0 - s, 2.0) * 0.35);
+    let foam_colour = water.fall[4].rgb;
+    let body = mix(water.fall[2].rgb, foam_colour, aeration * 0.5);
+    var colour = mix(body, foam_colour, band * aeration);
+    colour = mix(colour, water.fall[3].rgb * 1.6, pow(1.0 - s, 2.0) * 0.35);
     var alpha = 0.7 + 0.3 * band;
 
     let thickness = max(scene_depth(vec2<i32>(in.clip.xy)) - own, 0.0);
@@ -496,7 +497,7 @@ fn fragment_fall(in: Surface) -> @location(0) vec4<f32> {
     let low = 1.0 - smoothstep(0.0, mist, max(rise, 0.0));
     let touch = 1.0 - smoothstep(0.0, 45.0, thickness);
     let foam = clamp(low * (0.45 + 0.9 * churn) + touch * 0.35 * churn, 0.0, 1.0);
-    colour = mix(colour, water.foam.rgb, foam);
+    colour = mix(colour, foam_colour, foam);
     alpha = max(alpha, foam * (0.55 + 0.45 * churn));
     alpha *= smoothstep(-0.3 * mist, 0.0, min(rise, 0.0));
 

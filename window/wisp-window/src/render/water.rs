@@ -52,7 +52,7 @@ pub(super) struct WaterUniform {
     look: [f32; 4],
     sparks: [f32; 4],
     calm: [f32; 4],
-    fall: [[f32; 4]; 2],
+    fall: [[f32; 4]; falls::ROWS],
     mid: [f32; 4],
     ripples: [[f32; 4]; 2 * SOURCES],
 }
@@ -77,7 +77,7 @@ impl WaterUniform {
             look: [settings.crust, settings.shimmer, settings.opacity, settings.bubbles],
             sparks: [settings.embers, settings.swirl, settings.swell, sources.len().min(SOURCES) as f32],
             calm: [settings.breakup, settings.detail_reach, settings.sparkle_cover, settings.haze_lift],
-            fall: Fall::WATERFALL.rows(plane),
+            fall: Fall::WATERFALL.rows(plane, linear),
             mid: [mid[0], mid[1], mid[2], settings.muted],
             ripples,
         }
