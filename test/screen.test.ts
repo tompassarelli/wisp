@@ -139,3 +139,13 @@ test("[reference wisp-standalone-menu] a child of a raised panel draws above a l
   expect(rows.get("PanelButton")!.alignment).toEqual({ vertical: "middle", horizontal: "center" });
   expect(rows.get("PanelText")!.alignment).toBeUndefined();
 });
+
+test("[reference smashcraft#862] a frame painted with a signed JASS colour reaches the window as an unsigned ARGB word", () => {
+  const client = new HeadlessClient({ slot: 0, humans: [0], declarations: readNativeDeclarations(), filePrefix: "screen", localNatives: {}, network: [], screen: { width: 1280, height: 720 } });
+  const call = (name: string, ...args: unknown[]) => (client.natives[name] as (this: void, ...args: unknown[]) => unknown)(...args);
+  const portrait = call("BlzCreateFrameByType", "BACKDROP", "portrait", undefined, "", 0);
+  call("BlzFrameSetVertexColor", portrait, -1);
+  call("BlzFrameSetTextColor", portrait, -16744193);
+  const [row] = client.frames.snapshot();
+  expect(row).toMatchObject({ name: "portrait", color: 0xffffffff, textColor: 0xff0080ff });
+});

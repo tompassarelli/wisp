@@ -5,6 +5,9 @@ import { describeValue } from "../jassFormat";
 
 export const isFrame = (value: unknown): value is Frame => typeof value === "object" && value !== null && "points" in value;
 
+// Engine: a JASS integer is signed, so BlzConvertColor gives white as -1; the native window reads a frame colour as an unsigned ARGB word.
+const argb = (color: number) => (color < 0 ? color + 4294967296 : color);
+
 export interface FrameContext {
   readonly handle: HandleFactory;
   readonly frames: (this: void) => Frames;
@@ -85,10 +88,10 @@ export function frameNatives({ handle, frames, gameUiOrigin }: FrameContext): Re
       if (isFrame(frame)) frame.spriteTime = seconds;
     },
     BlzFrameSetVertexColor: (frame: unknown, color: number) => {
-      if (isFrame(frame)) frame.color = color;
+      if (isFrame(frame)) frame.color = argb(color);
     },
     BlzFrameSetTextColor: (frame: unknown, color: number) => {
-      if (isFrame(frame)) frame.textColor = color;
+      if (isFrame(frame)) frame.textColor = argb(color);
     },
     BlzFrameSetAlpha: (frame: unknown, alpha: number) => {
       if (isFrame(frame)) frame.alpha = alpha;
