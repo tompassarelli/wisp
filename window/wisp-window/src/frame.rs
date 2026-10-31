@@ -4,7 +4,7 @@ use std::thread;
 use std::time::Duration;
 
 use crate::input::Input;
-use crate::metrics::{ms, Metrics, Series};
+use crate::metrics::{ms, Beat, Metrics, Pulse, Series};
 pub use crate::mailbox::{End, Event, Mailbox, Sample, Submission};
 use crate::pacing::{Pacer, Phase, StepClock};
 use crate::sync::lock;
@@ -73,6 +73,7 @@ pub struct FrameLoop<S: Surface, C: Clock> {
     pacer: Pacer,
     steps: StepClock,
     phase: Phase,
+    pulse: Pulse,
     pub problem: Option<String>,
     _timer: TimerResolution,
 }
@@ -94,6 +95,7 @@ impl<S: Surface, C: Clock> FrameLoop<S, C> {
             pacer: Pacer::default(),
             steps: StepClock::default(),
             phase: Phase::default(),
+            pulse: Pulse::default(),
             problem: None,
             _timer: TimerResolution::raise(),
         }
@@ -154,6 +156,10 @@ impl<S: Surface, C: Clock> FrameLoop<S, C> {
         if mode != Mode::Loading {
             let times = Times { asked, acquired, drawing, drawn, presented };
             self.publish(&outcome, &times, interval, missed);
+            let beat = Beat { presented_ns: presented, interval_ms: interval, step: self.drawn_step, late: outcome.late, dropped: outcome.dropped, acquire_ms: ms(asked, acquired), draw_ms: ms(drawing, drawn) };
+            if let Some(line) = self.pulse.beat(beat) {
+                eprintln!("{line}");
+            }
         }
         self.previous_frame_late = outcome.late;
         self.previous_acquire = Some(stamp);
@@ -195,25 +201,32 @@ impl<S: Surface, C: Clock> FrameLoop<S, C> {
         self.clock.now_ns().saturating_sub(target_ns)
     }
 
-    /// On a frame that steps the game, sleeps to the pacer's sample point, samples, and waits for the scene until the pacer's deadline; on the frames between steps it redraws the last scene.
+    /// On a frame that steps the game, sleeps to the pacer's sample point, samples, queues one sample for each step that came due and waits for the last one's scene until the pacer's deadline; on the frames between steps it redraws the last scene.
     fn sample_and_wait(&mut self, mode: Mode, seam: &impl Seam, anchor: u64, period_ms: f64) -> Outcome {
         let mut outcome = Outcome::default();
-        if !self.steps.step_now(anchor, period_ms) {
+        let steps = self.steps.steps_due(anchor, period_ms);
+        if steps == 0 {
             return outcome;
         }
         let late = self.sleep_until(anchor + (self.pacer.sample_offset_ms(period_ms) * 1e6) as u64);
         self.pacer.record_wake(late as f64 / 1e6);
-        let sample = Sample { frame: self.frame, sampled_ns: self.clock.now_ns(), input: seam.input() };
-        outcome.sampled_ns = sample.sampled_ns;
-        self.frame = self.frame.wrapping_add(1);
-        self.sample_times[sample.frame as usize % SAMPLE_MEMORY] = Some((sample.frame, sample.sampled_ns));
-        if mode == Mode::Baseline {
-            self.mailbox.submit(Submission { bytes: b"{}".to_vec(), step: sample.frame as u64, frame: sample.frame });
-        } else if !self.mailbox.push_sample(sample) {
-            outcome.dropped = true;
+        let sampled_ns = self.clock.now_ns();
+        let input = seam.input();
+        outcome.sampled_ns = sampled_ns;
+        let mut last = self.frame;
+        for _ in 0..steps {
+            let sample = Sample { frame: self.frame, sampled_ns, input };
+            last = sample.frame;
+            self.frame = self.frame.wrapping_add(1);
+            self.sample_times[sample.frame as usize % SAMPLE_MEMORY] = Some((sample.frame, sample.sampled_ns));
+            if mode == Mode::Baseline {
+                self.mailbox.submit(Submission { bytes: b"{}".to_vec(), step: sample.frame as u64, frame: sample.frame });
+            } else if !self.mailbox.push_sample(sample) {
+                outcome.dropped = true;
+            }
         }
         let deadline = anchor + (self.pacer.scene_deadline_ms(period_ms) * 1e6) as u64;
-        outcome.late = !self.clock.wait_for_scene(&self.mailbox, sample.frame, deadline) && !self.mailbox.is_stopping();
+        outcome.late = !self.clock.wait_for_scene(&self.mailbox, last, deadline) && !self.mailbox.is_stopping();
         outcome.arrived_ns = Some(self.clock.now_ns());
         if let Some(submission) = self.mailbox.take_scene() {
             let began = self.clock.now_ns();

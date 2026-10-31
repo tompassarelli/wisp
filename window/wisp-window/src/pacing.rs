@@ -10,6 +10,7 @@ const SIM_HZ: f64 = 60.0;
 const FALLBACK_WORK_MS: f64 = 4.0;
 const WAKE_LIMIT_MS: f64 = 2.0;
 const PHASE_CREEP_NS: u64 = 50_000;
+const CATCH_UP_STEPS: u64 = 6;
 
 /// Where in a display frame the sample is taken: late enough that the step, the encode and the draw finish just before the present, early enough to leave the measured p99 and a margin.
 pub struct Pacer {
@@ -94,23 +95,28 @@ impl Pacer {
     }
 }
 
-/// Which display frames step the game: the first whose acquire is at or after the step's due time on the 60 Hz sim clock, so a 144 Hz display steps on every 2nd or 3rd vblank and redraws the last scene between.
+/// How many steps each display frame runs on the 60 Hz sim clock: one on the first frame whose acquire is at or after the step's due time, so a 144 Hz display steps on every 2nd or 3rd vblank and redraws the last scene between, and every step that came due since on a frame slower than the sim, up to six, so a display that falls as low as 10 Hz drops frames instead of slowing the game.
 #[derive(Default)]
 pub struct StepClock {
     due_ns: Option<u64>,
 }
 
 impl StepClock {
-    pub fn step_now(&mut self, acquired_ns: u64, period_ms: f64) -> bool {
+    pub fn steps_due(&mut self, acquired_ns: u64, period_ms: f64) -> u32 {
         let step_ns = (1e9 / SIM_HZ) as u64;
-        let slack_ns = (period_ms * 0.5e6) as u64;
+        let slack_ns = ((period_ms * 1e6) as u64).min(step_ns) / 2;
         let due = *self.due_ns.get_or_insert(acquired_ns);
-        if acquired_ns + slack_ns < due {
-            return false;
+        let reach = acquired_ns + slack_ns;
+        if reach < due {
+            return 0;
         }
-        let next = due + step_ns;
-        self.due_ns = Some(if acquired_ns > next + step_ns { acquired_ns + step_ns } else { next });
-        true
+        let behind = (reach - due) / step_ns + 1;
+        if behind > CATCH_UP_STEPS {
+            self.due_ns = Some(acquired_ns + step_ns);
+            return 1;
+        }
+        self.due_ns = Some(due + behind * step_ns);
+        behind as u32
     }
 }
 
@@ -188,7 +194,7 @@ mod tests {
         let mut vblank = 0;
         let mut stepped = Vec::new();
         for k in 0..(hz * seconds) as u64 {
-            if clock.step_now(1_000_000 + k * period_ns, 1e3 / hz) {
+            if clock.steps_due(1_000_000 + k * period_ns, 1e3 / hz) > 0 {
                 stepped.push(k);
                 vblank = k;
             }
@@ -226,14 +232,34 @@ mod tests {
     }
 
     #[test]
+    fn a_display_under_sixty_hertz_still_steps_sixty_times_a_second() {
+        for hz in [50.0, 40.0, 30.0, 20.0, 10.0] {
+            let period_ns = (1e9 / hz) as u64;
+            let mut clock = StepClock::default();
+            let steps: u32 = (0..(hz * 10.0) as u64).map(|k| clock.steps_due(1_000_000 + k * period_ns, 1e3 / hz)).sum();
+            let last_frame_short = (60.0 / hz).ceil() as u32;
+            assert!((600 - last_frame_short..=601).contains(&steps), "{hz} Hz ran {steps} steps in ten seconds");
+        }
+    }
+
+    #[test]
+    fn a_missed_vblank_runs_the_step_it_skipped() {
+        let mut clock = StepClock::default();
+        let period_ns = 16_666_667;
+        let vblanks = [0, 1, 2, 4, 5, 6];
+        let steps: Vec<u32> = vblanks.iter().map(|k| clock.steps_due(1_000_000 + k * period_ns, 16.667)).collect();
+        assert_eq!(steps, [1, 1, 1, 2, 1, 1]);
+    }
+
+    #[test]
     fn a_stall_catches_up_at_most_one_step() {
         let mut clock = StepClock::default();
         let period_ns = 8_333_333;
         for k in 0..10 {
-            clock.step_now(1_000_000 + k * period_ns, 8.333);
+            clock.steps_due(1_000_000 + k * period_ns, 8.333);
         }
         let after = 1_000_000 + 10 * period_ns + 2_000_000_000;
-        let stepped = (0..5).filter(|k| clock.step_now(after + k * period_ns, 8.333)).count();
+        let stepped = (0..5).filter(|k| clock.steps_due(after + k * period_ns, 8.333) > 0).count();
         assert!(stepped <= 3, "{stepped} steps in five vblanks after a two second stall");
     }
 

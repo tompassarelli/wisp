@@ -271,7 +271,7 @@ scene-to-present time, the p99 lateness of the render thread's own wakes (at mos
 scene that has arrived and redraws the last one when none has, so a late game
 never makes a present miss its vblank; a scene that missed its deadline is
 counted in `lateScenes` and drawn on a later frame. Above 60 Hz the game still steps 60 times a second: a step runs on the first vblank whose
-acquire is at or after its due time and the vblanks between redraw the last scene. The due time advances by exactly 1/60 s from the first step, so 120 Hz steps every second vblank, 144 Hz every second or third and a display a little off its rate (119.88 Hz) still averages 60; after a stall of more than one step the clock restarts one step ahead of the acquire instead of stepping to catch up. The tests in `pacing.rs` hold 600 steps (plus or minus 1) in ten simulated seconds at 120 and 144 Hz and one step per vblank at 60 Hz. A game linked against a Wisp from before this gate (Smashcraft's pin until it moves) steps once per display frame and runs at double speed on a 120 Hz panel.
+acquire is at or after its due time and the vblanks between redraw the last scene. The due time advances by exactly 1/60 s from the first step, so 120 Hz steps every second vblank, 144 Hz every second or third and a display a little off its rate (119.88 Hz) still averages 60. A frame that comes later than one step (a missed vblank, or a display or GPU that cannot hold 60 Hz) queues one sample for every step that came due, up to six (a frame rate as low as 10 Hz), so the game keeps its speed and drops frames instead of playing in slow motion; after a stall of more than six steps the clock restarts one step ahead of the acquire instead of stepping to catch up. The tests in `pacing.rs` hold 600 steps (plus or minus 1) in ten simulated seconds at 120 and 144 Hz, 600 less at most the last frame's steps at 50, 40, 30, 20 and 10 Hz, and one step per vblank at 60 Hz. Every five seconds the window prints its presented frames per second with the frame time's p50 and p99, the game's ticks per second, the acquire and draw p99 and the late scenes and dropped samples to standard error, so a slow window says which of them is short. A game linked against a Wisp from before this gate (Smashcraft's pin until it moves) steps once per display frame and runs at double speed on a 120 Hz panel.
 
 `WISP_WINDOW_PRESENT` (`Fifo`, the default, `Mailbox` or `Immediate`) and
 `WISP_WINDOW_FULLSCREEN=1` (borderless fullscreen) set the present path of an `openNativeWindow`
@@ -293,6 +293,16 @@ drawn), `missedPresents` (an acquire interval over 1.5 T, with
 `missedPresentsAfterLateScene` for those that follow a late scene), `lateScenes`
 and `droppedSamples`; `presentedMs` is the interval between two images the
 display handed back. Closing the window ends the session.
+
+An agent that opens the window for a person to play starts it in that person's slice, not under `run-bounded` or a machine-capacity lease, which put it in `agent.slice` (CPU weight 20, pinned to the agent cores) beside every build: at a load near 30 a match there fell to 47 ticks a second with a sim step p50 of 12 ms, where in `app.slice` the same match ran its step in 6 ms. From an agent's shell on Linux:
+
+```bash
+env XDG_RUNTIME_DIR=/run/user/$(id -u) DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u)/bus \
+  systemd-run --user --scope --quiet --slice=app.slice --unit=wisp-play-$(date +%s) -- \
+  env -u AI_AGENT bun wisp play --standalone --window native --map MAP.w3x
+```
+
+Leave `WISP_WINDOW_PRESENT` unset there. Under `Fifo` a window that is not on screen presents about once a second, because the compositor (niri, for one) throttles the frame callbacks of a hidden surface, so a frame rate read while the player looks at another window says nothing about play; `Mailbox` keeps drawing at full GPU cost while hidden.
 
 Press F10 in the window for the options screen: a Low, Medium, High or Ultra graphics preset and an Original or Remastered art choice (Remastered sharpens textures and rounds silhouettes, see [Remaster at load](native-window-plan.md#remaster-at-load)), saved per player and applied at once; see [Graphics settings](native-window-plan.md#graphics-settings). `WISP_REMASTER=off|standard|high` is a developer override of the art choice.
 
