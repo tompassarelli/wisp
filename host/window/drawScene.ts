@@ -7,6 +7,8 @@ import { drawnPoses } from "../render/culling";
 import { nativeUi, skinned, uiAssets } from "./nativeUi";
 import { type ControlSkin, createControlSkins } from "./controlSkin";
 import { destroyedSample } from "./destroyedEffect";
+import type { LightningLook } from "../terrain/lightningData";
+import { createLightningLooks } from "./lightningLooks";
 import type { FrameSnapshot } from "../../src/game/native/frameStore";
 import type { DrawnPose, RenderScene } from "../render/renderScene";
 import { NATIVE_RISE, SKY_FAR, camera, transform } from "../render/screen";
@@ -53,6 +55,8 @@ export interface ModelLibrary {
   loading(): number;
   /** The key light and ambient the day-night model at `path` gives at `hours`, once the model is read. */
   light(path: string, hours: number): NativeLight | undefined;
+  /** The look the install's lightning table gives the type `codeName`, once it and its texture are pushed; undefined while they load and for a type the install lacks. */
+  lightning(codeName: string): LightningLook | undefined;
 }
 
 /** The light the native renderer shades with (window/wisp-window/src/render/scene.rs). */
@@ -109,6 +113,7 @@ export function createModelLibrary(read: AssetReader, sink: AssetSink, report: (
     pushed.set(path, started);
     return started;
   };
+  const lightnings = createLightningLooks(read, push, report);
   const isWaterFrame = (image: string) => /^replaceabletextures[\\/]water[\\/]water\d+\.blp$/i.test(image);
   const pushWaterFrames = async () => {
     for (let index = 0; index < MAX_WATER_FRAMES; index++) {
@@ -140,7 +145,7 @@ export function createModelLibrary(read: AssetReader, sink: AssetSink, report: (
   };
   let reading = 0;
   return {
-    loading: () => reading + lights.loading(),
+    loading: () => reading + lights.loading() + lightnings.loading(),
     show(paths: readonly string[]): void {
       for (const path of paths) {
         if (pushed.has(path)) continue;
@@ -149,6 +154,7 @@ export function createModelLibrary(read: AssetReader, sink: AssetSink, report: (
       }
     },
     light: lights.light,
+    lightning: lightnings.look,
     controlSkin: controls.skin,
     sequences(path: string): readonly AnimationSequence[] | undefined {
       const known = entries.get(path);
@@ -206,7 +212,7 @@ export function drawScene(scene: RenderScene, library: ModelLibrary) {
   const environment = scene.environment;
   const sky = environment.sky !== "" && environment.skyVisible ? place({ handle: { id: 0 }, model: environment.sky, x: 0, y: 0, z: 0, alpha: 255, scale: 1, flat: false, animation: undefined, subAnimations: [], animationElapsed: 0, animationClock: 0, color: [255, 255, 255], teamColor: 0, matrixScale: [1, 1, 1], yaw: 0, pitch: 0, roll: 0 } as unknown as DrawnPose) : undefined;
   const poses = drawnPoses(scene.effects, view.eye, view.far, scene.world).flatMap((pose) => place(pose) ?? []);
-  return { frame: scene.frame, pending: library.loading(), playing: scene.playing === true, camera: { view: Array.from(view.view), eye: view.eye, tangent: view.shadow.tangent, near: view.near, far: view.far, skyFar: SKY_FAR, rise: NATIVE_RISE, reach: view.shadow.reach }, fog: fogOf(scene), light: library.light(environment.dayNight.unit, environment.timeOfDay), sky, skyLook: environment.skyLook, poses, lightnings: (scene.lightnings ?? []).map((bolt) => ({ from: bolt.from, to: bolt.to, color: bolt.color })), weathers: (scene.weathers ?? []).map((weather) => ({ id: weather.id, rect: weather.rect })), ui };
+  return { frame: scene.frame, pending: library.loading(), playing: scene.playing === true, camera: { view: Array.from(view.view), eye: view.eye, tangent: view.shadow.tangent, near: view.near, far: view.far, skyFar: SKY_FAR, rise: NATIVE_RISE, reach: view.shadow.reach }, fog: fogOf(scene), light: library.light(environment.dayNight.unit, environment.timeOfDay), sky, skyLook: environment.skyLook, poses, lightnings: (scene.lightnings ?? []).map((bolt) => ({ from: bolt.from, to: bolt.to, color: bolt.color, look: library.lightning(bolt.codeName) })), weathers: (scene.weathers ?? []).map((weather) => ({ id: weather.id, rect: weather.rect })), ui };
 }
 
 const PRELOAD_MS = 120_000;

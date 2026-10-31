@@ -91,12 +91,25 @@ pub struct WeatherPose {
     pub rect: [f32; 4],
 }
 
-/// A lightning bolt between two world points, its colour 0 to 1.
+/// How a lightning type looks, from its row in Splats\LightningData.slk: the texture's path in the install, the ribbon's width and average segment length in world units, its noise as a share of a segment, the texture's repeats per segment and the row's colour 0 to 1.
+#[derive(Deserialize)]
+pub struct Look {
+    pub texture: String,
+    pub width: f32,
+    pub segment: f32,
+    pub noise: f32,
+    pub scale: f32,
+    pub color: [f32; 3],
+}
+
+/// A lightning bolt between two world points, its colour 0 to 1, and its type's look once the host has read it.
 #[derive(Deserialize)]
 pub struct Bolt {
     pub from: [f32; 3],
     pub to: [f32; 3],
     pub color: [f32; 4],
+    #[serde(default)]
+    pub look: Option<Look>,
 }
 
 #[derive(Deserialize, Default)]

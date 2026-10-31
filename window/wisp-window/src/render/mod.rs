@@ -475,7 +475,7 @@ impl Renderer {
             &ParticleFrame { base: main.base, right: [view[0], view[4], view[8], 0.0], up: [view[1], view[5], view[9], 0.0], eye_and_now: [eye[0], eye[1], eye[2], 0.0] },
         );
         self.problems.append(&mut self.particles.problems);
-        self.lightning.stage(&self.queue, &scene.lightnings);
+        self.problems.extend(self.lightning.stage(lightning::Art { device: &self.device, queue: &self.queue, textures: &self.textures, white: &self.white, sampler: &self.sampler, settled: self.decoding.is_empty() }, &scene.lightnings));
         self.weather.stage(&self.queue, &scene.camera, &scene.weathers, &self.features);
         self.sky_group_of = sky.map(|(id, _)| Group { model: id, faded: false, first: sky_instance as u32, count: 1 });
         sun.is_some()
