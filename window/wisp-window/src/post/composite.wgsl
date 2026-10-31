@@ -4,6 +4,7 @@
 @group(0) @binding(4) var occlusion: texture_2d<f32>;
 @group(0) @binding(5) var grade: texture_3d<f32>;
 @group(0) @binding(6) var scene_depth: texture_2d<f32>;
+@group(0) @binding(7) var scene_stencil: texture_multisampled_2d<u32>;
 
 const LUT_SIZE = 32.0;
 const AGX_MIN_EV = -12.47393;
@@ -43,6 +44,8 @@ fn blue_noise(pixel: vec2<f32>) -> f32 {
 
 const CONTACT_STEPS = 10;
 const CONTACT_BIAS = 0.004;
+const UNIT = 1u;
+const FIGHTER_OCCLUSION = 0.35;
 
 fn full_view_position(pixel: vec2<f32>, w: f32) -> vec3<f32> {
     return view_direction(picture_ndc(pixel + 0.5)) * w;
@@ -128,6 +131,9 @@ fn composite_main(@builtin(position) at: vec4<f32>) -> @location(0) vec4<f32> {
         var shade = select(1.0, seen.x, p.occlusion.y > 0.0);
         if (p.occlusion.w > 0.0) {
             shade *= 1.0 - contact_shadow(at.xy - 0.5, w, seen.yz) * p.occlusion.w;
+        }
+        if ((textureLoad(scene_stencil, pixel, 0).r & UNIT) != 0u) {
+            shade = mix(1.0, shade, FIGHTER_OCCLUSION);
         }
         color *= mix(shade, 1.0, smoothstep(0.8, 2.5, luminance(color)));
     }

@@ -2,7 +2,7 @@ import type { WindowView } from "./binding";
 import { type Spread, spread } from "./stats";
 
 /** The GPU's passes the render thread times, by the key the result gives each; `frame` spans the first pass's beginning to the last one's end. */
-const GPU_PASSES = ["frame", "shadow", "reflection", "clouds", "sky", "scene", "water", "post", "sprites", "ui", "counter"] as const;
+const GPU_PASSES = ["frame", "shadow", "fighterShadow", "reflection", "clouds", "sky", "scene", "water", "post", "sprites", "ui", "counter"] as const;
 
 type GpuPass = typeof GPU_PASSES[number];
 

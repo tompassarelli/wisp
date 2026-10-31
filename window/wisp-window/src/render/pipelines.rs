@@ -3,7 +3,7 @@
 use std::mem::size_of;
 
 use super::model::{Filter, Vertex, FILTERS};
-use super::{Instance, DEPTH};
+use super::{Instance, DEPTH, UNIT};
 
 pub(super) fn entry(binding: u32, visibility: wgpu::ShaderStages, ty: wgpu::BindingType) -> wgpu::BindGroupLayoutEntry {
     wgpu::BindGroupLayoutEntry { binding, visibility, ty, count: None }
@@ -47,6 +47,12 @@ pub(super) fn index_of(filter: Filter, faded: bool) -> usize {
     }
 }
 
+/// A solid layer writes its draw's stencil reference, `UNIT` for a unit's and 0 for anything else, where it wins the depth test, so the final-image pass can tell a fighter's pixels from the stage's.
+fn marks_units() -> wgpu::StencilState {
+    let face = wgpu::StencilFaceState { compare: wgpu::CompareFunction::Always, fail_op: wgpu::StencilOperation::Keep, depth_fail_op: wgpu::StencilOperation::Keep, pass_op: wgpu::StencilOperation::Replace };
+    wgpu::StencilState { front: face, back: face, read_mask: 0, write_mask: UNIT }
+}
+
 /// The pipelines in `index_of` order, the seven of `FILTERS` and the two faded solid ones, and the frame and layer bind group layouts they use.
 pub(super) fn build(device: &wgpu::Device, format: wgpu::TextureFormat, samples: u32) -> (Vec<wgpu::RenderPipeline>, wgpu::BindGroupLayout, wgpu::BindGroupLayout) {
     let module = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("model"), source: wgpu::ShaderSource::Wgsl(shader_source(include_str!("shader.wgsl")).into()) });
@@ -60,6 +66,7 @@ pub(super) fn build(device: &wgpu::Device, format: wgpu::TextureFormat, samples:
             entry(3, wgpu::ShaderStages::VERTEX, wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Storage { read_only: true }, has_dynamic_offset: false, min_binding_size: None }),
             entry(4, wgpu::ShaderStages::FRAGMENT, wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Depth, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false }),
             entry(5, wgpu::ShaderStages::FRAGMENT, wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Comparison)),
+            entry(6, wgpu::ShaderStages::FRAGMENT, wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Depth, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false }),
         ],
     });
     let layer_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -100,7 +107,7 @@ pub(super) fn build(device: &wgpu::Device, format: wgpu::TextureFormat, samples:
                     format: DEPTH,
                     depth_write_enabled: Some(filter.writes_depth()),
                     depth_compare: Some(wgpu::CompareFunction::LessEqual),
-                    stencil: Default::default(),
+                    stencil: if filter.writes_depth() { marks_units() } else { Default::default() },
                     bias: Default::default(),
                 }),
                 multisample: wgpu::MultisampleState { count: samples, mask: !0, alpha_to_coverage_enabled: filter == Filter::Cutout && !faded && samples > 1 },
@@ -126,8 +133,6 @@ pub(super) fn shadow(device: &wgpu::Device, layer_layout: &wgpu::BindGroupLayout
         ],
     });
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("shadow"), bind_group_layouts: &[Some(&layout), Some(layer_layout)], immediate_size: 0 });
-    let vertex_attributes = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2, 3 => Uint16x4, 4 => Float32x4];
-    let instance_attributes = wgpu::vertex_attr_array![5 => Float32x4, 6 => Float32x4, 7 => Float32x4, 8 => Float32x4, 9 => Float32x4, 10 => Float32x4, 11 => Uint32x2];
     let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
         label: Some("shadow"),
         layout: Some(&pipeline_layout),
@@ -136,8 +141,8 @@ pub(super) fn shadow(device: &wgpu::Device, layer_layout: &wgpu::BindGroupLayout
             entry_point: Some("shadow_vertex"),
             compilation_options: Default::default(),
             buffers: &[
-                Some(wgpu::VertexBufferLayout { array_stride: size_of::<Vertex>() as u64, step_mode: wgpu::VertexStepMode::Vertex, attributes: &vertex_attributes }),
-                Some(wgpu::VertexBufferLayout { array_stride: size_of::<Instance>() as u64, step_mode: wgpu::VertexStepMode::Instance, attributes: &instance_attributes }),
+                Some(wgpu::VertexBufferLayout { array_stride: size_of::<Vertex>() as u64, step_mode: wgpu::VertexStepMode::Vertex, attributes: &VERTEX_ATTRIBUTES }),
+                Some(wgpu::VertexBufferLayout { array_stride: size_of::<Instance>() as u64, step_mode: wgpu::VertexStepMode::Instance, attributes: &INSTANCE_ATTRIBUTES }),
             ],
         },
         fragment: Some(wgpu::FragmentState { module: &module, entry_point: Some("shadow_fragment"), compilation_options: Default::default(), targets: &[] }),

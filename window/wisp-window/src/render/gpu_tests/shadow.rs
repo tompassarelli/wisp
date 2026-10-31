@@ -41,7 +41,7 @@ const WIDE: u32 = 512;
 const EYE: f32 = 3000.0;
 const TANGENT: f32 = 0.08;
 
-fn box_of(vertices: &mut Vec<Vertex>, indices: &mut Vec<u32>, half: [f32; 3], centre: [f32; 3]) -> (u32, u32) {
+pub(super) fn box_of(vertices: &mut Vec<Vertex>, indices: &mut Vec<u32>, half: [f32; 3], centre: [f32; 3]) -> (u32, u32) {
     let first = indices.len() as u32;
     for axis in 0..3 {
         for sign in [-1.0f32, 1.0] {

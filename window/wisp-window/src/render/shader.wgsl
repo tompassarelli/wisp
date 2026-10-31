@@ -14,6 +14,9 @@ const LIT_AND_SHADOWED = 2u;
 const WRAP = 0.3;
 const RIM = 1.0;
 const RIM_EDGE = 2.5;
+const FILL = 0.3;
+const FIGHTER_TAPS = 8u;
+const FIGHTER_RADIUS = 1.5;
 const MAX_LIGHT = 1.1;
 // Replaceable 2 as the player's install draws it: a Gaussian spot measured from the TeamGlow textures, peak 0.46 of the team colour, falling to 1/e at 0.2 of the quad from its centre.
 const TEAM_GLOW_PEAK = 0.46;
@@ -23,6 +26,7 @@ const TEAM_GLOW_RADIUS = 0.2;
 @group(0) @binding(3) var<storage, read> uv_rows: array<vec4<f32>>;
 @group(0) @binding(4) var shadow_map: texture_depth_2d;
 @group(0) @binding(5) var shadow_sampler: sampler_comparison;
+@group(0) @binding(6) var fighter_map: texture_depth_2d;
 @group(1) @binding(0) var layer_texture: texture_2d<f32>;
 @group(1) @binding(1) var layer_sampler: sampler;
 @group(1) @binding(2) var<uniform> layer: Layer;
@@ -35,7 +39,7 @@ struct Varying {
     @location(3) tint: vec4<f32>,
     @location(4) team: vec3<f32>,
     @location(5) fade: f32,
-    @location(6) rim: f32,
+    @location(6) unit: f32,
 };
 
 fn placement(vertex: Vertex, instance: Instance) -> mat4x4<f32> {
@@ -81,7 +85,7 @@ fn vertex_main(vertex: Vertex, instance: Instance) -> Varying {
     out.normal = normalize((placed * vec4<f32>(vertex.normal, 0.0)).xyz);
     out.tint = tint_of(instance);
     out.team = instance.team.xyz;
-    out.rim = instance.team.w;
+    out.unit = instance.team.w;
     out.fade = fade_of(instance);
     return out;
 }
@@ -169,6 +173,20 @@ fn sun_visibility(world: vec3<f32>, normal: vec3<f32>, facing: f32, pixel: vec2<
     return lit / f32(taps);
 }
 
+fn fighter_visibility(world: vec3<f32>, normal: vec3<f32>, pixel: vec2<f32>) -> f32 {
+    let at = frame.fighter_projection * vec4<f32>(world + normal * frame.fighter_shadow.y, 1.0);
+    let uv = vec2<f32>(at.x * 0.5 + 0.5, 0.5 - at.y * 0.5);
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 || at.z > 1.0 || at.z < 0.0) {
+        return 1.0;
+    }
+    let turn = interleaved_noise(pixel) * TURN;
+    var lit = 0.0;
+    for (var i = 0u; i < FIGHTER_TAPS; i++) {
+        lit += textureSampleCompareLevel(fighter_map, shadow_sampler, uv + disk_tap(i, FIGHTER_TAPS, turn) * FIGHTER_RADIUS * frame.fighter_shadow.x, at.z);
+    }
+    return lit / f32(FIGHTER_TAPS);
+}
+
 fn light_of(in: Varying) -> vec3<f32> {
     let toward = frame.light_toward.xyz;
     let view = normalize(frame.eye.xyz - in.world);
@@ -178,13 +196,20 @@ fn light_of(in: Varying) -> vec3<f32> {
     }
     let facing = dot(normal, toward);
     let diffuse = clamp((facing + WRAP) / (1.0 + WRAP), 0.0, 1.0);
+    let unit = in.unit > 0.5;
     var visibility = 1.0;
-    if (layer.lighting == LIT_AND_SHADOWED && frame.shadow.z > 0.5) {
+    if (layer.lighting == LIT_AND_SHADOWED && unit && frame.fighter_shadow.z > 0.5) {
+        visibility = 1.0 - frame.fighter_shadow.w * (1.0 - fighter_visibility(in.world, normal, in.clip.xy));
+    } else if (layer.lighting == LIT_AND_SHADOWED && !unit && frame.shadow.z > 0.5) {
         visibility = sun_visibility(in.world, normal, facing, in.clip.xy);
     }
+    var key = diffuse * visibility;
+    if (unit) {
+        key += FILL * clamp(dot(normal, view), 0.0, 1.0) * (1.0 - key);
+    }
     let sky = 0.85 + 0.3 * (normal.z * 0.5 + 0.5);
-    var light = min(frame.light_ambient.xyz * sky + frame.light_key.xyz * diffuse * visibility, vec3<f32>(MAX_LIGHT));
-    if (layer.lighting == LIT_AND_SHADOWED && in.rim > 0.5) {
+    var light = min(frame.light_ambient.xyz * sky + frame.light_key.xyz * key, vec3<f32>(MAX_LIGHT));
+    if (layer.lighting == LIT_AND_SHADOWED && unit) {
         let tint = frame.light_ambient.xyz + frame.light_key.xyz * 0.5;
         let rim = pow(1.0 - clamp(dot(normal, view), 0.0, 1.0), RIM_EDGE);
         light += rim * RIM * tint / max(max(tint.r, tint.g), max(tint.b, 0.001));

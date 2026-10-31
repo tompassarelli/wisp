@@ -13,6 +13,8 @@ struct Frame {
     sun_projection: mat4x4<f32>,
     shadow: vec4<f32>,
     shadow_filter: vec4<f32>,
+    fighter_projection: mat4x4<f32>,
+    fighter_shadow: vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> frame: Frame;

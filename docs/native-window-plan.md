@@ -1175,6 +1175,18 @@ Direction (Tom, 31 October 2026): full send on the native look, in five layers. 
 4. **Stage worlds** with original or CC0 art (sc-stage-fullsend).
 5. **Presentation screens** (wisp-109-present).
 
+### Fighters stay lit
+
+Style rule (Tom, 1 November 2026): a fighter reads first. Characters had looked too dark at the higher presets: the sun's map is fitted to the whole view, so at Medium a texel spans several units and its soft filter left dark blotches on a fighter's torso, legs and boots, and the ambient occlusion and contact shadows darkened them again. The look to match is a Warcraft III unit, always lit, with a soft shadow at its feet, drawn with today's means:
+
+- A unit (`Pose::unit`, every pose the game places as a unit; Smashcraft's fighters are units) never samples the sun's map, so the stage never shadows a fighter. Every unit still casts into the sun's map, so its shadow lands on the stage at every preset that draws shadows.
+- At High and Ultra (`fighterShadows`, 1024 and 2048 texels a side; zero at Low and Medium) a second depth map down the sun is fitted tightly around the units alone (their still boxes grown by 30% a side for their animation, the side in steps of 32 units and the centre on its texel grid), and a fighter takes its own and the other fighters' shadow from it with an 8-tap filter 1.5 texels wide, at 35% of the key light, so a fighter's shadowed side is never black. Low and Medium draw no fighter map and no extra pass, and a fighter there has no self-shadow.
+- A fill light from the camera adds 30% of the key where the sun leaves a fighter's side dark, beside the rim light every solid layer has.
+- A unit's solid layers write the stencil's `UNIT` bit (value 1) in the scene's depth (no new target; the depth format is `Depth24PlusStencil8`, which the Radeon 890M stores as 32-bit float depth anyway), and the composite keeps 35% of the ambient occlusion and contact shadow on those pixels.
+- At every preset a fighter is never more than 15% darker than the same fighter at Low. The render tests hold this on a stand-in fighter, and the captures measured below hold it in the game.
+
+Measured 1 November 2026 on gex45 (RTX PRO 4000) at 2880x1920. Before the rule, on Blackrock with Archimonde and Illidan, Ultra left Archimonde's torso 5% and Illidan's 8% darker than Low, in blotches; turning one feature off at a time put about 80% of that on the sun's map and about 20% on the ambient occlusion, with contact shadows and bloom changing nothing measurable. After it, on Blackrock, Stratholme and the Frozen Throne, each from both facings on the same frame, a fighter's torso at Ultra is 0.1% to 1.4% darker than at Low and its whole box between 1.3% darker and 0.3% brighter. The fighters' map pass (`gpuFighterShadowMs`) takes 0.012 ms of GPU time a frame at Ultra and 0.007 ms at High, against 3.22 ms for the whole frame at Ultra and 3.08 ms at High (medians over 900 frames of the same match).
+
 ## The post stack (wisp#109)
 
 The scene pass draws in linear light into a 4x multisampled half-float target and resolves it to a single-sample half-float texture; nothing in the scene shaders tone maps or encodes. `window/wisp-window/src/post/` owns what happens next, in this order:

@@ -82,7 +82,7 @@ pub struct Pose {
     pub alpha: f32,
     pub color: [f32; 3],
     pub team: [f32; 3],
-    /// Whether the pose is a unit, which takes the rim light; a stage piece or effect does not.
+    /// A unit, as Warcraft names its fighters and creatures; a stage piece or effect is not. The renderer gives a unit the rim light and keeps it lit as Warcraft does: no shadow from the stage, its own soft self-shadow at High and Ultra, and less occlusion than the stage (docs/native-window-plan.md, "Fighters stay lit").
     #[serde(default)]
     pub unit: bool,
 }

@@ -5,7 +5,7 @@ use wisp_window::render::DrawScene;
 use wisp_window::settings::{Features, PRESETS};
 
 const SCENE: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
-const DEPTH: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
+const DEPTH: wgpu::TextureFormat = wgpu::TextureFormat::Depth24PlusStencil8;
 const OUTPUT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 const SIZE: (u32, u32) = (2880, 1920);
 const FRAMES: u32 = 100;
@@ -54,6 +54,8 @@ struct Rig {
     queue: wgpu::Queue,
     hdr: wgpu::TextureView,
     depth: wgpu::TextureView,
+    depth_only: wgpu::TextureView,
+    stencil: wgpu::TextureView,
     target: wgpu::TextureView,
     floor: wgpu::RenderPipeline,
 }
@@ -72,9 +74,12 @@ impl Rig {
                 .create_view(&Default::default())
         };
         let both = wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING;
-        let (hdr, depth, target) = (make(SCENE, 1, both), make(DEPTH, 4, both), make(OUTPUT, 1, wgpu::TextureUsages::RENDER_ATTACHMENT));
+        let (hdr, target) = (make(SCENE, 1, both), make(OUTPUT, 1, wgpu::TextureUsages::RENDER_ATTACHMENT));
+        let depth_texture = device.create_texture(&wgpu::TextureDescriptor { label: None, size: wgpu::Extent3d { width: SIZE.0, height: SIZE.1, depth_or_array_layers: 1 }, mip_level_count: 1, sample_count: 4, dimension: wgpu::TextureDimension::D2, format: DEPTH, usage: both, view_formats: &[] });
+        let aspect = |aspect| depth_texture.create_view(&wgpu::TextureViewDescriptor { aspect, ..Default::default() });
+        let (depth, depth_only, stencil) = (aspect(wgpu::TextureAspect::All), aspect(wgpu::TextureAspect::DepthOnly), aspect(wgpu::TextureAspect::StencilOnly));
         let floor = Self::floor_pipeline(&device);
-        Rig { device, queue, hdr, depth, target, floor }
+        Rig { device, queue, hdr, depth, depth_only, stencil, target, floor }
     }
 
     fn floor_pipeline(device: &wgpu::Device) -> wgpu::RenderPipeline {
@@ -165,7 +170,7 @@ impl Rig {
 fn main() {
     let rig = Rig::new();
     let mut post = Post::new(&rig.device, &rig.queue, OUTPUT, SCENE, DEPTH, 4);
-    post.fit(SIZE, &rig.hdr, &rig.depth);
+    post.fit(SIZE, &rig.hdr, &rig.depth_only, &rig.stencil);
     let scene = sky_scene();
     let asked = std::env::args().nth(1).map(|name| name.to_ascii_lowercase());
     for preset in PRESETS.iter().filter(|preset| asked.as_deref().is_none_or(|name| name == preset.name().to_ascii_lowercase())) {

@@ -35,6 +35,11 @@ fn unfiltered_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
     wgpu::BindGroupLayoutEntry { binding, visibility: wgpu::ShaderStages::FRAGMENT, ty: wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: false }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false }, count: None }
 }
 
+/// The scene's stencil at its samples per pixel, where a unit's solid layers marked their pixels.
+fn stencil_entry(binding: u32, multisampled: bool) -> wgpu::BindGroupLayoutEntry {
+    wgpu::BindGroupLayoutEntry { binding, visibility: wgpu::ShaderStages::FRAGMENT, ty: wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Uint, view_dimension: wgpu::TextureViewDimension::D2, multisampled }, count: None }
+}
+
 fn params_entry() -> wgpu::BindGroupLayoutEntry {
     wgpu::BindGroupLayoutEntry {
         binding: 0,
@@ -168,7 +173,7 @@ impl Post {
             bloom: layout("bloom", &[params_entry(), sampler_entry(1), texture_entry(2, false, flat, false)]),
             composite: layout(
                 "composite",
-                &[params_entry(), sampler_entry(1), texture_entry(2, false, flat, false), texture_entry(3, false, flat, false), texture_entry(4, false, flat, false), texture_entry(5, false, wgpu::TextureViewDimension::D3, false), unfiltered_entry(6)],
+                &[params_entry(), sampler_entry(1), texture_entry(2, false, flat, false), texture_entry(3, false, flat, false), texture_entry(4, false, flat, false), texture_entry(5, false, wgpu::TextureViewDimension::D3, false), unfiltered_entry(6), stencil_entry(7, samples > 1)],
             ),
         };
         let shrink = format!("const REFLECTION_SHRINK: f32 = {REFLECTION_SHRINK}.0;\n");
@@ -180,7 +185,8 @@ impl Post {
         let occlusion = module(device, "occlusion", &[include_str!("occlusion.wgsl")]);
         let denoise = module(device, "denoise", &[include_str!("denoise.wgsl")]);
         let bloom = module(device, "bloom", &[include_str!("bloom.wgsl")]);
-        let composite = module(device, "composite", &[include_str!("composite.wgsl")]);
+        let composite_source = crate::render::depth_shader(include_str!("composite.wgsl"), samples);
+        let composite = module(device, "composite", &[composite_source.as_str()]);
         let sky_layout = &layouts.sky;
         let pipelines = Pipelines {
             cloud: pipeline(device, "cloud", &cloud, &layouts.cloud, "cloud_main", colour(BLOOM_FORMAT, None), 1, None),
@@ -218,8 +224,8 @@ impl Post {
         self.srgb
     }
 
-    /// Sizes the post targets to the scene's: `hdr` is the single-sample colour the scene pass resolved into, `depth` its multisampled depth.
-    pub fn fit(&mut self, size: (u32, u32), hdr: &wgpu::TextureView, depth: &wgpu::TextureView) {
+    /// Sizes the post targets to the scene's: `hdr` is the single-sample colour the scene pass resolved into, `depth` its depth and `stencil` its stencil, each at the scene's samples per pixel.
+    pub fn fit(&mut self, size: (u32, u32), hdr: &wgpu::TextureView, depth: &wgpu::TextureView, stencil: &wgpu::TextureView) {
         let device = &self.device;
         let half = |size: (u32, u32), level: u32| ((size.0 >> level).max(1), (size.1 >> level).max(1));
         let cloud = view_of(device, "clouds", ((size.0 / CLOUD_SCALE).max(1), (size.1 / CLOUD_SCALE).max(1)), BLOOM_FORMAT);
@@ -273,6 +279,7 @@ impl Post {
                 binding(4, wgpu::BindingResource::TextureView(&occlusion)),
                 binding(5, wgpu::BindingResource::TextureView(&self.lut)),
                 binding(6, wgpu::BindingResource::TextureView(&full_depth)),
+                binding(7, wgpu::BindingResource::TextureView(stencil)),
             ],
         });
         self.targets = Some(Targets {

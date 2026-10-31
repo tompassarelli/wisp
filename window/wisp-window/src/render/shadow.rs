@@ -7,6 +7,7 @@ use bytemuck::Zeroable;
 use super::math::{multiply, Mat4, IDENTITY};
 use super::pipelines;
 use super::uniforms::{FrameUniform, SceneFrame, Sun};
+use super::scene::Scene;
 use super::{GpuModel, Group};
 
 pub(super) const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
@@ -85,6 +86,48 @@ pub(super) fn sun(corners: [[f32; 3]; 8], toward: [f32; 3], map: u32) -> Sun {
 }
 
 
+/// The world box around a model's box (lowest x, y, z, then highest) placed by `matrix`.
+fn placed(bounds: &[f32; 6], matrix: &Mat4) -> [f32; 6] {
+    let mut out = [f32::MAX, f32::MAX, f32::MAX, f32::MIN, f32::MIN, f32::MIN];
+    for corner in 0..8usize {
+        let point = transform(matrix, [0, 1, 2].map(|axis| bounds[axis + 3 * (corner >> axis & 1)]));
+        for axis in 0..3 {
+            (out[axis], out[axis + 3]) = (out[axis].min(point[axis]), out[axis + 3].max(point[axis]));
+        }
+    }
+    out
+}
+
+/// How far past a unit's still box its animation may reach, as a share of the box's size on each side.
+const FIGHTER_REACH: f32 = 0.3;
+/// The fighters' map covers a whole number of these, so it changes size only in steps as the fighters spread apart and its texels sit on a fixed grid between steps.
+const FIGHTER_SNAP: f32 = 32.0;
+
+/// The view-projection of the sun looking along `-toward` over the fighters' world boxes (lowest x, y, z, then highest), each grown by `FIGHTER_REACH`; none when there are no fighters.
+pub(super) fn fighters(boxes: impl Iterator<Item = [f32; 6]>, toward: [f32; 3], map: u32) -> Option<Sun> {
+    let view = light_view(toward);
+    let (mut low, mut high) = ([f32::MAX; 3], [f32::MIN; 3]);
+    for bounds in boxes {
+        let grow = [0, 1, 2].map(|axis| (bounds[axis + 3] - bounds[axis]) * FIGHTER_REACH);
+        for corner in 0..8 {
+            let point = [0, 1, 2].map(|axis| if corner >> axis & 1 == 0 { bounds[axis] - grow[axis] } else { bounds[axis + 3] + grow[axis] });
+            let local = transform(&view, point);
+            for axis in 0..3 {
+                (low[axis], high[axis]) = (low[axis].min(local[axis]), high[axis].max(local[axis]));
+            }
+        }
+    }
+    if low[0] > high[0] {
+        return None;
+    }
+    let side = ((high[0] - low[0]).max(high[1] - low[1]) / FIGHTER_SNAP).ceil().max(1.0) * FIGHTER_SNAP;
+    let texel = side / map as f32;
+    let snap = |centre: f32| (centre / texel).round() * texel;
+    let (cx, cy) = (snap((low[0] + high[0]) * 0.5), snap((low[1] + high[1]) * 0.5));
+    let projection = orthographic(cx - side * 0.5, cx + side * 0.5, cy - side * 0.5, cy + side * 0.5, high[2], low[2]);
+    Some(Sun { view_projection: multiply(&projection, &view), texel: 1.0 / map as f32, offset: texel, texel_world: texel, depth_range: high[2] - low[2], light_tan: 0.0, taps: 8.0 })
+}
+
 /// The sun's depth map with the pipeline and bindings that draw into it, and the comparison sampler the model shader reads it through.
 pub(super) struct Shadow {
     /// Texels a side, or zero when the graphics settings draw no shadows.
@@ -142,8 +185,8 @@ impl Shadow {
         queue.write_buffer(&self.frame, 0, bytemuck::bytes_of(&frame));
     }
 
-    /// Draws every solid layer of every group into the depth map.
-    pub fn draw(&self, encoder: &mut wgpu::CommandEncoder, timestamps: Option<wgpu::RenderPassTimestampWrites<'_>>, models: &[GpuModel], groups: &[Group], instances: &wgpu::Buffer) {
+    /// Draws every solid layer of every group into the depth map, or of the units' groups only for the fighters' map.
+    pub fn draw(&self, encoder: &mut wgpu::CommandEncoder, timestamps: Option<wgpu::RenderPassTimestampWrites<'_>>, models: &[GpuModel], groups: &[Group], instances: &wgpu::Buffer, units_only: bool) {
         let mut pass = encoder
             .begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("sun"),
@@ -156,7 +199,7 @@ impl Shadow {
             .forget_lifetime();
         pass.set_pipeline(&self.pipeline);
         pass.set_bind_group(0, &self.group, &[]);
-        for group in groups {
+        for group in groups.iter().filter(|group| group.unit || !units_only) {
             let model = &models[group.model];
             pass.set_vertex_buffer(0, model.vertices.slice(..));
             pass.set_vertex_buffer(1, instances.slice(..));
@@ -171,12 +214,31 @@ impl Shadow {
 }
 
 impl super::Renderer {
+    /// The fighters' map over the units the scene places, when the settings draw one and the scene is lit.
+    pub(super) fn fighter_sun(&self, scene: &Scene) -> Option<Sun> {
+        let light = scene.light.as_ref().filter(|_| self.fighters.side > 0)?;
+        let boxes = scene.poses.iter().filter(|pose| pose.unit && pose.alpha > 0.0).filter_map(|pose| {
+            let body = self.models[*self.model_ids.get(pose.model.as_str())?].body?;
+            Some(placed(&body, &pose.matrix))
+        });
+        fighters(boxes, light.toward, self.fighters.side)
+    }
+
     /// Follows the graphics settings: a different map size remakes the depth map and the groups that bind it, and zero draws no shadows.
     pub(super) fn set_shadow_side(&mut self, side: u32) {
         if side == self.shadow.side {
             return;
         }
         self.shadow.resize(&self.device, side);
+        self.bind_frames();
+    }
+
+    /// Follows the graphics settings' fighter map size as `set_shadow_side` follows the sun's.
+    pub(super) fn set_fighter_side(&mut self, side: u32) {
+        if side == self.fighters.side {
+            return;
+        }
+        self.fighters.resize(&self.device, side);
         self.bind_frames();
     }
 }

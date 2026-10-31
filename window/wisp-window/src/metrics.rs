@@ -44,6 +44,7 @@ pub const SERIES: [&str; FIXED + PASSES.len()] = [
     "cpuEncodeMs",
     "gpuFrameMs",
     "gpuShadowMs",
+    "gpuFighterShadowMs",
     "gpuReflectionMs",
     "gpuCloudsMs",
     "gpuSkyMs",

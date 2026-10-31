@@ -64,7 +64,7 @@ impl Attachments<'_> {
             .begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some(self.label),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment { view: self.color, depth_slice: None, resolve_target: self.resolve, ops: wgpu::Operations { load: self.load, store: wgpu::StoreOp::Store } })],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment { view: self.depth, depth_ops: self.depth_ops, stencil_ops: None }),
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment { view: self.depth, depth_ops: self.depth_ops, stencil_ops: self.depth_ops.map(stencil_like) }),
                 timestamp_writes: self.timestamps,
                 occlusion_query_set: None,
                 multiview_mask: None,
@@ -73,6 +73,16 @@ impl Attachments<'_> {
         pass.set_viewport(0.0, 0.0, self.size.0 as f32, self.size.1 as f32, 0.0, 1.0);
         pass
     }
+}
+
+/// The stencil, where units mark their pixels, is cleared and kept with the depth.
+fn stencil_like(depth: wgpu::Operations<f32>) -> wgpu::Operations<u32> {
+    let load = match depth.load {
+        wgpu::LoadOp::Clear(_) => wgpu::LoadOp::Clear(0),
+        wgpu::LoadOp::Load => wgpu::LoadOp::Load,
+        wgpu::LoadOp::DontCare(token) => wgpu::LoadOp::DontCare(token),
+    };
+    wgpu::Operations { load, store: depth.store }
 }
 
 fn fresh(store: wgpu::StoreOp) -> Option<wgpu::Operations<f32>> {
@@ -85,6 +95,7 @@ impl Renderer {
             let model = &self.models[group.model];
             pass.set_vertex_buffer(0, model.vertices.slice(..));
             pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
+            pass.set_stencil_reference(if group.unit { super::UNIT } else { 0 });
             pass.set_index_buffer(model.indices.slice(..), wgpu::IndexFormat::Uint32);
             for draw in model.draws.iter().filter(|draw| draw.in_stage(stage)) {
                 match (&draw.bind, water) {
@@ -113,7 +124,7 @@ impl Renderer {
 
     pub(super) fn bind_frames(&mut self) {
         for set in [&mut self.main, &mut self.sky, &mut self.mirror, &mut self.mirror_sky] {
-            set.group = super::frame_group(&self.device, &self.frame_layout, &set.buffer, &self.bone_buffer, &self.color_buffer, &self.uv_buffer, self.shadow.bound());
+            set.group = super::frame_group(&self.device, &self.frame_layout, &set.buffer, &self.bone_buffer, &self.color_buffer, &self.uv_buffer, self.shadow.bound(), &self.fighters.view);
         }
     }
 
@@ -146,8 +157,12 @@ impl Renderer {
         self.fit_targets(size);
         self.particles.begin(scene.frame);
         let window = size.0 as f32 / size.1.max(1) as f32;
-        if self.prepare(scene, aspect, window, size) && !self.groups.is_empty() {
-            self.shadow.draw(encoder, timer.writes(Pass::Shadow), &self.models, &self.groups, &self.instance_buffer);
+        let maps = self.prepare(scene, aspect, window, size);
+        if maps.sun && !self.groups.is_empty() {
+            self.shadow.draw(encoder, timer.writes(Pass::Shadow), &self.models, &self.groups, &self.instance_buffer, false);
+        }
+        if maps.fighters {
+            self.fighters.draw(encoder, timer.writes(Pass::FighterShadow), &self.models, &self.groups, &self.instance_buffer, true);
         }
 
         let clear = (if scene.clear == [0.0; 3] { super::CLEAR } else { scene.clear.map(f64::from) }).map(linear_of);
@@ -165,7 +180,7 @@ impl Renderer {
             self.water_level = None;
         }
         let targets = self.targets.as_ref().expect("fit_targets ran");
-        let images = self.water_level.and_then(|_| self.water.group(&self.device, &targets.depth));
+        let images = self.water_level.and_then(|_| self.water.group(&self.device, &targets.depth_only));
 
         self.draw_reflection(encoder, timer, clear, procedural_sky);
         if procedural_sky {

@@ -16,7 +16,7 @@ pub struct FrameUniform {
     pub fog_range: [f32; 4],
 }
 
-/// The frame the model and water shaders read: the shared six, then the eye, the near and far planes with the water plane, the screen, the glow a lava surface throws on what is above it, and the sun's lookup.
+/// The frame the model and water shaders read: the shared six, then the eye, the near and far planes with the water plane, the screen, the glow a lava surface throws on what is above it, the sun's lookup and the fighters'.
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 pub struct SceneFrame {
@@ -29,6 +29,9 @@ pub struct SceneFrame {
     pub sun_projection: Mat4,
     pub shadow: [f32; 4],
     pub shadow_filter: [f32; 4],
+    pub fighter_projection: Mat4,
+    /// The fighters' map: a texel in uv, the normal offset in world units, 1 when it is drawn, and how much of the key light a fighter's self-shadow takes.
+    pub fighter_shadow: [f32; 4],
 }
 
 /// What the shader needs to look a world position up in the sun's map.
@@ -52,7 +55,8 @@ pub struct Sun {
 pub enum Lit<'a> {
     Unlit,
     Ambient,
-    Sunlit(&'a Sun),
+    /// The sun's map, and the fighters' own map when the settings draw one.
+    Sunlit(&'a Sun, Option<&'a Sun>),
 }
 
 /// What the light does to a layer: nothing for the glowing and modulating layers whose colours are the effect and for layers the model marks unshaded, the key and ambient for translucent ones, and shadows and a rim as well for the solid ones.

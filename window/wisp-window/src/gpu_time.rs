@@ -9,6 +9,7 @@ use std::sync::Arc;
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Pass {
     Shadow,
+    FighterShadow,
     Reflection,
     Clouds,
     Sky,
@@ -21,7 +22,7 @@ pub enum Pass {
     Counter,
 }
 
-pub const PASSES: [Pass; 10] = [Pass::Shadow, Pass::Reflection, Pass::Clouds, Pass::Sky, Pass::Scene, Pass::Water, Pass::Post, Pass::Sprites, Pass::Ui, Pass::Counter];
+pub const PASSES: [Pass; 11] = [Pass::Shadow, Pass::FighterShadow, Pass::Reflection, Pass::Clouds, Pass::Sky, Pass::Scene, Pass::Water, Pass::Post, Pass::Sprites, Pass::Ui, Pass::Counter];
 
 const SLOTS: usize = 4;
 const QUERIES: u32 = 256;

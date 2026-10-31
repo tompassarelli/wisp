@@ -38,10 +38,10 @@ impl Preset {
     /// The features this preset runs.
     pub fn features(self) -> Features {
         match self {
-            Preset::Low => Features { shadows: Shadows::Off, msaa: 1, ssao: false, contact_shadows: false, bloom: false, volumetrics: false, cloud_layers: 1, weather_percent: 25, water: Water::Reflective, render_scale_percent: 75 },
-            Preset::Medium => Features { shadows: Shadows::Map(1024), msaa: 2, ssao: false, contact_shadows: false, bloom: false, volumetrics: false, cloud_layers: 2, weather_percent: 50, water: Water::Reflective, render_scale_percent: 100 },
-            Preset::High => Features { shadows: Shadows::Map(2048), msaa: 4, ssao: true, contact_shadows: true, bloom: true, volumetrics: false, cloud_layers: 3, weather_percent: 100, water: Water::Reflective, render_scale_percent: 100 },
-            Preset::Ultra => Features { shadows: Shadows::Map(4096), msaa: 8, ssao: true, contact_shadows: true, bloom: true, volumetrics: true, cloud_layers: 3, weather_percent: 100, water: Water::Refractive, render_scale_percent: 100 },
+            Preset::Low => Features { shadows: Shadows::Off, msaa: 1, ssao: false, contact_shadows: false, fighter_shadows: 0, bloom: false, volumetrics: false, cloud_layers: 1, weather_percent: 25, water: Water::Reflective, render_scale_percent: 75 },
+            Preset::Medium => Features { shadows: Shadows::Map(1024), msaa: 2, ssao: false, contact_shadows: false, fighter_shadows: 0, bloom: false, volumetrics: false, cloud_layers: 2, weather_percent: 50, water: Water::Reflective, render_scale_percent: 100 },
+            Preset::High => Features { shadows: Shadows::Map(2048), msaa: 4, ssao: true, contact_shadows: true, fighter_shadows: 1024, bloom: true, volumetrics: false, cloud_layers: 3, weather_percent: 100, water: Water::Reflective, render_scale_percent: 100 },
+            Preset::Ultra => Features { shadows: Shadows::Map(4096), msaa: 8, ssao: true, contact_shadows: true, fighter_shadows: 2048, bloom: true, volumetrics: true, cloud_layers: 3, weather_percent: 100, water: Water::Refractive, render_scale_percent: 100 },
         }
     }
 
@@ -104,6 +104,8 @@ pub struct Features {
     pub ssao: bool,
     /// Screen-space shadows from the sun: a short ray march in the depth that seats feet, weapons and small props where the shadow map is too coarse.
     pub contact_shadows: bool,
+    /// Texels a side of the fighters' own shadow map, which shades a fighter by itself and the other fighters; zero draws no map, and a fighter is then lit without shadow.
+    pub fighter_shadows: u32,
     pub bloom: bool,
     /// Volumetric fog and light shafts.
     pub volumetrics: bool,
@@ -118,7 +120,7 @@ pub struct Features {
 
 impl Features {
     /// Each setting key and its value, for the log and `standalone.json`.
-    pub fn keys(&self) -> [(&'static str, String); 10] {
+    pub fn keys(&self) -> [(&'static str, String); 11] {
         [
             ("shadows", match self.shadows {
                 Shadows::Off => "off".into(),
@@ -127,6 +129,7 @@ impl Features {
             ("msaa", self.msaa.to_string()),
             ("ssao", self.ssao.to_string()),
             ("contactShadows", self.contact_shadows.to_string()),
+            ("fighterShadows", self.fighter_shadows.to_string()),
             ("bloom", self.bloom.to_string()),
             ("volumetrics", self.volumetrics.to_string()),
             ("cloudLayers", self.cloud_layers.to_string()),
@@ -168,7 +171,7 @@ mod tests {
     #[test]
     fn each_preset_costs_no_less_than_the_one_below() {
         let cost = |features: Features| {
-            (matches!(features.shadows, Shadows::Map(_)) as u32 + features.ssao as u32 + features.contact_shadows as u32 + features.bloom as u32 + features.volumetrics as u32, features.msaa, features.weather_percent, features.render_scale_percent, features.cloud_layers)
+            (matches!(features.shadows, Shadows::Map(_)) as u32 + features.ssao as u32 + features.contact_shadows as u32 + u32::from(features.fighter_shadows > 0) + features.bloom as u32 + features.volumetrics as u32, features.msaa, features.weather_percent, features.render_scale_percent, features.cloud_layers)
         };
         for pair in PRESETS.windows(2) {
             let (low, high) = (cost(pair[0].features()), cost(pair[1].features()));

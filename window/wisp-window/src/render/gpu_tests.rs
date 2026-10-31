@@ -5,6 +5,7 @@ use scene::Bolt;
 use image::ImageEncoder;
 
 mod faces;
+mod fighter_light;
 mod lightning;
 mod remaster;
 mod rim;

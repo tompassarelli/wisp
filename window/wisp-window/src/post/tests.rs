@@ -4,7 +4,7 @@ use crate::render::DrawScene;
 
 const SIDE: u32 = 64;
 const SCENE: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
-const DEPTH: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
+const DEPTH: wgpu::TextureFormat = wgpu::TextureFormat::Depth24PlusStencil8;
 const OUTPUT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 const PLAIN: Tuning = Tuning { bloom_strength: 0.0, occlusion_strength: 0.0, contact_strength: 0.0, ..TUNING };
 
@@ -62,7 +62,8 @@ fn run_with(device: &wgpu::Device, queue: &wgpu::Queue, light: impl Fn(u32, u32)
     let target = texture(device, OUTPUT, 1, wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC);
     let (hdr_view, depth_view, target_view) = (hdr.create_view(&Default::default()), depth.create_view(&Default::default()), target.create_view(&Default::default()));
     let mut post = Post::new(device, queue, OUTPUT, SCENE, DEPTH, 4);
-    post.fit((SIDE, SIDE), &hdr_view, &depth_view);
+    let aspect = |aspect| depth.create_view(&wgpu::TextureViewDescriptor { aspect, ..Default::default() });
+    post.fit((SIDE, SIDE), &hdr_view, &aspect(wgpu::TextureAspect::DepthOnly), &aspect(wgpu::TextureAspect::StencilOnly));
     let mut scene = scene();
     configure(&mut scene);
     post.prepare(&Look::of(&scene, 1.0, [0.0, 0.0, SIDE as f32, SIDE as f32], false, &tuning));

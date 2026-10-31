@@ -183,7 +183,7 @@ impl Renderer {
         let color_capacity = 64;
         let colors = color_storage(&self.device, color_capacity);
         let uv_rows = uv_storage(&self.device, color_capacity);
-        let group = frame_group(&self.device, &self.frame_layout, &frame, &bones, &colors, &uv_rows, self.shadow.bound());
+        let group = frame_group(&self.device, &self.frame_layout, &frame, &bones, &colors, &uv_rows, self.shadow.bound(), &self.fighters.view);
         let resolved = make(HDR, 1, wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING, "sprite");
         Slot {
             size,
@@ -245,13 +245,13 @@ impl Renderer {
         if bones > slot.bone_capacity {
             slot.bone_capacity = bones.next_power_of_two();
             slot.bones = bone_storage(&self.device, slot.bone_capacity);
-            slot.group = frame_group(&self.device, &self.frame_layout, &slot.frame, &slot.bones, &slot.colors, &slot.uv_rows, self.shadow.bound());
+            slot.group = frame_group(&self.device, &self.frame_layout, &slot.frame, &slot.bones, &slot.colors, &slot.uv_rows, self.shadow.bound(), &self.fighters.view);
         }
         if colors.len() > slot.color_capacity {
             slot.color_capacity = colors.len().next_power_of_two();
             slot.colors = color_storage(&self.device, slot.color_capacity);
             slot.uv_rows = uv_storage(&self.device, slot.color_capacity);
-            slot.group = frame_group(&self.device, &self.frame_layout, &slot.frame, &slot.bones, &slot.colors, &slot.uv_rows, self.shadow.bound());
+            slot.group = frame_group(&self.device, &self.frame_layout, &slot.frame, &slot.bones, &slot.colors, &slot.uv_rows, self.shadow.bound(), &self.fighters.view);
         }
         let queue = &self.queue;
         let team = [shot.team[0], shot.team[1], shot.team[2], 1.0];
@@ -265,7 +265,7 @@ impl Renderer {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("sprite"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment { view: &slot.color, depth_slice: None, resolve_target: (self.samples > 1).then_some(&slot.resolved), ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT), store: if self.samples > 1 { wgpu::StoreOp::Discard } else { wgpu::StoreOp::Store } } })],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment { view: &slot.depth, depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(1.0), store: wgpu::StoreOp::Discard }), stencil_ops: None }),
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment { view: &slot.depth, depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(1.0), store: wgpu::StoreOp::Discard }), stencil_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(0), store: wgpu::StoreOp::Discard }) }),
                 timestamp_writes: timer.writes(crate::gpu_time::Pass::Sprites),
                 occlusion_query_set: None,
                 multiview_mask: None,

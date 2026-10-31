@@ -326,6 +326,7 @@ impl Renderer {
     pub fn set_features(&mut self, features: Features) {
         self.features = features;
         self.set_shadow_side(match features.shadows { Shadows::Off => 0, Shadows::Map(side) => side });
+        self.set_fighter_side(features.fighter_shadows);
         self.set_post_tuning(tuning_of(features, self.tuning));
         if samples_of(features) != self.samples {
             self.steer();
