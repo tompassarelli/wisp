@@ -44,7 +44,7 @@ export function culpritRun(runs: readonly Run[]): Run | undefined {
   return (green === -1 ? runs : runs.slice(0, green)).filter((run) => run.conclusion === "failure").at(-1);
 }
 
-export function redIssueBody(branch: string, tests: readonly string[], runs: readonly Run[], repository: string, lane?: string): string {
+export function redIssueBody(branch: string, tests: readonly string[], runs: readonly Run[], repository: string, lanes: readonly string[] = []): string {
   const [latest] = runs;
   const green = runs.findIndex((run) => run.conclusion === "success");
   const first = culpritRun(runs);
@@ -55,7 +55,7 @@ export function redIssueBody(branch: string, tests: readonly string[], runs: rea
     "",
     `- Latest failing run: ${latest?.url ?? "?"} (${short(latest?.headSha ?? "")})`,
     first === undefined ? "" : `- First failing commit: ${first.headSha} (${first.url})`,
-    first === undefined || lane === undefined ? "" : `- Culprit lane: ${lane} (the Autoland branch that landed it)`,
+    ...(first === undefined ? [] : lanes.map((lane) => `- Culprit lane: ${lane}`)),
     lastGreen === undefined
       ? "- Last green run: none in the recent history"
       : `- Last green commit: ${lastGreen.headSha}; commits that may have broken it: https://github.com/${repository}/compare/${short(lastGreen.headSha)}...${short(first?.headSha ?? latest?.headSha ?? "")}`,
@@ -91,6 +91,12 @@ export const landedFrom = (repository: string, sha: string) =>
     Effect.orElseSucceed(() => undefined),
   );
 
+export const suspectLanes = (repository: string, from: string, to: string) => Effect.gen(function*() {
+  const shas = (yield* gh("api", `repos/${repository}/compare/${from}...${to}`, "--jq", '.commits[].sha').pipe(Effect.orElseSucceed(() => to))).split("\n").filter((sha) => sha.trim() !== "");
+  const lanes = yield* Effect.forEach(shas.slice(-10), (sha) => landedFrom(repository, sha).pipe(Effect.map((lane) => lane === undefined ? undefined : `${lane} (${sha.slice(0, 10)})`)));
+  return lanes.filter((lane): lane is string => lane !== undefined);
+});
+
 export const reportRun = (runId: string) => Effect.gen(function*() {
   const run = yield* gh("run", "view", runId, "--json", "conclusion,headBranch,workflowName,databaseId").pipe(Effect.flatMap(decode(ThisRun, "gh run view")));
   if (run.conclusion !== "success" && run.conclusion !== "failure") return yield* Console.log(`run ${runId} ${run.conclusion || "unfinished"}: nothing to report`);
@@ -113,8 +119,9 @@ export const reportRun = (runId: string) => Effect.gen(function*() {
   const tests = failingTests(yield* gh("run", "view", runId, "--log-failed"));
   const streak = index === -1 ? completed : completed.slice(index);
   const culprit = culpritRun(streak);
-  const lane = culprit === undefined ? undefined : yield* landedFrom(nameWithOwner, culprit.headSha);
-  const body = redIssueBody(run.headBranch, tests, streak, nameWithOwner, lane);
+  const lastGreen = streak.find((entry) => entry.conclusion === "success");
+  const lanes = culprit === undefined ? [] : yield* suspectLanes(nameWithOwner, lastGreen?.headSha ?? culprit.headSha, culprit.headSha);
+  const body = redIssueBody(run.headBranch, tests, streak, nameWithOwner, lanes);
   const [issue] = open;
   if (issue === undefined) {
     const url = yield* gh("issue", "create", "--title", title, "--body", body, "--label", "bug", "--label", "priority:now");
