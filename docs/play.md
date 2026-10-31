@@ -484,6 +484,8 @@ A game opts in with `StandaloneGame.net`: `mapHash()` names its build and
 over Wisp's transport (wisp:docs/network-model.md). A joiner whose map hash
 differs from the code's stops before sending anything with `MapMismatch`,
 naming both hashes; a direct join sends the full hash and the host refuses it.
+The host waits up to 5 minutes for every player to join (a relay closes a
+room after 10 idle minutes); each later step of the handshake has 30 s.
 Closing either window sends a goodbye, so the other side ends at once with
 `PeerLeft`; a side that goes quiet ends the other after 3 s with `PeerSilent`.
 `--script`, `--headless`, `--frames` and `--out` work as above, one script per

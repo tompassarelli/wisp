@@ -9,6 +9,9 @@ import { type Datagram, decodeDatagram, encodeDatagram, fitTurns } from "./wire"
 
 export { FRAME_MS };
 const SILENCE_MS = 3000;
+const HANDSHAKE_MS = 30_000;
+// A relay closes a room after 10 idle minutes (wisp:docs/relay.md, "Limits")
+const JOIN_WAIT_MS = 5 * 60_000;
 const START_LEAD_MS = 400;
 const PINGS = 8;
 const PING_SPACING_MS = 25;
@@ -195,11 +198,12 @@ export const runNetPeer = (game: NetGame, options: NetPeerOptions, log: (line: s
     const inputDelay = session.measured?.(rttMs);
     if (inputDelay !== undefined) log(`net: slot ${slot}, map input delay ${inputDelay} frames (${(inputDelay * FRAME_MS).toFixed(1)} ms)`);
   };
-  const handshakeEnd = wallClock() + 30_000;
+  let handshakeEnd = wallClock() + HANDSHAKE_MS;
   if (hosting) {
     const joined = new Set<number>();
+    const joinEnd = wallClock() + JOIN_WAIT_MS;
     while (joined.size < peers.length) {
-      if (wallClock() > handshakeEnd) return yield* new NetFailure({ problem: `${joined.size} of ${peers.length} players joined within 30 s` });
+      if (wallClock() > joinEnd) return yield* new NetFailure({ problem: `${joined.size} of ${peers.length} players joined within ${JOIN_WAIT_MS / 60_000} minutes` });
       yield* nap(5);
       for (const { from, datagram } of inbox.splice(0)) {
         if (datagram.t !== "hello") continue;
@@ -210,6 +214,7 @@ export const runNetPeer = (game: NetGame, options: NetPeerOptions, log: (line: s
         joined.add(from);
       }
     }
+    handshakeEnd = wallClock() + HANDSHAKE_MS;
     for (let id = 0; id < PINGS * 3 && peers.some((peer) => (pongs.get(peer)?.length ?? 0) < PINGS); id++) {
       yield* send({ t: "ping", id, at: Math.round(wallClock() * 1000) });
       yield* nap(PING_SPACING_MS);
