@@ -5,6 +5,7 @@ import * as nativePlayers from "../src/game/native/players";
 import { bindWorld } from "../src/game/native/world";
 import { HeadlessClient } from "../src/headless/client";
 import { readNativeDeclarations } from "../host/headless/headless";
+import { registerChatEvents, registerChatHistoryKey } from "../src/ui/chatPanel";
 import { compile, wrap } from "./gameApiCompile";
 
 test("input calls lower to the natives they replaced, byte for byte", () => {
@@ -70,4 +71,15 @@ test("the native backend runs a client's key, chat and pointer events and local 
   expect([nativeInput.keyDown(space), nativeInput.pointerX(), nativeInput.mouseDown(second.natives.MOUSE_BUTTON_TYPE_LEFT as never)]).toEqual([false, 0, false]);
   bindWorld(undefined);
   expect([...first.emulatedCalls.keys(), ...second.emulatedCalls.keys()]).toEqual([]);
+});
+
+test("[boundary] the chat panel's registrations run on Bun over the native backend and register each slot", () => {
+  const client = new HeadlessClient({ slot: 0, humans: [0, 1], declarations: readNativeDeclarations(), filePrefix: "game-api", localNatives: {}, network: [] });
+  bindWorld(client.world);
+  const events = nativeEvents.createEvents();
+  registerChatEvents(events, [0, 1]);
+  registerChatHistoryKey(events, [1], nativeInput.osKey(119));
+  bindWorld(undefined);
+  expect(client.log.map(call => call.name)).toEqual(["CreateTrigger", "Player", "TriggerRegisterPlayerChatEvent", "Player", "TriggerRegisterPlayerChatEvent", "ConvertOsKeyType", "Player", "BlzTriggerRegisterPlayerKeyEvent"]);
+  expect([...client.emulatedCalls.keys()]).toEqual([]);
 });

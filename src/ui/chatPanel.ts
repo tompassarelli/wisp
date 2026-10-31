@@ -1,8 +1,8 @@
 // A chat panel a map draws in place of Warcraft's: it only reads received lines and writes its own frames.
 
-import { addChatEvent, addKeyEvent, type OsKey } from "../game/input";
-import type { Events } from "../game/events";
-import { player } from "../game/players";
+import { addChatEvent, addKeyEvent, type OsKey } from "wisp/game/input";
+import type { Events } from "wisp/game/events";
+import { player } from "wisp/game/players";
 import { f32 } from "../sim/f32";
 import { addChatLine, advanceChat, chatAge, chatOpacity, createChatLog, type ChatLog, type ChatRow, type GlyphWidths, visibleChatRows } from "./chatLog";
 
