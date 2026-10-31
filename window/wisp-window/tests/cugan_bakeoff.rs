@@ -1,4 +1,4 @@
-//! Real-CUGAN on wgpu against the ncnn port's outputs for the twelve bake-off textures (wisp:docs/remaster-upscaler.md). The port tiles at 400 pixels and approximates the squeeze-excitation means across tiles, which the five textures wider than 400 pixels (with their wrap padding) trigger; their references in `out-exact` come from the same tool with `-t 1200`, one exact tile. The textures come from a player's install and stay outside Git, in `$WISP_BAKEOFF` or `~/.local/state/wisp/remaster-bakeoff`; without them, or without a hardware adapter, each test returns at once.
+//! Real-CUGAN on wgpu against the ncnn port's outputs for the twelve bake-off textures (wisp:docs/remaster-upscaler.md). The port tiles at 400 pixels and approximates the squeeze-excitation means across tiles, which the five textures wider than 400 pixels (with their wrap padding) trigger; their references in `out-exact` come from the same tool with `-t 1200`, one exact tile. The textures come from a player's install and stay outside Git, in `$WISP_BAKEOFF` or `~/.local/state/wisp/remaster-bakeoff`; without them, or without a hardware adapter, each test fails when run with `--ignored`.
 
 use std::path::PathBuf;
 
@@ -53,8 +53,9 @@ fn colour_error(ours: &Image, theirs: &Image) -> f64 {
 }
 
 #[test]
+#[ignore = "needs the bake-off textures in $WISP_BAKEOFF and a hardware adapter"]
 fn rgb_is_within_one_level_of_the_ncnn_port_and_alpha_is_todays_filter() {
-    let (Some(folder), Some(upscaler)) = (folder(), upscaler()) else { return };
+    let (Some(folder), Some(upscaler)) = (folder(), upscaler()) else { panic!("the bake-off textures or a hardware adapter are missing") };
     let classical = Upscaler::classical();
     for name in TEXTURES {
         let source = load(&folder.join("png").join(format!("{name}.png")));
@@ -88,8 +89,9 @@ fn seam(image: &Image, width: u32, height: u32) -> (f64, f64) {
 }
 
 #[test]
+#[ignore = "needs the bake-off textures in $WISP_BAKEOFF and a hardware adapter"]
 fn lords_grass_tiled_three_by_three_has_no_seam_the_source_lacks() {
-    let (Some(folder), Some(upscaler)) = (folder(), upscaler()) else { return };
+    let (Some(folder), Some(upscaler)) = (folder(), upscaler()) else { panic!("the bake-off textures or a hardware adapter are missing") };
     let source = load(&folder.join("png/lords_grass.png"));
     let ours = upscaler.doubled(&source, Edges::Wrap, "wrap").0;
     let (source_cell, our_cell) = (seam(&source, 64, 64), seam(&ours, 128, 128));

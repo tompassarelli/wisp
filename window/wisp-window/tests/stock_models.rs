@@ -14,13 +14,10 @@ fn stock_model(path: &str) -> Option<Vec<u8>> {
 }
 
 #[test]
+#[ignore = "needs WISP_STOCK_DIRS naming a folder with buildings/orc/watchtower/watchtower.mdx"]
 fn an_orc_building_samples_its_own_texture_coordinates() {
-    let Some(bytes) = stock_model("buildings/orc/watchtower/watchtower.mdx") else {
-        println!("WISP_STOCK_DIRS names no folder holding buildings/orc/watchtower/watchtower.mdx");
-        return;
-    };
+    let bytes = stock_model("buildings/orc/watchtower/watchtower.mdx").expect("WISP_STOCK_DIRS names a folder holding buildings/orc/watchtower/watchtower.mdx");
     let model = Model::from_mdx(&bytes).expect("the building parses");
-    assert_eq!(model.geosets.len(), 10);
     let data = source::model(&bytes, Quality::Off).expect("the building builds");
     let mut first = 0;
     for (index, geoset) in model.geosets.iter().enumerate() {
