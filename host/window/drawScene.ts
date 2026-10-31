@@ -73,7 +73,7 @@ function createDayNightLights(read: AssetReader, report: (problem: string) => vo
         if (!reading.has(path)) {
           reading.add(path);
           void read(path)
-            .then((bytes) => { models.set(path, bytes === undefined ? undefined : parseMDX(parsableModel(bytes).bytes.slice().buffer)); })
+            .then((bytes) => { models.set(path, bytes === undefined ? undefined : parseMDX(parsableModel(bytes, true).bytes.slice().buffer)); })
             .catch((cause: unknown) => { models.set(path, undefined); report(`${path}: ${cause instanceof Error ? cause.message : String(cause)}`); })
             .finally(() => { reading.delete(path); });
         }
