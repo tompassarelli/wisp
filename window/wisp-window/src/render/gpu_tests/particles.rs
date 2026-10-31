@@ -38,7 +38,7 @@ fn particle_and_blend_sheet(priority_plane: Option<i32>) -> [f32; 3] {
     renderer.textures.insert("sheet".into(), upload(&device, &queue, &crate::texture::Image { width: 1, height: 1, rgba: texel(SOURCE, 1.0).to_vec() }));
     let reach = 600.0;
     let corner = |x: f32, y: f32, u: f32, v: f32| Vertex { position: [x, y, -150.0], normal: [0.0, 0.0, 1.0], uv: [u, v], bones: [0; 4], weights: [1.0, 0.0, 0.0, 0.0] };
-    let layer = model::Layer { paint: Paint::Texture("sheet".into()), filter: Filter::Blend, color_slot: 1, unshaded: true };
+    let layer = model::Layer { paint: Paint::Texture("sheet".into()), filter: Filter::Blend, color_slot: 1, unshaded: true, two_sided: true };
     let vertices = vec![corner(-reach, -reach, 0.0, 1.0), corner(reach, -reach, 1.0, 1.0), corner(reach, reach, 1.0, 0.0), corner(-reach, reach, 0.0, 0.0)];
     renderer.add_model("sheet", ModelData { vertices, indices: vec![0, 1, 2, 0, 2, 3], parts: vec![model::Part { color_slot: 0, first_index: 0, index_count: 6, layers: vec![layer] }], rig: Box::new(FlatRig::new([1.0; 4])), emitters: Vec::new() });
     let mut scene = Scene { frame: 0, clear: BACKGROUND, ..Scene::default() };

@@ -52,6 +52,7 @@ pub struct Geoset {
 /// A layer's shading flag bits (the MDX `Layer.shading`).
 pub mod shading {
     pub const UNSHADED: u32 = 1;
+    pub const TWO_SIDED: u32 = 0x10;
 }
 
 pub mod node_flags {

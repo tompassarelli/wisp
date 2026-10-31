@@ -59,6 +59,8 @@ pub struct Layer {
     pub color_slot: u32,
     /// Drawn without the scene light, as a liquid or a glow is.
     pub unshaded: bool,
+    /// Drawn from behind as well as in front; Warcraft culls the back faces of a layer without the two-sided shading flag.
+    pub two_sided: bool,
 }
 
 /// A run of indices drawn with one material's layers, one draw per layer.

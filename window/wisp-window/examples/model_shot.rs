@@ -33,7 +33,8 @@ fn main() {
     let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default())).expect("adapter");
     println!("adapter {}", adapter.get_info().name);
     let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())).expect("device");
-    let mut renderer = Renderer::new(device.clone(), queue.clone(), FORMAT, Quality::Off, wisp_window::settings::Preset::High.features());
+    let quality: Quality = std::env::var("WISP_REMASTER").ok().map_or(Ok(Quality::Off), |value| value.parse()).expect("WISP_REMASTER is off, standard or high");
+    let mut renderer = Renderer::new(device.clone(), queue.clone(), FORMAT, quality, wisp_window::settings::Preset::High.features());
     let clock: f32 = std::env::var("WISP_SHOT_CLOCK").ok().and_then(|value| value.parse().ok()).unwrap_or(0.0);
     let facing = std::env::var("WISP_SHOT_FACING").ok().and_then(|value| value.parse::<f32>().ok()).unwrap_or(0.0).to_radians();
     let teams: Vec<[f32; 3]> = std::env::var("WISP_SHOT_TEAMS").unwrap_or_else(|_| "1,0,0".into()).split(';').map(|team| {

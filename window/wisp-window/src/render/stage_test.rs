@@ -15,6 +15,7 @@ use crate::texture::Image;
 
 mod falls;
 mod low;
+mod mirror;
 mod pool;
 
 struct Clocked(std::sync::Arc<std::sync::atomic::AtomicU32>);
@@ -77,7 +78,7 @@ fn block(low: [f32; 3], high: [f32; 3]) -> (Vec<Vertex>, Vec<u32>) {
 
 fn model((vertices, indices): (Vec<Vertex>, Vec<u32>), paint: Paint, filter: Filter) -> ModelData {
     let count = indices.len() as u32;
-    ModelData { vertices, indices, parts: vec![Part { color_slot: 0, first_index: 0, index_count: count, layers: vec![Layer { paint, filter, color_slot: 1, unshaded: false }] }], emitters: Vec::new(), rig: Box::new(Still) }
+    ModelData { vertices, indices, parts: vec![Part { color_slot: 0, first_index: 0, index_count: count, layers: vec![Layer { paint, filter, color_slot: 1, unshaded: false, two_sided: true }] }], emitters: Vec::new(), rig: Box::new(Still) }
 }
 
 /// A bed that rises from deep water in front to the shore at the back, so the water has a shallow end to read against.
@@ -465,36 +466,4 @@ fn an_effect_whose_path_names_a_liquid_leaves_the_sea_water() {
     assert!(sea[2] > sea[1], "the sea stays water under a plague cloud, got {sea:?}");
     stage.draw(&Stage::scene(1.0, Preset::Poison));
     assert_eq!(stage.renderer.water.liquid, Preset::Poison);
-}
-
-#[test]
-fn the_far_sea_mirrors_the_sky_and_not_the_clear_colour() {
-    let size = (960, 640);
-    let Some(mut stage) = Stage::new(size) else { return };
-    let scene = Scene { clear: [0.0; 3], ..Stage::scene(1.0, Preset::Water) };
-    stage.draw(&scene);
-    let rgba = stage.read();
-    if let Ok(dir) = std::env::var("WISP_WATER_CAPTURE_DIR") {
-        std::fs::create_dir_all(&dir).unwrap();
-        capture::write(&PathBuf::from(dir).join("far-sea.png"), size.0, size.1, &rgba).unwrap();
-    }
-    let darkest = |rgba: &[u8]| (300..340).flat_map(|y| (0..280).map(move |x| (x, y))).map(|(x, y)| pixel(&rgba, size.0, x, y).iter().map(|&channel| u32::from(channel)).sum::<u32>()).min().unwrap();
-    let (black, white) = (darkest(&rgba), { stage.draw(&Scene { clear: [1.0; 3], ..scene }); darkest(&stage.read()) });
-    assert!(black.abs_diff(white) <= 16, "the far sea changes with the clear colour: its darkest pixel sums to {black} over black and {white} over white");
-}
-
-/// Tomb of Sargeras lays a narrow water strip at the deck before a wide sea far below it; the scene is mirrored in the sea's plane, so a reflection sits under what it reflects.
-#[test]
-fn the_scene_is_mirrored_in_the_widest_liquid_surface_at_its_own_height() {
-    let Some(mut stage) = Stage::new((320, 200)) else { return };
-    stage.renderer.add_model("strip", model(block([-50.0, -60.0, 0.0], [50.0, 60.0, 0.0]), Paint::Water, Filter::Blend));
-    let mut scene = Stage::scene(1.0, Preset::Water);
-    let mut strip = placed("strip", 0.0, 0.0, 1.0, [1.0; 3]);
-    strip.matrix[0] = 12.0;
-    scene.poses.insert(0, strip);
-    for pose in scene.poses.iter_mut().filter(|pose| pose.model == sea(Preset::Water)) {
-        pose.matrix[14] = -360.0;
-    }
-    stage.draw(&scene);
-    assert_eq!(stage.renderer.water_level, Some(-360.0));
 }

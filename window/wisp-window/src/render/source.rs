@@ -112,18 +112,19 @@ fn paint(model: &model::Model, texture_id: i32) -> Paint {
 /// The layers a geoset draws, a layer that cycles through water frames counting as one water draw.
 fn layers_of(model: &model::Model, material: usize, layer_draws: &[Vec<Vec<(Option<i32>, u32)>>], geoset_index: usize) -> Vec<Layer> {
     let Some(found) = model.materials.get(material) else {
-        return vec![Layer { paint: Paint::None, filter: Filter::Opaque, color_slot: geoset_index as u32, unshaded: false }];
+        return vec![Layer { paint: Paint::None, filter: Filter::Opaque, color_slot: geoset_index as u32, unshaded: false, two_sided: true }];
     };
     let mut layers = Vec::new();
     for (layer, draws) in found.layers.iter().zip(&layer_draws[material]) {
         let unshaded = layer.shading_flags & model::shading::UNSHADED != 0;
+        let two_sided = layer.shading_flags & model::shading::TWO_SIDED != 0;
         let mut water_drawn = false;
         for &(variant, color_slot) in draws {
             let paint = paint(model, variant.unwrap_or(layer.texture_id));
             if paint == Paint::Water && std::mem::replace(&mut water_drawn, true) {
                 continue;
             }
-            layers.push(Layer { paint, filter: Filter::from_index(layer.filter_mode), color_slot, unshaded });
+            layers.push(Layer { paint, filter: Filter::from_index(layer.filter_mode), color_slot, unshaded, two_sided });
         }
     }
     without_stand_in(layers)
@@ -221,8 +222,16 @@ mod tests {
     }
 
     #[test]
+    fn a_layer_is_two_sided_only_when_its_shading_has_the_two_sided_flag() {
+        let layer = |shading_flags| model::Layer { shading_flags, ..model::Layer::default() };
+        let material = model::Material { layers: vec![layer(0), layer(model::shading::TWO_SIDED | model::shading::UNSHADED), layer(model::shading::UNSHADED)] };
+        let data = build(model::Model { materials: vec![material], geosets: vec![model::Geoset::default()], ..model::Model::default() }, Quality::Off).unwrap();
+        assert_eq!(data.parts[0].layers.iter().map(|layer| layer.two_sided).collect::<Vec<_>>(), vec![false, true, false]);
+    }
+
+    #[test]
     fn a_water_layer_replaces_the_base_surface_listed_before_it_and_keeps_the_layers_after() {
-        let layer = |paint, filter| Layer { paint, filter, color_slot: 0, unshaded: true };
+        let layer = |paint, filter| Layer { paint, filter, color_slot: 0, unshaded: true, two_sided: true };
         let layers = vec![layer(Paint::Texture("base.tga".into()), Filter::Opaque), layer(Paint::Texture("glow.tga".into()), Filter::Additive), layer(Paint::Water, Filter::Additive), layer(Paint::Texture("spark.tga".into()), Filter::Additive)];
         let kept = without_stand_in(layers);
         assert_eq!(kept.iter().map(|layer| layer.paint.clone()).collect::<Vec<_>>(), vec![Paint::Water, Paint::Texture("spark.tga".into())]);

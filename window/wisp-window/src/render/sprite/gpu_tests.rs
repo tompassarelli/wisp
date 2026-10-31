@@ -5,7 +5,7 @@ const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 
 /// A one-geoset model of a triangle in the plane a sprite's camera faces: its apex up when `apex_up`, else down, so a card's picture tells the two apart.
 fn card_model(apex_up: bool) -> ModelData {
-    let draw = model::Part { color_slot: 0, first_index: 0, index_count: 6, layers: vec![model::Layer { paint: Paint::None, filter: Filter::Opaque, color_slot: 1, unshaded: true }] };
+    let draw = model::Part { color_slot: 0, first_index: 0, index_count: 6, layers: vec![model::Layer { paint: Paint::None, filter: Filter::Opaque, color_slot: 1, unshaded: true, two_sided: true }] };
     let corner = |y: f32, z: f32| Vertex { position: [0.0, y, z], normal: [1.0, 0.0, 0.0], uv: [0.0; 2], bones: [0; 4], weights: [1.0, 0.0, 0.0, 0.0] };
     let (base, apex) = if apex_up { (0.0, 120.0) } else { (120.0, 0.0) };
     ModelData { vertices: vec![corner(-40.0, base), corner(40.0, base), corner(0.0, apex)], indices: vec![0, 1, 2, 0, 2, 1], parts: vec![draw], rig: Box::new(FlatRig::new([1.0; 4])), emitters: Vec::new() }

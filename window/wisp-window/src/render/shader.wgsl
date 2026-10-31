@@ -6,6 +6,7 @@ struct Layer {
     ignores_texture_alpha: u32,
     lighting: u32,
     solid: u32,
+    two_sided: u32,
 };
 
 const UNLIT = 0u;
@@ -203,7 +204,10 @@ fn linear_light(display: vec3<f32>) -> vec3<f32> {
 }
 
 @fragment
-fn fragment_main(in: Varying) -> @location(0) vec4<f32> {
+fn fragment_main(in: Varying, @builtin(front_facing) front: bool) -> @location(0) vec4<f32> {
+    if (layer.two_sided == 0u && front == (frame.camera.w > 0.5)) {
+        discard;
+    }
     var color = textureSample(layer_texture, layer_sampler, in.uv);
     if (layer.kind == 1u) {
         color = vec4<f32>(in.team, 1.0);

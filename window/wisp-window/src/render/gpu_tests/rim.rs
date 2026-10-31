@@ -9,7 +9,7 @@ fn edge_on(unit: bool) -> Option<f32> {
     for vertex in &mut vertices {
         vertex.normal = [0.0, 1.0, 0.0];
     }
-    let part = model::Part { color_slot: 0, first_index, index_count, layers: vec![model::Layer { paint: Paint::Texture("grey".into()), filter: Filter::Opaque, color_slot: 1, unshaded: false }] };
+    let part = model::Part { color_slot: 0, first_index, index_count, layers: vec![model::Layer { paint: Paint::Texture("grey".into()), filter: Filter::Opaque, color_slot: 1, unshaded: false, two_sided: true }] };
     renderer.add_model("edge", ModelData { vertices, indices, parts: vec![part], rig: Box::new(FlatRig::new([1.0; 4])), emitters: Vec::new() });
     let mut scene = Scene { frame: 0, clear: BACKGROUND, ..Scene::default() };
     scene.camera = scene::Camera { view: translation(0.0, 0.0, -500.0), eye: [0.0, 0.0, 500.0], tangent: 1.0, near: 1.0, far: 10_000.0, sky_far: 10_000.0, rise: 0.0, reach: 2000.0 };

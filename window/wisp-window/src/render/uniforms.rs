@@ -87,5 +87,5 @@ pub struct LayerUniform {
     pub ignores_texture_alpha: u32,
     pub lighting: u32,
     pub solid: u32,
-    pub pad: u32,
+    pub two_sided: u32,
 }

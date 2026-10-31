@@ -183,7 +183,7 @@ mod tests {
     }
 
     fn model(vertices: Vec<Vertex>, indices: Vec<u32>) -> ModelData {
-        let parts = vec![Part { color_slot: 0, first_index: 0, index_count: indices.len() as u32, layers: vec![Layer { paint: Paint::None, filter: Filter::Opaque, color_slot: 0, unshaded: false }] }];
+        let parts = vec![Part { color_slot: 0, first_index: 0, index_count: indices.len() as u32, layers: vec![Layer { paint: Paint::None, filter: Filter::Opaque, color_slot: 0, unshaded: false, two_sided: true }] }];
         ModelData { vertices, indices, parts, rig: Box::new(NoRig), emitters: Vec::new() }
     }
 

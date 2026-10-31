@@ -296,7 +296,7 @@ impl Renderer {
         };
         let uniform = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("layer"),
-            contents: bytemuck::bytes_of(&LayerUniform { kind, cutoff: if layer.filter == Filter::Cutout { 0.75 } else { 0.0 }, geoset_slot: part.color_slot, layer_slot: layer.color_slot, ignores_texture_alpha: u32::from(layer.filter == Filter::Additive), lighting: lighting_of(layer.filter, layer.unshaded), solid: u32::from(layer.filter == Filter::Opaque), pad: 0 }),
+            contents: bytemuck::bytes_of(&LayerUniform { kind, cutoff: if layer.filter == Filter::Cutout { 0.75 } else { 0.0 }, geoset_slot: part.color_slot, layer_slot: layer.color_slot, ignores_texture_alpha: u32::from(layer.filter == Filter::Additive), lighting: lighting_of(layer.filter, layer.unshaded), solid: u32::from(layer.filter == Filter::Opaque), two_sided: u32::from(layer.two_sided) }),
             usage: wgpu::BufferUsages::UNIFORM,
         });
         draw(passes::Bind::Layer(self.device.create_bind_group(&wgpu::BindGroupDescriptor {
