@@ -74,8 +74,8 @@ struct Draw {
     filter: Filter,
     first_index: u32,
     index_count: u32,
-    /// None for a water layer, which the water pass binds its own images for.
-    bind_group: Option<wgpu::BindGroup>,
+    /// A layer's texture and slots, or for a water layer the water pass's own images, drawn as the sea or as falling water.
+    bind: passes::Bind,
 }
 
 struct GpuModel {
@@ -263,14 +263,15 @@ impl Renderer {
         let mut draws = Vec::new();
         let mut opaque_first = false;
         let mut solid = false;
-        for part in data.parts.iter().filter(|_| drawable) {
+        let falling_parts = water::falls::of_parts(&data);
+        for (part, &falling) in data.parts.iter().zip(&falling_parts).filter(|_| drawable) {
             for layer in &part.layers {
                 opaque_first |= layer.filter.index() < Filter::Blend.index();
                 solid |= layer.paint != Paint::Water && layer.filter.writes_depth();
-                draws.push(self.layer_draw(path, part, layer));
+                draws.push(self.layer_draw(path, part, layer, falling));
             }
         }
-        let liquid = surface::Surface::of_water(&data).map(|surface| (water::Preset::of_model(path), surface));
+        let liquid = surface::Surface::of_water(&data, &falling_parts).map(|surface| (water::Preset::of_model(path), surface));
         let body = if solid { ripples::extent_of(data.vertices.iter().map(|vertex| vertex.position)) } else { None };
         let emitters = self.register_emitters(path, data.emitters);
         let bones = data.rig.bone_count().max(1);
@@ -279,11 +280,11 @@ impl Renderer {
         self.counts.extend([0, 0]);
     }
 
-    /// The draw of one layer of a part: a water layer carries no bind group, any other binds its texture and its slots.
-    fn layer_draw(&mut self, path: &str, part: &model::Part, layer: &model::Layer) -> Draw {
-        let draw = |bind_group| Draw { filter: layer.filter, first_index: part.first_index, index_count: part.index_count, bind_group };
+    /// The draw of one layer of a part: a water layer binds the water pass's images, as the sea or as a fall, any other binds its texture and its slots.
+    fn layer_draw(&mut self, path: &str, part: &model::Part, layer: &model::Layer, falling: bool) -> Draw {
+        let draw = |bind| Draw { filter: layer.filter, first_index: part.first_index, index_count: part.index_count, bind };
         let (kind, texture) = match &layer.paint {
-            Paint::Water => return draw(None),
+            Paint::Water => return draw(if falling { passes::Bind::Fall } else { passes::Bind::Sea }),
             Paint::Texture(name) => match self.textures.get(&name.to_ascii_lowercase()) {
                 Some(view) => (0, view),
                 None => {
@@ -300,7 +301,7 @@ impl Renderer {
             contents: bytemuck::bytes_of(&LayerUniform { kind, cutoff: if layer.filter == Filter::Cutout { 0.75 } else { 0.0 }, geoset_slot: part.color_slot, layer_slot: layer.color_slot, ignores_texture_alpha: u32::from(layer.filter == Filter::Additive), lighting: lighting_of(layer.filter, layer.unshaded), solid: u32::from(layer.filter == Filter::Opaque), pad: 0 }),
             usage: wgpu::BufferUsages::UNIFORM,
         });
-        draw(Some(self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+        draw(passes::Bind::Layer(self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("layer"),
             layout: &self.layer_layout,
             entries: &[

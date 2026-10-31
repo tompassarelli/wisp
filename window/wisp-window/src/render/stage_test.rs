@@ -13,6 +13,7 @@ use crate::capture;
 use crate::remaster::Quality;
 use crate::texture::Image;
 
+mod falls;
 mod pool;
 
 struct Clocked(std::sync::Arc<std::sync::atomic::AtomicU32>);

@@ -22,10 +22,10 @@ impl Surface {
         (low[0] <= high[0]).then(|| Self { centre: [(low[0] + high[0]) * 0.5, (low[1] + high[1]) * 0.5, high[2]], half: [(high[0] - low[0]) * 0.5, (high[1] - low[1]) * 0.5] })
     }
 
-    /// The surface of the parts of `model` that have a water layer, if any.
-    pub fn of_water(model: &ModelData) -> Option<Self> {
-        let wet = model.parts.iter().filter(|part| part.layers.iter().any(|layer| layer.paint == Paint::Water));
-        let corners = wet.flat_map(|part| model.indices.get(part.first_index as usize..(part.first_index + part.index_count) as usize).unwrap_or_default());
+    /// The surface of the parts of `model` that have a water layer and are not `falling` (water/falls.rs), if any.
+    pub fn of_water(model: &ModelData, falling: &[bool]) -> Option<Self> {
+        let wet = model.parts.iter().zip(falling).filter(|(part, &falling)| !falling && part.layers.iter().any(|layer| layer.paint == Paint::Water));
+        let corners = wet.flat_map(|(part, _)| model.indices.get(part.first_index as usize..(part.first_index + part.index_count) as usize).unwrap_or_default());
         Self::of(corners.filter_map(|&vertex| model.vertices.get(vertex as usize)).map(|vertex| vertex.position))
     }
 

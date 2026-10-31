@@ -2,6 +2,8 @@
 //! as a textured layer. The scene is drawn in three steps: solid layers are resolved into a refraction image and a depth buffer, a mirrored copy is drawn into a reflection
 //! image, and the water pass reads all three. Depth below the surface, taken from the depth buffer, sets the shallow-to-deep ramp, the contact softening and the shore foam.
 
+pub(super) mod falls;
+
 use std::collections::BTreeMap;
 use std::mem::size_of;
 
@@ -11,6 +13,7 @@ use wgpu::util::DeviceExt;
 use crate::post::REFLECTION_SHRINK;
 use crate::texture::Image;
 
+use falls::Fall;
 use super::gpu::upload_layers;
 use super::model::Vertex;
 use super::ripples::{Source, SOURCES};
@@ -244,11 +247,12 @@ pub(super) struct WaterUniform {
     look: [f32; 4],
     sparks: [f32; 4],
     calm: [f32; 4],
+    fall: [[f32; 4]; 2],
     ripples: [[f32; 4]; 2 * SOURCES],
 }
 
 impl WaterUniform {
-    pub fn new(settings: &WaterSettings, seconds: f32, sources: &[Source]) -> Self {
+    pub fn new(settings: &WaterSettings, seconds: f32, sources: &[Source], plane: Option<f32>) -> Self {
         let mut ripples = [[0.0; 4]; 2 * SOURCES];
         for (slot, source) in sources.iter().take(SOURCES).enumerate() {
             ripples[2 * slot] = source.at;
@@ -267,6 +271,7 @@ impl WaterUniform {
             look: [settings.crust, settings.shimmer, settings.opacity, settings.bubbles],
             sparks: [settings.embers, settings.swirl, settings.swell, sources.len().min(SOURCES) as f32],
             calm: [settings.breakup, settings.detail_reach, settings.sparkle_cover, settings.haze_lift],
+            fall: Fall::WATERFALL.rows(plane),
             ripples,
         }
     }
@@ -314,6 +319,8 @@ impl Targets {
 pub(super) struct Water {
     layout: wgpu::BindGroupLayout,
     pub pipeline: wgpu::RenderPipeline,
+    /// The pipeline for falling water (water/falls.rs), which shares the sea's images and uniform.
+    pub falls: wgpu::RenderPipeline,
     uniform: wgpu::Buffer,
     tiled: wgpu::Sampler,
     clamped: wgpu::Sampler,
@@ -344,8 +351,8 @@ impl Water {
         });
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("water"), source: wgpu::ShaderSource::Wgsl(shader_source(include_str!("water.wgsl")).into()) });
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("water"), bind_group_layouts: &[Some(frame_layout), Some(&layout)], immediate_size: 0 });
-        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("water"),
+        let build = |label, fragment_entry: &str| device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some(label),
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &module,
@@ -358,7 +365,7 @@ impl Water {
             },
             fragment: Some(wgpu::FragmentState {
                 module: &module,
-                entry_point: Some("fragment_main"),
+                entry_point: Some(fragment_entry),
                 compilation_options: Default::default(),
                 targets: &[Some(wgpu::ColorTargetState { format, blend: Some(wgpu::BlendState::ALPHA_BLENDING), write_mask: wgpu::ColorWrites::ALL })],
             }),
@@ -368,10 +375,12 @@ impl Water {
             multiview_mask: None,
             cache: None,
         });
+        let (pipeline, falls) = (build("water", "fragment_main"), build("falls", "fragment_fall"));
         let sampler = |mode| device.create_sampler(&wgpu::SamplerDescriptor { address_mode_u: mode, address_mode_v: mode, mag_filter: wgpu::FilterMode::Linear, min_filter: wgpu::FilterMode::Linear, ..Default::default() });
         Self {
             layout,
             pipeline,
+            falls,
             uniform: device.create_buffer_init(&wgpu::util::BufferInitDescriptor { label: Some("water"), contents: bytemuck::bytes_of(&WaterUniform::zeroed()), usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST }),
             tiled: sampler(wgpu::AddressMode::Repeat),
             clamped: sampler(wgpu::AddressMode::ClampToEdge),
@@ -413,8 +422,8 @@ impl Water {
         }
     }
 
-    pub fn write(&self, queue: &wgpu::Queue, settings: &WaterSettings, seconds: f32, sources: &[Source]) {
-        queue.write_buffer(&self.uniform, 0, bytemuck::bytes_of(&WaterUniform::new(settings, seconds, sources)));
+    pub fn write(&self, queue: &wgpu::Queue, settings: &WaterSettings, seconds: f32, sources: &[Source], plane: Option<f32>) {
+        queue.write_buffer(&self.uniform, 0, bytemuck::bytes_of(&WaterUniform::new(settings, seconds, sources, plane)));
     }
 
     /// The group the water pass binds; made per frame since it names the window-sized images.
@@ -472,7 +481,7 @@ mod tests {
 
     #[test]
     fn the_uniform_carries_the_time_and_the_ramp_rates() {
-        let uniform = WaterUniform::new(&WaterSettings::default(), 3.5, &[]);
+        let uniform = WaterUniform::new(&WaterSettings::default(), 3.5, &[], None);
         assert_eq!(uniform.flow[3], 3.5);
         assert_eq!(uniform.shallow[3], WaterSettings::default().absorption);
         assert_eq!(uniform.deep[3], WaterSettings::default().depth_rate);
@@ -481,10 +490,10 @@ mod tests {
     #[test]
     fn the_uniform_carries_the_ripple_sources_and_their_count() {
         let source = Source { at: [10.0, 20.0, 30.0, 4.0], motion: [1.0, 2.0, 3.0, 1.0] };
-        let uniform = WaterUniform::new(&WaterSettings::default(), 0.0, &[source, source]);
+        let uniform = WaterUniform::new(&WaterSettings::default(), 0.0, &[source, source], None);
         assert_eq!(uniform.sparks[3], 2.0);
         assert_eq!(uniform.ripples[2], source.at);
         assert_eq!(uniform.ripples[3], source.motion);
-        assert_eq!(WaterUniform::new(&WaterSettings::default(), 0.0, &[]).sparks[3], 0.0);
+        assert_eq!(WaterUniform::new(&WaterSettings::default(), 0.0, &[], None).sparks[3], 0.0);
     }
 }

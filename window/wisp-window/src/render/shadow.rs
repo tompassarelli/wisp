@@ -162,7 +162,7 @@ impl Shadow {
             pass.set_vertex_buffer(1, instances.slice(..));
             pass.set_index_buffer(model.indices.slice(..), wgpu::IndexFormat::Uint32);
             for draw in model.draws.iter().filter(|draw| draw.filter.writes_depth()) {
-                let Some(layer) = &draw.bind_group else { continue };
+                let Some(layer) = draw.layer() else { continue };
                 pass.set_bind_group(1, layer, &[]);
                 pass.draw_indexed(draw.first_index..draw.first_index + draw.index_count, 0, group.first..group.first + group.count);
             }

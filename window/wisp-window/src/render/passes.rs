@@ -8,6 +8,13 @@ use super::scene::Scene;
 use super::water::WaterSettings;
 use super::{fitted, linear_of, pipelines, Draw, Group, Renderer};
 
+/// What a draw binds: a layer's texture and slots, or the water pass's own images, drawn as the sea or as falling water (water/falls.rs).
+pub(super) enum Bind {
+    Layer(wgpu::BindGroup),
+    Sea,
+    Fall,
+}
+
 /// Which layers a pass draws: with water, the solid ones first, then the water, then the layers that blend over it.
 #[derive(Clone, Copy, PartialEq)]
 pub(super) enum Stage {
@@ -18,8 +25,16 @@ pub(super) enum Stage {
 }
 
 impl Draw {
+    /// The layer's texture and slots, or None for a water layer.
+    pub(super) fn layer(&self) -> Option<&wgpu::BindGroup> {
+        match &self.bind {
+            Bind::Layer(layer) => Some(layer),
+            Bind::Sea | Bind::Fall => None,
+        }
+    }
+
     fn is_water(&self) -> bool {
-        self.bind_group.is_none()
+        self.layer().is_none()
     }
 
     fn in_stage(&self, stage: Stage) -> bool {
@@ -72,16 +87,16 @@ impl Renderer {
             pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
             pass.set_index_buffer(model.indices.slice(..), wgpu::IndexFormat::Uint32);
             for draw in model.draws.iter().filter(|draw| draw.in_stage(stage)) {
-                match (&draw.bind_group, water) {
-                    (Some(layer), _) => {
+                match (&draw.bind, water) {
+                    (Bind::Layer(layer), _) => {
                         pass.set_pipeline(&self.pipelines[pipelines::index_of(draw.filter, group.faded)]);
                         pass.set_bind_group(1, layer, &[]);
                     }
-                    (None, Some(images)) => {
-                        pass.set_pipeline(&self.water.pipeline);
+                    (bind, Some(images)) => {
+                        pass.set_pipeline(if matches!(bind, Bind::Fall) { &self.water.falls } else { &self.water.pipeline });
                         pass.set_bind_group(1, images, &[]);
                     }
-                    (None, None) => continue,
+                    (_, None) => continue,
                 }
                 pass.draw_indexed(draw.first_index..draw.first_index + draw.index_count, 0, group.first..group.first + group.count);
             }
@@ -142,7 +157,7 @@ impl Renderer {
             let seconds = self.started.elapsed().as_secs_f32();
             let plane = self.water_level.unwrap_or(0.0);
             self.ripples.follow(scene.poses.iter().map(|pose| Placement { id: pose.id, model: &pose.model, matrix: pose.matrix, alpha: pose.alpha }), |model| self.model_ids.get(model).and_then(|&id| self.models[id].body), plane, scene.frame, seconds);
-            self.water.write(&self.queue, &WaterSettings::of(self.water.liquid), seconds, &self.ripples.sources());
+            self.water.write(&self.queue, &WaterSettings::of(self.water.liquid), seconds, &self.ripples.sources(), self.water_level);
         } else {
             self.water_level = None;
         }

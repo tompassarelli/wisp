@@ -270,7 +270,7 @@ impl Renderer {
             pass.set_index_buffer(model.indices.slice(..), wgpu::IndexFormat::Uint32);
             for draw in &model.draws {
                 pass.set_pipeline(&self.pipelines[draw.filter.index()]);
-                pass.set_bind_group(1, &draw.bind_group, &[]);
+                pass.set_bind_group(1, draw.layer(), &[]);
                 pass.draw_indexed(draw.first_index..draw.first_index + draw.index_count, 0, 0..1);
             }
         }

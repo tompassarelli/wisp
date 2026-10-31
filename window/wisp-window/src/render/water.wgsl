@@ -9,6 +9,7 @@ struct Water {
     look: vec4<f32>,
     sparks: vec4<f32>,
     calm: vec4<f32>,
+    fall: array<vec4<f32>, 2>,
     ripples: array<vec4<f32>, 32>,
 };
 
@@ -443,4 +444,60 @@ fn fragment_main(in: Surface) -> @location(0) vec4<f32> {
         colour = mix(colour, frame.fog_color.rgb, fog);
     }
     return vec4<f32>(colour, max(clamp(calm + foam, 0.0, 1.0), water.look.z) * fade);
+}
+
+// Streaks of a fall: cells stretched along the fall, in columns of three widths whose edges stay crisp across and whose pattern runs down at the fall's speed. Zero to one.
+fn streaks(along: f32, height: f32, time: f32) -> f32 {
+    let speed = water.fall[0].x;
+    let width = water.fall[0].y;
+    var total = 0.0;
+    var weight = 0.0;
+    for (var layer = 0; layer < 3; layer++) {
+        let l = f32(layer);
+        let cell = width * (1.0 + 1.9 * l);
+        let column = along / cell + l * 17.3;
+        let crisp = floor(column) + smoothstep(0.3, 0.7, fract(column));
+        let run = (height + speed * (0.9 + 0.1 * l) * time) / (cell * 9.0);
+        let share = 1.0 - 0.25 * l;
+        total += noise(vec2<f32>(crisp, run + hash(vec2<f32>(floor(column), l)) * 40.0)) * share;
+        weight += share;
+    }
+    return total / weight;
+}
+
+// Falling water: not the sea stood on end. The streaks are columns across the view (a fall ramps and curves, so no face gives one axis). Streaks run down in bands over a body lightened by air; foam and mist stand where the fall meets the surface below
+// (the sea's plane, or a solid the fall touches); the sheet thins out beneath the plane so it joins the sea instead of ending at it.
+@fragment
+fn fragment_fall(in: Surface) -> @location(0) vec4<f32> {
+    let time = water.flow.w;
+    let aeration = water.fall[0].z;
+    let mist = water.fall[0].w;
+    let plane = water.fall[1].x;
+    let across = frame.view_projection;
+    let axis = normalize(vec2<f32>(across[0][0], across[1][0]) + vec2<f32>(1e-6, 0.0));
+    let along = dot(in.world.xy, axis);
+    let own = in.clip.w;
+
+    let s = streaks(along, in.world.z, time);
+    let band = smoothstep(0.42, 0.5, s) * 0.55 + smoothstep(0.6, 0.68, s) * 0.45;
+    let body = mix(water.shallow.rgb, water.foam.rgb, aeration * 0.5);
+    var colour = mix(body, water.foam.rgb, band * aeration);
+    colour = mix(colour, water.deep.rgb * 1.6, pow(1.0 - s, 2.0) * 0.35);
+    var alpha = 0.7 + 0.3 * band;
+
+    let thickness = max(scene_depth(vec2<i32>(in.clip.xy)) - own, 0.0);
+    let rise = select(1.0e9, in.world.z - plane, plane > -1.0e30);
+    let churn = noise(vec2<f32>(along * 0.06 + time * 0.4, rise * 0.04 - time * 1.7)) * 0.6 + noise(vec2<f32>(along * 0.17 - time * 0.3, rise * 0.1 - time * 2.9)) * 0.4;
+    let low = 1.0 - smoothstep(0.0, mist, max(rise, 0.0));
+    let touch = 1.0 - smoothstep(0.0, 45.0, thickness);
+    let foam = clamp(low * (0.45 + 0.9 * churn) + touch * 0.35 * churn, 0.0, 1.0);
+    colour = mix(colour, water.foam.rgb, foam);
+    alpha = max(alpha, foam * (0.55 + 0.45 * churn));
+    alpha *= smoothstep(-0.3 * mist, 0.0, min(rise, 0.0));
+
+    if (frame.fog_color.w > 0.5) {
+        let fog = clamp((own - frame.fog_range.x) / max(frame.fog_range.y - frame.fog_range.x, 1.0), 0.0, frame.fog_range.z);
+        colour = mix(colour, frame.fog_color.rgb, fog);
+    }
+    return vec4<f32>(colour, alpha);
 }
