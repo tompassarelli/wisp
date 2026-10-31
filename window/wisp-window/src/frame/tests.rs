@@ -146,12 +146,15 @@ mod simulated {
         2.0
     }
 
-    /// The step clock, the game's thread and the display on one fake timeline: the clock takes each step at its due time, the worker takes each sample once it is queued and free and answers after the scripted step, and the display hands back an image at the first tick of its own grid after the last present, which is the vblank grid while the window is shown and a coarser one while the compositor throttles it, and none at all while it is unshown; it reports its vblank period as the window's monitor does.
+    /// The step clock, the game's thread and the display on one fake timeline: the clock takes each step at its due time, the worker takes each sample once it is queued and free and answers after the scripted step, and the display hands back an image at the first tick of its own grid after the last present, which is the vblank grid while the window is shown and a coarser one while the compositor throttles it, and none at all while it is unshown; under `Mailbox` it hands one back as soon as the GPU has finished the last frame, `gpu_ns` after its draw; it reports its vblank period as the window's monitor does.
     struct World {
         now_ns: u64,
         refresh_ns: u64,
         image_every_ns: u64,
         unshown: bool,
+        mailbox: bool,
+        gpu_ns: u64,
+        gpu_free_ns: u64,
         step_ms: fn(u32) -> f64,
         worker_free_ns: u64,
         in_flight: VecDeque<(u64, u32)>,
@@ -239,15 +242,15 @@ mod simulated {
         type Image = ();
 
         fn acquire(&mut self) -> Option<()> {
-            let (now, every, presented, unshown) = {
+            let (now, every, presented, unshown, mailbox, gpu_free) = {
                 let world = self.0.world.borrow();
-                (world.now_ns, world.image_every_ns, world.presented_ns, world.unshown)
+                (world.now_ns, world.image_every_ns, world.presented_ns, world.unshown, world.mailbox, world.gpu_free_ns)
             };
             if unshown {
                 self.0.advance(now + UNSHOWN_TRY_NS);
                 return None;
             }
-            let at = presented.unwrap_or(now).max(now).div_ceil(every) * every;
+            let at = if mailbox { now.max(gpu_free) } else { presented.unwrap_or(now).max(now).div_ceil(every) * every };
             self.0.advance(at);
             self.0.world.borrow_mut().acquires.push(at);
             Some(())
@@ -256,7 +259,9 @@ mod simulated {
         fn draw(&mut self, _: &(), step: u64) {
             let now = self.0.now_ns();
             self.0.advance(now + DRAW_NS);
-            self.0.world.borrow_mut().shown.push(step);
+            let mut world = self.0.world.borrow_mut();
+            world.shown.push(step);
+            world.gpu_free_ns = world.now_ns + world.gpu_ns;
         }
 
         fn present(&self, _: ()) {
@@ -266,6 +271,10 @@ mod simulated {
 
         fn refresh_ms(&self) -> Option<f64> {
             Some(self.0.world.borrow().refresh_ns as f64 / 1e6)
+        }
+
+        fn blocks_on_display(&self) -> bool {
+            !self.0.world.borrow().mailbox
         }
     }
 
@@ -279,7 +288,7 @@ mod simulated {
         fn new(period_ns: u64, step_ms: fn(u32) -> f64) -> Self {
             let mailbox = Arc::new(Mailbox::default());
             let stepper = Arc::new(Stepper::default());
-            let world = World { now_ns: period_ns, refresh_ns: period_ns, image_every_ns: period_ns, unshown: false, step_ms, worker_free_ns: 0, in_flight: VecDeque::new(), presented_ns: None, acquires: Vec::new(), shown: Vec::new() };
+            let world = World { now_ns: period_ns, refresh_ns: period_ns, image_every_ns: period_ns, unshown: false, mailbox: false, gpu_ns: 0, gpu_free_ns: 0, step_ms, worker_free_ns: 0, in_flight: VecDeque::new(), presented_ns: None, acquires: Vec::new(), shown: Vec::new() };
             let clock = SimClock { world: Rc::new(RefCell::new(world)), mailbox: mailbox.clone(), stepper: stepper.clone() };
             let metrics = Arc::new(Mutex::new(Metrics::default()));
             let frames = FrameLoop::new(SimDisplay(clock.clone()), clock.clone(), mailbox, metrics.clone(), stepper);
@@ -406,5 +415,25 @@ mod simulated {
         }
         let seconds = (sim.now_ns() - PERIOD_NS) as f64 / 1e9;
         assert!((sim.stepped() as f64 - seconds * 60.0).abs() <= 1.0, "{} steps in {seconds:.2} s with no image", sim.stepped());
+    }
+
+    #[test]
+    fn a_mailbox_frame_longer_than_a_vblank_lands_on_the_first_vblank_after_it() {
+        const SECONDS: u64 = 20;
+        const GPU_NS: u64 = 38_000_000;
+        let period_ns = (1e9 / 120.0) as u64;
+        let mut sim = Sim::new(period_ns, quick_step_ms);
+        {
+            let mut world = sim.world();
+            world.mailbox = true;
+            world.gpu_ns = GPU_NS;
+        }
+        sim.run_until(SECONDS * SECOND_NS);
+        let acquires = sim.world().acquires.clone();
+        let intervals: Vec<u64> = acquires.windows(2).map(|pair| pair[1] - pair[0]).skip(acquires.len() / 2).collect();
+        let longest = (DRAW_NS + GPU_NS).div_ceil(period_ns) * period_ns + period_ns;
+        assert!(intervals.iter().all(|interval| *interval <= longest), "a frame of {} ms of GPU work at 120 Hz takes at most {:.1} ms, not a pacing grid of its own: {:?}", GPU_NS / 1_000_000, longest as f64 / 1e6, intervals.iter().map(|interval| *interval as f64 / 1e6).collect::<Vec<_>>());
+        let seconds = (sim.now_ns() - period_ns) as f64 / 1e9;
+        assert!((sim.stepped() as f64 - seconds * 60.0).abs() <= 2.0, "{} steps in {seconds:.2} s", sim.stepped());
     }
 }
