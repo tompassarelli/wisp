@@ -5,11 +5,14 @@ import { measureWindow } from "./probe";
 
 const [modulePath, exportName, title, frames, warmup, out] = process.argv.slice(2);
 if (modulePath === undefined || exportName === undefined || title === undefined || frames === undefined || warmup === undefined || out === undefined) throw new Error("usage: probeChild.ts GAME_MODULE EXPORT TITLE FRAMES WARMUP RAW.json");
+const stage = (name: string) => console.error(`probeChild: ${name} at ${Math.round(performance.now())} ms`);
 const samples = await Effect.runPromise(measureWindow({ module: modulePath, export: exportName }, title, Number(frames), Number(warmup)).pipe(
   Effect.catch((failure) => Effect.promise(async () => {
     await Bun.write(out, JSON.stringify({ failure: describeCause(failure) }));
     process.exit(1);
   })),
 ));
+stage("window closed");
 await Bun.write(out, JSON.stringify(samples));
+stage("samples written");
 process.exit(0);

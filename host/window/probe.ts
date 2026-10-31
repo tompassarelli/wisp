@@ -34,6 +34,7 @@ export const measureWindow = (game: NativeGameModule, title: string, frames: num
     probe: { frames, warmupFrames },
   });
   const result = yield* sim.completed;
+  console.error(`probe: the run completed at ${Math.round(performance.now())} ms`);
   const series = result.series as Record<string, number[]> & { render?: RenderSeries };
   const keep = (values: readonly number[] | undefined) => (values ?? []).slice(-frames);
   if (series.render === undefined) return yield* new RenderFailure({ cause: new Error("the run ended before its measured frames") });
