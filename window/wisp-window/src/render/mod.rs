@@ -8,6 +8,7 @@
 mod math;
 mod assets;
 mod gpu;
+mod groups;
 pub mod model;
 mod emitters;
 mod lightning;
@@ -43,6 +44,7 @@ use math::{mirrored, multiply, projection, Mat4, IDENTITY};
 use gpu::{bone_storage, frame_group, frame_uniform_buffer, instance_storage, color_storage, repeat_sampler, upload, uv_storage, white};
 use {lightning::Lightning, weather::Weather};
 use model::{Filter, ModelData, ModelEmitter, Paint, Vertex};
+use groups::Group;
 use shadow::Shadow;
 use uniforms::{lighting_of, FrameUniform, Instance, LayerUniform, Lit, SceneFrame};
 use water::{Glow, Water, WaterSettings};
@@ -89,12 +91,6 @@ struct GpuModel {
     liquid: Option<(water::Preset, surface::Surface)>,
     /// The model's box when it has a layer that writes depth, which is what makes it a body that disturbs water.
     body: Option<ripples::Extent>,
-}
-
-struct Group {
-    model: usize,
-    first: u32,
-    count: u32,
 }
 
 /// A scene's frame uniform and the group that binds it with the bone, opacity and texture-coordinate buffers.
@@ -280,7 +276,7 @@ impl Renderer {
         let bones = data.rig.bone_count().max(1);
         self.model_ids.insert(path.to_string(), self.models.len());
         self.models.push(GpuModel { vertices, indices, draws, opaque_first, skin: sprite::Skin::new(data.vertices, data.indices, &data.parts), rig: data.rig, bones, emitters, liquid, body });
-        self.counts.push(0);
+        self.counts.extend([0, 0]);
     }
 
     /// The draw of one layer of a part: a water layer carries no bind group, any other binds its texture and its slots.
@@ -301,7 +297,7 @@ impl Renderer {
         };
         let uniform = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("layer"),
-            contents: bytemuck::bytes_of(&LayerUniform { kind, cutoff: if layer.filter == Filter::Cutout { 0.75 } else { 0.0 }, geoset_slot: part.color_slot, layer_slot: layer.color_slot, ignores_texture_alpha: u32::from(layer.filter == Filter::Additive), lighting: lighting_of(layer.filter, layer.unshaded), pad: [0; 2] }),
+            contents: bytemuck::bytes_of(&LayerUniform { kind, cutoff: if layer.filter == Filter::Cutout { 0.75 } else { 0.0 }, geoset_slot: part.color_slot, layer_slot: layer.color_slot, ignores_texture_alpha: u32::from(layer.filter == Filter::Additive), lighting: lighting_of(layer.filter, layer.unshaded), solid: u32::from(layer.filter == Filter::Opaque), pad: 0 }),
             usage: wgpu::BufferUsages::UNIFORM,
         });
         draw(Some(self.device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -374,20 +370,22 @@ impl Renderer {
                         (self.water_level, widest, self.water.liquid) = (Some(height), area, liquid);
                     }
                 }
-                if self.counts[id] == 0 {
-                    self.order.push(id);
+                let key = groups::key(id, pose.alpha);
+                if self.counts[key] == 0 {
+                    self.order.push(key);
                 }
-                self.counts[id] += 1;
+                self.counts[key] += 1;
             }
         }
         let models = &self.models;
-        self.order.sort_by_key(|&id| !models[id].opaque_first);
+        self.order.sort_by_key(|&key| groups::split(key).1 || !models[groups::split(key).0].opaque_first);
         self.groups.clear();
         let mut cursor = 0;
-        for &id in &self.order {
-            self.groups.push(Group { model: id, first: cursor, count: self.counts[id] });
-            cursor += self.counts[id];
-            self.counts[id] = 0;
+        for &key in &self.order {
+            let (model, faded) = groups::split(key);
+            self.groups.push(Group { model, faded, first: cursor, count: self.counts[key] });
+            cursor += self.counts[key];
+            self.counts[key] = 0;
         }
         self.instance_scratch.clear();
         self.instance_scratch.resize(cursor as usize, Instance::zeroed());
@@ -396,7 +394,8 @@ impl Renderer {
         self.uv_scratch.clear();
         for pose in poses {
             let Some(&id) = self.model_ids.get(pose.model.as_str()) else { continue };
-            let group = self.groups.iter().find(|group| group.model == id).map(|group| group.first).unwrap_or(0);
+            let key = groups::key(id, pose.alpha);
+            let group = self.groups.iter().find(|group| (group.model, group.faded) == groups::split(key)).map(|group| group.first).unwrap_or(0);
             let model = &mut self.models[id];
             let base = self.bone_scratch.len();
             self.bone_scratch.resize(base + model.bones, IDENTITY);
@@ -404,8 +403,8 @@ impl Renderer {
             let color_base = self.color_scratch.len();
             self.color_scratch.extend_from_slice(model.rig.colors());
             self.uv_scratch.extend_from_slice(model.rig.uv_rows());
-            let slot = (group + self.counts[id]) as usize;
-            self.counts[id] += 1;
+            let slot = (group + self.counts[key]) as usize;
+            self.counts[key] += 1;
             self.instance_scratch[slot] = Instance { model: water::with_reach(pose.matrix, model.liquid.as_ref().filter(|_| model.body.is_none()).map(|(_, surface)| surface.half)), tint: [pose.color[0], pose.color[1], pose.color[2], pose.alpha], team: [pose.team[0], pose.team[1], pose.team[2], 1.0], base: [base as u32, color_base as u32] };
             if pose.sequence >= 0 && pose.alpha > 0.0 {
                 for (index, ((emitter, slot), sample)) in model.emitters.iter().zip(model.rig.emitters()).enumerate() {
@@ -476,7 +475,7 @@ impl Renderer {
         self.problems.append(&mut self.particles.problems);
         self.lightning.stage(&self.queue, &scene.lightnings);
         self.weather.stage(&self.queue, &scene.camera, &scene.weathers, &self.features);
-        self.sky_group_of = sky.map(|(id, _)| Group { model: id, first: sky_instance as u32, count: 1 });
+        self.sky_group_of = sky.map(|(id, _)| Group { model: id, faded: false, first: sky_instance as u32, count: 1 });
         sun.is_some()
     }
 

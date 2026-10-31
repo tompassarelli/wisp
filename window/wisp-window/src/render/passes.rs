@@ -5,7 +5,7 @@ use crate::post::Look;
 use super::ripples::Placement;
 use super::scene::Scene;
 use super::water::WaterSettings;
-use super::{fitted, linear_of, Draw, Group, Renderer};
+use super::{fitted, linear_of, pipelines, Draw, Group, Renderer};
 
 /// Which layers a pass draws: with water, the solid ones first, then the water, then the layers that blend over it.
 #[derive(Clone, Copy, PartialEq)]
@@ -64,7 +64,7 @@ fn fresh(store: wgpu::StoreOp) -> Option<wgpu::Operations<f32>> {
 
 impl Renderer {
     pub(super) fn draw_groups<'a>(&'a self, pass: &mut wgpu::RenderPass<'a>, groups: &[Group], opaque: bool, stage: Stage, water: Option<&'a wgpu::BindGroup>) {
-        for group in groups.iter().filter(|group| self.models[group.model].opaque_first == opaque && !self.models[group.model].draws.is_empty()) {
+        for group in groups.iter().filter(|group| (self.models[group.model].opaque_first && !group.faded) == opaque && !self.models[group.model].draws.is_empty()) {
             let model = &self.models[group.model];
             pass.set_vertex_buffer(0, model.vertices.slice(..));
             pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
@@ -72,7 +72,7 @@ impl Renderer {
             for draw in model.draws.iter().filter(|draw| draw.in_stage(stage)) {
                 match (&draw.bind_group, water) {
                     (Some(layer), _) => {
-                        pass.set_pipeline(&self.pipelines[draw.filter.index()]);
+                        pass.set_pipeline(&self.pipelines[pipelines::index_of(draw.filter, group.faded)]);
                         pass.set_bind_group(1, layer, &[]);
                     }
                     (None, Some(images)) => {

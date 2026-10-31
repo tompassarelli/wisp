@@ -215,8 +215,12 @@ fn centre_of(sheets: &[Sheet]) -> [f32; 3] {
     centre_of_geoset(sheets, [1.0; 4])
 }
 
-/// Draws `sheets` as the layers of one geoset whose animated colour and opacity are `geoset`.
 fn centre_of_geoset(sheets: &[Sheet], geoset: [f32; 4]) -> [f32; 3] {
+    centre_of_pose(sheets, geoset, 1.0)
+}
+
+/// Draws `sheets` as the layers of one geoset whose animated colour and opacity are `geoset`, in a pose of opacity `alpha`.
+fn centre_of_pose(sheets: &[Sheet], geoset: [f32; 4], alpha: f32) -> [f32; 3] {
     let Some((device, queue)) = device() else { return [f32::NAN; 3] };
     let mut renderer = Renderer::new(device.clone(), queue.clone(), FORMAT, crate::remaster::Quality::Off, crate::settings::Preset::High.features());
     let mut vertices = Vec::new();
@@ -241,7 +245,7 @@ fn centre_of_geoset(sheets: &[Sheet], geoset: [f32; 4]) -> [f32; 3] {
     renderer.add_model("sheets", ModelData { vertices, indices, parts, rig: Box::new(FlatRig::new(geoset)), emitters: Vec::new() });
     let mut scene = Scene { frame: 0, clear: BACKGROUND, ..Scene::default() };
     scene.camera = scene::Camera { view: IDENTITY, eye: [0.0; 3], tangent: 1.0, near: 1.0, far: 10_000.0, sky_far: 10_000.0, rise: 0.0, reach: 0.0 };
-    scene.poses = vec![scene::Pose { id: 0, model: "sheets".into(), matrix: IDENTITY, sequence: 0, frame: 0.0, clock: 0.0, alpha: 1.0, color: [1.0; 3], team: TEAM }];
+    scene.poses = vec![scene::Pose { id: 0, model: "sheets".into(), matrix: IDENTITY, sequence: 0, frame: 0.0, clock: 0.0, alpha, color: [1.0; 3], team: TEAM }];
     let scope = device.push_error_scope(wgpu::ErrorFilter::Validation);
     let light = light_at_centre(&mut renderer, &device, &queue, &scene);
     let error = pollster::block_on(scope.pop());
@@ -392,6 +396,15 @@ fn a_geoset_colour_multiplies_every_layer_of_its_geoset() {
     let team = Sheet { filter: Filter::Opaque, depth: 100.0, paint: Paint::TeamColor, texel: [0; 4] };
     assert_pixel(centre_of_geoset(&[team], [teal[0], teal[1], teal[2], 1.0]), linear([0, 1, 2].map(|channel| TEAM[channel] * teal[channel])), "a team colour layer is multiplied by the geoset colour");
     assert_pixel(centre_of_geoset(&[sheet(Filter::Blend, 100.0, texel(SOURCE, 1.0))], [1.0, 1.0, 1.0, 0.5]), over(source(), 0.5, background()), "the geoset alpha still fades its layers");
+}
+
+#[test]
+fn a_faded_pose_draws_its_solid_layers_whole_at_its_alpha() {
+    let alpha = 120.0 / 255.0;
+    assert_pixel(centre_of_pose(&[sheet(Filter::Cutout, 100.0, texel(SOURCE, 1.0))], [1.0; 4], alpha), over(source(), alpha, background()), "a cut-out body passes its texture's test and is faded by the pose, not cut out by it");
+    let team = Sheet { filter: Filter::Opaque, depth: 100.0, paint: Paint::TeamColor, texel: [0; 4] };
+    assert_pixel(centre_of_pose(&[team], [1.0; 4], alpha), over(team_light(), alpha, background()), "an opaque layer is faded by the pose");
+    assert_pixel(centre_of_pose(&[sheet(Filter::Cutout, 100.0, texel(SOURCE, 0.7))], [1.0; 4], alpha), background(), "what the texture cuts out stays cut out");
 }
 
 struct ClockRig(std::sync::Arc<std::sync::Mutex<f32>>);

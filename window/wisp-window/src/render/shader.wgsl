@@ -5,6 +5,7 @@ struct Layer {
     layer_slot: u32,
     ignores_texture_alpha: u32,
     lighting: u32,
+    solid: u32,
 };
 
 const UNLIT = 0u;
@@ -225,7 +226,7 @@ fn fragment_main(in: Varying) -> @location(0) vec4<f32> {
         color = vec4<f32>(color.rgb * in.tint.rgb * in.tint.a * in.fade, 1.0);
         fog_target = vec3<f32>(0.0);
     } else {
-        color = vec4<f32>(color.rgb * light * in.tint.rgb, color.a * in.tint.a * in.fade);
+        color = vec4<f32>(color.rgb * light * in.tint.rgb, select(color.a, 1.0, layer.solid == 1u) * in.fade);
     }
     if (in.fade < 0.004 || (frame.camera.w > 0.5 && in.world.z < frame.camera.z)) {
         discard;
@@ -235,6 +236,9 @@ fn fragment_main(in: Varying) -> @location(0) vec4<f32> {
         if (color.a <= 0.0) {
             discard;
         }
+    }
+    if (!additive) {
+        color.a *= in.tint.a;
     }
     if (frame.fog_color.w > 0.5) {
         let fog = clamp((in.clip.w - frame.fog_range.x) / max(frame.fog_range.y - frame.fog_range.x, 1.0), 0.0, frame.fog_range.z);

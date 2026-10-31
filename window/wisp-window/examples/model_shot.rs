@@ -59,7 +59,7 @@ fn main() {
             (at as i32, from as f32 + (to - from) as f32 * through)
         });
         renderer.ingest(path, bytes);
-        poses.push(serde_json::json!({ "model": path, "matrix": [facing.cos(),facing.sin(),0.0,0.0, -facing.sin(),facing.cos(),0.0,0.0, 0.0,0.0,1.0,0.0, index as f32 * 700.0, 0.0, 0.0, 1.0], "sequence": sequence, "frame": frame, "clock": clock, "alpha": 1.0, "color": [1.0, 1.0, 1.0], "team": teams[index % teams.len()] }));
+        poses.push(serde_json::json!({ "model": path, "matrix": [facing.cos(),facing.sin(),0.0,0.0, -facing.sin(),facing.cos(),0.0,0.0, 0.0,0.0,1.0,0.0, index as f32 * 700.0, 0.0, 0.0, 1.0], "sequence": sequence, "frame": frame, "clock": clock, "alpha": std::env::var("WISP_SHOT_ALPHA").ok().and_then(|value| value.parse::<f32>().ok()).unwrap_or(1.0), "color": [1.0, 1.0, 1.0], "team": teams[index % teams.len()] }));
     }
     std::thread::sleep(std::time::Duration::from_secs(2));
     renderer.pump();

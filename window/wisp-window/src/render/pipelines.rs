@@ -38,7 +38,16 @@ pub(super) fn blend_of(filter: Filter) -> Option<wgpu::BlendState> {
 }
 
 
-/// The seven pipelines in `FILTERS` order, and the frame and layer bind group layouts they use.
+/// The pipeline a layer of `filter` draws with: a faded instance blends its solid layers by its alpha, as Warcraft draws a unit or effect below full alpha.
+pub(super) fn index_of(filter: Filter, faded: bool) -> usize {
+    match (filter, faded) {
+        (Filter::Opaque, true) => FILTERS.len(),
+        (Filter::Cutout, true) => FILTERS.len() + 1,
+        _ => filter.index(),
+    }
+}
+
+/// The pipelines in `index_of` order, the seven of `FILTERS` and the two faded solid ones, and the frame and layer bind group layouts they use.
 pub(super) fn build(device: &wgpu::Device, format: wgpu::TextureFormat) -> (Vec<wgpu::RenderPipeline>, wgpu::BindGroupLayout, wgpu::BindGroupLayout) {
     let module = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("model"), source: wgpu::ShaderSource::Wgsl(shader_source(include_str!("shader.wgsl")).into()) });
     let both = wgpu::ShaderStages::VERTEX_FRAGMENT;
@@ -64,7 +73,10 @@ pub(super) fn build(device: &wgpu::Device, format: wgpu::TextureFormat) -> (Vec<
     let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("model"), bind_group_layouts: &[Some(&frame_layout), Some(&layer_layout)], immediate_size: 0 });
     let pipelines = FILTERS
         .iter()
-        .map(|&filter| {
+        .map(|&filter| (filter, false))
+        .chain([(Filter::Opaque, true), (Filter::Cutout, true)])
+        .map(|(filter, faded)| {
+            let blend = if faded { blend_of(Filter::Blend) } else { blend_of(filter) };
             device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some("model"),
                 layout: Some(&layout),
@@ -81,7 +93,7 @@ pub(super) fn build(device: &wgpu::Device, format: wgpu::TextureFormat) -> (Vec<
                     module: &module,
                     entry_point: Some("fragment_main"),
                     compilation_options: Default::default(),
-                    targets: &[Some(wgpu::ColorTargetState { format, blend: blend_of(filter), write_mask: wgpu::ColorWrites::ALL })],
+                    targets: &[Some(wgpu::ColorTargetState { format, blend, write_mask: wgpu::ColorWrites::ALL })],
                 }),
                 primitive: wgpu::PrimitiveState::default(),
                 depth_stencil: Some(wgpu::DepthStencilState {
@@ -91,7 +103,7 @@ pub(super) fn build(device: &wgpu::Device, format: wgpu::TextureFormat) -> (Vec<
                     stencil: Default::default(),
                     bias: Default::default(),
                 }),
-                multisample: wgpu::MultisampleState { count: SAMPLES, mask: !0, alpha_to_coverage_enabled: filter == Filter::Cutout },
+                multisample: wgpu::MultisampleState { count: SAMPLES, mask: !0, alpha_to_coverage_enabled: filter == Filter::Cutout && !faded },
                 multiview_mask: None,
                 cache: None,
             })
