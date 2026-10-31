@@ -13,6 +13,7 @@ use crate::texture::Image;
 
 use super::gpu::upload_layers;
 use super::model::Vertex;
+use super::ripples::{Source, SOURCES};
 use super::pipelines::{entry, shader_source, INSTANCE_ATTRIBUTES, VERTEX_ATTRIBUTES};
 use super::{Instance, DEPTH, SAMPLES};
 
@@ -220,10 +221,16 @@ pub(super) struct WaterUniform {
     glow: [f32; 4],
     look: [f32; 4],
     sparks: [f32; 4],
+    ripples: [[f32; 4]; 2 * SOURCES],
 }
 
 impl WaterUniform {
-    pub fn new(settings: &WaterSettings, seconds: f32) -> Self {
+    pub fn new(settings: &WaterSettings, seconds: f32, sources: &[Source]) -> Self {
+        let mut ripples = [[0.0; 4]; 2 * SOURCES];
+        for (slot, source) in sources.iter().take(SOURCES).enumerate() {
+            ripples[2 * slot] = source.at;
+            ripples[2 * slot + 1] = source.motion;
+        }
         let linear = |colour: [f32; 3]| colour.map(|channel| super::linear_of(f64::from(channel)) as f32);
         let (shallow, deep, foam, glow) = (linear(settings.shallow), linear(settings.deep), linear(settings.foam), linear(settings.glow));
         Self {
@@ -235,7 +242,8 @@ impl WaterUniform {
             wave: [settings.wave_height, settings.wave_number, settings.wave_speed, settings.reflection],
             glow: [glow[0], glow[1], glow[2], settings.emissive],
             look: [settings.crust, settings.shimmer, settings.opacity, settings.bubbles],
-            sparks: [settings.embers, settings.swirl, settings.swell, 0.0],
+            sparks: [settings.embers, settings.swirl, settings.swell, sources.len().min(SOURCES) as f32],
+            ripples,
         }
     }
 }
@@ -378,8 +386,8 @@ impl Water {
         }
     }
 
-    pub fn write(&self, queue: &wgpu::Queue, settings: &WaterSettings, seconds: f32) {
-        queue.write_buffer(&self.uniform, 0, bytemuck::bytes_of(&WaterUniform::new(settings, seconds)));
+    pub fn write(&self, queue: &wgpu::Queue, settings: &WaterSettings, seconds: f32, sources: &[Source]) {
+        queue.write_buffer(&self.uniform, 0, bytemuck::bytes_of(&WaterUniform::new(settings, seconds, sources)));
     }
 
     /// The group the water pass binds; made per frame since it names the window-sized images.
@@ -454,9 +462,19 @@ mod tests {
 
     #[test]
     fn the_uniform_carries_the_time_and_the_ramp_rates() {
-        let uniform = WaterUniform::new(&WaterSettings::default(), 3.5);
+        let uniform = WaterUniform::new(&WaterSettings::default(), 3.5, &[]);
         assert_eq!(uniform.flow[3], 3.5);
         assert_eq!(uniform.shallow[3], WaterSettings::default().absorption);
         assert_eq!(uniform.deep[3], WaterSettings::default().depth_rate);
+    }
+
+    #[test]
+    fn the_uniform_carries_the_ripple_sources_and_their_count() {
+        let source = Source { at: [10.0, 20.0, 30.0, 4.0], motion: [1.0, 2.0, 3.0, 1.0] };
+        let uniform = WaterUniform::new(&WaterSettings::default(), 0.0, &[source, source]);
+        assert_eq!(uniform.sparks[3], 2.0);
+        assert_eq!(uniform.ripples[2], source.at);
+        assert_eq!(uniform.ripples[3], source.motion);
+        assert_eq!(WaterUniform::new(&WaterSettings::default(), 0.0, &[]).sparks[3], 0.0);
     }
 }

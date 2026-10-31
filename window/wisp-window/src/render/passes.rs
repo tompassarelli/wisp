@@ -2,6 +2,7 @@
 
 use crate::post::Look;
 
+use super::ripples::Placement;
 use super::scene::Scene;
 use super::{fitted, linear_of, Draw, Group, Renderer};
 
@@ -127,7 +128,10 @@ impl Renderer {
         self.post.prepare(&look);
         if self.water_level.is_some() && self.water.ready() {
             self.water.fit(&self.device, super::HDR, size);
-            self.water.write(&self.queue, &scene.water, self.started.elapsed().as_secs_f32());
+            let seconds = self.started.elapsed().as_secs_f32();
+            let plane = self.water_level.unwrap_or(0.0);
+            self.ripples.follow(scene.poses.iter().map(|pose| Placement { id: pose.id, model: &pose.model, matrix: pose.matrix, alpha: pose.alpha }), |model| self.model_ids.get(model).and_then(|&id| self.models[id].body), plane, scene.frame, seconds);
+            self.water.write(&self.queue, &scene.water, seconds, &self.ripples.sources());
         } else {
             self.water_level = None;
         }
