@@ -6,6 +6,7 @@ import { assertEquals } from "wisp/src/runtime/testing";
 import { floorDiv, idiv, imod } from "wisp/src/sim/intMath";
 import { f32 } from "wisp/src/sim/f32";
 import { multiplyFloat32 } from "wisp/src/sim/binary32";
+import { readChunk } from "wisp/src/platform/fileio";
 
 declare global {
   var __fixtureTicks: number | undefined;
@@ -31,3 +32,4 @@ export function start(): void {
 
 export const tick = () => trampoline("fixture.tick")();
 export const fail = () => reportError("fixture.tick", "fixture failure", "");
+export const readFile: (filename: string) => string | undefined = readChunk;
