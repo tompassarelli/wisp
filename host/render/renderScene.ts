@@ -1,6 +1,6 @@
 import type { EffectPose } from "../../src/game/native/types";
 import type { HeadlessClient } from "../../src/headless/client";
-import type { Environment } from "../../src/headless/warcraft3Scenery";
+import type { Environment } from "../../src/game/native/viewStore";
 import type { Terrain, WorldBounds } from "../terrain/terrain";
 import type { TerrainDoodad } from "../terrain/doodads";
 

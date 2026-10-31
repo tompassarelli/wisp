@@ -102,6 +102,7 @@
     "./game/text": { "types": "./src/game/text.d.ts", "bun": "./src/game/native/text.ts", "default": "./src/game/native/text.ts" },
     "./game/files": { "types": "./src/game/files.d.ts", "bun": "./src/game/native/files.ts", "default": "./src/game/native/files.ts" },
     "./game/players": { "types": "./src/game/players.d.ts", "bun": "./src/game/native/players.ts", "default": "./src/game/native/players.ts" },
+    "./game/view": { "types": "./src/game/view.d.ts", "bun": "./src/game/native/view.ts", "default": "./src/game/native/view.ts" },
     "./src/game/native/animation": "./src/game/native/animation.ts",
     "./src/headless/client": "./src/headless/client.ts",
     "./src/headless/declarations": "./src/headless/declarations.ts",

@@ -10,6 +10,7 @@ import * as nativeSound from "../src/game/native/sound";
 import * as nativeText from "../src/game/native/text";
 import * as filesApi from "../src/game/native/files";
 import * as nativePlayers from "../src/game/native/players";
+import * as nativeView from "../src/game/native/view";
 import { bindWorld } from "../src/game/native/world";
 import { HeadlessClient } from "../src/headless/client";
 import { readNativeDeclarations } from "../host/headless/headless";
@@ -22,6 +23,8 @@ import type { VolumeGroup } from "../src/game/sound";
 import { text } from "../src/game/warcraft/text";
 import { files } from "../src/game/warcraft/files";
 import { players } from "../src/game/warcraft/players";
+import { view } from "../src/game/warcraft/view";
+import type { CameraField } from "../src/game/view";
 
 const root = join(import.meta.dir, "..");
 
@@ -351,4 +354,74 @@ test("the native backend answers from each client's slots", () => {
   expect(second.players.color(1)).toBeUndefined();
   expect(first.log.map(call => call.name).slice(0, 7)).toEqual(["CreateTrigger", "TriggerAddAction", "Player", "TriggerRegisterPlayerEvent", "GetPlayerId", "Player", "GetPlayerController"]);
   expect([...first.emulatedCalls.keys(), ...second.emulatedCalls.keys()]).toEqual([]);
+});
+
+test("view calls compile to the native calls they replaced, byte for byte", () => {
+  const lowered = compile(`import { setCameraField, cameraField, cameraTargetX, setTerrainFog, setSkyModel, setFilterStartColor, showFilter, resetTerrainFog } from "../../src/game/view";\n` + wrap(`
+  setCameraField(CAMERA_FIELD_ZOFFSET, 12.5, 0.0);
+  const distance = cameraField(CAMERA_FIELD_TARGET_DISTANCE) + cameraTargetX();
+  setTerrainFog(0, 100.0, 200.0, 0.0, 0.25, 0.5, 0.75);
+  setSkyModel(model);
+  setFilterStartColor(distance, 1, 2, 3);
+  showFilter(true);
+  resetTerrainFog();`));
+  const raw = compile(wrap(`
+  SetCameraField(CAMERA_FIELD_ZOFFSET, 12.5, 0.0);
+  const distance = GetCameraField(CAMERA_FIELD_TARGET_DISTANCE) + GetCameraTargetPositionX();
+  SetTerrainFogEx(0, 100.0, 200.0, 0.0, 0.25, 0.5, 0.75);
+  SetSkyModel(model);
+  SetCineFilterStartColor(distance, 1, 2, 3);
+  DisplayCineFilter(true);
+  ResetTerrainFog();`));
+  expect(lowered.diagnostics).toBe("");
+  expect(raw.diagnostics).toBe("");
+  expect(lowered.lua).toBe(raw.lua);
+  expect(lowered.lua).toContain("GetCameraTargetPositionX()");
+});
+
+test("every view lowering row names a declared native with the arity of its Wisp function and an implemented backend call", () => {
+  const declared = new Map(readNativeDeclarations().functions.map(([name, , parameters]) => [name, parameters] as const));
+  const dts = readFileSync(join(root, "src/game/view.d.ts"), "utf8");
+  const exported = [...dts.matchAll(/export declare function (\w+)\(([^)]*)\)/g)].map(match => [match[1]!, (match[2] ?? "").trim() === "" ? 0 : (match[2] ?? "").split(",").length] as const);
+  expect(exported.map(([name]) => name).sort()).toEqual(Object.keys(view).sort());
+  expect(Object.keys(nativeView).sort()).toEqual(Object.keys(view).sort());
+  for (const [name, parameters] of exported) {
+    const template = parseTemplate(view[name] ?? "");
+    expect(declared.get(template.native)).toBe(template.args.length);
+    expect(template.args.filter(part => "arg" in part).length).toBe(parameters);
+  }
+});
+
+test("the view backend logs the native call of its lowering row, keeps each client's view apart and shares it with the client's Warcraft-named natives", () => {
+  const declarations = readNativeDeclarations();
+  const make = (slot: number) => new HeadlessClient({ slot, humans: [0, 1], declarations, filePrefix: "game-api", localNatives: { GetCameraField: "local", GetCameraTargetPositionX: "local", GetCameraTargetPositionY: "local" }, network: [] });
+  const [first, second] = [make(0), make(1)];
+  const field = first.natives.CAMERA_FIELD_ZOFFSET as CameraField;
+  bindWorld(first.world);
+  nativeView.setCameraField(field, 12.5, 0);
+  nativeView.setCameraPosition(3, 4);
+  nativeView.setTerrainFog(0, 100, 200, 0.5, 0.25, 0.5, 0.75);
+  nativeView.setSkyModel("sky.mdx");
+  nativeView.showSky(false);
+  nativeView.setFilterEndColor(1, 2, 3, 4);
+  nativeView.showFilter(true);
+  const read = [nativeView.cameraField(field), nativeView.cameraTargetX(), nativeView.cameraTargetY()];
+  nativeView.setCameraBounds(0, 0, 0, 0, 0, 0, 0, 0);
+  bindWorld(second.world);
+  nativeView.setCameraPosition(9, 9);
+  bindWorld(undefined);
+  expect(read).toEqual([12.5, 3, 4]);
+  expect(first.cameraPose()).toEqual({ x: 3, y: 4, fields: { CAMERA_FIELD_ZOFFSET: 12.5 } });
+  expect(second.cameraPose().x).toBe(9);
+  expect(first.cineFilterPose()?.color).toEqual([1, 2, 3, 4]);
+  expect(first.scenery.environment.sky).toBe("sky.mdx");
+  expect(first.scenery.environment.skyVisible).toBe(false);
+  expect(first.scenery.fog).toEqual({ style: 0, zStart: 100, zEnd: 200, density: 0.5, color: [0.25, 0.5, 0.75] });
+  expect(first.log.map(call => call.name)).toEqual(["SetCameraField", "SetCameraPosition", "SetTerrainFogEx", "SetSkyModel", "BlzShowSkyBox", "SetCineFilterEndColor", "DisplayCineFilter", "SetCameraBounds"]);
+  expect([...first.emulatedCalls.keys(), ...second.emulatedCalls.keys()]).toEqual([]);
+  const natives = first.natives as Record<string, (...args: unknown[]) => unknown>;
+  expect(natives.GetCameraField?.(field)).toBe(12.5);
+  natives.SetCameraPosition?.(5, 6);
+  expect(first.cameraPose().y).toBe(6);
+  expect(Object.fromEntries(first.emulatedCalls)).toEqual({ GetCameraField: 1, SetCameraPosition: 1 });
 });

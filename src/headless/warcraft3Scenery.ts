@@ -1,6 +1,7 @@
 import type { Handle } from "../game/native/types";
 import type { NativeBehavior } from "./clientTypes";
 import { f32 } from "../sim/f32";
+import { type Environment, View } from "../game/native/viewStore";
 
 interface DoodadFixture {
   readonly id: number;
@@ -48,40 +49,18 @@ export interface SceneryContext {
 }
 interface Region { readonly minX: number; readonly minY: number; readonly maxX: number; readonly maxY: number }
 
-/** A stage's sky as the native window paints it; colours are 0 to 1, angles degrees. */
-export interface SkyLook {
-  readonly zenith: readonly [number, number, number];
-  readonly cover: number;
-  readonly sunAzimuth: number;
-  readonly sunElevation: number;
-  readonly sun: readonly [number, number, number];
-  readonly stars: number;
-  readonly glow: number;
-}
-
-export interface Environment {
-  sky: string;
-  skyLook?: SkyLook;
-  skyVisible: boolean;
-  terrainVisible: boolean;
-
-  dayNight: { terrain: string; unit: string };
-
-  timeOfDay: number;
-}
-
 export class Scenery {
   readonly doodads: DoodadState[];
+  get fog(): Record<string, unknown> { return this.view.fog; }
+  get environment(): Environment { return this.view.environment; }
+  get minShadowCastingPointLightCount(): number { return this.view.minShadowCastingPointLightCount; }
   readonly destructables = new Map<Handle, DestructableState>();
-  readonly fog: Record<string, unknown> = {};
-  readonly environment: Environment = { sky: "", skyVisible: true, terrainVisible: true, dayNight: { terrain: "", unit: "" }, timeOfDay: 12 };
   readonly water: Record<string, unknown> = {};
   readonly cameraInput = new Map<unknown, boolean>();
   readonly cameraSetups = new Map<Handle, number>();
   readonly cameraBlockers = new Map<Handle, boolean>();
   cameraType = 0;
   cameraAllowsHotkeyTargetLock = true;
-  minShadowCastingPointLightCount = 0;
   cinematicEnabledDE = true;
   thematicMusicPauseOnFocusLost = false;
   thematicMusicAbsoluteVolume: number | undefined;
@@ -89,7 +68,7 @@ export class Scenery {
   preloadedCinematic: string | undefined;
   readonly hudScale: number;
 
-  constructor(private readonly fixtures: SceneryFixtures = {}) {
+  constructor(private readonly fixtures: SceneryFixtures = {}, private readonly view = new View(() => 0)) {
     this.doodads = (fixtures.doodads ?? []).map(d => ({ ...d }));
     this.hudScale = fixtures.hudScale ?? 1;
   }
@@ -146,15 +125,10 @@ export class Scenery {
   behaviors(context: SceneryContext): Readonly<Record<string, NativeBehavior>> {
     const behaviors: Record<string, NativeBehavior> = {
       Rect: (minX: number, minY: number, maxX: number, maxY: number) => ({ ...context.handle("rect"), minX, minY, maxX, maxY }),
-      SetTerrainFogExV: (style: number, zstart: number, zend: number, density: number, heightStart: number, heightEnd: number, linearStart: number, linearEnd: number, red: number, green: number, blue: number) => {
-        this.fog.style = style; this.fog.zStart = zstart; this.fog.zEnd = zend; this.fog.density = density;
-        this.fog.heightStart = heightStart; this.fog.heightEnd = heightEnd; this.fog.linearStart = linearStart; this.fog.linearEnd = linearEnd; this.fog.color = [red, green, blue];
-      },
+      SetTerrainFogExV: (style: number, zstart: number, zend: number, density: number, heightStart: number, heightEnd: number, linearStart: number, linearEnd: number, red: number, green: number, blue: number) => { this.view.setFogHeight(style, zstart, zend, density, heightStart, heightEnd, linearStart, linearEnd, red, green, blue); },
       BlzSetTerrainFogColor: (red: number, green: number, blue: number) => { this.fog.color = [red, green, blue]; },
-      SetTerrainFogEx: (style: number, zstart: number, zend: number, density: number, red: number, green: number, blue: number) => {
-        this.fog.style = style; this.fog.zStart = zstart; this.fog.zEnd = zend; this.fog.density = density; this.fog.color = [red, green, blue];
-      },
-      ResetTerrainFog: () => { for (const field of Object.keys(this.fog)) delete this.fog[field]; },
+      SetTerrainFogEx: (style: number, zstart: number, zend: number, density: number, red: number, green: number, blue: number) => { this.view.setFog(style, zstart, zend, density, red, green, blue); },
+      ResetTerrainFog: () => { this.view.resetFog(); },
       SetSkyModel: (model: string) => { this.environment.sky = model; },
       WispSetSkyLook: (zenithRed: number, zenithGreen: number, zenithBlue: number, cover: number, sunAzimuth: number, sunElevation: number, sunRed: number, sunGreen: number, sunBlue: number, stars: number, glow: number) => {
         this.environment.skyLook = { zenith: [zenithRed, zenithGreen, zenithBlue], cover, sunAzimuth, sunElevation, sun: [sunRed, sunGreen, sunBlue], stars, glow };
@@ -164,7 +138,7 @@ export class Scenery {
       BlzShowTerrain: (show: boolean) => { this.environment.terrainVisible = show; },
       SetDayNightModels: (terrain: string, unit: string) => { this.environment.dayNight = { terrain, unit }; },
       SetTimeOfDay: (hours: number) => { this.environment.timeOfDay = hours; },
-      BlzSetMinShadowCastingPointLightCount: (count: number) => { this.minShadowCastingPointLightCount = count; },
+      BlzSetMinShadowCastingPointLightCount: (count: number) => { this.view.minShadowCastingPointLightCount = count; },
       BlzGetMinShadowCastingPointLightCount: () => this.minShadowCastingPointLightCount,
       SetCameraFieldControlledByInput: (field: unknown, controlled: boolean) => { this.cameraInput.set(field, controlled); },
       GetCameraFieldControlledByInput: (field: unknown) => this.cameraInput.get(field) ?? false,

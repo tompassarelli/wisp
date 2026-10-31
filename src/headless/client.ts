@@ -1,7 +1,7 @@
 import { f32 } from "../sim/f32";
 import { mixCall } from "./callHash";
 import type { EffectDeaths, EffectPose, Handle } from "../game/native/types";
-import type { CameraPose, CineFilterPose, ClientFiles, IntentionalNoops, LocalNatives, MissingNative, NativeBehavior, NativeBehaviors, NativeCall, PlayerMouseInput, SoundCue, StandaloneProfile, SyncMessage, UnitPose, UnitStateFixtures } from "./clientTypes";
+import type { ClientFiles, IntentionalNoops, LocalNatives, MissingNative, NativeBehavior, NativeBehaviors, NativeCall, PlayerMouseInput, SoundCue, StandaloneProfile, SyncMessage, UnitPose, UnitStateFixtures } from "./clientTypes";
 import type { NativeDeclarations } from "./declarations";
 import { FRAME_POINTS, type Frame, type FrameTemplate, Frames } from "../game/native/frameStore";
 import { FrameUi } from "../game/native/frameUi";
@@ -12,7 +12,7 @@ import { describeNumber } from "../game/native/textFormat";
 import { EmulatedCalls, logUnlessLocal } from "./nativeCalls";
 import { Lightnings } from "../game/native/lightnings";
 import { Weathers } from "./weather";
-import { CameraCine } from "./natives/cameraCine";
+import { ViewNatives } from "./natives/view";
 import { Effects } from "../game/native/effectStore";
 import { FileLines } from "../game/native/fileLines";
 import { effectNatives, lightningNatives, textTagNatives } from "./natives/effects";
@@ -27,16 +27,18 @@ import { soundNatives } from "./natives/sound";
 import { playerMouseEvent, TriggersTimers } from "./natives/triggersTimers";
 import { type Unit, Units } from "./natives/units";
 import { TextTags } from "../game/native/textTags";
+import { View, type CameraPose, type CineFilterPose } from "../game/native/viewStore";
 import type { World } from "../game/native/world";
 import { type AbilityObjectFixtures, Warcraft3Abilities } from "./warcraft3Abilities";
 import { Warcraft3Inventory, type Warcraft3InventoryFixtures } from "./warcraft3Inventory";
 import { WARCRAFT3_ENUM_VALUES } from "./warcraft3Natives";
 import { Scenery, type SceneryFixtures } from "./warcraft3Scenery";
 
-export type { CameraPose, CineFilterPose, ClientFiles, IntentionalNoops, LocalNatives, MapEntry, MissingNative, NativeBehavior, NativeBehaviors, NativeCall, SoundCue, StandaloneProfile, SyncMessage, UnitPose, UnitStateFixture, UnitStateFixtures } from "./clientTypes";
+export type { ClientFiles, IntentionalNoops, LocalNatives, MapEntry, MissingNative, NativeBehavior, NativeBehaviors, NativeCall, SoundCue, StandaloneProfile, SyncMessage, UnitPose, UnitStateFixture, UnitStateFixtures } from "./clientTypes";
 export { describeNumber } from "../game/native/textFormat";
 export { describeCall, describeValue, sameCall } from "./jassFormat";
 export { assertSoundCue } from "../game/native/soundStore";
+export type { CameraPose, CineFilterPose } from "../game/native/viewStore";
 export { FRAMES_PER_SECOND };
 
 export interface ClientScope {
@@ -154,7 +156,8 @@ export class HeadlessClient {
   private readonly units: Units;
   private readonly effects: Effects;
   private readonly sounds: Sounds;
-  private readonly camera: CameraCine;
+  readonly view: View;
+  private readonly viewNatives: ViewNatives;
   private readonly preloadText: PreloadText;
   private readonly timers: TriggersTimers;
   readonly soundLog: SoundCue[];
@@ -165,7 +168,8 @@ export class HeadlessClient {
   constructor(options: ClientOptions) {
     this.screen = options.screen;
     this.abilities = new Warcraft3Abilities(options.abilityObjects);
-    this.scenery = new Scenery(options.scenery);
+    this.view = new View(() => this.frame);
+    this.scenery = new Scenery(options.scenery, this.view);
     this.inventory = new Warcraft3Inventory({
       handle: kind => this.handle(kind),
       getUnitTypeId: unit => (unit as Unit).typeId,
@@ -179,7 +183,7 @@ export class HeadlessClient {
     this.effects = new Effects(handle, options.effectDeaths, frame);
     this.sounds = new Sounds(handle, options.musicSlider ?? 1, frame);
     this.soundLog = this.sounds.log;
-    this.camera = new CameraCine(this.scenery, frame);
+    this.viewNatives = new ViewNatives(this.view, this.scenery);
     this.timers = new TriggersTimers(handle, this.units);
     this.slot = options.slot;
     this.scope = options.scope;
@@ -192,7 +196,7 @@ export class HeadlessClient {
     const local = options.localNatives;
     const log = this.log;
     this.world = {
-      effects: this.effects, beams: this.lightnings, floatingText: this.textTags, sounds: this.sounds, frames: this.frameUi, events: this.timers, quests: this.quests, players: this.players,
+      effects: this.effects, beams: this.lightnings, floatingText: this.textTags, view: this.view, sounds: this.sounds, frames: this.frameUi, events: this.timers, quests: this.quests, players: this.players,
       files: new FileLines((path, lines) => this.preloadText.write(path, lines)),
       display: (player, text) => { if (player === this.slot) this.messages.push(text); },
       log: logUnlessLocal(log, local),
@@ -337,8 +341,8 @@ export class HeadlessClient {
       ...frameNatives(frameContext),
       ...this.timers.behaviors(this.slot, network),
       ...this.preloadText.behaviors(),
-      ...this.camera.behaviors(),
       ...soundNatives(this.sounds),
+      ...this.viewNatives.behaviors(),
       ...effectNatives(this.effects),
       ...mathNatives(),
       ...this.playing.behaviors(),
@@ -354,11 +358,11 @@ export class HeadlessClient {
   }
 
   cineFilterPose(): CineFilterPose | undefined {
-    return this.camera.cineFilterPose();
+    return this.view.cineFilterPose();
   }
 
   cameraPose(): CameraPose {
-    return this.camera.cameraPose();
+    return this.view.cameraPose();
   }
 
   unitPoses(): UnitPose[] {

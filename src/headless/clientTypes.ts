@@ -41,23 +41,6 @@ export type NativeBehavior = (this: void, ...args: never[]) => unknown;
 
 export type NativeBehaviors = Readonly<Record<string, unknown>>;
 
-export interface CineFilterPose {
-  readonly texture: string;
-
-  readonly blendMode: string;
-  readonly texMapFlags: unknown;
-
-  readonly color: readonly [number, number, number, number];
-
-  readonly uv: readonly [number, number, number, number];
-}
-
-export interface CameraPose {
-  readonly x: number;
-  readonly y: number;
-  readonly fields: Readonly<Record<string, number>>;
-}
-
 export type { SoundCue } from "../game/native/types";
 
 export interface UnitPose extends AnimationState {
