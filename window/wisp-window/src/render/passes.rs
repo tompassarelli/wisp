@@ -197,16 +197,21 @@ impl Renderer {
             let mut pass = Attachments { label: "water", color: &targets.color, depth: &targets.depth, load: wgpu::LoadOp::Load, resolve: targets.resolving(&targets.resolved), depth_ops: None, size, timestamps: timer.writes(Pass::Water) }.begin(encoder);
             pass.set_bind_group(0, &self.main.group, &[]);
             self.draw_both(&mut pass, &self.groups, Stage::Water, Some(images));
+            self.particles.draw(&mut pass, true);
+            pass.set_bind_group(0, &self.main.group, &[]);
             self.draw_both(&mut pass, &self.groups, Stage::Soft, None);
-            self.particles.draw(&mut pass);
+            self.particles.draw(&mut pass, false);
             self.lightning.draw(&mut pass, &self.particles);
             self.weather.draw(&mut pass, &self.particles);
             drop(pass);
         } else {
             let mut pass = Attachments { label: "scene", color: &targets.color, depth: &targets.depth, load: wgpu::LoadOp::Load, resolve: targets.resolving(&targets.resolved), depth_ops: fresh(wgpu::StoreOp::Store), size, timestamps: timer.writes(Pass::Scene) }.begin(encoder);
             pass.set_bind_group(0, &self.main.group, &[]);
-            self.draw_both(&mut pass, &self.groups, Stage::Everything, None);
-            self.particles.draw(&mut pass);
+            self.draw_both(&mut pass, &self.groups, Stage::Solid, None);
+            self.particles.draw(&mut pass, true);
+            pass.set_bind_group(0, &self.main.group, &[]);
+            self.draw_both(&mut pass, &self.groups, Stage::Soft, None);
+            self.particles.draw(&mut pass, false);
             self.lightning.draw(&mut pass, &self.particles);
             self.weather.draw(&mut pass, &self.particles);
             drop(pass);

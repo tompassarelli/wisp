@@ -57,6 +57,8 @@ pub struct Emitter2 {
     pub tail_decay: [f32; 3],
     pub texture_id: i32,
     pub squirt: bool,
+    /// Where the emitter draws against the model's translucent layers: below zero before them, else after.
+    pub priority_plane: i32,
 }
 
 pub const LINE_EMITTER: u32 = 131_072;

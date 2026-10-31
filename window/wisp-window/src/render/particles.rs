@@ -60,6 +60,7 @@ struct Ring {
     buffer: wgpu::Buffer,
     group: wgpu::BindGroup,
     blend: usize,
+    behind: bool,
     births: Vec<f32>,
     longest_life: f32,
     head: usize,
@@ -90,7 +91,7 @@ pub(super) struct Particles {
     frame_group: wgpu::BindGroup,
     specs: u32,
     rings: Vec<Ring>,
-    ring_ids: HashMap<(String, usize), usize>,
+    ring_ids: HashMap<(String, usize, bool), usize>,
     running: HashMap<(u32, u32), Running>,
     generation: u64,
     frame: Option<u32>,
@@ -180,7 +181,7 @@ impl Particles {
         }
     }
 
-    /// Registers one emitter of a model that has just been built: its look goes to the spec buffer, and its particles to the ring of its texture and blend.
+    /// Registers one emitter of a model that has just been built: its look goes to the spec buffer, and its particles to the ring of its texture, blend and side of the translucent layers.
     pub(super) fn register(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, emitter: &ModelEmitter, texture: (&str, &wgpu::TextureView), sampler: &wgpu::Sampler) -> Option<Slot> {
         if self.specs as usize >= SPECS {
             self.problems.push("more particle emitters than the window has room for".into());
@@ -188,7 +189,8 @@ impl Particles {
         }
         let spec = &emitter.spec;
         let blend = blend_index(spec.filter_mode);
-        let key = (texture.0.to_ascii_lowercase(), blend);
+        let behind = spec.priority_plane < 0;
+        let key = (texture.0.to_ascii_lowercase(), blend, behind);
         let ring = match self.ring_ids.get(&key) {
             Some(&ring) => ring,
             None => {
@@ -202,7 +204,7 @@ impl Particles {
                         wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::Sampler(sampler) },
                     ],
                 });
-                self.rings.push(Ring { buffer, group, blend, births: vec![f32::NEG_INFINITY; RING], longest_life: 0.0, head: 0, live: 0, staged: Vec::new() });
+                self.rings.push(Ring { buffer, group, blend, behind, births: vec![f32::NEG_INFINITY; RING], longest_life: 0.0, head: 0, live: 0, staged: Vec::new() });
                 self.ring_ids.insert(key, self.rings.len() - 1);
                 self.rings.len() - 1
             }
@@ -335,9 +337,10 @@ impl Particles {
         queue.write_buffer(&self.frame_buffer, 0, bytemuck::bytes_of(&frame));
     }
 
-    pub(super) fn draw<'a>(&'a self, pass: &mut wgpu::RenderPass<'a>) {
+    /// Draws the live particles of the emitters whose priority plane puts them `behind` the translucent layers, or of the rest.
+    pub(super) fn draw<'a>(&'a self, pass: &mut wgpu::RenderPass<'a>, behind: bool) {
         pass.set_bind_group(0, &self.frame_group, &[]);
-        for ring in self.rings.iter().filter(|ring| ring.live > 0) {
+        for ring in self.rings.iter().filter(|ring| ring.live > 0 && ring.behind == behind) {
             pass.set_pipeline(&self.pipelines[ring.blend]);
             pass.set_bind_group(1, &ring.group, &[]);
             let first = (ring.head + RING - ring.live) % RING;

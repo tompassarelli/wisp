@@ -265,7 +265,8 @@ fn read_emitter_look(chunk: &mut Reader, emitter: &mut Emitter2) -> Result<(), M
     }
     emitter.texture_id = chunk.i32()?;
     emitter.squirt = chunk.i32()? > 0;
-    chunk.take(8)?;
+    emitter.priority_plane = chunk.i32()?;
+    chunk.take(4)?;
     Ok(())
 }
 
@@ -413,7 +414,7 @@ mod tests {
         for value in [10.0, 20.0, 5.0] {
             float(&mut body, value);
         }
-        for value in [0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 1, 0, 0] {
+        for value in [0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 1, -10, 0] {
             int(&mut body, value);
         }
         body.extend_from_slice(b"KP2V");
@@ -440,6 +441,7 @@ mod tests {
         assert_eq!((emitter.alphas, emitter.scaling, emitter.head_decay), ([1.0, 128.0 / 255.0, 0.0], [10.0, 20.0, 5.0], [0.0, 0.0, 0.0]));
         assert_eq!(emitter.head_life, [0.0, 3.0, 0.0]);
         assert!(emitter.squirt);
+        assert_eq!(emitter.priority_plane, -10);
         assert_eq!(emitter.visibility.track.as_ref().map(|track| track.keys.len()), Some(1));
         assert!(model.nodes[0].is_some());
     }
