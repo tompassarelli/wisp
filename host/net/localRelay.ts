@@ -20,7 +20,7 @@ const freePort = Effect.tryPromise({
 });
 
 /** The relay binary `WISP_RELAY_BIN` names, else the one cargo builds from relay/ with its pinned toolchain (wisp:docs/relay.md). */
-const relayBinary = Effect.gen(function*() {
+export const relayBinary = Effect.gen(function*() {
   const named = process.env["WISP_RELAY_BIN"];
   if (named !== undefined) return named;
   if (!(yield* Effect.promise(() => Bun.file(join(relayDirectory, "Cargo.toml")).exists()))) {

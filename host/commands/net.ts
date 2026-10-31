@@ -155,17 +155,26 @@ const relayPair = (prefix: readonly string[], rest: readonly string[]) => Effect
   const code = yield* Deferred.make<string>();
   const player = (label: string, argv: readonly string[]) => Effect.gen(function*() {
     const handle = yield* ChildProcess.make(prefix[0] ?? "bun", [...prefix.slice(1), ...argv], { stdin: "ignore" });
-    yield* Effect.forkScoped(handle.stderr.pipe(Stream.decodeText(), Stream.splitLines, Stream.runForEach((line) => Effect.gen(function*() {
-      if (!line.startsWith("net:")) return;
+    const stderr = yield* Effect.forkScoped(handle.stderr.pipe(Stream.decodeText(), Stream.splitLines, Stream.runFoldEffect(() => "", (last, line) => Effect.gen(function*() {
+      if (!line.startsWith("net:")) return line.trim() === "" ? last : line;
       process.stderr.write(`${label} ${line}\n`);
       const found = /^net: join code (\S+)/.exec(line);
       if (found !== null) yield* Deferred.succeed(code, found[1] ?? "");
+      return line;
     }))));
     const stdout = yield* Effect.forkScoped(handle.stdout.pipe(Stream.decodeText(), Stream.mkString));
-    return { outcome: Fiber.join(stdout).pipe(Effect.map(decodeOutcome), Effect.mapError((cause) => new NetFailure({ problem: `${label}: ${String(cause)}` }))) };
+    const failed = (cause: unknown) => new NetFailure({ problem: `${label}: ${String(cause)}` });
+    return {
+      outcome: Fiber.join(stdout).pipe(Effect.map(decodeOutcome), Effect.mapError(failed)),
+      lastWords: Fiber.join(stderr).pipe(Effect.mapError(failed)),
+    };
   });
   const host = yield* player("host", ["host", "--relay", `${relay.address}:${relay.port}`, "--humans", String(humans), ...shared]);
-  const room = yield* Deferred.await(code).pipe(Effect.timeoutOption("30 seconds"));
+  const hostEnded = Effect.all([host.outcome, host.lastWords]).pipe(Effect.map(([outcome, lastWords]) => `the host ended before printing a join code: ${Option.match(outcome, {
+    onNone: () => lastWords === "" ? "it printed nothing" : lastWords,
+    onSome: (ended) => "failure" in ended ? `${ended.failure.tag}: ${ended.failure.message}` : "it reported a finished match",
+  })}`));
+  const room = yield* Effect.raceFirst(Deferred.await(code), hostEnded.pipe(Effect.flatMap((problem) => new NetFailure({ problem })))).pipe(Effect.timeoutOption("30 seconds"));
   if (Option.isNone(room)) return yield* new NetFailure({ problem: "the host printed no join code within 30 s" });
   const joiners = yield* Effect.forEach(Array.from({ length: humans - 1 }, (_, index) => index + 1), (index) => Effect.gen(function*() {
     const target = proxied ? yield* behindProxy(relay, room.value, { ...path, seed: path.seed + index }) : room.value;
