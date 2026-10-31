@@ -72,6 +72,8 @@ export function playerMouseEvent(natives: Readonly<Record<string, unknown>>, inp
   return { event: input.down ? natives.EVENT_PLAYER_MOUSE_DOWN : natives.EVENT_PLAYER_MOUSE_UP, x: input.x, y: input.y, button };
 }
 
+const MOUSE_MOVE = "EVENT_PLAYER_MOUSE_MOVE";
+
 /** The shortest repeating period: a zero period fires about 10,000 times a game second (wisp:docs/warsmash-notes.md#timers-and-frame-stepping). */
 const MIN_PERIOD = f32(0.0001);
 
@@ -239,6 +241,37 @@ export class TriggersTimers implements EventStore {
     return this.handle("event");
   }
 
+  registerKey(events: Handle, slot: number, key: number, meta: number, down: boolean): Handle {
+    this.registrations.push({ kind: "key", trigger: events as Trigger, player: slot, key, meta, down });
+    return this.handle("event");
+  }
+
+  registerChat(events: Handle, slot: number, text: string, exact: boolean): Handle {
+    this.registrations.push({ kind: "chat", trigger: events as Trigger, player: slot, text, exact });
+    return this.handle("event");
+  }
+
+  registerMouseMove(events: Handle, slot: number): Handle {
+    this.registrations.push({ kind: "player", trigger: events as Trigger, player: slot, event: MOUSE_MOVE });
+    return this.handle("event");
+  }
+
+  triggerKey(): number {
+    return this.event.key;
+  }
+
+  triggerChat(): string {
+    return this.event.chat;
+  }
+
+  triggerMouseX(): number {
+    return this.event.mouseX;
+  }
+
+  triggerMouseY(): number {
+    return this.event.mouseY;
+  }
+
   syncData(): string {
     return this.event.syncData;
   }
@@ -321,10 +354,10 @@ export class TriggersTimers implements EventStore {
       BlzGetTriggerFrameText: () => this.triggerFrameText(),
       BlzGetTriggerSyncData: () => this.syncData(),
       BlzGetTriggerSyncPrefix: () => this.syncPrefix(),
-      GetEventPlayerChatString: () => this.event.chat,
-      BlzGetTriggerPlayerKey: () => this.event.key,
-      BlzGetTriggerPlayerMouseX: () => this.event.mouseX,
-      BlzGetTriggerPlayerMouseY: () => this.event.mouseY,
+      GetEventPlayerChatString: () => this.triggerChat(),
+      BlzGetTriggerPlayerKey: () => this.triggerKey(),
+      BlzGetTriggerPlayerMouseX: () => this.triggerMouseX(),
+      BlzGetTriggerPlayerMouseY: () => this.triggerMouseY(),
       BlzGetTriggerPlayerMousePosition: () => this.bodies.location(this.event.mouseX, this.event.mouseY),
       BlzGetTriggerPlayerMouseButton: () => this.event.mouseButton,
       GetExpiredTimer: () => this.event.timer,
@@ -334,18 +367,12 @@ export class TriggersTimers implements EventStore {
       DestroyTrigger: (trigger: Trigger) => this.destroy(trigger),
       TriggerAddAction: (trigger: Trigger, action: Callback) => this.addAction(trigger, action),
       BlzTriggerRegisterPlayerSyncEvent: (trigger: Trigger, player: number, prefix: string) => this.registerSync(trigger, player, prefix),
-      TriggerRegisterPlayerChatEvent: (trigger: Trigger, player: number, text: string, exact: boolean) => {
-        this.registrations.push({ kind: "chat", trigger, player, text, exact });
-        return this.handle("event");
-      },
+      TriggerRegisterPlayerChatEvent: (trigger: Trigger, player: number, text: string, exact: boolean) => this.registerChat(trigger, player, text, exact),
       TriggerRegisterPlayerEvent: (trigger: Trigger, player: number, event: unknown) => {
         this.registrations.push({ kind: "player", trigger, player, event });
         return this.handle("event");
       },
-      BlzTriggerRegisterPlayerKeyEvent: (trigger: Trigger, player: number, key: number, meta: number, down: boolean) => {
-        this.registrations.push({ kind: "key", trigger, player, key, meta, down });
-        return this.handle("event");
-      },
+      BlzTriggerRegisterPlayerKeyEvent: (trigger: Trigger, player: number, key: number, meta: number, down: boolean) => this.registerKey(trigger, player, key, meta, down),
     };
   }
 }

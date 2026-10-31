@@ -21,6 +21,7 @@ import { mathNatives } from "./natives/math";
 import { Playing } from "./natives/playing";
 import { playerNatives } from "./natives/players";
 import { Players } from "../game/native/playerStore";
+import { Input } from "../game/native/inputStore";
 import { Sync } from "../game/native/syncStore";
 import { Bodies } from "../game/native/bodyStore";
 import { PreloadText } from "./natives/preloadText";
@@ -111,12 +112,15 @@ export class HeadlessClient {
   readonly frameUi: FrameUi;
   readonly quests: Quests;
   readonly textAreaAutoScroll = new Map<Handle, boolean>();
-  readonly heldMouseButtons = new Set<unknown>();
+  readonly input = new Input();
   /** Pixels `BlzGetLocalClientWidth/Height` report, which a window's cursor is mapped into. */
   readonly screen: { readonly width: number; readonly height: number };
-  mouseScreenX = 0;
-  mouseScreenY = 0;
-  private heldMeta = 0;
+
+  get heldMouseButtons(): Set<unknown> { return this.input.heldMouseButtons; }
+  get mouseScreenX(): number { return this.input.pointerX; }
+  set mouseScreenX(x: number) { this.input.pointerX = x; }
+  get mouseScreenY(): number { return this.input.pointerY; }
+  set mouseScreenY(y: number) { this.input.pointerY = y; }
   readonly slot: number;
 
   readonly log: NativeCall[] = [];
@@ -154,7 +158,6 @@ export class HeadlessClient {
   setWallTime(seconds: number): void { this.wallSeconds = seconds; }
   private nextId = 0;
   private readonly scope: ClientScope | undefined;
-  private readonly heldKeys = new Set<number>();
   private readonly units: Units;
   private readonly effects: Effects;
   private readonly sounds: Sounds;
@@ -202,7 +205,7 @@ export class HeadlessClient {
     const local = options.localNatives;
     const log = this.log;
     this.world = {
-      effects: this.effects, beams: this.lightnings, floatingText: this.textTags, view: this.view, sounds: this.sounds, frames: this.frameUi, events: this.timers, quests: this.quests, players: this.players, bodies: this.bodies, sync: this.sync,
+      effects: this.effects, beams: this.lightnings, floatingText: this.textTags, view: this.view, sounds: this.sounds, frames: this.frameUi, events: this.timers, quests: this.quests, players: this.players, bodies: this.bodies, sync: this.sync, input: this.input,
       files: new FileLines((path, lines) => this.preloadText.write(path, lines)),
       display: (player, text) => { if (player === this.slot) this.messages.push(text); },
       log: logUnlessLocal(log, local),
@@ -319,11 +322,7 @@ export class HeadlessClient {
     const handle = (kind: string): Handle => this.handle(kind);
     const frameContext: FrameContext = {
       ui: this.frameUi, textAreaAutoScroll: this.textAreaAutoScroll,
-      keyPressed: key => this.heldKeys.has(key),
-      metaPressed: meta => (this.heldMeta & meta) === meta,
-      mouseButtonPressed: button => this.heldMouseButtons.has(button),
-      mouseX: () => this.mouseScreenX,
-      mouseY: () => this.mouseScreenY,
+      input: this.input,
     };
     return {
       ...this.scenery.behaviors({ handle }),
@@ -412,9 +411,7 @@ export class HeadlessClient {
   }
 
   hold(key: number, meta: number, down: boolean): void {
-    this.heldMeta = meta;
-    if (down) this.heldKeys.add(key);
-    else this.heldKeys.delete(key);
+    this.input.hold(key, meta, down);
   }
 
   keyEvent(sender: number, key: number, meta: number, down: boolean): void {

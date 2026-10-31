@@ -1,29 +1,26 @@
 import type { Handle } from "../../game/native/types";
 import type { NativeBehavior } from "../clientTypes";
+import type { Input } from "../../game/native/inputStore";
 import type { FrameUi } from "../../game/native/frameUi";
 import { f32 } from "../../sim/f32";
 
 export interface FrameContext {
   readonly ui: FrameUi;
   readonly textAreaAutoScroll: Map<Handle, boolean>;
-  readonly keyPressed: (this: void, key: number) => boolean;
-  readonly metaPressed: (this: void, meta: number) => boolean;
-  readonly mouseButtonPressed: (this: void, button: unknown) => boolean;
-  readonly mouseX: (this: void) => number;
-  readonly mouseY: (this: void) => number;
+  readonly input: Input;
 }
 
-export function inputNatives({ ui, textAreaAutoScroll, keyPressed, metaPressed, mouseButtonPressed, mouseX, mouseY }: FrameContext): Readonly<Record<string, NativeBehavior>> {
+export function inputNatives({ ui, textAreaAutoScroll, input }: FrameContext): Readonly<Record<string, NativeBehavior>> {
   const screen = ui.screen;
   return {
     BlzGetLocalClientWidth: () => screen.width,
     BlzGetLocalClientHeight: () => screen.height,
-    BlzIsLocalClientActive: () => true,
-    BlzIsKeyPressed: (key: number) => keyPressed(key),
-    BlzIsMetaKeyPressed: (meta: number) => metaPressed(meta),
-    BlzIsMouseButtonPressed: (button: unknown) => mouseButtonPressed(button),
-    BlzGetMouseScreenPosX: () => mouseX(),
-    BlzGetMouseScreenPosY: () => mouseY(),
+    BlzIsLocalClientActive: () => input.focused(),
+    BlzIsKeyPressed: (key: number) => input.keyHeld(key),
+    BlzIsMetaKeyPressed: (meta: number) => input.metaHeld(meta),
+    BlzIsMouseButtonPressed: (button: unknown) => input.mouseButtonHeld(button),
+    BlzGetMouseScreenPosX: () => input.pointerX,
+    BlzGetMouseScreenPosY: () => input.pointerY,
     BlzPixelToFrameX: (pixel: number) => f32(pixel * f32(0.8) / screen.width),
     BlzPixelToFrameY: (pixel: number) => f32(pixel * f32(0.6) / screen.height),
     BlzFrameToPixelX: (frame: number) => Math.round(frame * screen.width / f32(0.8)),

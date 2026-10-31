@@ -8,10 +8,17 @@ export interface EventStore {
   registerFrame(events: Handle, frame: unknown, event: unknown): Handle;
   hasFrame(events: Handle, frame: unknown, event: unknown): boolean;
   registerLeave(events: Handle, slot: number): Handle;
+  registerKey(events: Handle, slot: number, key: number, meta: number, down: boolean): Handle;
+  registerChat(events: Handle, slot: number, text: string, exact: boolean): Handle;
+  registerMouseMove(events: Handle, slot: number): Handle;
   registerSync(events: Handle, slot: number, prefix: string): Handle;
   syncData(): string;
   syncPrefix(): string;
   triggerPlayer(): unknown;
+  triggerKey(): number;
+  triggerChat(): string;
+  triggerMouseX(): number;
+  triggerMouseY(): number;
   triggerFrame(): unknown;
   triggerFrameEvent(): unknown;
   triggerFrameText(): string;

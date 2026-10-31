@@ -3,6 +3,7 @@ import type { Effects } from "./effectStore";
 import type { EventStore } from "./eventStore";
 import type { FrameUi } from "./frameUi";
 import type { FileLines } from "./fileLines";
+import type { Input } from "./inputStore";
 import type { Lightnings } from "./lightnings";
 import type { Players } from "./playerStore";
 import type { Quests } from "./quests";
@@ -21,6 +22,7 @@ export interface World {
   readonly quests: Quests;
   readonly players: Players;
   readonly sync: Sync;
+  readonly input: Input;
   readonly bodies: Bodies;
   /** Puts a line in the message area of the client that `player` plays, if this world is that client's. */
   readonly display: (this: void, player: unknown, text: string) => void;
