@@ -338,14 +338,42 @@ fn a_window_that_starts_on_original_art_swaps_the_remaster_in_when_it_is_built()
     renderer.ingest("art.png", png);
     for _ in 0..4000 {
         renderer.pump();
-        if renderer.incoming.is_none() {
+        if !renderer.art_pending() {
             break;
         }
         std::thread::sleep(std::time::Duration::from_millis(1));
     }
-    assert!(renderer.incoming.is_none(), "the remastered set never replaced the Original one");
+    assert!(!renderer.art_pending() && renderer.incoming.is_none(), "the remastered set never replaced the Original one");
     assert_eq!(renderer.quality(), crate::remaster::Quality::Standard);
     assert!(renderer.textures.contains_key("art.png") && renderer.reliefs.contains_key("art.png"), "the swapped-in set carries the remastered texture and its relief");
+}
+
+#[test]
+fn a_match_keeps_the_art_it_started_with_and_the_bake_waits_until_play_stops() {
+    let Some((device, queue)) = device() else { return };
+    let mut renderer = Renderer::new(device.clone(), queue.clone(), FORMAT, crate::remaster::Quality::Off, crate::settings::Preset::High.features());
+    renderer.set_playing(true);
+    renderer.set_quality(crate::remaster::Quality::Standard);
+    let seed = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().subsec_nanos().to_le_bytes();
+    let pixels: Vec<u8> = (0..8 * 8).flat_map(|index| [index as u8 ^ seed[0], seed[1], seed[2], 255]).collect();
+    let mut png = Vec::new();
+    image::codecs::png::PngEncoder::new(&mut png).write_image(&pixels, 8, 8, image::ExtendedColorType::Rgba8).unwrap();
+    renderer.ingest("match.png", png);
+    for _ in 0..200 {
+        renderer.pump();
+        std::thread::sleep(std::time::Duration::from_millis(1));
+    }
+    assert!(renderer.incoming.is_none() && renderer.reliefs.is_empty(), "no remastered set is built during play");
+    assert_eq!(renderer.bake_progress().map(|progress| progress.done), Some(0), "the bake waits during play");
+    renderer.set_playing(false);
+    for _ in 0..4000 {
+        renderer.pump();
+        if !renderer.art_pending() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(1));
+    }
+    assert!(renderer.reliefs.contains_key("match.png"), "once play stops the texture is baked and the remastered set swapped in");
 }
 
 #[test]

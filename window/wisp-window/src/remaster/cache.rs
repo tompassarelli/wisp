@@ -41,6 +41,16 @@ impl Cache {
         self.directory.join(format!("{key}.{part}.png"))
     }
 
+    /// True when the bake has seen this key: its maps are stored, or it was marked to be drawn as it is.
+    pub fn holds(&self, key: &str) -> bool {
+        self.directory.join(format!("{key}.as-is")).exists() || (self.path(key, "albedo").exists() && self.path(key, "relief").exists())
+    }
+
+    /// Marks a texture the remaster leaves as it is (too large, or unreadable), so the next run does not decode it again to find out.
+    pub fn keep_as_is(&self, key: &str) {
+        let _ = fs::write(self.directory.join(format!("{key}.as-is")), []);
+    }
+
     pub fn load(&self, key: &str) -> Option<Maps> {
         Some(Maps { albedo: read(&self.path(key, "albedo"))?, relief: read(&self.path(key, "relief"))? })
     }

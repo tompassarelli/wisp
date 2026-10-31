@@ -38,6 +38,7 @@ export interface HeadlessRenderProject {
   readonly angle?: ChromeAngle;
   /** Extra environment for Chrome, such as the EGL vendor that picks its GPU. */
   readonly chromeEnv?: Readonly<Record<string, string>>;
+  /** Models the game can draw beyond its first scene; the native window reads them in after it starts, so their textures are remastered while the player is in the menus. */
   readonly preloadModels?: readonly string[];
 
   readonly terrain?: { readonly w3e?: Uint8Array; readonly bounds?: WorldBounds; readonly origin?: readonly [number, number] };
@@ -91,7 +92,7 @@ export interface RenderedFrame {
 }
 
 export const captureScene = (client: HeadlessClient, options: { readonly visibleOnly?: boolean; readonly matchFrame?: number } = {}): RenderScene => ({
-  frame: client.frame, ...(options.matchFrame === undefined ? {} : { matchFrame: options.matchFrame }), client: client.slot, effects: client.effectPoses({ visibleOnly: options.visibleOnly ?? false }), units: client.unitPoses(), camera: client.cameraPose(), ui: client.frames.snapshot({ visibleOnly: options.visibleOnly ?? false }), filter: client.cineFilterPose(), textTags: client.textTags.poses(), lightnings: client.lightnings.poses(), weathers: client.weathers.poses(),
+  frame: client.frame, ...(options.matchFrame === undefined ? {} : { matchFrame: options.matchFrame }), playing: client.playing.on, client: client.slot, effects: client.effectPoses({ visibleOnly: options.visibleOnly ?? false }), units: client.unitPoses(), camera: client.cameraPose(), ui: client.frames.snapshot({ visibleOnly: options.visibleOnly ?? false }), filter: client.cineFilterPose(), textTags: client.textTags.poses(), lightnings: client.lightnings.poses(), weathers: client.weathers.poses(),
   environment: sceneEnvironment(client),
 });
 

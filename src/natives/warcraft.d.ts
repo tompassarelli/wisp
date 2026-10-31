@@ -3418,6 +3418,7 @@ declare function BlzFrameSetAlpha(frame: framehandle, alpha: number): void;
 declare function BlzFrameGetAlpha(frame: framehandle): number;
 declare function BlzFrameSetSpriteAnimate(frame: framehandle, primaryProp: number, flags: number): void;
 declare function WispFrameSetSpriteTime(frame: framehandle, seconds: number): void;
+declare function WispSetPlaying(playing: boolean): void;
 declare function BlzFrameSetTexture(frame: framehandle, texFile: string, flag: number, blend: boolean): void;
 declare function BlzFrameSetScale(frame: framehandle, scale: number): void;
 declare function BlzFrameSetTooltip(frame: framehandle, tooltip: framehandle): void;

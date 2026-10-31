@@ -314,7 +314,7 @@ window. The camera fits the sequence's box front-on, turned 20 degrees, and the 
 comes from the camera's upper left with the scene's light colours (a neutral light when the
 scene has none). A game that scrubs a model's timeline calls `WispFrameSetSpriteTime(frame,
 seconds)`, a Wisp native the Warcraft build does not have, so it calls it only from native-window
-code. A sprite is drawn again only when its pose, size or light changes. Chrome does not draw
+code. A sprite is drawn again only when its pose, size or light changes. A map tells the native window that a match is on with `WispSetPlaying(true)` and that it is back in its menus with `WispSetPlaying(false)`; the window bakes remastered art only while not playing and never changes the art mid-match (native-window-plan.md, "Remaster at load"). Chrome does not draw
 SPRITE frames.
 
 `bun wisp window probe [--baseline] [--frames N] [--out DIR]` runs the sample map's scene

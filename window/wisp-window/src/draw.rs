@@ -285,7 +285,9 @@ impl Gpu {
 
     /// Keeps the scene to draw.
     pub fn load_scene(&mut self, bytes: &[u8]) -> Result<(), String> {
-        self.scene = Some(DrawScene::parse(bytes)?);
+        let scene = DrawScene::parse(bytes)?;
+        self.renderer.set_playing(scene.playing);
+        self.scene = Some(scene);
         self.ui.load_scene(bytes)
     }
 
@@ -302,7 +304,8 @@ impl Gpu {
             let size = (self.config.width, self.config.height);
             self.renderer.draw(&mut encoder, &view, size, self.aspect, scene);
             let [left, top, width, height] = fitted(size, self.aspect);
-            self.ui.set_overlay(self.menu.scene(&self.settings));
+            let bake = self.renderer.bake_progress().map(|progress| menu::Bake { progress, filter: progress.total > 0 && progress.ready() && self.renderer.upscales_with_filter(), playing: scene.playing, pending: self.renderer.art_pending() });
+            self.ui.set_overlay(self.menu.scene(&self.settings, bake));
             let area = [left as f32, top as f32, width as f32, height as f32];
             self.ui.each_sprite(area, |index, extent, shot| self.renderer.draw_sprite(&mut encoder, index, extent, shot, scene.light.as_ref()));
             self.ui.draw(&mut encoder, &view, size, area, &self.renderer);

@@ -77,6 +77,9 @@ pub struct Scene {
     pub frame: u32,
     /// How many of the scene's models Bun has not finished sending; a capture waits for none.
     pub pending: u32,
+    /// Whether the game is in play (a match) rather than in its menus, as the map last told `WispSetPlaying`; the remaster bakes and swaps art only while it is not.
+    #[serde(default)]
+    pub playing: bool,
     #[serde(default)]
     pub clear: [f32; 3],
     #[serde(deserialize_with = "super::water::scene_water")]

@@ -8,6 +8,9 @@ use super::cugan::{self, Cugan, Edges};
 use super::upscale;
 use crate::texture::Image;
 
+/// The method name of the edge-directed filter, in cache keys and in `method`.
+pub const FILTER: &str = "edge-directed";
+
 pub struct Upscaler {
     device: Option<(wgpu::Device, wgpu::Queue, String)>,
     learned: OnceLock<Option<Mutex<Cugan>>>,
@@ -56,7 +59,7 @@ impl Upscaler {
         if self.learned().is_some() && !self.stopped.load(Ordering::Relaxed) {
             cugan::MODEL
         } else {
-            "edge-directed"
+            FILTER
         }
     }
 

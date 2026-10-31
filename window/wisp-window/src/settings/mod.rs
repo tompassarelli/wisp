@@ -54,8 +54,8 @@ impl Preset {
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Art {
-    #[default]
     Original,
+    #[default]
     Remastered,
 }
 

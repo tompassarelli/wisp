@@ -1,5 +1,6 @@
 //! Remasters a Classic texture on the player's machine: an upscaled albedo, plus a tangent-space normal map with roughness in its alpha, both derived from the player's own file. Results are cached under the player's cache directory and never leave it.
 
+mod bake;
 mod cache;
 mod cugan;
 mod relief;
@@ -10,9 +11,10 @@ use std::str::FromStr;
 
 use crate::texture::Image;
 
+pub use bake::{Baker, Progress};
 pub use cache::Cache;
 pub use cugan::{device_limits, Edges, NOTICE as REAL_CUGAN_NOTICE};
-pub use upscaler::Upscaler;
+pub use upscaler::{Upscaler, FILTER};
 
 /// Textures this large or larger are already high resolution (backdrops, loading screens) and are left as they are.
 pub const LARGEST_SOURCE: u32 = 1024;
@@ -113,6 +115,27 @@ pub fn prepare(bytes: &[u8], quality: Quality, cache: Option<&Cache>, upscaler: 
         }
         None => Ok(Prepared { albedo: decoded, relief: None }),
     }
+}
+
+/// What the art on screen draws a texture with: its remastered maps from `cache` when the bake made them, else the decoded original with `unbaked` set when the bake has yet to reach it. It never runs the upscaler, so drawing never waits on it.
+pub fn load(bytes: &[u8], quality: Quality, cache: Option<&Cache>, upscaler: &Upscaler, edges: Edges) -> Result<Loaded, String> {
+    if quality != Quality::Off {
+        if let Some(cache) = cache {
+            let key = cache_key(bytes, quality, upscaler, edges);
+            if let Some(maps) = cache.load(&key) {
+                return Ok(Loaded { prepared: Prepared { albedo: maps.albedo, relief: Some(maps.relief) }, unbaked: false });
+            }
+            let decoded = crate::texture::decode(bytes)?;
+            let unbaked = decoded.width.max(decoded.height) < LARGEST_SOURCE && !cache.holds(&key);
+            return Ok(Loaded { prepared: Prepared { albedo: decoded, relief: None }, unbaked });
+        }
+    }
+    Ok(Loaded { prepared: Prepared { albedo: crate::texture::decode(bytes)?, relief: None }, unbaked: false })
+}
+
+pub struct Loaded {
+    pub prepared: Prepared,
+    pub unbaked: bool,
 }
 
 /// Upscales `image` (the first doubling by `upscaler`, any further ones by the edge-directed filter) and derives its relief, or returns `None` when the quality is off or the texture is already large.

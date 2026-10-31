@@ -6,6 +6,7 @@ use std::sync::Mutex;
 use winit::keyboard::KeyCode;
 
 use crate::input::Held;
+use crate::remaster::Progress;
 use crate::settings::Settings;
 use crate::sync::lock;
 use crate::ui::{Horizontal, UiFrame, UiScene, Vertical};
@@ -100,6 +101,29 @@ const GOLD: u32 = 0xffff_d24a;
 const WHITE: u32 = 0xffff_ffff;
 const GREY: u32 = 0xffb4_b4b4;
 
+const CORNER: [f32; 4] = [0.5, 0.035, 0.79, 0.012];
+
+/// What the remaster bake tells the player: how far it is, whether the GPU runs the learned upscaler, and whether a match is on.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Bake {
+    pub progress: Progress,
+    pub filter: bool,
+    pub playing: bool,
+    pub pending: bool,
+}
+
+impl Bake {
+    fn label(self) -> String {
+        match (self.progress.ready(), self.filter) {
+            (false, _) if self.playing => format!("Preparing {}%, paused in the match", self.progress.percent()),
+            (false, _) => format!("Preparing {}%", self.progress.percent()),
+            (true, true) => "Ready, basic filter (no GPU upscaler)".into(),
+            (true, false) if self.pending && self.playing => "Ready from the next match".into(),
+            (true, false) => "Ready".into(),
+        }
+    }
+}
+
 fn text(rectangle: [f32; 4], text: String, height: f32, color: u32, horizontal: Horizontal) -> UiFrame {
     UiFrame { rectangle, text, texture: String::new(), solid: false, color: WHITE, text_color: color, alpha: 255, level: 1, font_file: String::new(), font_height: height, outline: false, horizontal, vertical: Vertical::Middle, scale: 1.0, plain: false, sprite: None }
 }
@@ -140,10 +164,12 @@ impl Menu {
         }
     }
 
-    /// The frames to draw over the game's own, empty while the screen is closed.
-    pub fn scene(&self, settings: &Settings) -> UiScene {
+    /// The frames to draw over the game's own: the screen while it is open, else a quiet line in the corner while the menus wait on the remaster bake.
+    pub fn scene(&self, settings: &Settings, bake: Option<Bake>) -> UiScene {
         if !self.open {
-            return UiScene::default();
+            let preparing = bake.filter(|bake| !bake.playing && !bake.progress.ready());
+            let frames = preparing.map(|bake| text(CORNER, format!("Preparing HD textures {}%", bake.progress.percent()), 0.013, GREY, Horizontal::Right));
+            return UiScene { frames: frames.into_iter().collect() };
         }
         let features = settings.features();
         let mut frames = Vec::new();
@@ -159,6 +185,9 @@ impl Menu {
             let color = if index == self.row { GOLD } else { WHITE };
             frames.push(text(line(index + 1), label.into(), 0.022, color, Horizontal::Left));
             frames.push(text(line(index + 1), value, 0.022, color, Horizontal::Right));
+        }
+        if let Some(bake) = bake {
+            frames.push(text(line(ROWS.len() + 1), format!("HD textures: {}", bake.label()), 0.016, GREY, Horizontal::Right));
         }
         for (index, (key, value)) in features.keys().into_iter().enumerate() {
             frames.push(text(line(ROWS.len() + 2 + index), key.into(), 0.016, GREY, Horizontal::Left));

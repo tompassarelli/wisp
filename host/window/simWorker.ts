@@ -80,6 +80,7 @@ const run = async (init: SimWorkerInit) => {
     });
     yield* preloadScene(player.native.prepare().scene, library, () => view.assetsPending());
     view.start();
+    for (const model of game.render.preloadModels ?? []) library.sequences(model);
     yield* serve(view, loop, finished.promise);
   })));
 };

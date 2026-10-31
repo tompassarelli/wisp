@@ -33,7 +33,7 @@ use wgpu::util::DeviceExt;
 use std::sync::Arc;
 
 use crate::decode_pool::Pool;
-use crate::remaster::{self, Cache, Edges, Prepared, Quality, Upscaler};
+use crate::remaster::{self, Baker, Cache, Edges, Loaded, Quality, Upscaler};
 use crate::settings::Features;
 use math::{mirrored, multiply, projection, Mat4, IDENTITY};
 use gpu::{bone_storage, frame_group, instance_storage, color_storage, repeat_sampler, upload, uv_storage, white};
@@ -107,6 +107,11 @@ pub struct Renderer {
     textures: HashMap<String, wgpu::TextureView>,
     reliefs: HashMap<String, wgpu::TextureView>,
     quality: Quality,
+    wanted: Quality,
+    baker: Option<Baker>,
+    baked_at_build: usize,
+    playing: bool,
+    unbaked: bool,
     upscaler: Arc<Upscaler>,
     cache: Option<Arc<Cache>>,
     models: Vec<GpuModel>,
@@ -137,7 +142,7 @@ pub struct Renderer {
     order: Vec<usize>,
     groups: Vec<Group>,
     sky_group_of: Option<Group>,
-    decoder: Pool<Result<Prepared, String>>,
+    decoder: Pool<Result<Loaded, String>>,
     decoding: HashMap<u64, String>,
     next_job: u64,
     waiting: Vec<(String, Arc<[u8]>)>,
@@ -188,6 +193,11 @@ impl Renderer {
             textures: HashMap::new(),
             reliefs: HashMap::new(),
             quality,
+            wanted: quality,
+            baker: None,
+            baked_at_build: 0,
+            playing: false,
+            unbaked: false,
             upscaler: Arc::new(Upscaler::classical()),
             cache: (quality != Quality::Off).then(Cache::open).flatten().map(Arc::new),
             models: Vec::new(),

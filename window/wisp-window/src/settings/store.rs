@@ -61,11 +61,11 @@ mod tests {
         let directory = scratch("round");
         let store = Store::at(directory.join("nested").join("a.graphics.json"));
         assert_eq!(store.load(), Settings::default());
-        let chosen = Settings { preset: Preset::Low, art: Art::Remastered };
+        let chosen = Settings { preset: Preset::Low, art: Art::Original };
         store.save(&chosen).unwrap();
         assert_eq!(store.load(), chosen);
         fs::write(&store.path, br#"{"preset":"ultra"}"#).unwrap();
-        assert_eq!(store.load(), Settings { preset: Preset::Ultra, art: Art::Original });
+        assert_eq!(store.load(), Settings { preset: Preset::Ultra, art: Art::Remastered });
         fs::write(&store.path, b"not json").unwrap();
         assert_eq!(store.load(), Settings::default());
         fs::remove_dir_all(&directory).unwrap();

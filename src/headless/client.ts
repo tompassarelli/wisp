@@ -12,6 +12,7 @@ import { CameraCine } from "./natives/cameraCine";
 import { Effects } from "./natives/effects";
 import { frameNatives, type FrameContext, inputNatives } from "./natives/frames";
 import { mathNatives } from "./natives/math";
+import { Playing } from "./natives/playing";
 import { PreloadText } from "./natives/preloadText";
 import { Sounds } from "./natives/sound";
 import { playerMouseEvent, TriggersTimers } from "./natives/triggersTimers";
@@ -117,6 +118,7 @@ export class HeadlessClient {
   // Wine reads the parent folder when a Preloader path is missing (wisp:docs/hot-reload.md).
 
   missedLookups = 0;
+  readonly playing = new Playing();
   readonly natives: Record<string, unknown> = {};
 
   frame = 0;
@@ -302,6 +304,7 @@ export class HeadlessClient {
       ...this.sounds.behaviors(),
       ...this.effects.behaviors(),
       ...mathNatives(),
+      ...this.playing.behaviors(),
     };
   }
 
