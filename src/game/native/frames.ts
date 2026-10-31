@@ -170,6 +170,24 @@ export function setFrameColor(frame: Frame, color: number): void {
   world.frames.setVertexColor(frame, color);
 }
 
+export function setFrameModel(frame: Frame, model: string, camera: number): void {
+  const world = boundWorld();
+  world.log?.("BlzFrameSetModel", [frame, model, camera]);
+  world.frames.setModel(frame, model, camera);
+}
+
+export function setFrameSpriteAnimation(frame: Frame, animation: number, flags: number): void {
+  const world = boundWorld();
+  world.log?.("BlzFrameSetSpriteAnimate", [frame, animation, flags]);
+  world.frames.setSpriteAnimation(frame, animation);
+}
+
+export function setFrameSpriteTime(frame: Frame, seconds: number): void {
+  const world = boundWorld();
+  world.log?.("WispFrameSetSpriteTime", [frame, seconds]);
+  world.frames.setSpriteTime(frame, seconds);
+}
+
 export function setFrameVisible(frame: Frame, visible: boolean): void {
   const world = boundWorld();
   world.log?.("BlzFrameSetVisible", [frame, visible]);
