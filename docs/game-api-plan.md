@@ -717,7 +717,13 @@ Done when:
    checksums equal.
 5. The native window's scripted standalone run (`--emulated-calls FILE`, on
    `--start select` and on `--start match`) shows character select and the
-   match HUD, and the file counts zero emulated calls of those 51 natives.
+   match HUD, and the file counts zero emulated calls of those 51 natives
+   except the 8 that Wisp's `ChatPanel` (wisp:src/ui/chatPanel.ts, 1 backdrop
+   and 16 rows, built at start on every screen) still calls until G8b moves
+   `src/ui`: `BlzGetOriginFrame` 1, `BlzCreateFrameByType` 17, `BlzFrameSetLevel` 17,
+   `BlzFrameSetEnable` 17, `BlzFrameSetVisible` 17, `BlzFrameSetTexture` 1,
+   `BlzFrameSetFont` 16 and `BlzFrameSetTextAlignment` 16 (measured on gex45 at
+   smashcraft 9007174a6a, `--start select` and `--start match`).
 
 Not required:
 
@@ -1116,6 +1122,8 @@ Done when:
    passes on a pin of this commit.
 4. `examples/sample` runs in the native window's scripted standalone run, whose
    `--emulated-calls FILE` lists no emulated call of any native.
+5. A Smashcraft `--start select` and `--start match` run with `--emulated-calls
+   FILE` counts zero of the 8 frame natives that `ChatPanel` called at G2.
 
 Not required:
 
