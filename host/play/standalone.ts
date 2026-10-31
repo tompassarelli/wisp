@@ -32,7 +32,7 @@ export interface StandaloneSession {
   checksum(): string;
   frame?(): number;
   finished?(): boolean;
-  /** The named stage times of the last step in milliseconds, such as the sim tick, a rollback's resimulation or the scene build; the native window reports a spread for each name. */
+  /** The named stage times of the last step in milliseconds, such as the sim tick or a rollback's resimulation; the step adds `scene`, the time from the headless client to the scene, and the native window reports a spread for each name. */
   stages?(): Readonly<Record<string, number>>;
   close(): void;
   /** Frames advance on their own (a networked match); `step` only hands over the input and the scene is read as it stands. */
@@ -148,12 +148,14 @@ export const openStandalone = (game: StandaloneGame, options: StandaloneOptions 
     if (checksum !== undefined) checksums.push({ step: steps, frame, checksum, simulationMs: performance.now() - start });
     const capture = captures.delete(frame);
     const done = options.frames !== undefined && (session.paced === true ? frame >= options.frames : steps >= options.frames);
+    const sceneStart = performance.now();
     const scene = sceneWithUnits(game.render, captureScene(session.client, { visibleOnly: !capture }));
+    const drawn = { ...scene, frame, units: [], effects: scene.effects.filter((effect) => effect.alpha > 0 && effect.scale > 0 && !effect.flat), ui: scene.ui.filter((element) => element.visible && element.alpha > 0) };
+    const sceneMs = performance.now() - sceneStart;
     const cues = session.client.soundLog.slice(soundOffset);
     soundOffset = session.client.soundLog.length;
     soundPlayer?.cues(cues);
-    const frameOf = { scene: { ...scene, frame, units: [], effects: scene.effects.filter((effect) => effect.alpha > 0 && effect.scale > 0 && !effect.flat), ui: scene.ui.filter((element) => element.visible && element.alpha > 0) },
-      sounds: cues, step: steps, frame, ...(checksum === undefined ? {} : { checksum }), capture, done, ...(stages === undefined ? {} : { stages }), serverMs: performance.now() - start } satisfies StandaloneFrame;
+    const frameOf = { scene: drawn, sounds: cues, step: steps, frame, ...(checksum === undefined ? {} : { checksum }), capture, done, stages: { ...stages, scene: sceneMs }, serverMs: performance.now() - start } satisfies StandaloneFrame;
     return { frame: frameOf, saved: capture ? scene : undefined };
   };
   const step = (body: string) => Effect.gen(function*() {

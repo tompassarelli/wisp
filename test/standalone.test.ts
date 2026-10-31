@@ -81,6 +81,24 @@ test("[spec docs/game-api-plan.md] a run given emulatedCalls writes the client's
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 
+test("[spec docs/play.md] each step's stages carry the game's own names and the scene build, timed by the step", async () => {
+  const runtime = installHeadless({ filePrefix: "stages-fixture", globalPrefixes: [] });
+  const clients = runtime.clients({ install() {}, start() {} }, [0]);
+  clients.start();
+  const client = clients.client(0);
+  const game: StandaloneGame = {
+    title: "Stages fixture", render: { readAsset: async () => undefined },
+    create: async () => ({ client, step: () => clients.frames(1), checksum: () => client.checksum(), stages: () => ({ sim: 1.5, rollback: 0 }), close: () => runtime.restore() }),
+  };
+  await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+    const player = yield* openStandalone(game);
+    const { stages } = player.native.advance({ buttons: [], axisX: 0, axisY: 0 });
+    expect(Object.keys(stages ?? {}).sort()).toEqual(["rollback", "scene", "sim"]);
+    expect(stages?.sim).toBe(1.5);
+    expect(stages?.scene).toBeGreaterThanOrEqual(0);
+  })));
+});
+
 test("[spec docs/play.md] --emulated-calls takes a file and leaves the other arguments in order", () => {
   expect(standaloneEmulatedCallsArgument(["--start", "select", "--emulated-calls", "calls.json", "--frames", "5"])).toEqual({ emulatedCalls: "calls.json", rest: ["--start", "select", "--frames", "5"] });
   expect(standaloneEmulatedCallsArgument(["--frames", "5"])).toEqual({ rest: ["--frames", "5"] });
