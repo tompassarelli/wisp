@@ -2,7 +2,10 @@ Wisp is an open-source toolchain and clean-room runtime for Warcraft III maps
 ([wisp#75](https://github.com/tompassarelli/wisp/issues/75)). The toolchain
 builds maps for the official game. The runtime reimplements the behaviour maps
 rely on, from scratch, and loads art at run time from the player's own legally
-owned Warcraft III install. These rules apply to every
+owned Warcraft III: Reforged install (3.x, CASC storage; Wisp supports no
+pre-Reforged 1.x install). Wisp checks that the install is present, not who
+owns it: there is no purchase, login or DRM check, and nothing here emulates
+either. These rules apply to every
 agent and contributor, in code, tests, fixtures, docs, issues, pull requests
 and history. The short form is the README's
 [Principles](../README.md#principles).
@@ -23,6 +26,11 @@ and history. The short form is the README's
 - No Warsmash (AGPL) code, and its facts are hypotheses only: a native
   fixture decides each one, and no new fact is sourced from Warsmash
   (wisp:docs/warsmash-notes.md, "How to use this page").
+- Standalone play requires the Reforged install and looks for it before it
+  opens a window (wisp:docs/play.md, "Warcraft III: Reforged is required"). The
+  check reads folder and file names and the text of `.build.info`; it never
+  reads Battle.net's login or account files, and it stops with a message
+  rather than working around a missing install.
 - No "Warcraft" in a product name; "works with your Warcraft III install" is
   fine.
 

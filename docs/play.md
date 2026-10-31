@@ -338,6 +338,34 @@ collects about once per frame while the sample map steps (650 collections in 630
 frames, p50 about 1 ms, max 6 to 60 ms); the scene deadline, not the collection
 count, is what keeps a present on time (box W1b).
 
+### Warcraft III: Reforged is required
+
+Standalone play needs the player's own Warcraft III: Reforged install (3.x,
+CASC storage); a pre-Reforged 1.x install, MPQ-only or CASC 1.32, is not
+supported. Wisp checks that the install is present, not who owns it: it makes
+no purchase, login or DRM check (wisp:docs/clean-room.md). `runStandalone` takes
+`reforged: { storage? }` and `findReforgedInstall` (wisp:host/os/warcraft/reforgedInstall.ts)
+looks in this order, taking the first folder whose `.build.info` is product `w3`,
+version `3.*`, with `.idx` files under `Data/data`:
+
+1. `--storage DIR` (the folder with `.build.info` and `Data/`).
+2. The `WC3_STORAGE` environment variable.
+3. On Windows, Battle.net's registry entry (`Blizzard Entertainment\Warcraft III`
+   `InstallPath`), then `%ProgramFiles(x86)%\Warcraft III` and
+   `%ProgramFiles%\Warcraft III`.
+4. On Linux, each Wine prefix's `drive_c/Program Files (x86)/Warcraft III` (or
+   `Program Files`): Steam `compatdata/*/pfx` (native and Flatpak Steam), Lutris
+   and Wine prefixes under `~/Games`, Bottles bottles, `$WINEPREFIX`, then `~/.wine`.
+   On macOS, `/Applications/Warcraft III` as well.
+
+An override that names the wrong folder stops the run; it is never skipped for
+a search. With no Reforged install the run exits non-zero before any window,
+GPU lease or game is made, with one message that starts `Warcraft III: Reforged
+required`, says what was searched (or which folder was refused and why:
+MPQ-only, an older build number, another product, no CASC index) and how to
+point Wisp at the install. The found folder is also exported as `WC3_STORAGE`
+so the worker thread's Classic-art reader opens the same install.
+
 ### Assets from a player's own files
 
 A player has no source tree or private asset store: the map is the `.w3x` they

@@ -8,6 +8,7 @@ import type { HeadlessClient } from "../../src/headless/client";
 import type { LockstepLink } from "../../src/headless/lockstep";
 import { missingNativeMessage } from "../../src/headless/journey";
 import { spawnLogged } from "../process/hostProcess";
+import { findReforgedInstall, STORAGE_ENV, type InstallLookup } from "../os/warcraft/reforgedInstall";
 import { requireGpuLease } from "../render/gpuLease";
 import { joinCode, joinTarget, relayCode, relayRegions, CODE_HASH_DIGITS, type RelayChoice } from "../net/joinCode";
 import { chooseHostRelay, showJoinPing } from "../net/regionChoice";
@@ -75,6 +76,8 @@ export interface StandaloneOptions {
   readonly gpuLease?: boolean;
   /** With `window: "native"`, where a worker thread imports the game from (an export that is a function receives `arguments` and returns the game, so the worker reads the player's own map and install as the main thread does); the worker steps the game there, so the native window requires it. */
   readonly nativeGame?: NativeGameModule;
+  /** The player's Warcraft III: Reforged install, looked for before a window opens: the run stops with one message when none is found (wisp:docs/play.md, "Warcraft III: Reforged is required"). Passing it also points the worker thread's Classic-art reader at the install it found. */
+  readonly reforged?: InstallLookup;
   /** With `window: "native"`, the `wisp-window` library the sound output loads, else the one the window uses. */
   readonly library?: string | undefined;
 }
@@ -325,6 +328,10 @@ const runNativeStandalone = (game: StandaloneGame, options: StandaloneOptions) =
 });
 
 export const runStandalone = (game: StandaloneGame, options: StandaloneOptions = {}) => Effect.scoped(Effect.gen(function*() {
+  if (options.reforged !== undefined) {
+    const install = yield* findReforgedInstall(options.reforged);
+    process.env[STORAGE_ENV] = install.storage;
+  }
   if (options.gpuLease !== false && agentRender(options)) yield* requireGpuLease();
   if (options.window === "native") return yield* runNativeStandalone(game, options);
   if (options.net !== undefined) return yield* runNetStandalone(game, options, options.net);

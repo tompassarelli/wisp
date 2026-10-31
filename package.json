@@ -74,6 +74,7 @@
     "./scripts/wisp/playerView": "./host/scene/playerView.ts",
     "./scripts/wisp/preloadRecord": "./host/io/preloadRecord.ts",
     "./scripts/wisp/quietNativeCapacity": "./host/client/quietNativeCapacity.ts",
+    "./scripts/wisp/reforgedInstall": "./host/os/warcraft/reforgedInstall.ts",
     "./scripts/wisp/renderAssets": "./host/render/renderAssets.ts",
     "./scripts/wisp/scene": "./host/scene/scene.ts",
     "./scripts/wisp/screenBounds": "./host/render/screenBounds.ts",
