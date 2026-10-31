@@ -258,8 +258,10 @@ queued, the window closes or fails, or `wisp_window_stop` is called, so it
 waits without running JavaScript and no callback crosses into Bun. The native
 window requires `nativeGame` in the options (the module path and export name
 that a worker thread imports the game from, because a game object cannot cross
-threads) and refuses `--net` until the netcode moves onto it (wisp#107). The
-worker owns the frame loop: it blocks in `next_event`, steps the map once,
+threads); with `--host` or `--join` the match's peer runs on that worker too
+(wisp:docs/native-window-plan.md, "Networked play on the worker"). The
+worker owns the frame loop: it blocks in `next_event` (a networked match polls
+it and sleeps 1 ms on the event loop instead, so the peer's sockets keep running), steps the map once,
 gives the scene back as JSON in one call, then yields one `setImmediate` turn so
 timers and `readAsset` completions run; Bun's main thread only opens the window
 and waits for the worker's `completed`, `closed` or `failed`. The worker holds
@@ -485,6 +487,8 @@ naming both hashes; a direct join sends the full hash and the host refuses it.
 Closing either window sends a goodbye, so the other side ends at once with
 `PeerLeft`; a side that goes quiet ends the other after 3 s with `PeerSilent`.
 `--script`, `--headless`, `--frames` and `--out` work as above, one script per
-player. To try it through delay and loss on one machine, put
+player. `--window native` hosts and joins the same way; its worker thread runs
+the match's peer (wisp:docs/native-window-plan.md, "Networked play on the
+worker"). To try it through delay and loss on one machine, put
 `net proxy --listen P --to 127.0.0.1:HOSTPORT --rtt 120` between them and join
 `127.0.0.1:P`.

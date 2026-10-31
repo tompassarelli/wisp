@@ -1,8 +1,8 @@
 import { mkdtemp, mkdir, rm } from "node:fs/promises";
-import { networkInterfaces, tmpdir } from "node:os";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as BunServices from "@effect/platform-bun/BunServices";
-import { Deferred, Effect, Fiber, FiberSet, Schema } from "effect";
+import { Deferred, Effect, FiberSet, Schema } from "effect";
 import { ChildProcess } from "effect/process";
 import type { HeadlessClient } from "../../src/headless/client";
 import type { LockstepLink } from "../../src/headless/lockstep";
@@ -10,10 +10,7 @@ import { missingNativeMessage } from "../../src/headless/journey";
 import { spawnLogged } from "../process/hostProcess";
 import { findReforgedInstall, STORAGE_ENV, type InstallLookup } from "../os/warcraft/reforgedInstall";
 import { requireGpuLease } from "../render/gpuLease";
-import { joinCode, joinTarget, relayCode, relayRegions, CODE_HASH_DIGITS, type RelayChoice } from "../net/joinCode";
-import { chooseHostRelay, showJoinPing } from "../net/regionChoice";
-import { NetFailure } from "../net/failure";
-import { type NetListening, type NetRole, type NetSession, runNetPeer } from "../net/peer";
+import type { NetSession } from "../net/peer";
 import { captureScene, sceneWithUnits, RenderFailure, type HeadlessRenderProject } from "../render/headlessRender";
 import { browserBundle } from "../render/browserBundle";
 import { createSoundResolver } from "../render/standaloneSound";
@@ -23,6 +20,7 @@ import { openSimPlayer } from "../window/simPlayer";
 import { createSoundPlayer } from "../window/soundPlayer";
 import type { NativeGameModule } from "../window/simProtocol";
 import type { StandaloneFrame, StandaloneInput } from "../render/standaloneFrames";
+import { openNetMatch } from "./standaloneNet";
 
 export type { StandaloneFrame, StandaloneInput } from "../render/standaloneFrames";
 
@@ -57,7 +55,7 @@ export interface StandaloneGame {
   };
 }
 
-type StandaloneNet = { readonly host: { readonly port: number; readonly relay?: string } } | { readonly join: string };
+export type StandaloneNet = { readonly host: { readonly port: number; readonly relay?: string } } | { readonly join: string };
 
 export type StandaloneWindow = "chrome" | "native";
 
@@ -82,18 +80,6 @@ export interface StandaloneOptions {
   readonly reforged?: InstallLookup;
   /** With `window: "native"`, the `wisp-window` library the sound output loads, else the one the window uses. */
   readonly library?: string | undefined;
-}
-
-class MapMismatch extends Schema.TaggedError<MapMismatch, { readonly brand: unique symbol }>()("MapMismatch", { code: Schema.String, here: Schema.String }) {
-  override get message(): string {
-    return `the join code is for map ${this.code}, this build is map ${this.here.slice(0, CODE_HASH_DIGITS)}; both players need the same build`;
-  }
-}
-
-/** This machine's IPv4 addresses other players can reach, LAN ones first. */
-function reachableAddresses(): string[] {
-  return Object.values(networkInterfaces()).flatMap((entries) => entries ?? [])
-    .filter((entry) => entry.family === "IPv4" && !entry.internal).map((entry) => entry.address);
 }
 
 const framesAhead = (scripted: boolean) => (scripted ? 3 : 1);
@@ -256,60 +242,13 @@ const printSummary = (result: Readonly<Record<string, unknown>> | void) => {
   console.log(JSON.stringify(summary));
 };
 
-const FOREVER_FRAMES = 60 * 60 * 60 * 24;
-
-/** One player of a networked match: `--host` listens (or, with `--relay REGION`, opens a relay room) and prints the join code, `--join CODE|ADDRESS:PORT` joins it (wisp:docs/play.md). */
+/** One player of a networked match in the Chrome page (wisp:docs/play.md, "Host and join"). */
 const runNetStandalone = (game: StandaloneGame, options: StandaloneOptions, net: StandaloneNet) => Effect.gen(function*() {
-  const hooks = game.net;
-  if (hooks === undefined) return yield* new NetFailure({ problem: `${game.title} doesn't support host and join` });
-  const mapHash = yield* attempt(() => hooks.mapHash());
-  let role: NetRole;
-  let relay: RelayChoice | undefined;
-  if ("host" in net) {
-    relay = net.host.relay === undefined ? undefined : yield* chooseHostRelay(net.host.relay, relayRegions(), console.error);
-    role = relay === undefined ? { kind: "host", port: net.host.port } : { kind: "relayHost", relay: relay.relay };
-  } else {
-    const target = joinTarget(net.join);
-    if (typeof target === "string") return yield* new NetFailure({ problem: target });
-    if ("relay" in target) {
-      yield* showJoinPing(target.relay, relayRegions(), console.error);
-      role = { kind: "relayJoin", relay: target.relay, room: target.room };
-    } else {
-      if (target.mapHash !== undefined && target.mapHash !== mapHash.slice(0, CODE_HASH_DIGITS)) return yield* new MapMismatch({ code: target.mapHash, here: mapHash });
-      role = { kind: "join", to: { address: target.address, port: target.port } };
-    }
-  }
-  const script = options.script === undefined ? undefined : yield* attempt(() => Bun.file(options.script!).text());
-  const created = Promise.withResolvers<StandaloneNetSession>();
-  const listening = (at: NetListening) => {
-    if ("room" in at) {
-      if (relay !== undefined) console.log(`${game.title}: join code ${relayCode(relay, at.room)} (relay room; the joiner's map must match ${mapHash.slice(0, CODE_HASH_DIGITS)})`);
-      return;
-    }
-    const { port } = at;
-    const addresses = reachableAddresses();
-    const [lan] = addresses;
-    if (lan !== undefined) console.log(`${game.title}: join code ${joinCode(lan, port, mapHash)} (map ${mapHash.slice(0, CODE_HASH_DIGITS)})`);
-    for (const address of addresses) console.log(`${game.title}: direct address ${address}:${port} (UDP; forward this port to ${address} for a player outside this network)`);
-    if (lan === undefined) console.log(`${game.title}: no network address; on this machine join 127.0.0.1:${port}`);
-  };
-  const peer = yield* Effect.forkScoped(runNetPeer({
-    create: async (link, slot, humans) => {
-      const session = await hooks.create(link, slot, humans, script === undefined ? undefined : { script });
-      return { ...session, start: () => { session.start(); created.resolve(session); }, close: () => undefined };
-    },
-  }, { role, game: `${game.title} map ${mapHash}`, frames: options.frames ?? FOREVER_FRAMES, listening }));
-  const player = yield* openStandalone({
-    ...game,
-    create: async () => {
-      const session = await created.promise;
-      return { client: session.client, paced: true, step: session.input, checksum: session.checksum, frame: session.frame, ...(session.finished === undefined ? {} : { finished: session.finished }), close: session.close };
-    },
-  }, options);
+  const match = yield* openNetMatch(game, options, net);
+  const player = yield* openStandalone(match.game, options);
   const { closed } = yield* openWindow(game, options, player.url);
-  const ended = Fiber.join(peer).pipe(Effect.tap((report) => Effect.sync(() => console.error(`net: ${JSON.stringify(report)}`))));
   const outcome = yield* Effect.raceFirst(
-    Effect.all([player.completed, ended], { concurrency: "unbounded" }).pipe(Effect.map(([result]) => result)),
+    Effect.all([player.completed, match.ended], { concurrency: "unbounded" }).pipe(Effect.map(([result]) => result)),
     closed,
   ).pipe(Effect.catchTags({
     PeerLeft: (left) => Effect.sync(() => console.log(`${game.title}: ${left.message}; the session ended`)),
@@ -322,9 +261,8 @@ const runNetStandalone = (game: StandaloneGame, options: StandaloneOptions, net:
 export const agentRender = (options: StandaloneOptions) =>
   options.headless === true || options.script !== undefined || options.out !== undefined || options.recordChecksums === true || (options.captureFrames ?? []).length > 0;
 
-/** Plays in the native window: a worker thread imports the game and owns the frame loop ("Seam (revised)" in wisp:docs/native-window-plan.md), and the netcode joins it in W2 (wisp#107). */
+/** Plays in the native window: a worker thread imports the game and owns the frame loop ("Seam (revised)" in wisp:docs/native-window-plan.md); with `--host` or `--join` the match's peer runs on that thread too ("Networked play on the worker"). */
 const runNativeStandalone = (game: StandaloneGame, options: StandaloneOptions) => Effect.gen(function*() {
-  if (options.net !== undefined) return yield* failed("the native window can't play over --net until the netcode moves onto it (wisp#107); use --window chrome");
   if (options.nativeGame === undefined) return yield* failed("the native window needs nativeGame, the module and export a worker thread imports the game from");
   if ((options.captureFrames ?? []).length > 0) return yield* failed("the native window can't capture frames yet; use --window chrome");
   yield* prepareWindowLibrary.pipe(Effect.mapError((cause) => failed(cause.message)));

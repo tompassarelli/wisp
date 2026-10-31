@@ -107,3 +107,33 @@ export function createFrameLoop(player: NativePlayer, window: WindowView, option
     step,
   };
 }
+
+const EVENT_WAIT_MS = 1000;
+const NET_POLL_MS = 1;
+
+/**
+ * Steps the game once per sample, in the order the render thread took them: wait in the window, step, submit, then one macrotask turn so
+ * timers, messages and `readAsset` completions run outside the time from sample to scene. A networked match's peer owns sockets and timers
+ * on this thread, so there the wait never blocks: with no sample queued the thread sleeps 1 ms on its event loop instead. Returns whether
+ * the window closed, or failed or was stopped.
+ */
+export const serveFrames = (view: WindowView, loop: FrameLoop, finished: Promise<void>, networked: boolean) => Effect.gen(function*() {
+  for (;;) {
+    const event = view.nextEvent(networked ? 0 : EVENT_WAIT_MS);
+    if (event.kind === "timeout") {
+      if (networked) yield* Effect.sleep(NET_POLL_MS);
+    } else if (event.kind === "frame") {
+      loop.step(event.sample);
+      yield* Effect.callback<void>((resume) => { setImmediate(() => resume(Effect.void)); });
+    } else if (event.kind === "closed") {
+      return "closed";
+    } else if (event.kind === "failed") {
+      loop.complete(view.error() ?? "the window failed");
+      yield* Effect.promise(() => finished);
+      return "ended";
+    } else {
+      loop.dispose();
+      return "ended";
+    }
+  }
+});

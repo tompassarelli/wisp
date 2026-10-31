@@ -167,9 +167,8 @@ starts it, and at shutdown tells the worker to stop and waits for its
 acknowledgement before `wisp_window_close`, so the worker makes no call on a
 freed handle. The game is named by a module path and an export
 (`StandaloneOptions.nativeGame`) because a game object cannot cross threads. A
-networked session is `paced` and its netcode owns the sockets and the clock on
-the main thread, so it keeps stepping there until W2 moves its transport; a
-`runStandalone` call without `nativeGame` also steps on the main thread.
+networked session runs on the worker too ("Networked play on the worker"); a
+`runStandalone` call without `nativeGame` steps on the main thread.
 
 Why: the first box's collection-pause bound is about the thread that answers
 the wake. With the sample map stepping on the main thread, Bun ran an eden
@@ -868,16 +867,38 @@ fall through to `close` regardless, go away.
 
 ### Paths without a worker
 
-W1c makes `--window native` require `nativeGame` and refuse `--net`.
+W1c makes `--window native` require `nativeGame`.
 
 - The main-thread paths reach the window only through the `JSCallback`, which
   W1c deletes.
 - Nothing calls them yet, because Smashcraft adopts the native window in W8.
-- W2 brings networked play back. Its phase-locked netcode tick drains the
-  queue without blocking (`next_event(handle, out, 0)` until it returns
-  nothing).
-- W2 also defines how the samples it drains map onto netcode frames. A drained
-  sample counts as consumed, not dropped.
+
+### Networked play on the worker (wisp#198)
+
+`--window native` with `--host` or `--join` runs the match's peer on the
+worker that steps the game, because the game's session cannot leave the thread
+that imported it. The worker calls `openNetMatch` (host/play/standaloneNet.ts),
+the same setup the Chrome page uses: it picks the relay or direct route, prints
+the join code, forks `runNetPeer` and returns the game whose session is
+`paced`. The peer steps the sim on its own clock, with time sync and rate
+correction, and each window sample only hands the window's input to the
+session's next local frame and draws the scene as it stands.
+
+- The peer's sockets and timers live on the worker's event loop, so there the
+  worker never blocks in `next_event`: it polls with a zero timeout and, with
+  no sample queued, sleeps 1 ms on the event loop (`serveFrames`,
+  host/window/frameLoop.ts). Every queued sample is still stepped, so none is
+  dropped. A local or scripted run keeps the blocking wait.
+- The worker sends `completed` only once the peer has ended, with its report
+  as `net`. The other player leaving or going quiet ends the run as on
+  Chrome, and a desync or network failure ends it with that error. On close the
+  worker ends its scope first, so the peer says goodbye before the main thread
+  closes the window.
+- The worker opens no window until the handshake ends, as the page does. A
+  handshake failure fails the run instead of leaving it waiting.
+- W2 keeps the phase lock: the peer's clock and the window's 60 Hz step clock
+  run apart, so a window sample can see zero or two new sim frames when their
+  phases cross.
 
 ### The bounds, restated
 
@@ -1254,8 +1275,8 @@ yet are created by that box. Each graphics run takes the gpu lease as
     deadline and sample point to the measured ones, and the 60 Hz step rule
     above 60 Hz;
   - borderless fullscreen;
-  - the netcode tick's phase lock for paced sessions, which brings back
-    `--window native` with `--net` through a non-blocking `next_event`;
+  - the netcode tick's phase lock for paced sessions (`--window native`
+    plays `--host` and `--join` since wisp#198, unlocked);
   - the harness's `--window native|chrome|warcraft`, run windowed and
     fullscreen;
   - PresentMon numbers on Windows.

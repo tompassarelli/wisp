@@ -1,9 +1,11 @@
 // The thread that steps a native window's game: started by simPlayer.ts. It blocks in the window's next_event, so it owns the frame loop and Bun's main thread keeps no part of it.
 import { Effect } from "effect";
 import { openStandalone } from "../play/standalone";
-import { type WindowView, adoptNativeWindow } from "./binding";
+import { openNetMatch } from "../play/standaloneNet";
+import type { NetReport } from "../net/peer";
+import { adoptNativeWindow } from "./binding";
 import { createModelLibrary, drawScene, preloadAssets, preloadScene } from "./drawScene";
-import { type FrameLoop, createFrameLoop } from "./frameLoop";
+import { createFrameLoop, serveFrames } from "./frameLoop";
 import { loadGame } from "./gameModule";
 import { type RenderSeries, type RenderSeriesName, renderSeriesLengths, renderSeriesSince } from "./renderSeries";
 import type { SimWorkerAttach, SimWorkerInit, SimWorkerMessage } from "./simProtocol";
@@ -14,37 +16,20 @@ declare const self: Worker;
 
 const attached = Promise.withResolvers<number>();
 const READ_ASSET_EVERY = 30;
-const EVENT_WAIT_MS = 1000;
+
+/** How a networked match's peer ended, added to the run's figures: its report, the other player leaving or going quiet, or an error. */
+interface NetEnd { readonly net?: NetReport; readonly netEnded?: string; readonly error?: string }
 
 const send = (message: SimWorkerMessage) => self.postMessage(message);
 const problemOf = (cause: unknown) => (cause instanceof Error ? cause.message : String(cause));
 
-/** Steps the game once per sample, in the order the render thread took them: block in the window, step, submit, then one macrotask turn so timers, messages and `readAsset` completions run outside the time from sample to scene. Returns when the window closes, fails or is stopped. */
-const serve = (view: WindowView, loop: FrameLoop, finished: Promise<void>) => Effect.gen(function*() {
-  for (;;) {
-    const event = view.nextEvent(EVENT_WAIT_MS);
-    if (event.kind === "frame") {
-      loop.step(event.sample);
-      yield* Effect.callback<void>((resume) => { setImmediate(() => resume(Effect.void)); });
-    } else if (event.kind === "closed") {
-      send({ type: "closed" });
-      return;
-    } else if (event.kind === "failed") {
-      loop.complete(view.error() ?? "the window failed");
-      yield* Effect.promise(() => finished);
-      return;
-    } else if (event.kind === "stopped") {
-      loop.dispose();
-      return;
-    }
-  }
-});
-
 const run = async (init: SimWorkerInit) => {
   const began = performance.now();
   const game = await loadGame(init.game);
-  await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
-    const player = yield* openStandalone(game, { ...init.options, window: "native", library: init.library });
+  const ending = await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+    const { net } = init.options;
+    const match = net === undefined ? undefined : yield* openNetMatch(game, init.options, net);
+    const player = yield* openStandalone(match?.game ?? game, { ...init.options, window: "native", library: init.library });
     send({ type: "ready" });
     const view = yield* Effect.acquireRelease(
       Effect.promise(() => attached.promise).pipe(Effect.map((handle) => adoptNativeWindow(handle, init.library))),
@@ -79,13 +64,29 @@ const run = async (init: SimWorkerInit) => {
       },
       extraResult: probe === undefined ? undefined : (series) => ({ series: { ...series, readAssets: reads, render: measured } }),
     }, (result) => {
-      void player.native.finish(result).catch(() => result).then((final) => { send({ type: "completed", result: final }); finished.resolve(); });
+      void player.native.finish(result).catch(() => result).then(async (final) => { send({ type: "completed", result: { ...final, ...await netEnd.promise } }); finished.resolve(); });
     });
+    const netEnd = Promise.withResolvers<NetEnd>();
+    if (match === undefined) netEnd.resolve({});
+    else yield* Effect.forkScoped(match.ended.pipe(
+      Effect.map((report): NetEnd => ({ net: report })),
+      Effect.catchTags({
+        PeerLeft: (left) => Effect.succeed<NetEnd>({ netEnded: `${left.message}; the session ended` }),
+        PeerSilent: (silent) => Effect.succeed<NetEnd>({ netEnded: `${silent.message}; the session ended` }),
+      }),
+      Effect.catch((error) => Effect.succeed<NetEnd>({ error: error.message })),
+      Effect.tap((end) => Effect.sync(() => {
+        if (end.netEnded !== undefined) console.log(`${game.title}: ${end.netEnded}`);
+        netEnd.resolve(end);
+        loop.complete(end.error);
+      })),
+    ));
     yield* preloadScene(player.native.prepare().scene, library, () => view.assetsPending());
     view.start();
     preloadAssets(game.render, library);
-    yield* serve(view, loop, finished.promise);
+    return yield* serveFrames(view, loop, finished.promise, match !== undefined);
   })));
+  if (ending === "closed") send({ type: "closed" });
 };
 
 self.onmessage = (event: MessageEvent<SimWorkerInit | SimWorkerAttach>) => {

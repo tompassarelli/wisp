@@ -1,3 +1,5 @@
+import type { StandaloneNet } from "../play/standalone";
+
 /**
  * The module and export a worker thread imports to get the game, which cannot cross threads as an object. The export is the game, or a
  * function from `arguments` to the game, which is how the worker builds it with the flags the player ran with (`--map MAP.w3x --player-assets-only`)
@@ -11,6 +13,7 @@ export interface NativeGameModule {
 
 /** The parts of a run's options the worker thread's player reads. */
 export interface WorkerPlayOptions {
+  readonly net?: StandaloneNet;
   readonly script?: string;
   readonly frames?: number;
   readonly out?: string;
