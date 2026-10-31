@@ -294,10 +294,24 @@ How the native window meets it:
      blocks until the display releases the previous image, so the return
      time anchors the phase. Acquiring before sleeping is what makes the
      anchor real; sleeping first would only measure the window's own call.
-  3. Sleep until the sample point: anchor + T − p99(wake + step + encode +
-     draw) − margin. The p99 is a moving window over the last 120 frames, and
-     the margin starts at 1 ms.
-  4. Sample, step, draw into the acquired image, and present.
+  3. Sleep until the sample point: anchor + n·T − lead, where the lead is
+     p99(step) + p99(wake + parse + draw) + two margins and n is the fewest
+     whole display frames that hold it. The p99s are moving windows over
+     the last 120 steps and frames, and the margin starts at 1 ms. The step's
+     share is capped at two sim periods, so one stall cannot hold every later
+     sample that far back.
+  4. Sample and hand the samples to the game. Its scene is aimed at the
+     vblank n frames after this acquire.
+  5. On the frame that ends at that vblank, wait for the scene until the
+     deadline, then draw the newest scene that has arrived and present.
+
+  With n fixed at 1, a step longer than a display frame could never make its
+  deadline, and each late scene grew the margin, which only moved the
+  deadline earlier: on a loaded gex45 at 2848x1840 and 120 Hz the old rule
+  drew 236 to 299 of every 300 steps late (wisp#145). Aiming at a vblank n
+  frames ahead gives the step its whole lead, and the step time is taken from
+  the scene's arrival even when it came too late to draw, so the pacer learns
+  the tail instead of a time cut off at the deadline.
 
   A late present shows up as the next acquire blocking about one extra
   vblank. The margin then grows by 0.5 ms, and after 600 clean frames it
@@ -727,16 +741,14 @@ on, each frame runs in this order:
    clock and the button mask. It goes onto a bounded queue of 8. When the
    queue is full, the oldest samples stay and the new one is counted in
    `droppedSamples`.
-3. **Wait for the scene.** The wait ends when this sample's scene arrives, or
-   at the scene deadline, whichever is first.
-   - W1b samples right after the acquire, as today, and puts the deadline at
-     the anchor plus T minus 4 ms.
-   - W2 moves the deadline to the measured p99 draw plus a margin before the
-     next vblank, and the sample point to the deadline minus the measured p99
-     step.
-4. **Draw.** The render thread draws the newest scene that has arrived. If this
-   sample's scene has not, it redraws the last scene and counts a late scene
-   (`lateScenes`).
+3. **Wait for the scene.** The frame that ends at the vblank a sample was aimed
+   at ("Frame pacing") waits until that sample's scene arrives, or until the
+   scene deadline, whichever is first. The deadline is the measured p99 draw
+   plus a margin before the next vblank; frames with no scene aimed at them
+   do not wait.
+4. **Draw.** Every frame draws the newest scene that has arrived. If the scene
+   aimed at this frame has not, it redraws the last scene and counts a late
+   scene (`lateScenes`), and the late scene is drawn on the next frame.
 5. **Present.**
 
 The game's thread takes samples in order, oldest first. A step that ran late

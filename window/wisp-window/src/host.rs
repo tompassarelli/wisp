@@ -293,7 +293,7 @@ impl Host {
     }
 
     pub fn submit(&self, bytes: &[u8], step: u64, frame: u32) {
-        self.shared.mailbox.submit(Submission { bytes: bytes.to_vec(), step, frame });
+        self.shared.mailbox.submit(Submission { bytes: bytes.to_vec(), step, frame, arrived_ns: now_ns() });
     }
 
     pub fn next_event(&self, timeout: Duration) -> Event {

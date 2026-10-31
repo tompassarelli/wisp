@@ -18,6 +18,8 @@ pub struct Submission {
     pub bytes: Vec<u8>,
     pub step: u64,
     pub frame: u32,
+    /// When the scene reached the library, on its clock.
+    pub arrived_ns: u64,
 }
 
 /// What ended the stream of samples: the player closing the window, the library failing, or `stop`.
@@ -42,11 +44,21 @@ struct Samples {
     end: Option<End>,
 }
 
+const ARRIVAL_MEMORY: usize = 32;
+
+/// The scene not yet drawn, the newest sample answered, and when each recent answer arrived, which drawing a scene leaves in place.
+#[derive(Default)]
+struct Scenes {
+    held: Option<Submission>,
+    answered: Option<u32>,
+    arrivals: [Option<(u32, u64)>; ARRIVAL_MEMORY],
+}
+
 #[derive(Default)]
 pub struct Mailbox {
     samples: Mutex<Samples>,
     sample_ready: Condvar,
-    scene: Mutex<Option<Submission>>,
+    scene: Mutex<Scenes>,
     scene_ready: Condvar,
     stopping: AtomicBool,
 }
@@ -88,29 +100,38 @@ impl Mailbox {
         self.sample_ready.notify_all();
     }
 
-    /// Keeps the scene for the newest sample answered, so a scene that arrives after a newer one is dropped; after a stop it keeps nothing.
+    /// Keeps the scene for the newest sample answered, so a scene that arrives after a newer one is dropped, and notes when each answer arrived; after a stop it keeps nothing.
     pub fn submit(&self, submission: Submission) {
-        let mut scene = lock(&self.scene);
+        let mut scenes = lock(&self.scene);
         if self.is_stopping() {
             return;
         }
-        if scene.as_ref().is_none_or(|held| held.frame <= submission.frame) {
-            *scene = Some(submission);
+        scenes.arrivals[submission.frame as usize % ARRIVAL_MEMORY] = Some((submission.frame, submission.arrived_ns));
+        scenes.answered = scenes.answered.max(Some(submission.frame));
+        if scenes.held.as_ref().is_none_or(|held| held.frame <= submission.frame) {
+            scenes.held = Some(submission);
         }
         self.scene_ready.notify_one();
     }
 
+    /// Waits up to `timeout` until the scene for `frame` or a newer one has arrived, whether or not it was drawn since; false after a stop.
     pub(crate) fn wait_for_scene(&self, frame: u32, timeout: Duration) -> bool {
+        let answered = |scenes: &Scenes| scenes.answered.is_some_and(|answered| answered >= frame);
         let guard = lock(&self.scene);
         let (guard, _) = self
             .scene_ready
-            .wait_timeout_while(guard, timeout, |scene| !scene.as_ref().is_some_and(|held| held.frame >= frame) && !self.is_stopping())
+            .wait_timeout_while(guard, timeout, |scenes| !answered(scenes) && !self.is_stopping())
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        guard.as_ref().is_some_and(|held| held.frame >= frame)
+        answered(&guard) && !self.is_stopping()
+    }
+
+    /// When the scene for `frame` arrived, if it has and is among the last 32 answered.
+    pub(crate) fn arrived_ns(&self, frame: u32) -> Option<u64> {
+        lock(&self.scene).arrivals[frame as usize % ARRIVAL_MEMORY].filter(|(answered, _)| *answered == frame).map(|(_, arrived)| arrived)
     }
 
     pub(crate) fn take_scene(&self) -> Option<Submission> {
-        lock(&self.scene).take()
+        lock(&self.scene).held.take()
     }
 
     pub fn is_stopping(&self) -> bool {
@@ -121,7 +142,7 @@ impl Mailbox {
     pub fn stop(&self) {
         self.stopping.store(true, Ordering::Release);
         self.end(End::Stopped);
-        lock(&self.scene).take();
+        *lock(&self.scene) = Scenes::default();
         self.scene_ready.notify_all();
     }
 }

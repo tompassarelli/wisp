@@ -15,10 +15,19 @@ const PERIOD_WINDOW: usize = 120;
 const PERIOD_MINIMUM: usize = 5;
 const MISSED_PERIODS: f64 = 1.5;
 const SAMPLE_MEMORY: usize = 64;
+const UNMEASURED_LIMIT: usize = 8;
 
 /// The frame loop's time: when things happen, and how long it waits for a scene.
 pub trait Clock {
     fn now_ns(&self) -> u64;
+
+    /// Sleeps until `target_ns` on this clock.
+    fn sleep_until(&self, target_ns: u64) {
+        let wait = target_ns.saturating_sub(self.now_ns());
+        if wait > 0 {
+            thread::sleep(Duration::from_nanos(wait));
+        }
+    }
 
     /// Waits until the scene for `frame` arrives or `deadline_ns` passes on this clock; true when it arrived.
     fn wait_for_scene(&self, mailbox: &Mailbox, frame: u32, deadline_ns: u64) -> bool {
@@ -74,6 +83,8 @@ pub struct FrameLoop<S: Surface, C: Clock> {
     drawn_frame: Option<u32>,
     sample_times: [Option<(u32, u64)>; SAMPLE_MEMORY],
     previous_frame_late: bool,
+    pending: VecDeque<Aim>,
+    unmeasured: VecDeque<Aim>,
     pacer: Pacer,
     steps: StepClock,
     phase: Phase,
@@ -97,6 +108,8 @@ impl<S: Surface, C: Clock> FrameLoop<S, C> {
             drawn_frame: None,
             sample_times: [None; SAMPLE_MEMORY],
             previous_frame_late: false,
+            pending: VecDeque::new(),
+            unmeasured: VecDeque::new(),
             pacer: Pacer::default(),
             steps: StepClock::default(),
             phase: Phase::default(),
@@ -140,6 +153,8 @@ impl<S: Surface, C: Clock> FrameLoop<S, C> {
         }
         let period_ms = self.period_ms();
         let outcome = if mode == Mode::Loading {
+            self.pending.clear();
+            self.unmeasured.clear();
             self.surface.idle();
             Outcome::default()
         } else {
@@ -151,8 +166,8 @@ impl<S: Surface, C: Clock> FrameLoop<S, C> {
         let timings = self.surface.timings();
         self.surface.present(image);
         let presented = self.clock.now_ns();
-        if let Some(arrived) = outcome.arrived_ns {
-            self.pacer.record(ms(outcome.sampled_ns, arrived), ms(arrived, drawn));
+        if let Some(ready) = outcome.ready_ns {
+            self.pacer.record_finish(ms(ready, drawn));
         }
         let missed = mode != Mode::Loading && interval.is_some_and(|interval| interval > MISSED_PERIODS * period_ms);
         if outcome.late || missed {
@@ -207,42 +222,29 @@ impl<S: Surface, C: Clock> FrameLoop<S, C> {
 
     /// Sleeps to `target_ns` and returns how many nanoseconds after it the thread woke.
     fn sleep_until(&self, target_ns: u64) -> u64 {
-        let wait = target_ns.saturating_sub(self.clock.now_ns());
-        if wait > 0 {
-            thread::sleep(Duration::from_nanos(wait));
-        }
+        self.clock.sleep_until(target_ns);
         self.clock.now_ns().saturating_sub(target_ns)
     }
 
-    /// On a frame that steps the game, sleeps to the pacer's sample point, samples, queues one sample for each step that came due and waits for the last one's scene until the pacer's deadline; on the frames between steps it redraws the last scene.
+    /// On a frame that steps the game, sleeps to the pacer's sample point, samples and queues one sample for each step that came due, the last aimed at the vblank the plan names; then, on whichever frame that vblank ends, waits for the scene aimed at it until the pacer's deadline. Every frame draws the newest scene that has arrived, so a late scene costs one frame of latency and never the present.
     fn sample_and_wait(&mut self, mode: Mode, seam: &impl Seam, anchor: u64, period_ms: f64) -> Outcome {
         let mut outcome = Outcome::default();
         let steps = self.steps.steps_due(anchor, period_ms);
-        if steps == 0 {
-            return outcome;
+        if steps > 0 {
+            self.sample(mode, seam, anchor, period_ms, steps, &mut outcome);
         }
-        let late = self.sleep_until(anchor + (self.pacer.sample_offset_ms(period_ms) * 1e6) as u64);
-        self.pacer.record_wake(late as f64 / 1e6);
-        let sampled_ns = self.clock.now_ns();
-        let input = seam.input();
-        outcome.sampled_ns = sampled_ns;
-        let mut last = self.frame;
-        let mut input = input;
-        for _ in 0..steps {
-            let sample = Sample { frame: self.frame, sampled_ns, input };
-            input = input.repeated();
-            last = sample.frame;
-            self.frame = self.frame.wrapping_add(1);
-            self.sample_times[sample.frame as usize % SAMPLE_MEMORY] = Some((sample.frame, sample.sampled_ns));
-            if mode == Mode::Baseline {
-                self.mailbox.submit(Submission { bytes: b"{}".to_vec(), step: sample.frame as u64, frame: sample.frame });
-            } else if !self.mailbox.push_sample(sample) {
-                outcome.dropped = true;
-            }
+        let period_ns = (period_ms * 1e6) as u64;
+        let ends_by = anchor + period_ns + period_ns / 2;
+        let target = self.pending.iter().filter(|aim| aim.vblank_ns <= ends_by).map(|aim| aim.frame).max();
+        if let Some(target) = target {
+            let deadline = anchor + (self.pacer.scene_deadline_ms(period_ms) * 1e6) as u64;
+            outcome.late = !self.clock.wait_for_scene(&self.mailbox, target, deadline) && !self.mailbox.is_stopping();
+            let (due, later): (Vec<Aim>, Vec<Aim>) = self.pending.drain(..).partition(|aim| aim.frame <= target);
+            self.pending = later.into();
+            self.unmeasured.extend(due.into_iter().filter(|aim| aim.frame == target));
         }
-        let deadline = anchor + (self.pacer.scene_deadline_ms(period_ms) * 1e6) as u64;
-        outcome.late = !self.clock.wait_for_scene(&self.mailbox, last, deadline) && !self.mailbox.is_stopping();
-        outcome.arrived_ns = Some(self.clock.now_ns());
+        self.measure_arrivals();
+        outcome.ready_ns = Some(self.clock.now_ns());
         if let Some(submission) = self.mailbox.take_scene() {
             let began = self.clock.now_ns();
             match self.surface.load_scene(&submission.bytes) {
@@ -263,6 +265,44 @@ impl<S: Surface, C: Clock> FrameLoop<S, C> {
         outcome
     }
 
+    fn sample(&mut self, mode: Mode, seam: &impl Seam, anchor: u64, period_ms: f64, steps: u32, outcome: &mut Outcome) {
+        let plan = self.pacer.plan(period_ms);
+        let late = self.sleep_until(anchor + (plan.offset_ms * 1e6) as u64);
+        self.pacer.record_wake(late as f64 / 1e6);
+        let sampled_ns = self.clock.now_ns();
+        let mut input = seam.input();
+        let mut last = self.frame;
+        for _ in 0..steps {
+            let sample = Sample { frame: self.frame, sampled_ns, input };
+            input = input.repeated();
+            last = sample.frame;
+            self.frame = self.frame.wrapping_add(1);
+            self.sample_times[sample.frame as usize % SAMPLE_MEMORY] = Some((sample.frame, sample.sampled_ns));
+            if mode == Mode::Baseline {
+                self.mailbox.submit(Submission { bytes: b"{}".to_vec(), step: sample.frame as u64, frame: sample.frame, arrived_ns: self.clock.now_ns() });
+            } else if !self.mailbox.push_sample(sample) {
+                outcome.dropped = true;
+            }
+        }
+        let vblank_ns = anchor + plan.vblanks_ahead as u64 * (period_ms * 1e6) as u64;
+        self.pending.push_back(Aim { frame: last, sampled_ns, vblank_ns });
+    }
+
+    /// Gives the pacer each awaited step's time from its sample to its scene's arrival, whether the scene came in time or after its frame drew without it, so the plan learns the step's whole tail.
+    fn measure_arrivals(&mut self) {
+        let mailbox = &self.mailbox;
+        let pacer = &mut self.pacer;
+        self.unmeasured.retain(|aim| match mailbox.arrived_ns(aim.frame) {
+            Some(arrived) => {
+                pacer.record_work(ms(aim.sampled_ns, arrived));
+                false
+            }
+            None => true,
+        });
+        while self.unmeasured.len() > UNMEASURED_LIMIT {
+            self.unmeasured.pop_front();
+        }
+    }
 
     fn drawn_sample_ns(&self) -> Option<u64> {
         let drawn = self.drawn_frame?;
@@ -278,170 +318,21 @@ struct Times {
     presented: u64,
 }
 
+/// A sample whose scene is aimed at the vblank `vblank_ns`.
+#[derive(Clone, Copy)]
+struct Aim {
+    frame: u32,
+    sampled_ns: u64,
+    vblank_ns: u64,
+}
+
 #[derive(Default)]
 struct Outcome {
     dropped: bool,
     late: bool,
-    sampled_ns: u64,
-    arrived_ns: Option<u64>,
+    ready_ns: Option<u64>,
     parse_ms: Option<f64>,
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
-    use std::time::Instant;
-
-    const PERIOD_NS: u64 = 16_666_667;
-    /// How long the test's clock lets a consumer answer in real time before the scene counts as late: far more than any host's scheduling
-    /// delay, so only the samples the script holds back are late.
-    const ANSWER_GRACE: Duration = Duration::from_secs(1);
-    const WARMUP: u32 = PERIOD_MINIMUM as u32 + 1;
-    const FRAMES: u32 = 12;
-    const LATE_SAMPLE: u32 = 5;
-    const LATE_FRAMES: u32 = 2;
-
-    /// The library's clock in the test: the fake display moves it to each vblank, so every interval is exactly one period, and a scene
-    /// that does not come within the grace moves it to the deadline, so lateness follows the script, not the host's load.
-    #[derive(Clone, Default)]
-    struct TestClock(Arc<AtomicU64>);
-
-    impl Clock for TestClock {
-        fn now_ns(&self) -> u64 {
-            self.0.load(Ordering::Acquire)
-        }
-
-        fn wait_for_scene(&self, mailbox: &Mailbox, frame: u32, deadline_ns: u64) -> bool {
-            let arrived = mailbox.wait_for_scene(frame, ANSWER_GRACE);
-            if !arrived {
-                self.0.fetch_max(deadline_ns, Ordering::AcqRel);
-            }
-            arrived
-        }
-    }
-
-    struct FakeSurface {
-        clock: TestClock,
-        acquires: Arc<AtomicU32>,
-        presented: Arc<Mutex<Vec<u64>>>,
-        drawing: AtomicU32,
-    }
-
-    impl Surface for FakeSurface {
-        type Image = ();
-
-        fn acquire(&mut self) -> Option<()> {
-            let acquired = self.acquires.fetch_add(1, Ordering::AcqRel) + 1;
-            self.clock.0.store(acquired as u64 * PERIOD_NS, Ordering::Release);
-            Some(())
-        }
-
-        fn draw(&mut self, _: &(), step: u64) {
-            self.drawing.store(step as u32, Ordering::Release);
-        }
-
-        fn present(&self, _: ()) {
-            lock(&self.presented).push(self.drawing.load(Ordering::Acquire) as u64);
-        }
-    }
-
-    struct Quiet;
-
-    impl Seam for Quiet {
-        fn input(&self) -> Input {
-            Input::default()
-        }
-    }
-
-    #[test]
-    fn stop_wakes_a_blocked_consumer() {
-        let mailbox = Arc::new(Mailbox::default());
-        let consumer = {
-            let mailbox = mailbox.clone();
-            thread::spawn(move || {
-                let began = Instant::now();
-                (mailbox.next_event(Duration::from_secs(30)), began.elapsed())
-            })
-        };
-        thread::sleep(Duration::from_millis(50));
-        mailbox.stop();
-        let (event, waited) = consumer.join().unwrap();
-        assert_eq!(event, Event::Ended(End::Stopped), "the blocked consumer is told of the stop");
-        assert!(waited < Duration::from_secs(5), "the consumer returned long before its 30 s timeout");
-        mailbox.push_sample(Sample { frame: 0, sampled_ns: 0, input: Input::default() });
-        assert_eq!(mailbox.next_event(Duration::from_secs(30)), Event::Ended(End::Stopped), "a stop outranks a queued sample");
-    }
-
-    #[test]
-    fn stop_during_submit_leaves_no_scene_behind() {
-        let mailbox = Arc::new(Mailbox::default());
-        let submitter = {
-            let mailbox = mailbox.clone();
-            thread::spawn(move || {
-                let mut frame = 0;
-                while !mailbox.is_stopping() {
-                    mailbox.submit(Submission { bytes: vec![0; 4096], step: 1, frame });
-                    frame += 1;
-                }
-                mailbox.submit(Submission { bytes: b"{}".to_vec(), step: 2, frame });
-            })
-        };
-        thread::sleep(Duration::from_millis(20));
-        mailbox.stop();
-        submitter.join().unwrap();
-        assert!(mailbox.take_scene().is_none(), "no scene survives a stop, however late its submit");
-        assert!(!mailbox.wait_for_scene(0, Duration::from_secs(5)), "a stopped mailbox does not wait for a scene");
-    }
-
-    #[test]
-    fn late_scene_keeps_presents_on_clock() {
-        let mailbox = Arc::new(Mailbox::default());
-        let metrics = Arc::new(Mutex::new(Metrics::default()));
-        let presented = Arc::new(Mutex::new(Vec::new()));
-        let acquires = Arc::new(AtomicU32::new(0));
-        let clock = TestClock::default();
-        let surface = FakeSurface { clock: clock.clone(), acquires: acquires.clone(), presented: presented.clone(), drawing: AtomicU32::new(0) };
-        let mut frames = FrameLoop::new(surface, clock, mailbox.clone(), metrics.clone());
-        for _ in 0..WARMUP {
-            frames.frame(Mode::Loading, &Quiet);
-        }
-        let consumer = {
-            let (mailbox, acquires) = (mailbox.clone(), acquires.clone());
-            thread::spawn(move || {
-                let mut seen = Vec::new();
-                while let Event::Frame(sample) = mailbox.next_event(Duration::from_secs(10)) {
-                    if sample.frame == LATE_SAMPLE {
-                        while acquires.load(Ordering::Acquire) < WARMUP + LATE_SAMPLE + LATE_FRAMES + 1 {
-                            thread::sleep(Duration::from_millis(1));
-                        }
-                    }
-                    seen.push(sample.frame);
-                    mailbox.submit(Submission { bytes: b"{}".to_vec(), step: sample.frame as u64 + 1, frame: sample.frame });
-                }
-                seen
-            })
-        };
-        for _ in 0..FRAMES {
-            frames.frame(Mode::Game, &Quiet);
-        }
-        mailbox.stop();
-        let seen = consumer.join().unwrap();
-
-        assert_eq!(seen, (0..FRAMES).collect::<Vec<_>>(), "the consumer got every sample in order");
-        let metrics = lock(&metrics);
-        let flags = |which: Series| metrics.series(which.index() as u32).iter().map(|flag| *flag as u32).collect::<Vec<_>>();
-        let late: Vec<u32> = (0..FRAMES).map(|frame| u32::from((LATE_SAMPLE..LATE_SAMPLE + LATE_FRAMES).contains(&frame))).collect();
-        assert_eq!(flags(Series::LateScenes), late, "exactly the frames waiting on the slow sample were late");
-        assert_eq!(flags(Series::MissedPresents).iter().sum::<u32>(), 0, "no present missed");
-        assert_eq!(flags(Series::DroppedSamples).iter().sum::<u32>(), 0, "no sample dropped");
-
-        let steps = lock(&presented).clone();
-        let shown = &steps[WARMUP as usize..];
-        assert_eq!(shown.len(), FRAMES as usize, "every frame presented, the late ones included");
-        assert_eq!(shown[LATE_SAMPLE as usize], LATE_SAMPLE as u64, "the late frame redraws the previous scene");
-        assert_eq!(shown[(LATE_SAMPLE + 1) as usize], LATE_SAMPLE as u64, "so does the next while the slow sample is outstanding");
-        assert_eq!(shown[(LATE_SAMPLE + LATE_FRAMES) as usize], (LATE_SAMPLE + LATE_FRAMES) as u64 + 1, "the frame after catches up to its own scene");
-        assert!(shown.windows(2).all(|pair| pair[0] <= pair[1]), "scenes never go backwards");
-    }
-}
+mod tests;

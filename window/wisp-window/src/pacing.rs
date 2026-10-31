@@ -7,10 +7,18 @@ const MARGIN_GROWTH_MS: f64 = 0.5;
 const CLEAN_FRAMES_TO_SHRINK: u32 = 600;
 const MARGIN_LIMIT_MS: f64 = 6.0;
 const SIM_HZ: f64 = 60.0;
-const FALLBACK_WORK_MS: f64 = 4.0;
+const FALLBACK_FINISH_MS: f64 = 2.0;
 const WAKE_LIMIT_MS: f64 = 2.0;
 const PHASE_CREEP_NS: u64 = 50_000;
 const CATCH_UP_STEPS: u64 = 6;
+const MAX_WORK_MS: f64 = 2000.0 / SIM_HZ;
+
+/// Where a stepping frame samples: `offset_ms` after its acquire, for the scene to be shown at the vblank `vblanks_ahead` display frames after that acquire.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Plan {
+    pub offset_ms: f64,
+    pub vblanks_ahead: u32,
+}
 
 /// Where in a display frame the sample is taken: late enough that the step, the encode and the draw finish just before the present, early enough to leave the measured p99 and a margin.
 pub struct Pacer {
@@ -44,9 +52,13 @@ fn p99(window: &VecDeque<f64>) -> Option<f64> {
 }
 
 impl Pacer {
-    /// Records one frame: `work_ms` from the sample to the scene's arrival, `finish_ms` from the scene's arrival to the present call.
-    pub fn record(&mut self, work_ms: f64, finish_ms: f64) {
+    /// Records one step's time from its sample to its scene's arrival.
+    pub fn record_work(&mut self, work_ms: f64) {
         push(&mut self.work, work_ms);
+    }
+
+    /// Records one frame's time from the end of its scene wait to the present call.
+    pub fn record_finish(&mut self, finish_ms: f64) {
         push(&mut self.finish, finish_ms);
     }
 
@@ -76,17 +88,23 @@ impl Pacer {
     }
 
     fn finish_ms(&self) -> f64 {
-        p99(&self.finish).unwrap_or(FALLBACK_WORK_MS / 2.0) + p99(&self.wake).unwrap_or(0.0).min(WAKE_LIMIT_MS) + self.margin_ms
+        p99(&self.finish).unwrap_or(FALLBACK_FINISH_MS) + p99(&self.wake).unwrap_or(0.0).min(WAKE_LIMIT_MS) + self.margin_ms
     }
 
-    /// The time the game gets between the sample and the deadline. A late scene is cut off at the deadline, so its measured time says only that the budget was too small: the margin, which a miss grows, widens it.
+    /// The time the game takes from the sample to its scene's arrival, measured when a late scene arrives as well, and the margin, which a miss grows. Before ten steps are measured the game gets a whole sim period.
     fn work_ms(&self) -> f64 {
-        p99(&self.work).unwrap_or(FALLBACK_WORK_MS) + self.margin_ms
+        p99(&self.work).unwrap_or(1000.0 / SIM_HZ) + self.margin_ms
     }
 
-    /// Milliseconds after the acquire at which to sample, for a display frame of `period_ms`.
-    pub fn sample_offset_ms(&self, period_ms: f64) -> f64 {
-        (period_ms - self.work_ms() - self.finish_ms()).max(0.0)
+    /// When to sample on a frame that steps, for a display frame of `period_ms`: as late as leaves the game its measured p99, the draw its own and both their margins before a present, counted back from the first vblank that far ahead rather than clamped into the frame of the sample, so a step longer than a display frame is shown on time some vblanks later instead of late on every frame, and never after the frame's own deadline, which the render thread must leave to draw this frame. The game never gets more than two sim periods, so one stall cannot hold every later sample that far back.
+    pub fn plan(&self, period_ms: f64) -> Plan {
+        let lead_ms = (self.work_ms().min(MAX_WORK_MS) + self.finish_ms()).max(0.0);
+        if period_ms <= 0.0 {
+            return Plan { offset_ms: 0.0, vblanks_ahead: 1 };
+        }
+        let vblanks_ahead = ((lead_ms / period_ms).ceil() as u32).max(1);
+        let latest = vblanks_ahead as f64 * period_ms - lead_ms;
+        Plan { offset_ms: latest.min(self.scene_deadline_ms(period_ms)).max(0.0), vblanks_ahead }
     }
 
     /// Milliseconds after the acquire by which the scene must have arrived to be drawn and presented before the next vblank.
@@ -160,9 +178,10 @@ mod tests {
     fn sample_point_leaves_the_measured_work_and_a_margin() {
         let mut pacer = Pacer::default();
         for _ in 0..50 {
-            pacer.record(2.0, 1.0);
+            pacer.record_work(2.0);
+            pacer.record_finish(1.0);
         }
-        assert!((pacer.sample_offset_ms(16.667) - (16.667 - 2.0 - 1.0 - 2.0)).abs() < 1e-9);
+        assert!((pacer.plan(16.667).offset_ms - (16.667 - 2.0 - 1.0 - 2.0)).abs() < 1e-9);
         assert!((pacer.scene_deadline_ms(16.667) - (16.667 - 1.0 - 1.0)).abs() < 1e-9);
     }
 
@@ -170,11 +189,12 @@ mod tests {
     fn a_miss_moves_the_sample_earlier_and_clean_frames_give_it_back() {
         let mut pacer = Pacer::default();
         for _ in 0..50 {
-            pacer.record(2.0, 1.0);
+            pacer.record_work(2.0);
+            pacer.record_finish(1.0);
         }
-        let before = pacer.sample_offset_ms(16.667);
+        let before = pacer.plan(16.667).offset_ms;
         pacer.missed();
-        assert!((before - pacer.sample_offset_ms(16.667) - 2.0 * MARGIN_GROWTH_MS).abs() < 1e-9, "a miss moves the sample point earlier by the margin's growth in the work and the finish");
+        assert!((before - pacer.plan(16.667).offset_ms - 2.0 * MARGIN_GROWTH_MS).abs() < 1e-9, "a miss moves the sample point earlier by the margin's growth in the work and the finish");
         for _ in 0..CLEAN_FRAMES_TO_SHRINK {
             pacer.clean_frame();
         }
@@ -184,8 +204,35 @@ mod tests {
     #[test]
     fn the_sample_point_falls_back_before_there_are_measurements() {
         let pacer = Pacer::default();
-        assert!(pacer.sample_offset_ms(16.667) > 0.0 && pacer.sample_offset_ms(16.667) < 16.667);
-        assert_eq!(Pacer::default().sample_offset_ms(2.0), 0.0);
+        assert!(pacer.plan(16.667).offset_ms > 0.0 && pacer.plan(16.667).offset_ms < 16.667);
+        assert_eq!(Pacer::default().plan(2.0), Plan { offset_ms: 0.0, vblanks_ahead: 11 });
+    }
+
+    #[test]
+    fn a_step_longer_than_a_display_frame_is_shown_some_vblanks_later() {
+        let mut pacer = Pacer::default();
+        for _ in 0..50 {
+            pacer.record_work(14.5);
+            pacer.record_finish(3.0);
+        }
+        let plan = pacer.plan(8.333);
+        assert_eq!(plan.vblanks_ahead, 3, "14.5 ms of step, 3 ms of draw and two 1 ms margins need three 120 Hz frames");
+        assert!((plan.offset_ms - (8.333 - 3.0 - 1.0)).abs() < 1e-9, "the sample point 5.5 ms in falls after this frame's own deadline, so it moves to the deadline: {plan:?}");
+        let sixty = pacer.plan(16.667);
+        assert_eq!(sixty.vblanks_ahead, 2);
+        assert!((sixty.offset_ms - (16.667 - 3.0 - 1.0)).abs() < 1e-9, "{sixty:?}");
+    }
+
+    #[test]
+    fn a_stall_holds_the_sample_back_at_most_two_sim_periods() {
+        let mut pacer = Pacer::default();
+        for _ in 0..50 {
+            pacer.record_work(100.0);
+            pacer.record_finish(1.0);
+        }
+        let plan = pacer.plan(8.333);
+        let lead = plan.vblanks_ahead as f64 * 8.333 - plan.offset_ms;
+        assert!((lead - (MAX_WORK_MS + 1.0 + 1.0)).abs() < 1e-9, "{plan:?}");
     }
 
     fn steps_over(hz: f64, seconds: f64) -> Vec<u64> {
@@ -285,7 +332,8 @@ mod tests {
     fn the_deadline_leaves_the_measured_wake_lateness() {
         let mut pacer = Pacer::default();
         for _ in 0..50 {
-            pacer.record(2.0, 1.0);
+            pacer.record_work(2.0);
+            pacer.record_finish(1.0);
             pacer.record_wake(0.75);
         }
         assert!((pacer.scene_deadline_ms(16.667) - (16.667 - 1.0 - 0.75 - 1.0)).abs() < 1e-9);
