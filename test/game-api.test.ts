@@ -10,6 +10,7 @@ import * as nativeSound from "../src/game/native/sound";
 import * as nativeText from "../src/game/native/text";
 import * as filesApi from "../src/game/native/files";
 import * as nativePlayers from "../src/game/native/players";
+import * as nativeSync from "../src/game/native/sync";
 import * as nativeView from "../src/game/native/view";
 import { bindWorld } from "../src/game/native/world";
 import { HeadlessClient } from "../src/headless/client";
@@ -23,8 +24,10 @@ import type { VolumeGroup } from "../src/game/sound";
 import { text } from "../src/game/warcraft/text";
 import { files } from "../src/game/warcraft/files";
 import { players } from "../src/game/warcraft/players";
+import { sync } from "../src/game/warcraft/sync";
 import { view } from "../src/game/warcraft/view";
 import type { CameraField } from "../src/game/view";
+import type { SyncMessage } from "../src/headless/clientTypes";
 
 const root = join(import.meta.dir, "..");
 
@@ -84,6 +87,7 @@ const families = [
   { name: "text", table: text, backend: nativeText },
   { name: "files", table: files, backend: filesApi },
   { name: "players", table: players, backend: nativePlayers },
+  { name: "sync", table: sync, backend: nativeSync },
 ] as const;
 
 test.each(families)("every $name lowering row names a declared native with the arity of its Wisp function and an implemented backend call", ({ name, table, backend }) => {
@@ -424,4 +428,46 @@ test("the view backend logs the native call of its lowering row, keeps each clie
   natives.SetCameraPosition?.(5, 6);
   expect(first.cameraPose().y).toBe(6);
   expect(Object.fromEntries(first.emulatedCalls)).toEqual({ GetCameraField: 1, SetCameraPosition: 1 });
+});
+
+test("sync calls lower to the natives they replaced, byte for byte", () => {
+  const lowered = compile(`import { createEvents } from "../../src/game/events";\nimport { addSyncEvent, sendSync, syncData, syncPrefix } from "../../src/game/sync";\n` + wrap(`
+  const events = createEvents();
+  addSyncEvent(events, owner, "pre");
+  if (!sendSync(syncPrefix(), syncData() + model)) BJDebugMsg("lost");`));
+  const raw = compile(wrap(`
+  const events = CreateTrigger();
+  BlzTriggerRegisterPlayerSyncEvent(events, owner, "pre", false);
+  if (!BlzSendSyncData(BlzGetTriggerSyncPrefix(), BlzGetTriggerSyncData() + model)) BJDebugMsg("lost");`));
+  expect(lowered.diagnostics).toBe("");
+  expect(raw.diagnostics).toBe("");
+  expect(lowered.lua).toBe(raw.lua);
+  expect(lowered.lua).toContain('BlzTriggerRegisterPlayerSyncEvent(events, owner, "pre", false)');
+});
+
+test("the native backend delivers a client's messages to its registrations in order and refuses a 256-character one", () => {
+  const declarations = readNativeDeclarations();
+  const make = (slot: number, network: SyncMessage[]) => new HeadlessClient({ slot, humans: [0, 1], declarations, filePrefix: "game-api", localNatives: {}, network });
+  const [outbox0, outbox1]: SyncMessage[][] = [[], []];
+  const [first, second] = [make(0, outbox0), make(1, outbox1)];
+  const heard: string[] = [];
+  bindWorld(first.world);
+  const events = nativeEvents.createEvents();
+  nativeSync.addSyncEvent(events, nativePlayers.player(1), "ab");
+  nativeEvents.onEvents(events, () => { heard.push(`${nativeSync.syncPrefix()}:${nativeSync.syncData()}:${nativePlayers.playerSlot(nativePlayers.eventPlayer())}`); });
+  expect(nativeSync.sendSync("ab", "x".repeat(255))).toBe(true);
+  expect(() => nativeSync.sendSync("ab", "x".repeat(256))).toThrow("at most 255 characters");
+  nativeSync.sendSync("ab", "second");
+  bindWorld(second.world);
+  nativeSync.sendSync("ab", "from one");
+  nativeSync.sendSync("ab", "and again");
+  bindWorld(undefined);
+  expect(outbox0.map(message => [message.sender, message.data.length])).toEqual([[0, 255], [0, 6]]);
+  expect(outbox1.map(message => [message.sender, message.data])).toEqual([[1, "from one"], [1, "and again"]]);
+  bindWorld(first.world);
+  for (const message of [...outbox1, ...outbox0]) first.deliverSync(message);
+  bindWorld(undefined);
+  expect(heard).toEqual(["ab:from one:1", "ab:and again:1"]);
+  expect(first.log.map(call => call.name).filter(name => name.startsWith("Blz"))).toEqual(["BlzTriggerRegisterPlayerSyncEvent", "BlzSendSyncData", "BlzSendSyncData", "BlzGetTriggerSyncPrefix", "BlzGetTriggerSyncData", "BlzGetTriggerSyncPrefix", "BlzGetTriggerSyncData"]);
+  expect([...first.emulatedCalls.keys(), ...second.emulatedCalls.keys()]).toEqual([]);
 });

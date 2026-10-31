@@ -6,11 +6,7 @@ export interface NativeCall {
   readonly args: readonly unknown[];
 }
 
-export interface SyncMessage {
-  readonly sender: number;
-  readonly prefix: string;
-  readonly data: string;
-}
+export type { SyncMessage } from "../game/native/syncStore";
 
 export type MouseButton = "left" | "middle" | "right";
 

@@ -21,6 +21,7 @@ import { mathNatives } from "./natives/math";
 import { Playing } from "./natives/playing";
 import { playerNatives } from "./natives/players";
 import { Players } from "../game/native/playerStore";
+import { Sync } from "../game/native/syncStore";
 import { PreloadText } from "./natives/preloadText";
 import { Sounds } from "../game/native/soundStore";
 import { soundNatives } from "./natives/sound";
@@ -164,6 +165,7 @@ export class HeadlessClient {
 
   readonly frames: Frames;
   readonly players: Players;
+  readonly sync: Sync;
 
   constructor(options: ClientOptions) {
     this.screen = options.screen;
@@ -192,11 +194,12 @@ export class HeadlessClient {
     this.frameUi = new FrameUi(() => this.frames, handle, () => this.natives.ORIGIN_FRAME_GAME_UI, options.screen);
     this.quests = new Quests(handle);
     this.players = new Players({ slot: options.slot, humans: options.humans, names: options.playerNames });
-    const behaviors = this.behaviors(options);
+    this.sync = new Sync(options.slot, options.network);
+    const behaviors = this.behaviors();
     const local = options.localNatives;
     const log = this.log;
     this.world = {
-      effects: this.effects, beams: this.lightnings, floatingText: this.textTags, view: this.view, sounds: this.sounds, frames: this.frameUi, events: this.timers, quests: this.quests, players: this.players,
+      effects: this.effects, beams: this.lightnings, floatingText: this.textTags, view: this.view, sounds: this.sounds, frames: this.frameUi, events: this.timers, quests: this.quests, players: this.players, sync: this.sync,
       files: new FileLines((path, lines) => this.preloadText.write(path, lines)),
       display: (player, text) => { if (player === this.slot) this.messages.push(text); },
       log: logUnlessLocal(log, local),
@@ -309,7 +312,7 @@ export class HeadlessClient {
     return this.units.liveHandleCounts();
   }
 
-  private behaviors({ network }: ClientOptions): Readonly<Record<string, NativeBehavior>> {
+  private behaviors(): Readonly<Record<string, NativeBehavior>> {
     const handle = (kind: string): Handle => this.handle(kind);
     const frameContext: FrameContext = {
       ui: this.frameUi, textAreaAutoScroll: this.textAreaAutoScroll,
@@ -339,7 +342,7 @@ export class HeadlessClient {
       ...this.abilities.behaviors(handle),
       ...inputNatives(frameContext),
       ...frameNatives(frameContext),
-      ...this.timers.behaviors(this.slot, network),
+      ...this.timers.behaviors(this.sync),
       ...this.preloadText.behaviors(),
       ...soundNatives(this.sounds),
       ...this.viewNatives.behaviors(),

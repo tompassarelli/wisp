@@ -5,6 +5,7 @@ declares (wisp:docs/architecture.md, "Where things live").
 
 ## Unreleased
 
+- `wisp/game/sync` is Wisp's sync-message API (`sendSync`, `addSyncEvent`, `syncData`, `syncPrefix`): delivery in the order sent, per sender, and a 255-character limit that the native backend enforces by throwing. `HeadlessClient.world` carries a `sync` store over the client's outbox.
 - `wisp/game/players` is Wisp's player API (`player`, `playerSlot`, `localPlayer`, `eventPlayer`, `playerControl`, `playerSlotState`, `playerName`, `setPlayerColor`, `addLeaveEvent`), and `Player` moved there from `wisp/game/effects` and `wisp/game/frames`. A lowering template may now name a global (`EVENT_PLAYER_LEAVE`) and a nested native (`ConvertPlayerColor($2)`); `HeadlessClient.world` carries a `players` store.
 - `wisp/game/frames` and `wisp/game/events` are Wisp's UI frame, message, quest log and event-trigger APIs, lowered on Warcraft and run by the native backend on Bun like `wisp/game/effects`. `wisp/src/headless/frames` moved to `wisp/src/game/native/frameStore`.
 - `wisp/game/sound` is Wisp's own sound API (sounds, music, volume groups): on Warcraft each call lowers to its native at compile time, on Bun it resolves to the native backend in `src/game/native/sound.ts`. The sound store moved from `wisp/src/headless/natives/sound` to `wisp/src/game/native/soundStore`, and `SoundCue` is declared in `wisp/src/game/native/types` (still re-exported from `wisp/src/headless/client`).

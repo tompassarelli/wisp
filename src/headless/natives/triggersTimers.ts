@@ -6,6 +6,7 @@ import type { Frame } from "../../game/native/frameStore";
 import type { EventStore } from "../../game/native/eventStore";
 import { FRAMES_PER_SECOND } from "../../game/native/frameRate";
 import { isFrame } from "../../game/native/frameUi";
+import { type Sync, SYNC_LIMIT } from "../../game/native/syncStore";
 import { after } from "./timerDeadline";
 import type { Unit, Units } from "./units";
 
@@ -76,9 +77,6 @@ const MIN_PERIOD = f32(0.0001);
 const MIN_ONE_SHOT = 0.0009765625;
 
 const frameEnd = (frame: number): number => divideFloat32(frame, FRAMES_PER_SECOND);
-
-// Sync data is capped at 255 characters, preserving whole UTF-8 characters (wisp:docs/warsmash-notes.md).
-const SYNC_DATA_LIMIT = 255;
 
 export class TriggersTimers implements EventStore {
   private readonly timers: Timer[] = [];
@@ -235,6 +233,19 @@ export class TriggersTimers implements EventStore {
     return this.registrations.some(registration => registration.kind === "frame" && registration.trigger === events && registration.frame === frame && registration.event === event);
   }
 
+  registerSync(events: Handle, slot: number, prefix: string): Handle {
+    this.registrations.push({ kind: "sync", trigger: events as Trigger, player: slot, prefix });
+    return this.handle("event");
+  }
+
+  syncData(): string {
+    return this.event.syncData;
+  }
+
+  syncPrefix(): string {
+    return this.event.syncPrefix;
+  }
+
   registerLeave(events: Handle, slot: number): Handle {
     this.registrations.push({ kind: "player", trigger: events as Trigger, player: slot, event: "EVENT_PLAYER_LEAVE" });
     return this.handle("event");
@@ -261,7 +272,7 @@ export class TriggersTimers implements EventStore {
       registration.kind === "frame" && registration.frame === frame && registration.event === event && !registration.trigger.destroyed);
   }
 
-  behaviors(slot: number, network: SyncMessage[]): Readonly<Record<string, NativeBehavior>> {
+  behaviors(sync: Sync): Readonly<Record<string, NativeBehavior>> {
     return {
       ...this.triggerBehaviors(),
       CreateTimer: (): Timer => {
@@ -295,8 +306,7 @@ export class TriggersTimers implements EventStore {
       },
       TimerGetElapsed: (timer: Timer) => this.timerElapsed(timer),
       BlzSendSyncData: (prefix: string, data: string) => {
-        network.push({ sender: slot, prefix, data: data.slice(0, SYNC_DATA_LIMIT) });
-        return true;
+        return sync.send(prefix, data.slice(0, SYNC_LIMIT));
       },
     };
   }
@@ -308,8 +318,8 @@ export class TriggersTimers implements EventStore {
       BlzGetTriggerFrame: () => this.triggerFrame(),
       BlzGetTriggerFrameEvent: () => this.triggerFrameEvent(),
       BlzGetTriggerFrameText: () => this.triggerFrameText(),
-      BlzGetTriggerSyncData: () => this.event.syncData,
-      BlzGetTriggerSyncPrefix: () => this.event.syncPrefix,
+      BlzGetTriggerSyncData: () => this.syncData(),
+      BlzGetTriggerSyncPrefix: () => this.syncPrefix(),
       GetEventPlayerChatString: () => this.event.chat,
       BlzGetTriggerPlayerKey: () => this.event.key,
       BlzGetTriggerPlayerMouseX: () => this.event.mouseX,
@@ -322,10 +332,7 @@ export class TriggersTimers implements EventStore {
       BlzTriggerInterrupt: (trigger: Trigger) => { trigger.interrupted = true; },
       DestroyTrigger: (trigger: Trigger) => this.destroy(trigger),
       TriggerAddAction: (trigger: Trigger, action: Callback) => this.addAction(trigger, action),
-      BlzTriggerRegisterPlayerSyncEvent: (trigger: Trigger, player: number, prefix: string) => {
-        this.registrations.push({ kind: "sync", trigger, player, prefix });
-        return this.handle("event");
-      },
+      BlzTriggerRegisterPlayerSyncEvent: (trigger: Trigger, player: number, prefix: string) => this.registerSync(trigger, player, prefix),
       TriggerRegisterPlayerChatEvent: (trigger: Trigger, player: number, text: string, exact: boolean) => {
         this.registrations.push({ kind: "chat", trigger, player, text, exact });
         return this.handle("event");
