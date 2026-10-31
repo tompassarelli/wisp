@@ -31,6 +31,7 @@ runMainCli("bun wisp", {
   },
   farm: { usage: "test [--ref REF] [--wait]   (the full suites on GitHub's free runners: docs/farm.md)", load: async () => (await import("./farm")).farm },
   render: { usage: "compare --reference BACKEND --candidate BACKEND --scenes FILE --out DIR   (the render bound from Chrome's two ANGLE backends: docs/render-compare.md)", load: async () => (await import("./render")).renderCommand },
+  latency: { usage: "press --window native|chrome|warcraft --display :N --wayland-runtime DIR --key KEYSYM --region X,Y,W,H --control X,Y,W,H --out DIR [--sample-log FILE] [--warcraft FILE]   (press to display: docs/native-window-plan.md)", load: async () => (await import("./latency")).latency },
   window: {
     usage: "probe [--baseline] [--frames N] [--out DIR]   (the native window's seam and pacing: docs/native-window-plan.md)",
     load: async () => (await import("./window")).makeWindow(join(root, "examples/sample/scripts/standalone.ts")),

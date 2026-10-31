@@ -326,8 +326,20 @@ How it is measured:
   Each run writes press-to-change p50 and p95, and the window share: the
   sample timestamp, which the library logs per frame on the monotonic clock
   it exports over FFI, subtracted from the time of the changed pixels.
-  - The harness reads that same clock through the library, so the two sides
-    share one clock.
+  - The window and the harness share the monotonic clock. The library's clock
+    counts from its first call, so the window process reads the offset
+    between it and `process.hrtime` once at start and writes each button
+    change it samples, on the harness's clock, to the file named by
+    `WISP_WINDOW_SAMPLE_LOG` (host/window/sampleLog.ts). The harness reads that
+    file after each trial: the window share runs from the first logged press
+    after the key was written to the middle of the bracket the change appeared in.
+  - `bun wisp latency press --window native --display :N --wayland-runtime DIR
+    --key KEY --region X,Y,W,H --control X,Y,W,H --sample-log FILE --out DIR
+    [--warcraft DIR/press-latency.json]` runs it and writes `latency.json`: the
+    native run's `pressMs` and `windowShareMs`, with the Warcraft run beside
+    it as `warcraft` when one is given. The window must already be on the
+    desktop and take its input from XTEST (an X11 window); the command does not
+    start it.
   - grim reads the compositor's output, not light off the panel. Scanout and
     panel response add the same constant to every target, so the comparisons
     hold.

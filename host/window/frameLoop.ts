@@ -14,6 +14,8 @@ export interface FrameLoopOptions {
   readonly scripted: boolean;
   /** Milliseconds from starting the player to its first frame, reported as `startupMs`. */
   readonly startupMs: number;
+  /** Called with each sample before it is stepped. */
+  readonly onSample?: ((sample: InputSample) => void) | undefined;
   /** Called once per finished frame with the count so far. */
   readonly afterFrame?: ((count: number) => void) | undefined;
   /** Fields added to the result, such as the raw series a probe reads. */
@@ -73,6 +75,7 @@ export function createFrameLoop(player: NativePlayer, window: WindowView, option
     if (ended) return;
     const began = performance.now();
     if (firstFrameAt === 0) firstFrameAt = began;
+    options.onSample?.(sample);
     series.wakes.push((window.nowNs() - sample.sampleNs) / 1e6);
     if (previous !== 0) series.intervals.push(began - previous);
     previous = began;

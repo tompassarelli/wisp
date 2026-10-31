@@ -7,6 +7,7 @@ import { type FrameLoop, createFrameLoop } from "./frameLoop";
 import { loadGame } from "./gameModule";
 import { type RenderSeries, type RenderSeriesName, renderSeriesLengths, renderSeriesSince } from "./renderSeries";
 import type { SimWorkerAttach, SimWorkerInit, SimWorkerMessage } from "./simProtocol";
+import { SAMPLE_LOG_VARIABLE, openSampleLog } from "./sampleLog";
 import { GC_LOG_BEGIN, GC_LOG_END } from "./stats";
 
 declare const self: Worker;
@@ -55,9 +56,11 @@ const run = async (init: SimWorkerInit) => {
     let measured: RenderSeries | undefined;
     const assets = [...(game.render.preloadModels ?? []), "missing\\probe.mdx"];
     const probe = init.probe;
+    const sampleLogPath = process.env[SAMPLE_LOG_VARIABLE];
     const library = createModelLibrary((path) => game.render.readAsset(path), view, (problem) => console.error(`native window: ${problem}`));
     const loop = createFrameLoop(player.native, view, {
       scripted: init.options.script !== undefined,
+      onSample: sampleLogPath === undefined ? undefined : openSampleLog(sampleLogPath, view),
       encodeScene: (scene) => JSON.stringify(drawScene(scene, library)),
       startupMs: performance.now() - began,
       afterFrame: probe === undefined ? undefined : (count) => {

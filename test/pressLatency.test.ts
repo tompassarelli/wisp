@@ -1,7 +1,9 @@
 import { expect, test } from "bun:test";
 import type { Frame } from "../host/contract/services";
 import { checkArguments, referenceErrors } from "../host/play/latencyReference";
-import { changedPixels, framePeriodMs, pressLatencyArguments, response, type Sample } from "../host/play/pressLatency";
+import { decodePressRun, latencyReport } from "../host/play/latencyComparison";
+import { changedPixels, framePeriodMs, pressLatencyArguments, response, windowShare, type Sample } from "../host/play/pressLatency";
+import { parseSampleLog } from "../host/window/sampleLog";
 import { displaySocket, fakeKey, keycodeOf, keysymOf, queryExtension } from "../host/play/xtest";
 
 const frame = (width: number, height: number, lit: readonly (readonly [number, number])[] = []): Frame => {
@@ -69,4 +71,20 @@ test("[spec docs/online-plan.md] a key press is one XTEST FakeInput request at a
   expect([query.length, query[0], query[2], query[4]]).toEqual([16, 98, 4, 5]);
   expect(keycodeOf(0x6a, 8, 2, Uint32Array.of(0, 0, 0x61, 0x41, 0x6a, 0x4a))).toBe(10);
   expect(keycodeOf(0x7a, 8, 2, Uint32Array.of(0, 0, 0x61, 0x41))).toBeUndefined();
+});
+
+test("[spec docs/native-window-plan.md] the window's share runs from the logged sample that carried the press to the middle of the bracket the change appeared in", () => {
+  const edges = parseSampleLog('{"sampleNs":40000000,"mask":1}\n{"sampleNs":90000000,"mask":0}\n');
+  expect(windowShare(edges, 36 * ms, { lowerMs: 8, upperMs: 24 })).toBe(12);
+  expect(windowShare(edges, 41 * ms, { lowerMs: 8, upperMs: 24 })).toBeUndefined();
+  expect(windowShare([], 36 * ms, { lowerMs: 8, upperMs: 24 })).toBeUndefined();
+});
+
+test("[spec docs/native-window-plan.md] latency.json carries the Warcraft run only when one was given", () => {
+  const run = { window: "native", trials: 100, responded: 97, pressMs: { p50: 30, p95: 41 } };
+  const warcraft = { window: "warcraft", trials: 100, responded: 90, pressMs: { p50: 97, p95: 120 } };
+  expect(latencyReport(run, undefined)).toEqual(run);
+  expect(latencyReport(run, warcraft)).toEqual({ ...run, warcraft });
+  expect(decodePressRun({ ...warcraft, rows: [] })).toEqual(warcraft);
+  expect(() => decodePressRun({ window: "warcraft" })).toThrow();
 });

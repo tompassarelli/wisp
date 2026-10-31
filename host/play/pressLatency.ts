@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
@@ -6,6 +6,7 @@ import { Effect } from "effect";
 import { decodePpm, encodePpm, type Frame } from "../contract/services";
 import { runTool } from "../os/warcraft/desktopClient";
 import { DesktopFailure } from "../contract/client";
+import { type SampleEdge, parseSampleLog } from "../window/sampleLog";
 import { openKeyboard } from "./xtest";
 
 export const WINDOW_KINDS = ["chrome", "warcraft", "native", "reference"] as const;
@@ -29,6 +30,8 @@ export interface PressLatencyOptions {
   readonly out: string;
   readonly grim: string;
   readonly settleMs: number;
+  /** The file a native window appends its button changes to (`WISP_WINDOW_SAMPLE_LOG`), from which the window's share of each press is read. */
+  readonly sampleLog: string | undefined;
 }
 
 /** One screen grab. The compositor answers a grab with the next frame it draws, so `afterNs` stamps that frame to within the time grim takes to hand it over. */
@@ -48,7 +51,12 @@ export interface Trial {
   readonly bracketMs: number | undefined;
   readonly skippedFrames: number | undefined;
   readonly frameMs: number;
-  readonly pressMs: number;
+  /** How long the XTEST request took to write: the uncertainty of the press time. */
+  readonly pressWriteMs: number;
+  /** The middle of the bracket: press to the changed pixels. */
+  readonly pressMs: number | undefined;
+  /** The sampled input to the changed pixels, on the library's clock; set only for a native window that logged the sample. */
+  readonly windowShareMs: number | undefined;
 }
 
 const BASELINE_MS = 300;
@@ -126,6 +134,16 @@ export function framePeriodMs(samples: readonly Sample[]): number {
   return percentile(samples.slice(1).map((sample, index) => (sample.afterNs - samples[index]!.afterNs) / 1e6), 0.5);
 }
 
+/** The sample that carried the press is the first logged button change at or after it; the window's share is from that sample to the middle of the bracket the change appeared in. */
+export function windowShare(edges: readonly SampleEdge[], pressNs: number, changed: Pick<Response, "lowerMs" | "upperMs">): number | undefined {
+  const sampled = edges.find((edge) => edge.sampleNs >= pressNs && edge.mask !== 0);
+  if (sampled === undefined) return undefined;
+  return (pressNs - sampled.sampleNs) / 1e6 + (changed.lowerMs + changed.upperMs) / 2;
+}
+
+const loggedShare = (log: string | undefined, pressNs: number, changed: Response) =>
+  log === undefined ? undefined : windowShare(parseSampleLog(readFileSync(log, "utf8")), pressNs, changed);
+
 const percentile = (values: readonly number[], fraction: number) => {
   const sorted = [...values].sort((a, b) => a - b);
   return sorted[Math.min(sorted.length - 1, Math.max(0, Math.ceil(fraction * sorted.length) - 1))] ?? Number.NaN;
@@ -137,6 +155,25 @@ const bounds = (a: Rect, b: Rect): Rect => {
 };
 
 const relativeTo = (origin: Rect, rect: Rect): Rect => ({ ...rect, x: rect.x - origin.x, y: rect.y - origin.y });
+
+/** The run's figures from its trials; `windowShareMs` is present only for a run that read a sample log. */
+function pressReport(options: PressLatencyOptions, trials: readonly Trial[]) {
+  const answered = trials.filter((trial) => trial.bracketMs !== undefined && trial.controlChanged !== undefined && trial.controlChanged <= CONTROL_CHANGED);
+  const seen = trials.filter((trial) => trial.upperMs !== undefined && trial.lowerMs !== undefined);
+  const upper = seen.map((trial) => trial.upperMs!);
+  const middle = seen.map((trial) => trial.pressMs!);
+  const shares = seen.flatMap((trial) => trial.windowShareMs === undefined ? [] : [trial.windowShareMs]);
+  return {
+    window: options.window, key: options.key, region: options.region, control: options.control, trials: trials.length,
+    responded: seen.length, missedFrames: answered.length - seen.length,
+    resolutionMs: percentile(trials.map((trial) => trial.frameMs), 0.5),
+    bracketMs: { p50: percentile(seen.map((trial) => trial.bracketMs!), 0.5), p95: percentile(seen.map((trial) => trial.bracketMs!), 0.95), max: Math.max(...seen.map((trial) => trial.bracketMs!)) },
+    upperMs: { p50: percentile(upper, 0.5), p95: percentile(upper, 0.95) },
+    pressMs: { p50: percentile(middle, 0.5), p95: percentile(middle, 0.95) },
+    ...(options.sampleLog === undefined ? {} : { windowShareMs: { p50: percentile(shares, 0.5), p95: percentile(shares, 0.95), measured: shares.length } }),
+    rows: trials,
+  };
+}
 
 /**
  * Taps `key` through XTEST on `display` while grabbing the compositor output back to back, and times the first grab whose `region` changed.
@@ -189,7 +226,9 @@ export const pressLatency = (options: PressLatencyOptions) => Effect.scoped(Effe
     const moved = controlChanged !== undefined && controlChanged > CONTROL_CHANGED;
     const caught = found !== undefined && !moved && found.bracketMs < SKIPPED_FRAME * frameMs;
     trials.push({
-      idleChanged, threshold, changed: found?.changed, controlChanged, frameMs, pressMs: (press.afterNs - press.beforeNs) / 1e6,
+      idleChanged, threshold, changed: found?.changed, controlChanged, frameMs, pressWriteMs: (press.afterNs - press.beforeNs) / 1e6,
+      pressMs: caught ? (found.lowerMs + found.upperMs) / 2 : undefined,
+      windowShareMs: caught ? loggedShare(options.sampleLog, pressNs, found) : undefined,
       lowerMs: caught ? found.lowerMs : undefined, upperMs: caught ? found.upperMs : undefined,
       bracketMs: found?.bracketMs, skippedFrames: found === undefined ? undefined : Math.max(0, Math.round(found.bracketMs / frameMs) - 1),
     });
@@ -201,30 +240,18 @@ export const pressLatency = (options: PressLatencyOptions) => Effect.scoped(Effe
     yield* Effect.log(JSON.stringify({ trial, ...trials.at(-1) }));
     yield* Effect.sleep(options.settleMs);
   }
-  const answered = trials.filter((trial) => trial.bracketMs !== undefined && trial.controlChanged !== undefined && trial.controlChanged <= CONTROL_CHANGED);
-  const seen = trials.filter((trial) => trial.upperMs !== undefined && trial.lowerMs !== undefined);
-  const upper = seen.map((trial) => trial.upperMs!);
-  const middle = seen.map((trial) => (trial.upperMs! + trial.lowerMs!) / 2);
-  const report = {
-    window: options.window, key: options.key, region: options.region, control: options.control, trials: trials.length,
-    responded: seen.length, missedFrames: answered.length - seen.length,
-    resolutionMs: percentile(trials.map((trial) => trial.frameMs), 0.5),
-    bracketMs: { p50: percentile(seen.map((trial) => trial.bracketMs!), 0.5), p95: percentile(seen.map((trial) => trial.bracketMs!), 0.95), max: Math.max(...seen.map((trial) => trial.bracketMs!)) },
-    upperMs: { p50: percentile(upper, 0.5), p95: percentile(upper, 0.95) },
-    middleMs: { p50: percentile(middle, 0.5), p95: percentile(middle, 0.95) },
-    rows: trials,
-  };
+  const report = pressReport(options, trials);
   writeFileSync(join(options.out, "press-latency.json"), JSON.stringify(report, null, 2) + "\n");
   return report;
 }));
 
-const PRESS_LATENCY_USAGE = `--window ${WINDOW_KINDS.join("|")} --display :N --wayland-runtime DIR --key KEYSYM --region X,Y,W,H --control X,Y,W,H --out DIR [--trials N] [--settle-ms MS]`;
+const PRESS_LATENCY_USAGE = `--window ${WINDOW_KINDS.join("|")} --display :N --wayland-runtime DIR --key KEYSYM --region X,Y,W,H --control X,Y,W,H --out DIR [--trials N] [--settle-ms MS] [--sample-log FILE]`;
 
 /** Reads the harness's flags; `GRIM` names the tool when it is not on PATH. Returns the usage line when a flag is missing or malformed. */
 export function pressLatencyArguments(args: readonly string[], env: Readonly<Record<string, string | undefined>> = process.env): PressLatencyOptions | string {
   const { values } = parseArgs({ args: [...args], strict: false, options: {
     window: { type: "string" }, display: { type: "string" }, "wayland-runtime": { type: "string" }, key: { type: "string" },
-    region: { type: "string" }, control: { type: "string" }, out: { type: "string" }, trials: { type: "string" }, "settle-ms": { type: "string" },
+    region: { type: "string" }, control: { type: "string" }, out: { type: "string" }, trials: { type: "string" }, "settle-ms": { type: "string" }, "sample-log": { type: "string" },
   } });
   const text = (name: string) => { const value = values[name]; return typeof value === "string" ? value : undefined; };
   const window = WINDOW_KINDS.find((kind) => kind === text("window"));
@@ -233,7 +260,7 @@ export function pressLatencyArguments(args: readonly string[], env: Readonly<Rec
   const trials = Number(text("trials") ?? "30"), settleMs = Number(text("settle-ms") ?? "1500");
   if (window === undefined || region === undefined || control === undefined || display === undefined || waylandRuntime === undefined || key === undefined || out === undefined
     || !Number.isInteger(trials) || trials < 1 || !(settleMs >= 0)) return PRESS_LATENCY_USAGE;
-  return { window, display, waylandRuntime, key, region, control, out, trials, settleMs, grim: env["GRIM"] ?? "grim" };
+  return { window, display, waylandRuntime, key, region, control, out, trials, settleMs, sampleLog: text("sample-log"), grim: env["GRIM"] ?? "grim" };
 }
 
 if (import.meta.main) {

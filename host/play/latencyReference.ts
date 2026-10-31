@@ -114,7 +114,7 @@ export const checkPressLatency = (options: Pick<PressLatencyOptions, "display" |
       writeFileSync(page, referencePage(frames));
       const report = yield* Effect.scoped(Effect.gen(function*() {
         yield* chromeFor(chrome, options.display, join(work, "profile"), page);
-        const measured = { ...options, window: "reference" as const, key: "j", region: REGION, control: CONTROL, out: join(options.out, `frames-${frames}`) };
+        const measured = { ...options, window: "reference" as const, sampleLog: undefined, key: "j", region: REGION, control: CONTROL, out: join(options.out, `frames-${frames}`) };
         yield* shown(measured);
         yield* Effect.sleep(1500);
         return yield* pressLatency(measured);
