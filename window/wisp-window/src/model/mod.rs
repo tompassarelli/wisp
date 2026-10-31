@@ -36,18 +36,6 @@ pub struct Node {
     pub scaling: Option<Track<3>>,
 }
 
-/// A light node: an omni light (`kind` 0) shines from its node's pivot out to `end`, at full strength inside `start`.
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct Light {
-    pub node: usize,
-    pub kind: i32,
-    pub start: f32,
-    pub end: f32,
-    pub color: [f32; 3],
-    pub intensity: f32,
-    pub pivot: [f32; 3],
-}
-
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Geoset {
     pub vertices: Vec<[f32; 3]>,
@@ -137,7 +125,6 @@ pub struct Model {
     pub materials: Vec<Material>,
     pub textures: Vec<Texture>,
     pub emitters: Vec<Emitter2>,
-    pub lights: Vec<Light>,
     pub geoset_anims: Vec<GeosetAnim>,
     pub texture_anims: Vec<TextureAnim>,
 }
@@ -191,9 +178,6 @@ impl Model {
                 emitter.flags = node.flags;
                 emitter.pivot = node.pivot;
             }
-        }
-        for light in &mut self.lights {
-            light.pivot = self.nodes.get(light.node).and_then(Option::as_ref).map_or([0.0; 3], |node| node.pivot);
         }
         for node in self.nodes.iter().flatten() {
             if let Some(parent) = node.parent {

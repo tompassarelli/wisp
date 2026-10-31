@@ -2,11 +2,12 @@
 
 use super::*;
 
-/// `base` with the final-image pass's bloom and occlusion strengths at their defaults when the features are on and zero when off.
+/// `base` with the final-image pass's bloom, occlusion and contact-shadow strengths at their defaults when the features are on and zero when off.
 pub(super) fn tuning_of(features: Features, base: Tuning) -> Tuning {
     Tuning {
         bloom_strength: if features.bloom { TUNING.bloom_strength } else { 0.0 },
         occlusion_strength: if features.ssao { TUNING.occlusion_strength } else { 0.0 },
+        contact_strength: if features.contact_shadows { TUNING.contact_strength } else { 0.0 },
         cloud_layers: features.cloud_layers as u32,
         ..base
     }
@@ -188,7 +189,6 @@ impl Renderer {
     pub fn set_features(&mut self, features: Features) {
         self.features = features;
         self.set_shadow_side(match features.shadows { Shadows::Off => 0, Shadows::Map(side) => side });
-        self.set_point_shadows(usize::from(features.point_shadows));
         self.set_post_tuning(tuning_of(features, self.tuning));
         if let Some(incoming) = self.incoming.as_mut() {
             incoming.set_features(features);

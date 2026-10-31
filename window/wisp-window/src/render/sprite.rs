@@ -182,7 +182,7 @@ impl Renderer {
         let color_capacity = 64;
         let colors = color_storage(&self.device, color_capacity);
         let uv_rows = uv_storage(&self.device, color_capacity);
-        let group = frame_group(&self.device, &self.frame_layout, &frame, &bones, &colors, &uv_rows, self.points.maps(&self.shadow.view, &self.shadow.compare));
+        let group = frame_group(&self.device, &self.frame_layout, &frame, &bones, &colors, &uv_rows, self.shadow.bound());
         Slot {
             size,
             msaa: make(HDR, SAMPLES, wgpu::TextureUsages::RENDER_ATTACHMENT, "sprite colour"),
@@ -238,13 +238,13 @@ impl Renderer {
         if bones > slot.bone_capacity {
             slot.bone_capacity = bones.next_power_of_two();
             slot.bones = bone_storage(&self.device, slot.bone_capacity);
-            slot.group = frame_group(&self.device, &self.frame_layout, &slot.frame, &slot.bones, &slot.colors, &slot.uv_rows, self.points.maps(&self.shadow.view, &self.shadow.compare));
+            slot.group = frame_group(&self.device, &self.frame_layout, &slot.frame, &slot.bones, &slot.colors, &slot.uv_rows, self.shadow.bound());
         }
         if colors.len() > slot.color_capacity {
             slot.color_capacity = colors.len().next_power_of_two();
             slot.colors = color_storage(&self.device, slot.color_capacity);
             slot.uv_rows = uv_storage(&self.device, slot.color_capacity);
-            slot.group = frame_group(&self.device, &self.frame_layout, &slot.frame, &slot.bones, &slot.colors, &slot.uv_rows, self.points.maps(&self.shadow.view, &self.shadow.compare));
+            slot.group = frame_group(&self.device, &self.frame_layout, &slot.frame, &slot.bones, &slot.colors, &slot.uv_rows, self.shadow.bound());
         }
         let queue = &self.queue;
         let team = [shot.team[0], shot.team[1], shot.team[2], 1.0];

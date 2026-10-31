@@ -51,3 +51,9 @@ fn view_ray(ndc: vec2<f32>) -> vec3<f32> {
     let direction = view_direction(ndc);
     return normalize(p.right.xyz * direction.x + p.up.xyz * direction.y + p.forward.xyz * -direction.z);
 }
+
+const SKY_DEPTH: f32 = 60000.0;
+
+fn half_view_position(pixel: vec2<i32>, w: f32) -> vec3<f32> {
+    return view_direction(picture_ndc(vec2<f32>(pixel) * 2.0 + 1.0)) * w;
+}

@@ -17,8 +17,8 @@ const CLOUD_SCALE: u32 = 4;
 const BLOOM_LEVELS: u32 = 5;
 const BLOOM_SHOWN: usize = 1;
 const BLOOM_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
-const OCCLUSION_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rg16Float;
-const HALF_DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::R32Float;
+const OCCLUSION_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
+const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::R32Float;
 const ADDITIVE: wgpu::BlendState = wgpu::BlendState {
     color: wgpu::BlendComponent { src_factor: wgpu::BlendFactor::One, dst_factor: wgpu::BlendFactor::One, operation: wgpu::BlendOperation::Add },
     alpha: wgpu::BlendComponent::REPLACE,
@@ -63,7 +63,10 @@ struct Pipelines {
     sky: wgpu::RenderPipeline,
     reflected_sky: wgpu::RenderPipeline,
     depth: wgpu::RenderPipeline,
+    half_depth: wgpu::RenderPipeline,
     occlusion: wgpu::RenderPipeline,
+    denoise_across: wgpu::RenderPipeline,
+    denoise_down: wgpu::RenderPipeline,
     prefilter: wgpu::RenderPipeline,
     down: wgpu::RenderPipeline,
     up: wgpu::RenderPipeline,
@@ -74,10 +77,15 @@ struct Pipelines {
 struct Targets {
     cloud: wgpu::TextureView,
     sky_group: wgpu::BindGroup,
-    half_depth: wgpu::TextureView,
+    full_depth: wgpu::TextureView,
     depth_group: wgpu::BindGroup,
+    half_depth: wgpu::TextureView,
+    half_depth_group: wgpu::BindGroup,
     occlusion: wgpu::TextureView,
     occlusion_group: wgpu::BindGroup,
+    smoothed: wgpu::TextureView,
+    denoise_across_group: wgpu::BindGroup,
+    denoise_down_group: wgpu::BindGroup,
     bloom: Vec<wgpu::TextureView>,
     prefilter_group: wgpu::BindGroup,
     down_groups: Vec<wgpu::BindGroup>,
@@ -158,14 +166,16 @@ impl Post {
             bloom: layout("bloom", &[params_entry(), sampler_entry(1), texture_entry(2, false, flat, false)]),
             composite: layout(
                 "composite",
-                &[params_entry(), sampler_entry(1), texture_entry(2, false, flat, false), texture_entry(3, false, flat, false), texture_entry(4, false, flat, false), texture_entry(5, false, wgpu::TextureViewDimension::D3, false), texture_entry(6, true, flat, true)],
+                &[params_entry(), sampler_entry(1), texture_entry(2, false, flat, false), texture_entry(3, false, flat, false), texture_entry(4, false, flat, false), texture_entry(5, false, wgpu::TextureViewDimension::D3, false), unfiltered_entry(6)],
             ),
         };
         let shrink = format!("const REFLECTION_SHRINK: f32 = {REFLECTION_SHRINK}.0;\n");
         let sky = module(device, "sky", &[NOISE, &shrink, include_str!("sky.wgsl")]);
         let cloud = module(device, "cloud", &[NOISE, include_str!("clouds.wgsl")]);
         let depth = module(device, "depth", &[include_str!("depth.wgsl")]);
+        let half_depth = module(device, "half depth", &[include_str!("half_depth.wgsl")]);
         let occlusion = module(device, "occlusion", &[include_str!("occlusion.wgsl")]);
+        let denoise = module(device, "denoise", &[include_str!("denoise.wgsl")]);
         let bloom = module(device, "bloom", &[include_str!("bloom.wgsl")]);
         let composite = module(device, "composite", &[include_str!("composite.wgsl")]);
         let sky_layout = &layouts.sky;
@@ -173,8 +183,11 @@ impl Post {
             cloud: pipeline(device, "cloud", &cloud, &layouts.cloud, "cloud_main", colour(BLOOM_FORMAT, None), 1, None),
             sky: pipeline(device, "sky", &sky, sky_layout, "sky_main", colour(scene_format, None), samples, Some(depth_format)),
             reflected_sky: pipeline(device, "reflected sky", &sky, sky_layout, "reflected_sky_main", colour(scene_format, None), samples, Some(depth_format)),
-            depth: pipeline(device, "depth", &depth, &layouts.depth, "depth_main", colour(HALF_DEPTH_FORMAT, None), 1, None),
+            depth: pipeline(device, "depth", &depth, &layouts.depth, "depth_main", colour(DEPTH_FORMAT, None), 1, None),
+            half_depth: pipeline(device, "half depth", &half_depth, &layouts.occlusion, "half_depth_main", colour(DEPTH_FORMAT, None), 1, None),
             occlusion: pipeline(device, "occlusion", &occlusion, &layouts.occlusion, "occlusion_main", colour(OCCLUSION_FORMAT, None), 1, None),
+            denoise_across: pipeline(device, "denoise across", &denoise, &layouts.occlusion, "denoise_across", colour(OCCLUSION_FORMAT, None), 1, None),
+            denoise_down: pipeline(device, "denoise down", &denoise, &layouts.occlusion, "denoise_down", colour(OCCLUSION_FORMAT, None), 1, None),
             prefilter: pipeline(device, "prefilter", &bloom, &layouts.bloom, "prefilter_main", colour(BLOOM_FORMAT, None), 1, None),
             down: pipeline(device, "bloom down", &bloom, &layouts.bloom, "down_main", colour(BLOOM_FORMAT, None), 1, None),
             up: pipeline(device, "bloom up", &bloom, &layouts.bloom, "up_main", colour(BLOOM_FORMAT, Some(ADDITIVE)), 1, None),
@@ -212,8 +225,10 @@ impl Post {
             layout: &self.layouts.sky,
             entries: &[binding(0, self.params.as_entire_binding()), binding(1, wgpu::BindingResource::TextureView(&cloud)), binding(2, wgpu::BindingResource::Sampler(&self.sampler))],
         });
-        let half_depth = view_of(device, "half depth", half(size, 1), HALF_DEPTH_FORMAT);
+        let full_depth = view_of(device, "full depth", size, DEPTH_FORMAT);
+        let half_depth = view_of(device, "half depth", half(size, 1), DEPTH_FORMAT);
         let occlusion = view_of(device, "occlusion", half(size, 1), OCCLUSION_FORMAT);
+        let smoothed = view_of(device, "smoothed occlusion", half(size, 1), OCCLUSION_FORMAT);
         let bloom: Vec<wgpu::TextureView> = (1..=BLOOM_LEVELS).map(|level| view_of(device, "bloom", half(size, level), BLOOM_FORMAT)).collect();
         let group = |layout: &wgpu::BindGroupLayout, source: &wgpu::TextureView| {
             device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -227,11 +242,23 @@ impl Post {
             layout: &self.layouts.depth,
             entries: &[binding(0, self.params.as_entire_binding()), binding(1, wgpu::BindingResource::TextureView(depth))],
         });
+        let half_depth_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("half depth"),
+            layout: &self.layouts.occlusion,
+            entries: &[binding(0, self.params.as_entire_binding()), binding(1, wgpu::BindingResource::TextureView(&full_depth))],
+        });
         let occlusion_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("occlusion"),
             layout: &self.layouts.occlusion,
             entries: &[binding(0, self.params.as_entire_binding()), binding(1, wgpu::BindingResource::TextureView(&half_depth))],
         });
+        let denoise_group = |source: &wgpu::TextureView| {
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("denoise"),
+                layout: &self.layouts.occlusion,
+                entries: &[binding(0, self.params.as_entire_binding()), binding(1, wgpu::BindingResource::TextureView(source))],
+            })
+        };
         let composite_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("composite"),
             layout: &self.layouts.composite,
@@ -242,7 +269,7 @@ impl Post {
                 binding(3, wgpu::BindingResource::TextureView(&bloom[BLOOM_SHOWN])),
                 binding(4, wgpu::BindingResource::TextureView(&occlusion)),
                 binding(5, wgpu::BindingResource::TextureView(&self.lut)),
-                binding(6, wgpu::BindingResource::TextureView(depth)),
+                binding(6, wgpu::BindingResource::TextureView(&full_depth)),
             ],
         });
         self.targets = Some(Targets {
@@ -252,10 +279,15 @@ impl Post {
             down_groups: bloom[..bloom.len() - 1].iter().map(|view| group(&self.layouts.bloom, view)).collect(),
             up_groups: bloom[BLOOM_SHOWN + 1..].iter().map(|view| group(&self.layouts.bloom, view)).collect(),
             depth_group,
+            full_depth,
             half_depth,
+            half_depth_group,
             occlusion_group,
+            denoise_across_group: denoise_group(&occlusion),
+            denoise_down_group: denoise_group(&smoothed),
             composite_group,
             occlusion,
+            smoothed,
             bloom,
         });
     }
@@ -327,8 +359,11 @@ impl Post {
             mark(encoder, label);
         };
         if self.occluding {
-            run(encoder, "half depth", &targets.half_depth, clear, &self.pipelines.depth, &targets.depth_group);
+            run(encoder, "depth", &targets.full_depth, clear, &self.pipelines.depth, &targets.depth_group);
+            run(encoder, "half depth", &targets.half_depth, clear, &self.pipelines.half_depth, &targets.half_depth_group);
             run(encoder, "occlusion", &targets.occlusion, clear, &self.pipelines.occlusion, &targets.occlusion_group);
+            run(encoder, "denoise across", &targets.smoothed, clear, &self.pipelines.denoise_across, &targets.denoise_across_group);
+            run(encoder, "denoise down", &targets.occlusion, clear, &self.pipelines.denoise_down, &targets.denoise_down_group);
         }
         if self.glowing {
             run(encoder, "bloom prefilter", &targets.bloom[0], clear, &self.pipelines.prefilter, &targets.prefilter_group);

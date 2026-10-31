@@ -1,6 +1,6 @@
 use super::*;
 
-pub(super) fn flat_quad(vertices: &mut Vec<Vertex>, indices: &mut Vec<u32>, reach: f32, height: f32) -> (u32, u32) {
+fn flat_quad(vertices: &mut Vec<Vertex>, indices: &mut Vec<u32>, reach: f32, height: f32) -> (u32, u32) {
     let base = vertices.len() as u32;
     for (x, y) in [(-reach, -reach), (reach, -reach), (reach, reach), (-reach, reach)] {
         vertices.push(Vertex { position: [x, y, height], normal: [0.0, 0.0, 1.0], uv: [0.0, 0.0], bones: [0; 4], weights: [1.0, 0.0, 0.0, 0.0] });

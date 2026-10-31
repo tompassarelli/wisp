@@ -119,7 +119,8 @@ pub struct Tuning {
     pub bloom_strength: f32,
     pub occlusion_radius: f32,
     pub occlusion_strength: f32,
-    pub occlusion_bias: f32,
+    pub contact_strength: f32,
+    pub contact_reach: f32,
     pub cloud_layers: u32,
 }
 
@@ -129,8 +130,9 @@ pub const TUNING: Tuning = Tuning {
     bloom_knee: 0.3,
     bloom_strength: 0.3,
     occlusion_radius: 90.0,
-    occlusion_strength: 0.7,
-    occlusion_bias: 0.03,
+    occlusion_strength: 1.0,
+    contact_strength: 0.7,
+    contact_reach: 45.0,
     cloud_layers: 3,
 };
 
@@ -215,12 +217,12 @@ impl Look {
             horizon: with(horizon, 0.0),
             ground: with(ground, 0.0),
             bloom: [t.bloom_threshold, t.bloom_knee, t.bloom_strength, 0.0],
-            occlusion: [t.occlusion_radius, t.occlusion_strength, t.occlusion_bias, 0.0],
-            misc: [scene.frame as f32 / 60.0, if srgb_surface { 1.0 } else { 0.0 }, 0.0, t.exposure],
+            occlusion: [t.occlusion_radius, t.occlusion_strength, 0.0, t.contact_strength],
+            misc: [scene.frame as f32 / 60.0, if srgb_surface { 1.0 } else { 0.0 }, t.contact_reach, t.exposure],
             cloud: [cover, stars, glow, if cover > 0.0 { t.cloud_layers as f32 } else { 0.0 }],
             eye: with(camera.eye, 0.0),
         };
-        Look { params, grade, occluding: t.occlusion_strength > 0.0, glowing: t.bloom_strength > 0.0, clouded: cover > 0.0 && t.cloud_layers > 0 }
+        Look { params, grade, occluding: t.occlusion_strength > 0.0 || t.contact_strength > 0.0, glowing: t.bloom_strength > 0.0, clouded: cover > 0.0 && t.cloud_layers > 0 }
     }
 }
 

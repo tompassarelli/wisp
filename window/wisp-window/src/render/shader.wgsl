@@ -18,7 +18,6 @@ const MAX_LIGHT = 1.1;
 @group(0) @binding(3) var<storage, read> uv_rows: array<vec4<f32>>;
 @group(0) @binding(4) var shadow_map: texture_depth_2d;
 @group(0) @binding(5) var shadow_sampler: sampler_comparison;
-@group(0) @binding(6) var point_maps: texture_depth_cube_array;
 @group(1) @binding(0) var layer_texture: texture_2d<f32>;
 @group(1) @binding(1) var layer_sampler: sampler;
 @group(1) @binding(2) var<uniform> layer: Layer;
@@ -114,37 +113,6 @@ fn sun_visibility(world: vec3<f32>, normal: vec3<f32>, facing: f32) -> f32 {
     return lit / 9.0;
 }
 
-fn point_visibility(index: u32, world: vec3<f32>, normal: vec3<f32>, light: vec3<f32>, reach: f32) -> f32 {
-    let slack = 1.0 + length(world - light) * frame.points.counts.z * 1.5;
-    let offset = world + normal * slack - light;
-    let distance = length(offset);
-    return textureSampleCompareLevel(point_maps, shadow_sampler, offset, i32(index), (distance - slack * 0.5) / reach);
-}
-
-fn point_light_of(in: Varying, normal: vec3<f32>) -> vec3<f32> {
-    var sum = vec3<f32>(0.0);
-    let count = u32(frame.points.counts.x);
-    let shadowed = u32(frame.points.counts.y);
-    for (var index = 0u; index < count; index++) {
-        let source = frame.points.position[index];
-        let toward = source.xyz - in.world;
-        let distance = length(toward);
-        if (distance >= source.w) {
-            continue;
-        }
-        let tint = frame.points.color[index];
-        let reach = 1.0 - clamp((distance - tint.w) / max(source.w - tint.w, 1.0), 0.0, 1.0);
-        let direction = toward / max(distance, 0.001);
-        let diffuse = clamp((dot(normal, direction) + WRAP) / (1.0 + WRAP), 0.0, 1.0);
-        var visibility = 1.0;
-        if (layer.lighting == LIT_AND_SHADOWED && index < shadowed) {
-            visibility = point_visibility(index, in.world, normal, source.xyz, source.w);
-        }
-        sum += tint.rgb * reach * reach * diffuse * visibility;
-    }
-    return sum;
-}
-
 fn light_of(in: Varying) -> vec3<f32> {
     let toward = frame.light_toward.xyz;
     let view = normalize(frame.eye.xyz - in.world);
@@ -160,7 +128,6 @@ fn light_of(in: Varying) -> vec3<f32> {
     }
     let sky = 0.85 + 0.3 * (normal.z * 0.5 + 0.5);
     var light = min(frame.light_ambient.xyz * sky + frame.light_key.xyz * diffuse * visibility, vec3<f32>(MAX_LIGHT));
-    light += point_light_of(in, normal);
     if (layer.lighting == LIT_AND_SHADOWED) {
         let tint = frame.light_ambient.xyz + frame.light_key.xyz * 0.5;
         let rim = pow(1.0 - clamp(dot(normal, view), 0.0, 1.0), RIM_EDGE);
@@ -194,7 +161,7 @@ fn fragment_main(in: Varying) -> @location(0) vec4<f32> {
     }
     let additive = layer.ignores_texture_alpha == 1u;
     var light = vec3<f32>(1.0);
-    if (layer.lighting != UNLIT && (frame.light_key.w > 0.5 || frame.points.counts.x > 0.5)) {
+    if (layer.lighting != UNLIT && frame.light_key.w > 0.5) {
         light = light_of(in);
     }
     if (layer.lighting != UNLIT && frame.glow.w > 1.0) {
