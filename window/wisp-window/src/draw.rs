@@ -126,7 +126,7 @@ pub struct Gpu {
 impl Gpu {
     pub fn new(window: Arc<Window>, aspect: f32) -> Result<Self, String> {
         let size = window.inner_size();
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle_from_env());
         let surface = instance.create_surface(SurfaceTarget::new(window)).map_err(|e| format!("surface: {e}"))?;
         let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
             power_preference: wgpu::PowerPreference::HighPerformance,
