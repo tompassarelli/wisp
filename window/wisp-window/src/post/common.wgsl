@@ -13,7 +13,11 @@ struct Params {
     bloom: vec4<f32>,
     occlusion: vec4<f32>,
     misc: vec4<f32>,
+    cloud: vec4<f32>,
+    eye: vec4<f32>,
 };
+
+const CLOUD_SCALE: f32 = 4.0;
 
 @group(0) @binding(0) var<uniform> p: Params;
 
@@ -41,4 +45,9 @@ fn view_depth(d: f32) -> f32 {
     let a = (far + near) / (near - far);
     let b = 2.0 * far * near / (near - far);
     return b / (2.0 * d + a - 1.0);
+}
+
+fn view_ray(ndc: vec2<f32>) -> vec3<f32> {
+    let direction = view_direction(ndc);
+    return normalize(p.right.xyz * direction.x + p.up.xyz * direction.y + p.forward.xyz * -direction.z);
 }

@@ -32,6 +32,19 @@ pub struct Light {
     pub ambient: [f32; 3],
 }
 
+/// A stage's sky as its map sets it: the zenith colour, how much of the sky cloud covers, the sun's direction and colour, and how far stars and a horizon glow show; colours are display values 0 to 1, angles degrees.
+#[derive(Deserialize, Clone, Copy)]
+#[serde(rename_all = "camelCase")]
+pub struct SkyLook {
+    pub zenith: [f32; 3],
+    pub cover: f32,
+    pub sun_azimuth: f32,
+    pub sun_elevation: f32,
+    pub sun: [f32; 3],
+    pub stars: f32,
+    pub glow: f32,
+}
+
 /// One placed model: its path, where it stands, the sequence and frame it shows and the colours it is drawn with.
 #[derive(Deserialize)]
 pub struct Pose {
@@ -72,6 +85,8 @@ pub struct Scene {
     pub fog: Option<Fog>,
     pub light: Option<Light>,
     pub sky: Option<Pose>,
+    #[serde(rename = "skyLook")]
+    pub sky_look: Option<SkyLook>,
     pub poses: Vec<Pose>,
     /// The game frame this scene shows.
     pub frame: u32,

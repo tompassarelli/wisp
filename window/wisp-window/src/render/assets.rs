@@ -7,6 +7,7 @@ pub(super) fn tuning_of(features: Features, base: Tuning) -> Tuning {
     Tuning {
         bloom_strength: if features.bloom { TUNING.bloom_strength } else { 0.0 },
         occlusion_strength: if features.ssao { TUNING.occlusion_strength } else { 0.0 },
+        cloud_layers: features.cloud_layers as u32,
         ..base
     }
 }

@@ -47,8 +47,20 @@ export interface SceneryContext {
 }
 interface Region { readonly minX: number; readonly minY: number; readonly maxX: number; readonly maxY: number }
 
+/** A stage's sky as the native window paints it; colours are 0 to 1, angles degrees. */
+export interface SkyLook {
+  readonly zenith: readonly [number, number, number];
+  readonly cover: number;
+  readonly sunAzimuth: number;
+  readonly sunElevation: number;
+  readonly sun: readonly [number, number, number];
+  readonly stars: number;
+  readonly glow: number;
+}
+
 export interface Environment {
   sky: string;
+  skyLook?: SkyLook;
   skyVisible: boolean;
   terrainVisible: boolean;
 
@@ -143,6 +155,10 @@ export class Scenery {
       },
       ResetTerrainFog: () => { for (const field of Object.keys(this.fog)) delete this.fog[field]; },
       SetSkyModel: (model: string) => { this.environment.sky = model; },
+      WispSetSkyLook: (zenithRed: number, zenithGreen: number, zenithBlue: number, cover: number, sunAzimuth: number, sunElevation: number, sunRed: number, sunGreen: number, sunBlue: number, stars: number, glow: number) => {
+        this.environment.skyLook = { zenith: [zenithRed, zenithGreen, zenithBlue], cover, sunAzimuth, sunElevation, sun: [sunRed, sunGreen, sunBlue], stars, glow };
+      },
+      WispResetSkyLook: () => { delete this.environment.skyLook; },
       BlzShowSkyBox: (show: boolean) => { this.environment.skyVisible = show; },
       BlzShowTerrain: (show: boolean) => { this.environment.terrainVisible = show; },
       SetDayNightModels: (terrain: string, unit: string) => { this.environment.dayNight = { terrain, unit }; },

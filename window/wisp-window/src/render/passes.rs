@@ -133,6 +133,9 @@ impl Renderer {
         let images = self.water_level.and_then(|_| self.water.group(&self.device, &targets.depth));
 
         self.draw_reflection(encoder, clear);
+        if procedural_sky {
+            self.post.draw_clouds(encoder);
+        }
         {
             let mut pass = Attachments { label: "sky", color: &targets.color, depth: &targets.depth, load: wgpu::LoadOp::Clear(clear), resolve: None, depth_ops: fresh(wgpu::StoreOp::Discard), size }.begin(encoder);
             if procedural_sky {

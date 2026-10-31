@@ -1,50 +1,50 @@
-fn hash(cell: vec2<f32>) -> f32 {
-    return fract(sin(dot(cell, vec2<f32>(127.1, 311.7))) * 43758.5453);
-}
+@group(0) @binding(1) var clouds: texture_2d<f32>;
+@group(0) @binding(2) var cloud_sampler: sampler;
 
-fn noise(at: vec2<f32>) -> f32 {
-    let cell = floor(at);
-    let f = fract(at);
-    let u = f * f * (3.0 - 2.0 * f);
-    return mix(mix(hash(cell), hash(cell + vec2<f32>(1.0, 0.0)), u.x), mix(hash(cell + vec2<f32>(0.0, 1.0)), hash(cell + vec2<f32>(1.0, 1.0)), u.x), u.y);
-}
-
-fn clouds(at: vec2<f32>) -> f32 {
-    var sum = 0.0;
-    var weight = 0.5;
-    var scale = at;
-    for (var octave = 0; octave < 5; octave++) {
-        sum += noise(scale) * weight;
-        scale = scale * 2.03 + vec2<f32>(17.0, 9.0);
-        weight *= 0.5;
+fn stars(ray: vec3<f32>) -> f32 {
+    let uv = vec2<f32>(ray.x, ray.z) / (ray.y * 0.5 + 0.6) * 70.0;
+    let cell = floor(uv);
+    let chance = hash(cell + 3.3);
+    if (chance < 0.93) {
+        return 0.0;
     }
-    return sum;
+    let local = fract(uv) - 0.5;
+    let jitter = vec2<f32>(hash(cell), hash(cell + 7.7)) - 0.5;
+    let twinkle = 0.75 + 0.25 * sin(p.misc.x * (1.5 + chance * 30.0) + chance * 400.0);
+    return smoothstep(0.07, 0.0, length(local - jitter * 0.6)) * (0.35 + 0.65 * fract(chance * 97.0)) * twinkle;
 }
 
-fn sky_color(ray: vec3<f32>) -> vec3<f32> {
+fn sky_color(ray: vec3<f32>, at: vec2<f32>) -> vec3<f32> {
     let height = ray.z;
-    var color = mix(p.horizon.rgb, p.zenith.rgb, pow(clamp(height, 0.0, 1.0), 0.5));
+    let haze = p.horizon.rgb;
+    var color = mix(haze, p.zenith.rgb, pow(clamp(height, 0.0, 1.0), 0.5));
     color = mix(color, p.ground.rgb, smoothstep(0.0, -0.25, height));
     let toward = max(dot(ray, p.sun_toward.xyz), 0.0) * p.sun_toward.w;
     let sun = p.sun_color.rgb;
-    color += sun * (pow(toward, 6.0) * 0.06 + pow(toward, 48.0) * 0.18);
-    color += sun * 6.0 * smoothstep(0.99955, 0.99985, toward);
-    if (height > 0.0) {
-        let plane = ray.xy / (height + 0.18);
-        let drift = plane * 0.55 + vec2<f32>(p.misc.x * 0.012, p.misc.x * 0.004);
-        let density = clouds(drift);
-        let shade = clouds(drift + p.sun_toward.xy * 0.12);
-        let cover = smoothstep(0.46, 0.74, density) * smoothstep(0.0, 0.2, height);
-        let lit = clamp(0.55 + (density - shade) * 3.0, 0.0, 1.0);
-        let body = mix(p.horizon.rgb * 0.8 + p.zenith.rgb * 0.3, mix(p.horizon.rgb, vec3<f32>(1.0), 0.55) * (0.55 + 0.9 * luminance(sun)), lit);
-        color = mix(color, body, cover * 0.8);
+    color += sun * (pow(toward, 6.0) * 0.03 + pow(toward, 48.0) * 0.1 + pow(toward, 400.0) * 0.4);
+    color += sun * 2.5 * smoothstep(0.9996, 0.99992, toward);
+    let glow = p.cloud.z;
+    if (glow > 0.0) {
+        let sideways = max(dot(normalize(ray.xy + vec2<f32>(1e-5, 0.0)), normalize(p.sun_toward.xy + vec2<f32>(1e-5, 0.0))), 0.0);
+        let band = exp(-pow((height - 0.02) / 0.11, 2.0));
+        color += sun * glow * band * (0.3 + 0.7 * sideways * sideways) * 0.3;
     }
-    return color;
+    if (p.cloud.y > 0.0 && height > 0.0) {
+        let along = height * 0.8 + ray.x * 0.5 - 0.25;
+        let milky = exp(-along * along * 12.0) * (0.55 + 0.45 * sin(ray.x * 23.0 + height * 17.0));
+        let night = p.cloud.y * smoothstep(0.03, 0.3, height) * (1.0 - clamp(luminance(haze) * 12.0, 0.0, 0.8));
+        color += (vec3<f32>(1.0, 0.95, 0.85) * stars(ray) * 0.9 + vec3<f32>(0.5, 0.55, 0.8) * milky * 0.035) * night;
+    }
+    return color + (hash(at) - 0.5) * 0.0015;
 }
 
 @fragment
 fn sky_main(@builtin(position) at: vec4<f32>) -> @location(0) vec4<f32> {
-    let direction = view_direction(picture_ndc(at.xy));
-    let ray = normalize(p.right.xyz * direction.x + p.up.xyz * direction.y + p.forward.xyz * -direction.z);
-    return vec4<f32>(sky_color(ray), 1.0);
+    let ndc = picture_ndc(at.xy);
+    var color = sky_color(view_ray(ndc), at.xy);
+    if (p.cloud.w > 0.0) {
+        let cloud = textureSampleLevel(clouds, cloud_sampler, at.xy / (vec2<f32>(textureDimensions(clouds)) * CLOUD_SCALE), 0.0);
+        color = color * (1.0 - cloud.a) + cloud.rgb;
+    }
+    return vec4<f32>(color, 1.0);
 }

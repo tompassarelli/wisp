@@ -38,10 +38,10 @@ impl Preset {
     /// The features this preset runs.
     pub fn features(self) -> Features {
         match self {
-            Preset::Low => Features { shadows: Shadows::Off, msaa: 1, ssao: false, bloom: false, volumetrics: false, weather_percent: 25, water: Water::Flat, render_scale_percent: 75 },
-            Preset::Medium => Features { shadows: Shadows::Map(1024), msaa: 2, ssao: false, bloom: false, volumetrics: false, weather_percent: 50, water: Water::Reflective, render_scale_percent: 100 },
-            Preset::High => Features { shadows: Shadows::Map(2048), msaa: 4, ssao: true, bloom: true, volumetrics: false, weather_percent: 100, water: Water::Reflective, render_scale_percent: 100 },
-            Preset::Ultra => Features { shadows: Shadows::Map(4096), msaa: 8, ssao: true, bloom: true, volumetrics: true, weather_percent: 100, water: Water::Refractive, render_scale_percent: 100 },
+            Preset::Low => Features { shadows: Shadows::Off, msaa: 1, ssao: false, bloom: false, volumetrics: false, cloud_layers: 1, weather_percent: 25, water: Water::Flat, render_scale_percent: 75 },
+            Preset::Medium => Features { shadows: Shadows::Map(1024), msaa: 2, ssao: false, bloom: false, volumetrics: false, cloud_layers: 2, weather_percent: 50, water: Water::Reflective, render_scale_percent: 100 },
+            Preset::High => Features { shadows: Shadows::Map(2048), msaa: 4, ssao: true, bloom: true, volumetrics: false, cloud_layers: 3, weather_percent: 100, water: Water::Reflective, render_scale_percent: 100 },
+            Preset::Ultra => Features { shadows: Shadows::Map(4096), msaa: 8, ssao: true, bloom: true, volumetrics: true, cloud_layers: 3, weather_percent: 100, water: Water::Refractive, render_scale_percent: 100 },
         }
     }
 
@@ -106,6 +106,8 @@ pub struct Features {
     pub bloom: bool,
     /// Volumetric fog and light shafts.
     pub volumetrics: bool,
+    /// Painted cloud layers the sky draws, 1 to 3; the third layer also draws the sun's shafts.
+    pub cloud_layers: u8,
     /// Weather particles drawn, as a percentage of what the weather emits.
     pub weather_percent: u8,
     pub water: Water,
@@ -115,7 +117,7 @@ pub struct Features {
 
 impl Features {
     /// Each setting key and its value, for the log and `standalone.json`.
-    pub fn keys(&self) -> [(&'static str, String); 8] {
+    pub fn keys(&self) -> [(&'static str, String); 9] {
         [
             ("shadows", match self.shadows {
                 Shadows::Off => "off".into(),
@@ -125,6 +127,7 @@ impl Features {
             ("ssao", self.ssao.to_string()),
             ("bloom", self.bloom.to_string()),
             ("volumetrics", self.volumetrics.to_string()),
+            ("cloudLayers", self.cloud_layers.to_string()),
             ("weather", format!("{}%", self.weather_percent)),
             ("water", format!("{:?}", self.water).to_ascii_lowercase()),
             ("renderScale", format!("{}%", self.render_scale_percent)),
@@ -163,11 +166,11 @@ mod tests {
     #[test]
     fn each_preset_costs_no_less_than_the_one_below() {
         let cost = |features: Features| {
-            (matches!(features.shadows, Shadows::Map(_)) as u32 + features.ssao as u32 + features.bloom as u32 + features.volumetrics as u32, features.msaa, features.weather_percent, features.render_scale_percent)
+            (matches!(features.shadows, Shadows::Map(_)) as u32 + features.ssao as u32 + features.bloom as u32 + features.volumetrics as u32, features.msaa, features.weather_percent, features.render_scale_percent, features.cloud_layers)
         };
         for pair in PRESETS.windows(2) {
             let (low, high) = (cost(pair[0].features()), cost(pair[1].features()));
-            assert!(low.0 <= high.0 && low.1 <= high.1 && low.2 <= high.2 && low.3 <= high.3, "{:?} to {:?}", pair[0], pair[1]);
+            assert!(low.0 <= high.0 && low.1 <= high.1 && low.2 <= high.2 && low.3 <= high.3 && low.4 <= high.4, "{:?} to {:?}", pair[0], pair[1]);
         }
     }
 

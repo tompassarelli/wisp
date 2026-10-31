@@ -2864,6 +2864,8 @@ declare function ClearTextMessages(): void;
 declare function SetDayNightModels(terrainDNCFile: string, unitDNCFile: string): void;
 declare function SetPortraitLight(portraitDNCFile: string): void;
 declare function SetSkyModel(skyModelFile: string): void;
+/** Wisp's own: how the native window paints the sky. Colours are 0 to 1 and angles degrees; `cover` 0 to 1 is how much of the sky cloud covers, `stars` and `glow` 0 to 1 how far stars and a horizon glow behind the sun show. The horizon colour is the fog's. */
+declare function WispSetSkyLook(zenithRed: number, zenithGreen: number, zenithBlue: number, cover: number, sunAzimuth: number, sunElevation: number, sunRed: number, sunGreen: number, sunBlue: number, stars: number, glow: number): void;
 declare function EnableUserControl(b: boolean): void;
 declare function EnableUserUI(b: boolean): void;
 declare function SuspendTimeOfDay(b: boolean): void;
@@ -3382,6 +3384,8 @@ declare function BlzCameraSetupApplyForceDurationSmooth(whichSetup: camerasetup,
 declare function BlzEnableTargetIndicator(enable: boolean): void;
 declare function BlzIsTargetIndicatorEnabled(): boolean;
 declare function BlzShowTerrain(show: boolean): void;
+/** Wisp's own: the native window paints the sky from the fog and the light again, as it does for a map that never calls `WispSetSkyLook`. */
+declare function WispResetSkyLook(): void;
 declare function BlzShowSkyBox(show: boolean): void;
 declare function BlzStartRecording(fps: number): void;
 declare function BlzEndRecording(): void;

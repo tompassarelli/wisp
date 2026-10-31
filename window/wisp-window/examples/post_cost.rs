@@ -1,6 +1,6 @@
-//! Times the final-image pass at 2880x1920 with GPU timestamps, a hundred frames in one submission, and prints the cost of each pass. Usage: `cargo run --release -p wisp-window --example post_cost`; the budget is 2 ms per frame on the laptop GPU.
+//! Times the final-image pass and the sky's cloud pass at 2880x1920 with GPU timestamps, a hundred frames in one submission, and prints the cost of each pass. Usage: `cargo run --release -p wisp-window --example post_cost [CLOUD_LAYERS]`; the budget is 2 ms per frame on the laptop GPU, and 0.5 ms for the clouds.
 
-use wisp_window::post::{Look, Post, TUNING};
+use wisp_window::post::{Look, Post, Tuning, TUNING};
 use wisp_window::render::DrawScene;
 
 const SCENE: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
@@ -9,6 +9,16 @@ const OUTPUT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 const SIZE: (u32, u32) = (2880, 1920);
 const FRAMES: u32 = 100;
 const STAMPS: u32 = 4096;
+
+fn sky_scene() -> DrawScene {
+    let mut scene = DrawScene::default();
+    scene.camera.view = [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0];
+    scene.camera.tangent = 0.5;
+    scene.camera.near = 10.0;
+    scene.camera.far = 1000.0;
+    scene.sky_look = Some(serde_json::from_str(r#"{"zenith":[0.1,0.2,0.4],"cover":0.55,"sunAzimuth":90,"sunElevation":14,"sun":[1,0.88,0.7],"stars":0.5,"glow":0.4}"#).unwrap());
+    scene
+}
 
 fn main() {
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
@@ -26,12 +36,9 @@ fn main() {
     let (hdr, depth, target) = (make(SCENE, 1, both), make(DEPTH, 4, both), make(OUTPUT, 1, wgpu::TextureUsages::RENDER_ATTACHMENT));
     let mut post = Post::new(&device, &queue, OUTPUT, SCENE, DEPTH, 4);
     post.fit(SIZE, &hdr, &depth);
-    let mut scene = DrawScene::default();
-    scene.camera.view = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0];
-    scene.camera.tangent = 1.0;
-    scene.camera.near = 10.0;
-    scene.camera.far = 1000.0;
-    post.prepare(&Look::of(&scene, 1.0, [0.0, 0.0, SIZE.0 as f32, SIZE.1 as f32], false, &TUNING));
+    let scene = sky_scene();
+    let layers = std::env::args().nth(1).and_then(|layers| layers.parse().ok()).unwrap_or(TUNING.cloud_layers);
+    post.prepare(&Look::of(&scene, SIZE.0 as f32 / SIZE.1 as f32, [0.0, 0.0, SIZE.0 as f32, SIZE.1 as f32], false, &Tuning { cloud_layers: layers, ..TUNING }));
     let mut run = |frames: u32| -> (f64, Vec<(String, f64)>) {
         let mut encoder = device.create_command_encoder(&Default::default());
         drop(encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -57,6 +64,9 @@ fn main() {
         let mut labels: Vec<String> = Vec::new();
         timed.write_timestamp(&stamps, 0);
         for _ in 0..frames {
+            post.draw_clouds(&mut timed);
+            labels.push("clouds".to_string());
+            timed.write_timestamp(&stamps, labels.len() as u32);
             post.encode_marked(&mut timed, &target, &mut |encoder, label| {
                 labels.push(label.to_string());
                 encoder.write_timestamp(&stamps, labels.len() as u32);

@@ -120,6 +120,7 @@ pub struct Tuning {
     pub occlusion_radius: f32,
     pub occlusion_strength: f32,
     pub occlusion_bias: f32,
+    pub cloud_layers: u32,
 }
 
 pub const TUNING: Tuning = Tuning {
@@ -130,6 +131,7 @@ pub const TUNING: Tuning = Tuning {
     occlusion_radius: 90.0,
     occlusion_strength: 0.7,
     occlusion_bias: 0.03,
+    cloud_layers: 3,
 };
 
 /// What the shaders read each frame (std140: every member is a vec4).
@@ -150,6 +152,8 @@ pub struct Params {
     bloom: [f32; 4],
     occlusion: [f32; 4],
     misc: [f32; 4],
+    cloud: [f32; 4],
+    eye: [f32; 4],
 }
 
 fn linear(display: f32) -> f32 {
@@ -166,6 +170,7 @@ pub struct Look {
     pub grade: Grade,
     pub occluding: bool,
     pub glowing: bool,
+    pub clouded: bool,
 }
 
 impl Look {
@@ -181,9 +186,21 @@ impl Look {
         let horizon = scene.fog.as_ref().map_or(clear.map(linear), |fog| fog.color.map(linear));
         let peak = ambient[0].max(ambient[1]).max(ambient[2]).max(1e-4);
         let sky_tint = ambient.map(|channel| channel / peak);
-        let zenith: [f32; 3] = std::array::from_fn(|c| horizon[c] * (0.30 + 0.35 * sky_tint[c]) + 0.015 * sky_tint[c]);
-        let ground = horizon.map(|channel| channel * 0.55);
         let sun_strength = key[0].max(key[1]).max(key[2]);
+        let look = scene.sky_look;
+        let zenith: [f32; 3] = match look {
+            Some(look) => look.zenith.map(linear),
+            None => std::array::from_fn(|c| horizon[c] * (0.30 + 0.35 * sky_tint[c]) + 0.015 * sky_tint[c]),
+        };
+        let (toward, sun_color, sun_on) = match look {
+            Some(look) => {
+                let (azimuth, elevation) = (look.sun_azimuth.to_radians(), look.sun_elevation.to_radians());
+                ([elevation.cos() * azimuth.cos(), elevation.cos() * azimuth.sin(), elevation.sin()], look.sun.map(linear), 1.0)
+            }
+            None => (toward, key.map(|channel| channel * 1.5), if sun_strength > 0.0 { 1.0 } else { 0.0 }),
+        };
+        let (cover, stars, glow) = look.map_or((0.0, 0.0, 0.0), |look| (look.cover, look.stars, look.glow));
+        let ground = horizon.map(|channel| channel * 0.55);
         let grade = if scene.light.is_some() { Grade::of_light(key, ambient) } else { Grade::NEUTRAL };
         let params = Params {
             right: [v[0], v[4], v[8], 0.0],
@@ -192,22 +209,46 @@ impl Look {
             lens: [camera.tangent, camera.tangent / aspect, camera.rise, aspect],
             depth: [camera.near, camera.far, 0.0, 0.0],
             rect,
-            sun_toward: with(toward, if sun_strength > 0.0 { 1.0 } else { 0.0 }),
-            sun_color: with(key.map(|channel| channel * 1.5), 0.0),
+            sun_toward: with(toward, sun_on),
+            sun_color: with(sun_color, 0.0),
             zenith: with(zenith, 0.0),
             horizon: with(horizon, 0.0),
             ground: with(ground, 0.0),
             bloom: [t.bloom_threshold, t.bloom_knee, t.bloom_strength, 0.0],
             occlusion: [t.occlusion_radius, t.occlusion_strength, t.occlusion_bias, 0.0],
             misc: [scene.frame as f32 / 60.0, if srgb_surface { 1.0 } else { 0.0 }, 0.0, t.exposure],
+            cloud: [cover, stars, glow, if cover > 0.0 { t.cloud_layers as f32 } else { 0.0 }],
+            eye: with(camera.eye, 0.0),
         };
-        Look { params, grade, occluding: t.occlusion_strength > 0.0, glowing: t.bloom_strength > 0.0 }
+        Look { params, grade, occluding: t.occlusion_strength > 0.0, glowing: t.bloom_strength > 0.0, clouded: cover > 0.0 && t.cloud_layers > 0 }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn sky_scene(cover: f32) -> DrawScene {
+        let look = format!(r#"{{"zenith":[0.1,0.2,0.4],"cover":{cover},"sunAzimuth":90,"sunElevation":30,"sun":[1,0.5,0.25],"stars":0.5,"glow":0.25}}"#);
+        let mut scene = DrawScene::default();
+        scene.sky_look = Some(serde_json::from_str(&look).unwrap());
+        scene
+    }
+
+    #[test]
+    fn a_stages_sky_look_sets_the_sun_the_zenith_and_how_many_cloud_layers_draw() {
+        let rect = [0.0, 0.0, 64.0, 64.0];
+        let look = Look::of(&sky_scene(0.5), 1.0, rect, false, &TUNING);
+        let toward = look.params.sun_toward;
+        assert!(toward[0].abs() < 1e-5 && (toward[1] - 0.866).abs() < 1e-3 && (toward[2] - 0.5).abs() < 1e-3 && toward[3] == 1.0, "{toward:?}");
+        assert!((look.params.zenith[2] - linear(0.4)).abs() < 1e-6);
+        assert_eq!(look.params.cloud, [0.5, 0.5, 0.25, 3.0]);
+        assert!(look.clouded);
+        let low = Look::of(&sky_scene(0.5), 1.0, rect, false, &Tuning { cloud_layers: 1, ..TUNING });
+        assert_eq!(low.params.cloud[3], 1.0);
+        assert!(!Look::of(&sky_scene(0.0), 1.0, rect, false, &TUNING).clouded, "a stage with no cloud draws no cloud pass");
+        assert!(!Look::of(&DrawScene::default(), 1.0, rect, false, &TUNING).clouded, "a map that sets no sky look keeps the plain gradient");
+    }
 
     #[test]
     fn a_known_hdr_input_maps_to_the_expected_srgb_bytes() {

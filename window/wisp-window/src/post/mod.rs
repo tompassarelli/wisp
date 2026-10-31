@@ -11,6 +11,9 @@ use std::mem::size_of;
 pub use look::{agx, srgb_encode, tone_map, Grade, Look, Params, Tuning, LUT_SIZE, TUNING};
 
 const COMMON: &str = include_str!("common.wgsl");
+const NOISE: &str = include_str!("noise.wgsl");
+/// The cloud texture is this many times smaller than the target on each side: clouds are soft, and a sixteenth of the pixels keeps three layers and the shafts cheap.
+const CLOUD_SCALE: u32 = 4;
 const BLOOM_LEVELS: u32 = 5;
 const BLOOM_SHOWN: usize = 1;
 const BLOOM_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
@@ -44,6 +47,7 @@ fn sampler_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
 }
 
 struct Layouts {
+    cloud: wgpu::BindGroupLayout,
     sky: wgpu::BindGroupLayout,
     depth: wgpu::BindGroupLayout,
     occlusion: wgpu::BindGroupLayout,
@@ -52,6 +56,7 @@ struct Layouts {
 }
 
 struct Pipelines {
+    cloud: wgpu::RenderPipeline,
     sky: wgpu::RenderPipeline,
     depth: wgpu::RenderPipeline,
     occlusion: wgpu::RenderPipeline,
@@ -63,6 +68,8 @@ struct Pipelines {
 
 /// The textures and bind groups that depend on the target's size.
 struct Targets {
+    cloud: wgpu::TextureView,
+    sky_group: wgpu::BindGroup,
     half_depth: wgpu::TextureView,
     depth_group: wgpu::BindGroup,
     occlusion: wgpu::TextureView,
@@ -82,7 +89,8 @@ pub struct Post {
     pipelines: Pipelines,
     sampler: wgpu::Sampler,
     params: wgpu::Buffer,
-    sky_group: wgpu::BindGroup,
+    cloud_group: wgpu::BindGroup,
+    clouded: bool,
     lut: wgpu::TextureView,
     lut_texture: wgpu::Texture,
     lut_grade: Option<Grade>,
@@ -91,8 +99,8 @@ pub struct Post {
     targets: Option<Targets>,
 }
 
-fn module(device: &wgpu::Device, label: &str, source: &str) -> wgpu::ShaderModule {
-    device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some(label), source: wgpu::ShaderSource::Wgsl([COMMON, source].concat().into()) })
+fn module(device: &wgpu::Device, label: &str, sources: &[&str]) -> wgpu::ShaderModule {
+    device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some(label), source: wgpu::ShaderSource::Wgsl([&[COMMON], sources].concat().concat().into()) })
 }
 
 fn pipeline(device: &wgpu::Device, label: &str, module: &wgpu::ShaderModule, layout: &wgpu::BindGroupLayout, fragment: &str, target: wgpu::ColorTargetState, multisample: u32, depth: Option<wgpu::TextureFormat>) -> wgpu::RenderPipeline {
@@ -139,7 +147,8 @@ impl Post {
         let layout = |label, entries: &[wgpu::BindGroupLayoutEntry]| device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor { label: Some(label), entries });
         let flat = wgpu::TextureViewDimension::D2;
         let layouts = Layouts {
-            sky: layout("sky", &[params_entry()]),
+            cloud: layout("cloud", &[params_entry()]),
+            sky: layout("sky", &[params_entry(), texture_entry(1, false, flat, false), sampler_entry(2)]),
             depth: layout("depth", &[params_entry(), texture_entry(1, true, flat, true)]),
             occlusion: layout("occlusion", &[params_entry(), unfiltered_entry(1)]),
             bloom: layout("bloom", &[params_entry(), sampler_entry(1), texture_entry(2, false, flat, false)]),
@@ -148,13 +157,15 @@ impl Post {
                 &[params_entry(), sampler_entry(1), texture_entry(2, false, flat, false), texture_entry(3, false, flat, false), texture_entry(4, false, flat, false), texture_entry(5, false, wgpu::TextureViewDimension::D3, false), texture_entry(6, true, flat, true)],
             ),
         };
-        let sky = module(device, "sky", include_str!("sky.wgsl"));
-        let depth = module(device, "depth", include_str!("depth.wgsl"));
-        let occlusion = module(device, "occlusion", include_str!("occlusion.wgsl"));
-        let bloom = module(device, "bloom", include_str!("bloom.wgsl"));
-        let composite = module(device, "composite", include_str!("composite.wgsl"));
+        let sky = module(device, "sky", &[NOISE, include_str!("sky.wgsl")]);
+        let cloud = module(device, "cloud", &[NOISE, include_str!("clouds.wgsl")]);
+        let depth = module(device, "depth", &[include_str!("depth.wgsl")]);
+        let occlusion = module(device, "occlusion", &[include_str!("occlusion.wgsl")]);
+        let bloom = module(device, "bloom", &[include_str!("bloom.wgsl")]);
+        let composite = module(device, "composite", &[include_str!("composite.wgsl")]);
         let sky_layout = &layouts.sky;
         let pipelines = Pipelines {
+            cloud: pipeline(device, "cloud", &cloud, &layouts.cloud, "cloud_main", colour(BLOOM_FORMAT, None), 1, None),
             sky: pipeline(device, "sky", &sky, sky_layout, "sky_main", colour(scene_format, None), samples, Some(depth_format)),
             depth: pipeline(device, "depth", &depth, &layouts.depth, "depth_main", colour(HALF_DEPTH_FORMAT, None), 1, None),
             occlusion: pipeline(device, "occlusion", &occlusion, &layouts.occlusion, "occlusion_main", colour(OCCLUSION_FORMAT, None), 1, None),
@@ -165,7 +176,7 @@ impl Post {
         };
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor { mag_filter: wgpu::FilterMode::Linear, min_filter: wgpu::FilterMode::Linear, address_mode_u: wgpu::AddressMode::ClampToEdge, address_mode_v: wgpu::AddressMode::ClampToEdge, address_mode_w: wgpu::AddressMode::ClampToEdge, ..Default::default() });
         let params = device.create_buffer(&wgpu::BufferDescriptor { label: Some("post params"), size: size_of::<Params>() as u64, usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
-        let sky_group = device.create_bind_group(&wgpu::BindGroupDescriptor { label: Some("sky"), layout: &layouts.sky, entries: &[binding(0, params.as_entire_binding())] });
+        let cloud_group = device.create_bind_group(&wgpu::BindGroupDescriptor { label: Some("cloud"), layout: &layouts.cloud, entries: &[binding(0, params.as_entire_binding())] });
         let lut_texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("grade"),
             size: wgpu::Extent3d { width: LUT_SIZE, height: LUT_SIZE, depth_or_array_layers: LUT_SIZE },
@@ -177,7 +188,7 @@ impl Post {
             view_formats: &[],
         });
         let lut = lut_texture.create_view(&Default::default());
-        Self { device: device.clone(), queue: queue.clone(), srgb: surface.is_srgb(), layouts, pipelines, sampler, params, sky_group, lut, lut_texture, lut_grade: None, occluding: true, glowing: true, targets: None }
+        Self { device: device.clone(), queue: queue.clone(), srgb: surface.is_srgb(), layouts, pipelines, sampler, params, cloud_group, clouded: false, lut, lut_texture, lut_grade: None, occluding: true, glowing: true, targets: None }
     }
 
     /// Whether the display encodes what the composite writes, which `Look::of` needs to know.
@@ -189,6 +200,12 @@ impl Post {
     pub fn fit(&mut self, size: (u32, u32), hdr: &wgpu::TextureView, depth: &wgpu::TextureView) {
         let device = &self.device;
         let half = |size: (u32, u32), level: u32| ((size.0 >> level).max(1), (size.1 >> level).max(1));
+        let cloud = view_of(device, "clouds", ((size.0 / CLOUD_SCALE).max(1), (size.1 / CLOUD_SCALE).max(1)), BLOOM_FORMAT);
+        let sky_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("sky"),
+            layout: &self.layouts.sky,
+            entries: &[binding(0, self.params.as_entire_binding()), binding(1, wgpu::BindingResource::TextureView(&cloud)), binding(2, wgpu::BindingResource::Sampler(&self.sampler))],
+        });
         let half_depth = view_of(device, "half depth", half(size, 1), HALF_DEPTH_FORMAT);
         let occlusion = view_of(device, "occlusion", half(size, 1), OCCLUSION_FORMAT);
         let bloom: Vec<wgpu::TextureView> = (1..=BLOOM_LEVELS).map(|level| view_of(device, "bloom", half(size, level), BLOOM_FORMAT)).collect();
@@ -223,6 +240,8 @@ impl Post {
             ],
         });
         self.targets = Some(Targets {
+            cloud,
+            sky_group,
             prefilter_group: group(&self.layouts.bloom, hdr),
             down_groups: bloom[..bloom.len() - 1].iter().map(|view| group(&self.layouts.bloom, view)).collect(),
             up_groups: bloom[BLOOM_SHOWN + 1..].iter().map(|view| group(&self.layouts.bloom, view)).collect(),
@@ -238,7 +257,7 @@ impl Post {
     /// Writes the frame's constants, and the grade's table when the grade changed since the last frame.
     pub fn prepare(&mut self, look: &Look) {
         self.queue.write_buffer(&self.params, 0, bytemuck::bytes_of(&look.params));
-        (self.occluding, self.glowing) = (look.occluding, look.glowing);
+        (self.occluding, self.glowing, self.clouded) = (look.occluding, look.glowing, look.clouded);
         if self.lut_grade != Some(look.grade) {
             self.lut_grade = Some(look.grade);
             self.queue.write_texture(
@@ -252,9 +271,18 @@ impl Post {
 
     /// Draws the sky as the first thing in the scene pass, behind everything: one triangle over the viewport.
     pub fn draw_sky(&self, pass: &mut wgpu::RenderPass<'_>) {
+        let targets = self.targets.as_ref().expect("fit ran");
         pass.set_pipeline(&self.pipelines.sky);
-        pass.set_bind_group(0, &self.sky_group, &[]);
+        pass.set_bind_group(0, &targets.sky_group, &[]);
         pass.draw(0..3, 0..1);
+    }
+
+    /// Paints the sky's cloud layers and sun shafts into the small cloud texture the sky pass lays over its gradient, when the stage's sky has clouds; call it before the scene pass.
+    pub fn draw_clouds(&self, encoder: &mut wgpu::CommandEncoder) {
+        if self.clouded {
+            let targets = self.targets.as_ref().expect("fit ran");
+            Self::fullscreen(encoder, "clouds", &targets.cloud, wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT), &self.pipelines.cloud, &self.cloud_group);
+        }
     }
 
     fn fullscreen(encoder: &mut wgpu::CommandEncoder, label: &str, target: &wgpu::TextureView, load: wgpu::LoadOp<wgpu::Color>, pipeline: &wgpu::RenderPipeline, group: &wgpu::BindGroup) {
