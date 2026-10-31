@@ -3,6 +3,10 @@ import type { AnimationSequence } from "../../src/headless/animation";
 import { createModelLibrary, drawScene } from "../../host/window/drawScene";
 import type { RenderScene } from "../../host/render/renderScene";
 
+const until = async (check: () => boolean) => {
+  for (const deadline = Date.now() + 5000; !check() && Date.now() < deadline;) await Bun.sleep(1);
+};
+
 const STAND: AnimationSequence = { name: "Stand", start: 100, end: 1100, looping: true, rarity: 0 };
 const pose = (model: string) => ({
   handle: { kind: "effect", id: 1 }, model, created: 0, x: 10, y: 20, z: 30, alpha: 255, scale: 1, timeScale: 1, flat: false, queuedAnimations: [], yaw: 0, pitch: 0, roll: 0,
@@ -26,7 +30,7 @@ test("modelLibrary_reports_a_missing_model", async () => {
   const library = createModelLibrary(async (path) => (path === "gone.mdx" ? undefined : new Uint8Array([1, 2, 3, 4])), { asset: (path) => { pushed.push(path); } }, (problem) => problems.push(problem));
   expect(library.sequences("gone.mdx")).toBeUndefined();
   expect(library.sequences("gone.mdx")).toBeUndefined();
-  await Bun.sleep(10);
+  await until(() => library.loading() === 0);
   expect(problems).toEqual(["gone.mdx: missing model"]);
   expect(pushed).toEqual([]);
 });
@@ -48,7 +52,7 @@ test("modelLibrary_pushes_each_ui_file_once_and_counts_it_until_read", async () 
   library.show(["a.tga"]);
   expect(library.loading()).toBe(2);
   release.resolve();
-  await Bun.sleep(10);
+  await until(() => library.loading() === 0);
   expect(pushed).toEqual(["a.tga", "b.ttf"]);
   expect(library.loading()).toBe(0);
 });
@@ -60,11 +64,15 @@ test("modelLibrary_sends_a_shared_texture_before_every_model_that_names_it", asy
   model.Textures = [{ Image: "shared.blp", ReplaceableId: 0, Flags: 0 }];
   const mdx = new Uint8Array(generateMDX(model));
   const pushed: string[] = [];
-  const library = createModelLibrary(async (path) => { await Bun.sleep(path === "shared.blp" ? 20 : 0); return path.endsWith(".mdx") ? mdx : new Uint8Array([1]); }, { asset: (path) => { pushed.push(path); } }, () => undefined);
+  const reads: string[] = [];
+  const texture = Promise.withResolvers<void>();
+  const library = createModelLibrary(async (path) => { reads.push(path); if (path === "shared.blp") await texture.promise; return path.endsWith(".mdx") ? mdx : new Uint8Array([1]); }, { asset: (path) => { pushed.push(path); } }, () => undefined);
   library.sequences("a.mdx");
-  await Bun.sleep(5);
+  await until(() => reads.includes("shared.blp"));
   library.sequences("b.mdx");
-  await Bun.sleep(80);
+  await until(() => reads.includes("b.mdx"));
+  texture.resolve();
+  await until(() => library.loading() === 0);
   expect(pushed).toEqual(["shared.blp", "a.mdx", "b.mdx"]);
 });
 
