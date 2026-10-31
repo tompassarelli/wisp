@@ -6,6 +6,8 @@ import { NetFailure } from "./failure";
 
 const HANDSHAKE_TRIES = 20;
 const HANDSHAKE_RETRY_MS = 250;
+// A stateful firewall or NAT forgets a UDP flow 30 s after its last outgoing datagram (Linux nf_conntrack_udp_timeout)
+const KEEPALIVE_MS = 10_000;
 
 export type RelayOpening = { readonly create: true; readonly players: number } | { readonly join: bigint };
 
@@ -25,7 +27,9 @@ const randomId = () => BigInt(Math.floor(Math.random() * 2 ** 52)) + 1n;
 
 /**
  * A peer-room member: asks the relay for a room (or to join one), answers its address challenge, and wraps each datagram
- * for the room's other member. Only the relay's own address is heard, so a stray datagram never reaches the match.
+ * for the room's other member. Only the relay's own address is heard, so a stray datagram never reaches the match. A member that has
+ * sent nothing for 10 s, such as a host waiting for its players, sends an empty datagram, which keeps its firewall's and NAT's mapping
+ * and the room alive; the other members' decoders drop it.
  */
 export const openRelayLink = (options: RelayLinkOptions) => Effect.gen(function*() {
   const relay = yield* Effect.tryPromise({
@@ -78,6 +82,7 @@ export const openRelayLink = (options: RelayLinkOptions) => Effect.gen(function*
     socket.send(bytes, relay.port, relay.address);
     for (let waited = 0; waited < HANDSHAKE_RETRY_MS && joined === undefined && refusal === undefined && cookie === challenged; waited += 2) yield* Effect.sleep(2);
   }
+  let lastSent = performance.now();
   const link: RelayedLink = {
     maxPayload: MAX_PACKET - PEER_HEADER,
     traffic,
@@ -88,6 +93,7 @@ export const openRelayLink = (options: RelayLinkOptions) => Effect.gen(function*
       if (token === undefined) return;
       const bytes = encodeControl({ type: "peer", token, payload });
       traffic.sent(bytes.length);
+      lastSent = performance.now();
       try {
         socket.send(bytes, relay.port, relay.address);
       } catch {
@@ -95,5 +101,8 @@ export const openRelayLink = (options: RelayLinkOptions) => Effect.gen(function*
       }
     },
   };
+  yield* Effect.forkScoped(Effect.forever(Effect.sleep(KEEPALIVE_MS).pipe(Effect.andThen(Effect.sync(() => {
+    if (performance.now() - lastSent >= KEEPALIVE_MS) link.send(new Uint8Array(0));
+  })))));
   return link;
 });
