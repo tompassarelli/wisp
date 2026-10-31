@@ -894,8 +894,15 @@ session's next local frame and draws the scene as it stands.
   Chrome, and a desync or network failure ends it with that error. On close the
   worker ends its scope first, so the peer says goodbye before the main thread
   closes the window.
-- The worker opens no window until the handshake ends, as the page does. A
-  handshake failure fails the run instead of leaving it waiting.
+- The worker opens the window first, then reads every model and texture the
+  game lists (`preloadAll`, host/window/drawScene.ts) and only then starts the
+  peer, so the match's clock never runs against a thread busy with art. The
+  reads finish together and their MDX parses run back to back: on gex45 the
+  447 models and 1593 files of Smashcraft took 11.3 s and held the worker's
+  event loop for up to 7 s at once (one model's parse took 497 ms), which in
+  the first relay match made each side see the other go silent for 3 s and end
+  the match. A local run still loads the rest in the background after its
+  first scene. A handshake failure fails the run instead of leaving it waiting.
 - W2 keeps the phase lock: the peer's clock and the window's 60 Hz step clock
   run apart, so a window sample can see zero or two new sim frames when their
   phases cross.

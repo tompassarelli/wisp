@@ -222,6 +222,20 @@ export const preloadScene = (scene: RenderScene, library: ModelLibrary, pending:
   }
 });
 
+/**
+ * Reads every model and texture the game lists and waits until none is still being read, before a networked match's clock starts: the
+ * reads finish together and their parses then hold the thread for seconds (on gex45, 447 models and 1593 files held it up to 7 s), and the
+ * peer on that thread would go silent to the other player.
+ */
+export const preloadAll = (render: { readonly preloadModels?: readonly string[]; readonly preloadTextures?: readonly string[] }, library: ModelLibrary) => Effect.gen(function*() {
+  const began = performance.now();
+  preloadAssets(render, library);
+  while (library.loading() > 0) {
+    if (performance.now() - began > PRELOAD_MS) return yield* Effect.die(new Error(`the game's models did not load in ${PRELOAD_MS / 1000} s`));
+    yield* Effect.sleep("5 millis");
+  }
+});
+
 /** Starts reading every model and texture the game lists beyond its first scene, so the window has them, and remasters them, before a match shows them. */
 export function preloadAssets(render: { readonly preloadModels?: readonly string[]; readonly preloadTextures?: readonly string[] }, library: ModelLibrary): void {
   for (const model of render.preloadModels ?? []) library.sequences(model);

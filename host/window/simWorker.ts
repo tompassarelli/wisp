@@ -4,7 +4,7 @@ import { openStandalone } from "../play/standalone";
 import { openNetMatch } from "../play/standaloneNet";
 import type { NetReport } from "../net/peer";
 import { adoptNativeWindow } from "./binding";
-import { createModelLibrary, drawScene, preloadAssets, preloadScene } from "./drawScene";
+import { createModelLibrary, drawScene, preloadAll, preloadAssets, preloadScene } from "./drawScene";
 import { createFrameLoop, serveFrames } from "./frameLoop";
 import { loadGame } from "./gameModule";
 import { type RenderSeries, type RenderSeriesName, renderSeriesLengths, renderSeriesSince } from "./renderSeries";
@@ -27,14 +27,15 @@ const run = async (init: SimWorkerInit) => {
   const began = performance.now();
   const game = await loadGame(init.game);
   const ending = await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
-    const { net } = init.options;
-    const match = net === undefined ? undefined : yield* openNetMatch(game, init.options, net);
-    const player = yield* openStandalone(match?.game ?? game, { ...init.options, window: "native", library: init.library });
     send({ type: "ready" });
     const view = yield* Effect.acquireRelease(
       Effect.promise(() => attached.promise).pipe(Effect.map((handle) => adoptNativeWindow(handle, init.library))),
       (opened) => Effect.sync(() => opened.release()),
     );
+    const library = createModelLibrary((path) => game.render.readAsset(path), view, (problem) => console.error(`native window: ${problem}`));
+    const { net } = init.options;
+    const match = net === undefined ? undefined : yield* preloadAll(game.render, library).pipe(Effect.andThen(openNetMatch(game, init.options, net)));
+    const player = yield* openStandalone(match?.game ?? game, { ...init.options, window: "native", library: init.library });
     const finished = Promise.withResolvers<void>();
     const reads: number[] = [];
     let measuredFrom: Readonly<Record<RenderSeriesName, number>> | undefined;
@@ -42,7 +43,6 @@ const run = async (init: SimWorkerInit) => {
     const assets = [...(game.render.preloadModels ?? []), "missing\\probe.mdx"];
     const probe = init.probe;
     const sampleLogPath = process.env[SAMPLE_LOG_VARIABLE];
-    const library = createModelLibrary((path) => game.render.readAsset(path), view, (problem) => console.error(`native window: ${problem}`));
     const loop = createFrameLoop(player.native, view, {
       scripted: init.options.script !== undefined,
       onSample: sampleLogPath === undefined ? undefined : openSampleLog(sampleLogPath, view),
