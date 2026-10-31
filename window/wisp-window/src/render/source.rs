@@ -1,6 +1,6 @@
 //! Where the file formats meet the renderer: MDX bytes become a `ModelData`, texture bytes an `Image`.
 
-use crate::model::{self, global_sequence_frame, Playhead, Pose};
+use crate::model::{self, global_sequence_frame, Facing, Playhead, Pose};
 
 use super::math::Mat4;
 use crate::remaster::Quality;
@@ -33,13 +33,13 @@ impl Rig for MdxRig {
         self.pose.matrices().len().max(1)
     }
 
-    fn pose(&mut self, sequence: i32, frame: f32, clock_seconds: f32, out: &mut [Mat4]) {
+    fn pose(&mut self, sequence: i32, frame: f32, clock_seconds: f32, facing: &Facing, out: &mut [Mat4]) {
         self.playhead.set_sequence(self.model, usize::try_from(sequence).ok());
         self.playhead.frame = frame;
         for (index, &length) in self.model.global_sequences.iter().enumerate() {
             self.playhead.set_global_frame(index, global_sequence_frame(clock_seconds, length));
         }
-        self.pose.update(&self.playhead);
+        self.pose.update(&self.playhead, facing);
         let palette = self.pose.matrices();
         let count = palette.len().min(out.len());
         out[..count].copy_from_slice(&palette[..count]);

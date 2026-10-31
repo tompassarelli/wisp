@@ -13,6 +13,9 @@ const WRAP = 0.3;
 const RIM = 1.0;
 const RIM_EDGE = 2.5;
 const MAX_LIGHT = 1.1;
+// Replaceable 2 as the player's install draws it: a Gaussian spot measured from the TeamGlow textures, peak 0.46 of the team colour, falling to 1/e at 0.2 of the quad from its centre.
+const TEAM_GLOW_PEAK = 0.46;
+const TEAM_GLOW_RADIUS = 0.2;
 
 @group(0) @binding(2) var<storage, read> slot_colors: array<vec4<f32>>;
 @group(0) @binding(3) var<storage, read> uv_rows: array<vec4<f32>>;
@@ -153,8 +156,9 @@ fn fragment_main(in: Varying) -> @location(0) vec4<f32> {
     if (layer.kind == 1u) {
         color = vec4<f32>(in.team, 1.0);
     } else if (layer.kind == 2u) {
-        let glow = sin(clamp(1.0 - length(in.uv - vec2<f32>(0.5, 0.5)) * 2.8, 0.0, 1.0));
-        if (glow < 0.02) {
+        let from_centre = length(in.uv - vec2<f32>(0.5, 0.5));
+        let glow = TEAM_GLOW_PEAK * exp(-from_centre * from_centre / (TEAM_GLOW_RADIUS * TEAM_GLOW_RADIUS));
+        if (glow < 0.005) {
             discard;
         }
         color = vec4<f32>(select(in.team, in.team * glow, layer.ignores_texture_alpha == 1u), glow);

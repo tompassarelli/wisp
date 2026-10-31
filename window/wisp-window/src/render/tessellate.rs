@@ -166,7 +166,7 @@ mod tests {
         fn bone_count(&self) -> usize {
             1
         }
-        fn pose(&mut self, _: i32, _: f32, _: f32, _: &mut [Mat4]) {}
+        fn pose(&mut self, _: i32, _: f32, _: f32, _: &crate::model::Facing, _: &mut [Mat4]) {}
         fn colors(&self) -> &[[f32; 4]] {
             &[]
         }

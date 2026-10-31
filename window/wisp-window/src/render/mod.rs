@@ -36,6 +36,7 @@ use wgpu::util::DeviceExt;
 use std::sync::Arc;
 
 use crate::decode_pool::Pool;
+use crate::model::Facing;
 use crate::remaster::{self, Baker, Cache, Edges, Loaded, Quality, Upscaler};
 use crate::settings::{Features, Shadows};
 use math::{mirrored, multiply, projection, Mat4, IDENTITY};
@@ -359,7 +360,7 @@ impl Renderer {
     }
 
     /// Lays every resident pose out by model: bone matrices into the scratch, instances grouped so each model's are contiguous.
-    fn layout(&mut self, poses: &[Pose]) {
+    fn layout(&mut self, poses: &[Pose], view: &Mat4) {
         self.counts.iter_mut().for_each(|count| *count = 0);
         self.order.clear();
         self.water_level = None;
@@ -398,7 +399,7 @@ impl Renderer {
             let model = &mut self.models[id];
             let base = self.bone_scratch.len();
             self.bone_scratch.resize(base + model.bones, IDENTITY);
-            model.rig.pose(pose.sequence, pose.frame, pose.clock, &mut self.bone_scratch[base..]);
+            model.rig.pose(pose.sequence, pose.frame, pose.clock, &Facing::of(view, &pose.matrix), &mut self.bone_scratch[base..]);
             let color_base = self.color_scratch.len();
             self.color_scratch.extend_from_slice(model.rig.colors());
             self.uv_scratch.extend_from_slice(model.rig.uv_rows());
@@ -417,13 +418,13 @@ impl Renderer {
 
     /// Poses the sky, grows the storage buffers that outgrew their capacity, uploads the scene's per-frame data and stages its particles and bolts.
     fn prepare(&mut self, scene: &Scene, aspect: f32, window: f32, size: (u32, u32)) -> bool {
-        self.layout(&scene.poses);
+        self.layout(&scene.poses, &scene.camera.view);
         let sky = scene.sky.as_ref().and_then(|pose| self.model_ids.get(pose.model.as_str()).map(|&id| (id, pose)));
         let sky_base = self.bone_scratch.len();
         let sky_color_base = self.color_scratch.len();
         if let Some((id, pose)) = sky {
             self.bone_scratch.resize(sky_base + self.models[id].bones, IDENTITY);
-            self.models[id].rig.pose(pose.sequence, pose.frame, pose.clock, &mut self.bone_scratch[sky_base..]);
+            self.models[id].rig.pose(pose.sequence, pose.frame, pose.clock, &Facing::of(&scene.camera.view, &pose.matrix), &mut self.bone_scratch[sky_base..]);
             self.color_scratch.extend_from_slice(self.models[id].rig.colors());
             self.uv_scratch.extend_from_slice(self.models[id].rig.uv_rows());
         }

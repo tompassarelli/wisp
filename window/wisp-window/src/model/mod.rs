@@ -10,7 +10,7 @@ mod track;
 
 use std::fmt;
 
-pub use pose::{Mat4, Playhead, Pose};
+pub use pose::{Facing, Mat4, Playhead, Pose};
 pub use skin::{skin_position, Blends, SkinVertex};
 pub use emitter::{Emitter2, Scalar, LINE_EMITTER, XY_QUAD};
 pub use track::{global_sequence_frame, rotate, sample, Key, LineType, Track};
@@ -52,6 +52,14 @@ pub struct Geoset {
 /// A layer's shading flag bits (the MDX `Layer.shading`).
 pub mod shading {
     pub const UNSHADED: u32 = 1;
+}
+
+pub mod node_flags {
+    pub const BILLBOARDED: u32 = 8;
+    pub const BILLBOARDED_LOCK_X: u32 = 16;
+    pub const BILLBOARDED_LOCK_Y: u32 = 32;
+    pub const BILLBOARDED_LOCK_Z: u32 = 64;
+    pub const ANY_BILLBOARD: u32 = BILLBOARDED | BILLBOARDED_LOCK_X | BILLBOARDED_LOCK_Y | BILLBOARDED_LOCK_Z;
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]

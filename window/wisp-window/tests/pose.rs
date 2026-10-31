@@ -1,5 +1,5 @@
 use serde::Deserialize;
-use wisp_window::model::{global_sequence_frame, rotate, sample, skin_position, SkinVertex, Key, LineType, Mat4, Model, Playhead, Pose, Track};
+use wisp_window::model::{global_sequence_frame, node_flags, rotate, sample, skin_position, SkinVertex, Facing, Key, LineType, Mat4, Model, Playhead, Pose, Track};
 
 const MDL: &str = include_str!("fixtures/rig.mdl");
 const MDX: &[u8] = include_bytes!("fixtures/rig.mdx");
@@ -31,7 +31,7 @@ fn check_model(model: &Model) {
         playhead.set_sequence(model, Some(case.sequence));
         playhead.frame = case.frame;
         playhead.set_global_frame(0, case.global);
-        pose.update(&playhead);
+        pose.update(&playhead, &Facing::FRONT);
         for (id, expected) in case.nodes.iter().enumerate() {
             let expected = expected.expect("node");
             let actual = pose.matrices()[id];
@@ -81,7 +81,7 @@ fn pose_leaves_unplaced_nodes_at_rest() {
     let mut playhead = Playhead::new(&model);
     playhead.set_sequence(&model, Some(0));
     playhead.frame = 500.0;
-    pose.update(&playhead);
+    pose.update(&playhead, &Facing::FRONT);
     assert_ne!(pose.matrices()[2], IDENTITY);
     assert_eq!(pose.matrices()[4], IDENTITY);
     assert_eq!(pose.matrices()[5], IDENTITY);
@@ -132,7 +132,7 @@ fn pose_group_of_six_bones_skins_as_the_equal_weight_mean_of_its_bones() {
     let mut playhead = Playhead::new(&model);
     playhead.set_sequence(&model, Some(0));
     playhead.frame = 500.0;
-    pose.update(&playhead);
+    pose.update(&playhead, &Facing::FRONT);
     let grouped: Vec<_> = (0..skin.len()).filter(|&at| model.geosets[0].vertex_group[at] == 3).collect();
     assert!(!grouped.is_empty());
     for at in grouped {
@@ -144,4 +144,114 @@ fn pose_group_of_six_bones_skins_as_the_equal_weight_mean_of_its_bones() {
         }
         assert!((0..3).all(|axis| close(position[axis], mean[axis])), "vertex {at}: {position:?} vs {mean:?}");
     }
+}
+
+fn posed_node_two(flags: u32, facing: &Facing) -> (Mat4, Mat4, [f32; 3]) {
+    let mut model = Model::from_mdl(MDL).expect("mdl");
+    model.geosets[0].groups[3] = vec![2];
+    let pose_with = |model: &Model| {
+        let mut pose = Pose::new(model, &[]).expect("pose");
+        let mut playhead = Playhead::new(model);
+        playhead.set_sequence(model, Some(0));
+        playhead.frame = 500.0;
+        pose.update(&playhead, facing);
+        pose.matrices()[2]
+    };
+    let unturned = pose_with(&model);
+    let node = model.nodes[2].as_mut().expect("node 2");
+    node.flags |= flags;
+    let pivot = node.pivot;
+    (pose_with(&model), unturned, pivot)
+}
+
+fn point(matrix: &Mat4, p: [f32; 3]) -> [f32; 3] {
+    std::array::from_fn(|row| matrix[row] * p[0] + matrix[4 + row] * p[1] + matrix[8 + row] * p[2] + matrix[12 + row])
+}
+
+fn axis(matrix: &Mat4, column: usize) -> [f32; 3] {
+    let raw = [matrix[column * 4], matrix[column * 4 + 1], matrix[column * 4 + 2]];
+    let size = (raw[0] * raw[0] + raw[1] * raw[1] + raw[2] * raw[2]).sqrt();
+    raw.map(|value| value / size)
+}
+
+fn near(actual: [f32; 3], expected: [f32; 3]) -> bool {
+    (0..3).all(|at| (actual[at] - expected[at]).abs() < 1e-3)
+}
+
+#[test]
+fn pose_z_locked_billboards_turn_about_their_own_z_only() {
+    let above = Facing { toward: [0.0, -0.6, 0.8], right: [1.0, 0.0, 0.0], up: [0.0, 0.8, 0.6] };
+    let (turned, unturned, pivot) = posed_node_two(node_flags::BILLBOARDED_LOCK_Z, &above);
+    let z = axis(&unturned, 2);
+    assert!(near(axis(&turned, 2), z), "Z keeps its posed direction");
+    let x = axis(&turned, 0);
+    let along = above.toward[0] * z[0] + above.toward[1] * z[1] + above.toward[2] * z[2];
+    let flat: [f32; 3] = std::array::from_fn(|at| above.toward[at] - along * z[at]);
+    let size = (flat[0] * flat[0] + flat[1] * flat[1] + flat[2] * flat[2]).sqrt();
+    assert!(near(x, flat.map(|value| value / size)), "X turns toward the viewer about Z: {x:?}");
+    assert!(near(point(&turned, pivot), point(&unturned, pivot)));
+}
+
+#[test]
+fn pose_unflagged_nodes_ignore_the_viewer() {
+    let side = Facing { toward: [0.0, -1.0, 0.0], right: [1.0, 0.0, 0.0], up: [0.0, 0.0, 1.0] };
+    let (from_side, _, _) = posed_node_two(0, &side);
+    let (from_front, _, _) = posed_node_two(0, &Facing::FRONT);
+    assert_eq!(from_side, from_front);
+}
+
+const BILLBOARD_MDL: &str = r#"Version { FormatVersion 900, }
+Model "Ball" { BlendTime 0, }
+Sequences 1 {
+  Anim "Stand" { Interval { 0, 1000 }, }
+}
+Bone "Dummy" {
+  ObjectId 0,
+  GeosetId Multiple, GeosetAnimId None,
+  Rotation 1 { Linear, 0: { 0, 0, 0.3826834, 0.9238795 }, }
+  Scaling 1 { Linear, 0: { 2, 2, 2 }, }
+}
+Bone "Ball" {
+  ObjectId 1, Parent 0,
+  Billboarded,
+  GeosetId Multiple, GeosetAnimId None,
+}
+PivotPoints 2 { { 0, 0, 0 }, { 4, 0, 5 }, }
+"#;
+
+fn apply(matrix: &Mat4, v: [f32; 4]) -> [f32; 3] {
+    std::array::from_fn(|row| (0..4).map(|k| matrix[k * 4 + row] * v[k]).sum())
+}
+
+fn compose(a: &Mat4, b: &Mat4) -> Mat4 {
+    std::array::from_fn(|index| (0..4).map(|k| a[k * 4 + index % 4] * b[(index / 4) * 4 + k]).sum())
+}
+
+#[test]
+fn a_billboarded_bone_turns_its_front_to_the_camera_whatever_the_model_and_its_parent_face() {
+    let model = Model::from_mdl(BILLBOARD_MDL).expect("billboard rig parses");
+    let mut pose = Pose::new(&model, &[1]).expect("pose");
+    let mut playhead = Playhead::new(&model);
+    playhead.set_sequence(&model, Some(0));
+    playhead.frame = 0.0;
+    let view: Mat4 = [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, -900.0, 1.0];
+    let (sin, cos) = 1.2f32.sin_cos();
+    let placement: Mat4 = [cos, sin, 0.0, 0.0, -sin, cos, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 300.0, 0.0, 0.0, 1.0];
+    pose.update(&playhead, &Facing::of(&view, &placement));
+    let world = compose(&placement, &pose.matrices()[1]);
+    let front = apply(&world, [1.0, 0.0, 0.0, 0.0]);
+    let side = apply(&world, [0.0, 1.0, 0.0, 0.0]);
+    let top = apply(&world, [0.0, 0.0, 1.0, 0.0]);
+    let expected = [([0.0, -2.0, 0.0], front), ([2.0, 0.0, 0.0], side), ([0.0, 0.0, 2.0], top)];
+    for (want, got) in expected {
+        assert!((0..3).all(|axis| (want[axis] - got[axis]).abs() < 1e-4), "{got:?} is not {want:?}");
+    }
+    let unturned = compose(&placement, &{
+        let mut still = Pose::new(&model, &[1]).expect("pose");
+        still.update(&playhead, &Facing::FRONT);
+        still.matrices()[0]
+    });
+    let pivot = apply(&unturned, [4.0, 0.0, 5.0, 1.0]);
+    let kept = apply(&world, [4.0, 0.0, 5.0, 1.0]);
+    assert!((0..3).all(|axis| (pivot[axis] - kept[axis]).abs() < 1e-3), "the pivot stays where its parent puts it: {kept:?} against {pivot:?}");
 }

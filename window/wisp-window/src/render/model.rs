@@ -1,7 +1,7 @@
 //! What the renderer needs of a model, independent of the file format it was read from: `source.rs` fills it from MDX bytes and a texture's bytes.
 
 use super::math::Mat4;
-use crate::model::Emitter2;
+use crate::model::{Emitter2, Facing};
 
 /// One skinned vertex: up to four bones with weights summing to 1.
 #[repr(C)]
@@ -73,7 +73,7 @@ pub struct Part {
 /// Writes one skinning matrix per bone for a sequence and frame, with no allocation once built.
 pub trait Rig: Send {
     fn bone_count(&self) -> usize;
-    fn pose(&mut self, sequence: i32, frame: f32, clock_seconds: f32, out: &mut [Mat4]);
+    fn pose(&mut self, sequence: i32, frame: f32, clock_seconds: f32, facing: &Facing, out: &mut [Mat4]);
     /// The colour and opacity (RGBA) of each geoset (first) and each material layer (after) at the pose the last `pose` call wrote: a geoset's animated colour and alpha, and a layer's alpha under white.
     fn colors(&self) -> &[[f32; 4]];
     /// How each geoset's and layer's texture coordinates are moved at that pose: two rows of `[xx, xy, 0, shift]` per slot, in the order of `colors`.

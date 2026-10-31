@@ -11,6 +11,7 @@ use super::math::{Mat4, IDENTITY};
 use super::model::{Part, Vertex};
 use super::scene::{Camera, Light, Scene};
 use super::water::Glow;
+use crate::model::Facing;
 use super::{Instance, Renderer, DEPTH, HDR, SAMPLES};
 
 const MARGIN: f32 = 1.06;
@@ -212,7 +213,7 @@ impl Renderer {
         let model = &mut self.models[id];
         let bones = model.bones;
         let mut posed = vec![IDENTITY; bones];
-        model.rig.pose(shot.sequence, shot.frame, shot.clock * 1000.0, &mut posed);
+        model.rig.pose(shot.sequence, shot.frame, shot.clock * 1000.0, &Facing::of(&look_at([TURN.cos(), TURN.sin(), 0.0], [0.0; 3]), &IDENTITY), &mut posed);
         let colors = model.rig.colors().to_vec();
         let uv_rows = model.rig.uv_rows().to_vec();
         let measured = model.skin.posed_bounds(&posed, &colors);

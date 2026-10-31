@@ -169,7 +169,7 @@ impl model::Rig for FlatRig {
         1
     }
 
-    fn pose(&mut self, _sequence: i32, _frame: f32, _clock_ms: f32, out: &mut [Mat4]) {
+    fn pose(&mut self, _sequence: i32, _frame: f32, _clock_ms: f32, _facing: &crate::model::Facing, out: &mut [Mat4]) {
         out[0] = IDENTITY;
     }
 
@@ -376,7 +376,7 @@ fn replaceable_one_and_two_draw_the_players_team_colour_and_glow() {
     let team = Sheet { filter: Filter::Opaque, depth: 100.0, paint: Paint::TeamColor, texel: [0; 4] };
     assert_pixel(centre_of(&[team]), team_light(), "replaceable 1 is the team colour");
     let glow = Sheet { filter: Filter::Blend, depth: 100.0, paint: Paint::TeamGlow, texel: [0; 4] };
-    let expected = over(team_light(), 1.0f32.sin(), background());
+    let expected = over(team_light(), 0.46, background());
     assert_pixel(centre_of(&[glow]), expected, "replaceable 2 is the team glow at its centre");
 }
 
@@ -397,7 +397,7 @@ impl model::Rig for ClockRig {
         1
     }
 
-    fn pose(&mut self, _sequence: i32, _frame: f32, clock_seconds: f32, out: &mut [Mat4]) {
+    fn pose(&mut self, _sequence: i32, _frame: f32, clock_seconds: f32, _facing: &crate::model::Facing, out: &mut [Mat4]) {
         *self.0.lock().unwrap() = clock_seconds;
         out[0] = IDENTITY;
     }

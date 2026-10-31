@@ -36,6 +36,10 @@ fn main() {
     let mut renderer = Renderer::new(device.clone(), queue.clone(), FORMAT, Quality::Off, wisp_window::settings::Preset::High.features());
     let clock: f32 = std::env::var("WISP_SHOT_CLOCK").ok().and_then(|value| value.parse().ok()).unwrap_or(0.0);
     let facing = std::env::var("WISP_SHOT_FACING").ok().and_then(|value| value.parse::<f32>().ok()).unwrap_or(0.0).to_radians();
+    let teams: Vec<[f32; 3]> = std::env::var("WISP_SHOT_TEAMS").unwrap_or_else(|_| "1,0,0".into()).split(';').map(|team| {
+        let channels: Vec<f32> = team.split(',').map(|value| value.trim().parse().unwrap_or(0.0)).collect();
+        [channels[0], channels[1], channels[2]]
+    }).collect();
     let mut poses = Vec::new();
     for (index, path) in args[2..].iter().enumerate() {
         let bytes = stocks.iter().find_map(|stock| std::fs::read(stock.join(path)).ok()).expect("model");
@@ -55,7 +59,7 @@ fn main() {
             (at as i32, from as f32 + (to - from) as f32 * through)
         });
         renderer.ingest(path, bytes);
-        poses.push(serde_json::json!({ "model": path, "matrix": [facing.cos(),facing.sin(),0.0,0.0, -facing.sin(),facing.cos(),0.0,0.0, 0.0,0.0,1.0,0.0, index as f32 * 700.0, 0.0, 0.0, 1.0], "sequence": sequence, "frame": frame, "clock": clock, "alpha": 1.0, "color": [1.0, 1.0, 1.0], "team": [1.0, 0.0, 0.0] }));
+        poses.push(serde_json::json!({ "model": path, "matrix": [facing.cos(),facing.sin(),0.0,0.0, -facing.sin(),facing.cos(),0.0,0.0, 0.0,0.0,1.0,0.0, index as f32 * 700.0, 0.0, 0.0, 1.0], "sequence": sequence, "frame": frame, "clock": clock, "alpha": 1.0, "color": [1.0, 1.0, 1.0], "team": teams[index % teams.len()] }));
     }
     std::thread::sleep(std::time::Duration::from_secs(2));
     renderer.pump();

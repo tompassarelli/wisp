@@ -19,7 +19,7 @@ impl Rig for Clocked {
     fn bone_count(&self) -> usize {
         1
     }
-    fn pose(&mut self, _: i32, _: f32, clock_seconds: f32, out: &mut [Mat4]) {
+    fn pose(&mut self, _: i32, _: f32, clock_seconds: f32, _: &crate::model::Facing, out: &mut [Mat4]) {
         self.0.store(clock_seconds.to_bits(), std::sync::atomic::Ordering::Relaxed);
         out[0] = IDENTITY;
     }
@@ -40,7 +40,7 @@ impl Rig for Still {
     fn bone_count(&self) -> usize {
         1
     }
-    fn pose(&mut self, _: i32, _: f32, _: f32, out: &mut [Mat4]) {
+    fn pose(&mut self, _: i32, _: f32, _: f32, _: &crate::model::Facing, out: &mut [Mat4]) {
         out[0] = IDENTITY;
     }
     fn colors(&self) -> &[[f32; 4]] {
@@ -359,7 +359,7 @@ fn a_pose_hands_the_rig_its_clock_in_seconds_so_global_sequences_run_at_game_spe
     renderer.add_model("clocked", data);
     let mut pose = placed("clocked", 0.0, 0.0, 0.0, [1.0; 3]);
     pose.clock = 2.5;
-    renderer.layout(&[pose]);
+    renderer.layout(&[pose], &IDENTITY);
     assert_eq!(f32::from_bits(seen.load(std::sync::atomic::Ordering::Relaxed)), 2.5);
 }
 
