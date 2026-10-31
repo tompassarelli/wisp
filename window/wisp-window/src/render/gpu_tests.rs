@@ -466,16 +466,17 @@ fn particle_light(filter_mode: u32, texel: [u8; 4]) -> [f32; 3] {
 }
 
 #[test]
-fn an_additive_particle_adds_its_colour_in_linear_light_scaled_by_its_texture_alpha() {
-    let (source, background) = (source(), background());
-    assert_pixel(particle_light(1, texel(SOURCE, 0.5)), [0, 1, 2].map(|channel| source[channel] * 0.5 + background[channel]), "source alpha plus one, so a soft edge stays soft and a colour is not brighter than its texture");
+fn an_additive_particle_adds_its_colour_scaled_by_its_texture_alpha_in_display_colour() {
+    let (faded, background) = (linear(SOURCE.map(|channel| channel * 0.5)), background());
+    assert_pixel(particle_light(1, texel(SOURCE, 0.5)), [0, 1, 2].map(|channel| faded[channel] + background[channel]), "Classic scales by alpha before the light is linear, so a soft fringe adds as little as it does there and the Blood Elf orb's flames stay off its sphere");
 }
 
 #[test]
 fn an_alpha_keyed_particle_cuts_at_three_quarters_and_adds_the_rest() {
-    let (source, background) = (source(), background());
+    let background = background();
     assert_pixel(particle_light(4, texel(SOURCE, 0.5)), background, "alpha 0.5 is cut out");
-    assert_pixel(particle_light(4, texel(SOURCE, 0.8)), [0, 1, 2].map(|channel| source[channel] * 0.8 + background[channel]), "alpha 0.8 adds by its alpha");
+    let faded = linear(SOURCE.map(|channel| channel * 0.8));
+    assert_pixel(particle_light(4, texel(SOURCE, 0.8)), [0, 1, 2].map(|channel| faded[channel] + background[channel]), "alpha 0.8 adds by its alpha in display colour");
 }
 
 #[test]

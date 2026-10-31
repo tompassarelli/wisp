@@ -38,12 +38,14 @@ struct Varying {
     @location(0) uv: vec2<f32>,
     @location(1) color: vec4<f32>,
     @location(2) cutoff: f32,
+    @location(3) @interpolate(flat) additive: u32,
 };
 
 const HEAD: u32 = 1u;
 const TAIL: u32 = 2u;
 const FLAT: u32 = 4u;
 const KEYED: u32 = 8u;
+const ADDITIVE: u32 = 16u;
 
 @vertex
 fn vertex_main(@builtin(vertex_index) vertex: u32, @builtin(instance_index) index: u32) -> Varying {
@@ -52,6 +54,7 @@ fn vertex_main(@builtin(vertex_index) vertex: u32, @builtin(instance_index) inde
     out.uv = vec2<f32>(0.0);
     out.color = vec4<f32>(0.0);
     out.cutoff = 0.0;
+    out.additive = 0u;
     let particle = particles[index];
     let age = frame.eye.w - particle.origin.w;
     let life = particle.velocity.w;
@@ -116,6 +119,7 @@ fn vertex_main(@builtin(vertex_index) vertex: u32, @builtin(instance_index) inde
     out.clip = frame.view_projection * vec4<f32>(at + offset, 1.0);
     out.color = color;
     out.cutoff = select(0.0, 0.75, (flags & KEYED) != 0u);
+    out.additive = flags & ADDITIVE;
     return out;
 }
 
@@ -133,6 +137,10 @@ fn fragment_main(in: Varying) -> @location(0) vec4<f32> {
     if (frame.fog_color.w > 0.5) {
         let fog = clamp((in.clip.w - frame.fog_range.x) / max(frame.fog_range.y - frame.fog_range.x, 1.0), 0.0, frame.fog_range.z);
         color = vec4<f32>(mix(color.rgb, frame.fog_color.rgb, fog), color.a);
+    }
+    // Classic adds a particle in display colour, so its alpha scales the colour before the linear conversion and soft fringes stay as faint as Classic draws them.
+    if (in.additive != 0u) {
+        return vec4<f32>(linear_light(color.rgb * color.a), color.a);
     }
     return vec4<f32>(linear_light(color.rgb), color.a);
 }

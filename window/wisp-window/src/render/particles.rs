@@ -24,7 +24,8 @@ const HEAD: u32 = 1;
 const TAIL: u32 = 2;
 const FLAT: u32 = 4;
 const KEYED: u32 = 8;
-const BLENDS: [Filter; 4] = [Filter::Blend, Filter::AddAlpha, Filter::Modulate, Filter::Modulate2x];
+const ADDITIVE: u32 = 16;
+const BLENDS: [Filter; 4] = [Filter::Blend, Filter::Additive, Filter::Modulate, Filter::Modulate2x];
 
 /// How an emitter's particles look over their life, shared by all of them: colours (alpha last), scale, frame ranges and flags.
 #[repr(C)]
@@ -206,7 +207,7 @@ impl Particles {
                 self.rings.len() - 1
             }
         };
-        let flags = u32::from(spec.head) * HEAD | u32::from(spec.tail) * TAIL | u32::from(spec.flags & XY_QUAD != 0) * FLAT | u32::from(spec.filter_mode == 4) * KEYED;
+        let flags = u32::from(spec.head) * HEAD | u32::from(spec.tail) * TAIL | u32::from(spec.flags & XY_QUAD != 0) * FLAT | u32::from(spec.filter_mode == 4) * KEYED | u32::from(blend_index(spec.filter_mode) == 1) * ADDITIVE;
         let color = |at: usize| [spec.colors[at][0], spec.colors[at][1], spec.colors[at][2], spec.alphas[at]];
         let record = Spec {
             colors: [color(0), color(1), color(2)],
