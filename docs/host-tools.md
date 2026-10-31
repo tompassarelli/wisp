@@ -55,7 +55,7 @@ inline in a host tool.
   program. Each game launcher, the menu listeners, the socket server and
   each game's host are in its scope. Request bodies are decoded with
   `Schema`, and HTTP handlers run through `FiberSet.makeRuntimePromise`.
-- wisp:host/commands/lan.ts (`startPair`): a capacity session in its
+- wisp:host/commands/lanPool.ts (`startPair`): a capacity session in its
   own child scope (`Scope.fork`), closed when that attempt fails and held by
   the pool otherwise. Readiness is polled under `Effect.timeoutOrElse`, and
   deferrals are retried every 45 s within `--wait`.

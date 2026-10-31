@@ -114,7 +114,7 @@ Before #108, by file (all now inside wisp:host/os/platform/linux/):
 | Wine (`wine`, `wineserver`, `WINEPREFIX`) | host/play/play.ts | play/linuxLaunch.ts, linux/procfs.ts |
 | Wine's runtime recognised by its `wineserver` name | host/os/warcraft/battleNet.ts (`prefixUse`) | linux/procfs.ts sets `ProcessInfo.runtime`; `prefixUse` reads the flag |
 | Proton and `steam-run` | host/lan/pairAgent.ts, host/lan/setup.ts | linux/layer.ts (`GameLauncher`) |
-| `nsenter` | host/commands/lan.ts | play/linuxLaunch.ts, linux/layer.ts (`Namespaces`) |
+| `nsenter` | host/commands/lan.ts, lanNetem.ts | play/linuxLaunch.ts, linux/layer.ts (`Namespaces`) |
 | `bwrap --unshare-net` | host/lan/pairSession.ts, host/lan/setup.ts | linux/layer.ts (`Namespaces`, `GameLauncher`) |
 | `grim` | host/os/warcraft/desktopClient.ts, host/lan/pool.ts | linux/desktop.ts (`InputInjection.tools` names it for the pool), play/linuxLaunch.ts |
 | `xdotool` | host/os/warcraft/desktopClient.ts, host/lan/pairAgent.ts, host/lan/pool.ts | linux/desktop.ts (`InputInjection.tools` names it for the pool), play/linuxLaunch.ts |
