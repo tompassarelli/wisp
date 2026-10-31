@@ -10,6 +10,7 @@ struct Water {
     sparks: vec4<f32>,
     calm: vec4<f32>,
     fall: array<vec4<f32>, 2>,
+    mid: vec4<f32>,
     ripples: array<vec4<f32>, 32>,
 };
 
@@ -360,7 +361,9 @@ fn fragment_main(in: Surface) -> @location(0) vec4<f32> {
     let bed = textureSampleLevel(refracted, clamped, look, 0.0).rgb;
     let absorb = max(1.0 - exp(-beneath * water.shallow.w), water.look.z);
     let ramp = max(1.0 - exp(-beneath * water.deep.w), 0.85 * (1.0 - exp(-max(own - 900.0, 0.0) * 0.00055)));
-    let body = mix(water.shallow.rgb, water.deep.rgb, ramp) * mix(1.0, 0.72 + 0.56 * field, breakup);
+    let muted = water.mid.w;
+    let stops = mix(mix(water.shallow.rgb, water.mid.rgb, clamp(ramp * 2.0, 0.0, 1.0)), water.deep.rgb, clamp(ramp * 2.0 - 1.0, 0.0, 1.0));
+    let body = mix(mix(water.shallow.rgb, water.deep.rgb, ramp), stops, muted) * mix(1.0, mix(0.72 + 0.56 * field, 0.94 + 0.12 * field, muted), breakup);
     let glow = min(frame_height(uv * 1.7 + vec2<f32>(0.3, time * 0.01), time), frame_height(uv * 1.3 - vec2<f32>(time * 0.013, 0.1), time * 1.3));
     let caustic = pow(clamp(glow * 1.6, 0.0, 1.0), 3.0) * (1.0 - absorb) * water.shine.z * mix(1.0, clump * close, breakup);
     var colour = mix(bed + caustic * vec3<f32>(0.5, 0.9, 1.0), body, absorb);
@@ -405,7 +408,7 @@ fn fragment_main(in: Surface) -> @location(0) vec4<f32> {
         colour += water.glow.rgb * water.sparks.y * (lit.x * 0.55 + lit.y * 1.1) * (0.4 + 0.6 * ramp) * (1.0 - 0.6 * smoothstep(4000.0, 9000.0, own));
     }
     let mirror = screen + vec2<f32>(normal.x, -normal.y) * 0.5 * water.shine.w + wobble * 2.5;
-    let sky = textureSampleLevel(reflected, clamped, clamp(mirror, vec2<f32>(0.002), vec2<f32>(0.998)), 0.0).rgb;
+    let sky = textureSampleLevel(reflected, clamped, clamp(mirror, vec2<f32>(0.002), vec2<f32>(0.998)), 0.0).rgb * mix(1.0, 0.45, muted);
     colour = mix(colour, sky, clamp(fresnel * water.wave.w * (1.0 - 0.85 * plate), 0.0, 1.0));
 
     let lit_scene = frame.light_key.w > 0.5;
@@ -433,10 +436,13 @@ fn fragment_main(in: Surface) -> @location(0) vec4<f32> {
     colour = mix(colour, hazed, haze * mix(1.0, 1.35, breakup));
 
     let edge = 1.0 - smoothstep(0.0, water.foam.w, thickness);
-    let crest = smoothstep(0.55, 0.9, frame_height(uv * 2.3 + vec2<f32>(0.0, time * 0.02), time)) * smoothstep(0.92, 1.0, normal.z) * 0.25 * near * mix(1.0, clump, breakup);
+    let crest = smoothstep(0.55, 0.9, frame_height(uv * 2.3 + vec2<f32>(0.0, time * 0.02), time)) * smoothstep(0.92, 1.0, normal.z) * 0.25 * near * mix(1.0, clump, breakup) * (1.0 - muted);
     let ripple = 0.5 + 0.5 * sin(thickness * 0.08 - time * 2.0 + noise(in.world.xy * 0.15) * 6.0);
     let shallows = select(edge * (0.55 + 0.45 * ripple) * (0.4 + noise(in.world.xy * 0.9 + time * 0.3)), 0.0, water.look.x > 0.0);
-    let foam = clamp(shallows + crest + disturbed.z, 0.0, 1.0) * (1.0 - plate);
+    let streak = smoothstep(0.38, 0.72, noise(vec2<f32>(in.world.x * 0.012 + time * 0.04, in.world.y * 0.05 - time * 0.015)));
+    let softened = edge * (0.5 + 0.5 * ripple) * streak * (1.0 - smoothstep(0.55, 1.0, edge) * 0.35);
+    let waterline = mix(shallows, softened, muted);
+    let foam = min(clamp(waterline + crest + disturbed.z, 0.0, 1.0), mix(1.0, 0.55, muted)) * (1.0 - plate);
     colour = mix(colour, water.foam.rgb, foam);
 
     if (frame.fog_color.w > 0.5) {

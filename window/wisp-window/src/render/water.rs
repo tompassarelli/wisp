@@ -85,6 +85,10 @@ pub struct WaterSettings {
     pub sparkle_cover: f32,
     /// How far the horizon haze lifts from the deep colour toward the fog or sky, 0 to 1.
     pub haze_lift: f32,
+    /// The middle stop of a muted liquid's three-stop depth ramp (shallow, mid, deep).
+    pub mid: [f32; 3],
+    /// How far the liquid takes the muted look, 0 to 1: three-stop ramp, no caustic web, no crest foam, a dimmed reflection and foam capped soft and translucent.
+    pub muted: f32,
 }
 
 impl Default for WaterSettings {
@@ -122,6 +126,8 @@ impl Default for WaterSettings {
             detail_reach: 0.0,
             sparkle_cover: 1.0,
             haze_lift: 0.6,
+            mid: [0.0; 3],
+            muted: 0.0,
         }
     }
 }
@@ -144,33 +150,55 @@ impl Preset {
 impl WaterSettings {
     pub fn of(preset: Preset) -> Self {
         match preset {
-            // A deep sea: dark teal from depth rather than texture, calm, with caustics and glints gathered into slow clumps and fine ripples only near the camera.
-            Preset::Water => Self { shallow: [0.10, 0.40, 0.38], deep: [0.012, 0.085, 0.10], absorption: 0.02, depth_rate: 0.004, normal_strength: 0.6, specular_power: 220.0, specular: 1.4, caustics: 0.8, reflection: 0.45, wave_height: 10.0, swell: 0.7, breakup: 1.0, detail_reach: 4500.0, sparkle_cover: 0.3, haze_lift: 0.35, ..Self::default() },
-            // Naxxramas ooze: thick, green and slow, bright from within where it is deep, with lazy bubbles.
+            // A calm muted sea after World of Warcraft Forever: a three-stop ramp from depth, fine low ripples, no caustic web, no swell, no glitter, a dim reflection and soft foam only where the water meets something.
+            Preset::Water => Self {
+                shallow: [0.259, 0.396, 0.369],
+                mid: [0.141, 0.286, 0.259],
+                deep: [0.059, 0.173, 0.204],
+                foam: [0.576, 0.837, 0.837],
+                absorption: 0.02,
+                depth_rate: 0.004,
+                foam_width: 40.0,
+                normal_strength: 0.3,
+                specular: 0.0,
+                caustics: 0.0,
+                reflection: 0.45,
+                wave_height: 3.0,
+                swell: 0.0,
+                breakup: 1.0,
+                detail_reach: 4500.0,
+                sparkle_cover: 0.3,
+                haze_lift: 0.35,
+                muted: 1.0,
+                ..Self::default()
+            },
+            // Naxxramas ooze: thick, green and slow, lit softly from within where it is deep, muted like the sea: its own three green stops, no caustic web or glitter, a dim reflection and soft foam.
             Preset::Poison => Self {
-                shallow: [0.36, 0.48, 0.14],
-                deep: [0.05, 0.16, 0.05],
-                foam: [0.70, 0.95, 0.30],
+                shallow: [0.32, 0.42, 0.22],
+                mid: [0.17, 0.28, 0.145],
+                deep: [0.085, 0.165, 0.095],
+                foam: [0.60, 0.78, 0.40],
+                muted: 1.0,
                 absorption: 0.03,
                 depth_rate: 0.006,
                 foam_width: 55.0,
-                normal_strength: 0.6,
+                normal_strength: 0.3,
                 fps: 4.0,
                 specular_power: 60.0,
-                specular: 0.55,
-                caustics: 0.15,
+                specular: 0.0,
+                caustics: 0.0,
                 refraction: 0.015,
                 reflection: 0.3,
-                wave_height: 7.0,
+                wave_height: 3.0,
                 wave_speed: 0.22,
-                glow: [0.42, 1.0, 0.10],
-                emissive: 0.32,
+                glow: [0.50, 0.95, 0.30],
+                emissive: 0.14,
                 glow_reach: 260.0,
                 glow_light: 0.32,
                 opacity: 0.92,
-                bubbles: 0.45,
-                swell: 0.5,
-                swirl: 0.9,
+                bubbles: 0.0,
+                swell: 0.0,
+                swirl: 0.3,
                 ..Self::default()
             },
             // Molten rock: a slow dark crust drifting over a bright core, lighting what is near it, with heat shimmer, bubbles and embers.
@@ -248,6 +276,7 @@ pub(super) struct WaterUniform {
     sparks: [f32; 4],
     calm: [f32; 4],
     fall: [[f32; 4]; 2],
+    mid: [f32; 4],
     ripples: [[f32; 4]; 2 * SOURCES],
 }
 
@@ -259,7 +288,7 @@ impl WaterUniform {
             ripples[2 * slot + 1] = source.motion;
         }
         let linear = |colour: [f32; 3]| colour.map(|channel| super::linear_of(f64::from(channel)) as f32);
-        let (shallow, deep, foam, glow) = (linear(settings.shallow), linear(settings.deep), linear(settings.foam), linear(settings.glow));
+        let (shallow, mid, deep, foam, glow) = (linear(settings.shallow), linear(settings.mid), linear(settings.deep), linear(settings.foam), linear(settings.glow));
         Self {
             shallow: [shallow[0], shallow[1], shallow[2], settings.absorption],
             deep: [deep[0], deep[1], deep[2], settings.depth_rate],
@@ -272,6 +301,7 @@ impl WaterUniform {
             sparks: [settings.embers, settings.swirl, settings.swell, sources.len().min(SOURCES) as f32],
             calm: [settings.breakup, settings.detail_reach, settings.sparkle_cover, settings.haze_lift],
             fall: Fall::WATERFALL.rows(plane),
+            mid: [mid[0], mid[1], mid[2], settings.muted],
             ripples,
         }
     }
@@ -475,7 +505,10 @@ mod tests {
         assert!(lava.glow_light > poison.glow_light, "lava lights its surroundings most");
         assert_eq!(water.glow(0.0, 0.0).light, [0.0, 0.0, 0.0, 1.0]);
         assert!(water.breakup > 0.0 && water.detail_reach > 0.0 && water.sparkle_cover < 1.0, "the sea breaks its texture up and keeps fine detail near the camera");
-        assert!(water.deep.iter().all(|&channel| channel < 0.15), "the deep sea is dark");
+        assert!(water.muted > 0.0 && poison.muted > 0.0 && lava.muted == 0.0, "the sea and the ooze are muted, the lava is not");
+        assert!(water.caustics == 0.0 && water.specular == 0.0 && water.swell == 0.0, "the muted sea has no caustic web, glitter or swell");
+        let luma = |colour: [f32; 3]| 0.2126 * colour[0] + 0.7152 * colour[1] + 0.0722 * colour[2];
+        assert!(luma(water.shallow) > luma(water.mid) && luma(water.mid) > luma(water.deep), "the sea's ramp darkens from shallow through mid to deep");
         assert_eq!((poison.breakup, lava.breakup), (0.0, 0.0), "the thick liquids keep their own surface");
     }
 
