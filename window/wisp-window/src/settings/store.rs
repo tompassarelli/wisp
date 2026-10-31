@@ -14,9 +14,18 @@ fn config_home() -> Option<PathBuf> {
     from("XDG_CONFIG_HOME").or_else(|| from("APPDATA")).or_else(|| from("HOME").map(|home| home.join(".config")))
 }
 
-/// `WISP_PLAYER`, else the operating system's user name, as a file name.
+/// `WISP_PLAYER`, else `agent` when `AI_AGENT` is set so an agent's run never writes a person's file, else the operating system's user name, as a file name.
 fn player() -> String {
-    let named = ["WISP_PLAYER", "USER", "USERNAME"].iter().find_map(|name| std::env::var(name).ok().filter(|value| !value.is_empty())).unwrap_or_else(|| "player".into());
+    player_named(|name| std::env::var(name).ok())
+}
+
+fn player_named(get: impl Fn(&str) -> Option<String>) -> String {
+    let set = |name: &str| get(name).filter(|value| !value.is_empty());
+    let named = set("WISP_PLAYER")
+        .or_else(|| set("AI_AGENT").map(|_| "agent".to_owned()))
+        .or_else(|| set("USER"))
+        .or_else(|| set("USERNAME"))
+        .unwrap_or_else(|| "player".into());
     named.chars().map(|ch| if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' || ch == '.' { ch } else { '_' }).collect()
 }
 
@@ -69,5 +78,15 @@ mod tests {
         fs::write(&store.path, b"not json").unwrap();
         assert_eq!(store.load(), Settings::default());
         fs::remove_dir_all(&directory).unwrap();
+    }
+
+    #[test]
+    fn an_agent_run_writes_the_agent_file_never_the_persons() {
+        let env = |pairs: &'static [(&'static str, &'static str)]| move |name: &str| pairs.iter().find(|(key, _)| *key == name).map(|(_, value)| (*value).to_owned());
+        assert_eq!(player_named(env(&[("USER", "tom")])), "tom");
+        assert_eq!(player_named(env(&[("USER", "tom"), ("AI_AGENT", "claude-code")])), "agent");
+        assert_eq!(player_named(env(&[("USER", "tom"), ("AI_AGENT", "")])), "tom");
+        assert_eq!(player_named(env(&[("USER", "tom"), ("AI_AGENT", "1"), ("WISP_PLAYER", "qa pair")])), "qa_pair");
+        assert_eq!(player_named(env(&[])), "player");
     }
 }
