@@ -459,10 +459,12 @@ The native window takes over the page's whole job, not only its drawing
   releases since the last sample (`pointer.rs`); the render thread reads them
   at the sample point with the keys, and a sample that repeats the one before
   it (a slow frame queues up to six) carries the position but no press, so a
-  click is delivered once. The sample carries the window's size, and
+  click is delivered once, and a button pressed since the last sample reads held
+  in this one with its release in the next, so a click quicker than a frame is
+  still a press the game sees held for one step. The sample carries the window's size, and
   `src/headless/pointer.ts` maps the cursor onto Warcraft's 0.8 by 0.6 UI
-  screen (the window draws frames across its whole client area) and
-  into the client's screen pixels, inverting the game's `pointerX`/`pointerY`, for `BlzGetMouseScreenPosX/Y` and
+  screen (the 4:3 area centred in the window and scaled by its height, as
+  `layout::pixels` draws frames) and into the client's screen pixels, inverting the game's `pointerX`/`pointerY`, for `BlzGetMouseScreenPosX/Y` and
   `BlzIsMouseButtonPressed`. A left press and release on the same frame that
   takes clicks is `FRAMEEVENT_CONTROL_CLICK` for the player, sent through the
   lockstep like a key; the frame is the topmost one that takes clicks (frame

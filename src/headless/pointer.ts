@@ -2,7 +2,7 @@ import type { HeadlessClient } from "./client";
 import type { Frame } from "./frames";
 import { f32 } from "../sim/f32";
 
-const UI_WIDTH = f32(0.8), UI_HEIGHT = f32(0.6);
+const UI_HALF_WIDTH = f32(0.4), UI_HEIGHT = f32(0.6);
 
 export function point(client: HeadlessClient, x: number, y: number, left: boolean | undefined): void {
   client.mouseScreenX = x;
@@ -26,15 +26,16 @@ export interface PointerReading {
   readonly released: number;
 }
 
-/** The cursor on Warcraft's 0.8 by 0.6 UI screen, Y up: the window draws the frames across its whole client area (`ui_area` in the window's draw.rs), so the cursor maps by fractions of the window. */
+/** The cursor on Warcraft's 0.8 by 0.6 UI screen, Y up: the window draws the 4:3 UI area centred in the window and scaled by the window's height (`layout::pixels` in the window's ui/layout.rs). */
 export function uiPoint(reading: Pick<PointerReading, "x" | "y" | "width" | "height">): { readonly x: number; readonly y: number } {
-  return { x: UI_WIDTH * reading.x / Math.max(1, reading.width), y: UI_HEIGHT - UI_HEIGHT * reading.y / Math.max(1, reading.height) };
+  const scale = UI_HEIGHT / Math.max(1, reading.height);
+  return { x: UI_HALF_WIDTH + (reading.x - reading.width / 2) * scale, y: UI_HEIGHT - reading.y * scale };
 }
 
-/** The cursor in the pixels of a client's screen, Y down, which is what `BlzGetMouseScreenPosX`/`Y` return: the inverse of the game's `pointerX`/`pointerY`, which centre a 4:3 area in the screen and scale it by the screen's height, so the point it computes is the one the window drew under the cursor. */
+/** The cursor in the pixels of a client's screen, Y down, which is what `BlzGetMouseScreenPosX`/`Y` return: the window is mapped by height so the 4:3 area keeps its place whatever the two aspect ratios, and the game's `pointerX`/`pointerY` read back the point the window drew under the cursor. */
 export function screenPoint(reading: Pick<PointerReading, "x" | "y" | "width" | "height">, screen: { readonly width: number; readonly height: number }): { readonly x: number; readonly y: number } {
-  const ui = uiPoint(reading), scale = screen.height / UI_HEIGHT;
-  return { x: Math.round(ui.x * scale + (screen.width - screen.height * 4 / 3) / 2), y: Math.round((UI_HEIGHT - ui.y) * scale) };
+  const scale = screen.height / Math.max(1, reading.height);
+  return { x: Math.round((reading.x - reading.width / 2) * scale + screen.width / 2), y: Math.round(reading.y * scale) };
 }
 
 /** The clients a window's mouse drives; `LockstepClients` is one. */

@@ -7,17 +7,17 @@ afterAll(runtime.restore);
 
 const WINDOW = { width: 1600, height: 900 };
 const reading = (x: number, y: number, rest: Partial<PointerReading> = {}): PointerReading => ({ x, y, ...WINDOW, inside: true, held: 0, pressed: 0, released: 0, ...rest });
-const pixelsOf = (uiX: number, uiY: number) => ({ x: uiX / 0.8 * WINDOW.width, y: (0.6 - uiY) / 0.6 * WINDOW.height });
+const pixelsOf = (uiX: number, uiY: number) => ({ x: WINDOW.width / 2 + (uiX - 0.4) * WINDOW.height / 0.6, y: (0.6 - uiY) * WINDOW.height / 0.6 });
 
-test("the window's pixels map across the whole UI screen and into the client's screen as the game's pointerX and pointerY read them", () => {
+test("the window's pixels map to Warcraft's 4:3 UI area centred and scaled by height, and into the client's screen as the game's pointerX and pointerY read them", () => {
   const centre = uiPoint(reading(800, 450));
   expect(centre.x).toBeCloseTo(0.4, 6);
   expect(centre.y).toBeCloseTo(0.3, 6);
-  const corner = uiPoint(reading(0, 0));
+  const corner = uiPoint(reading(800 - 600, 0));
   expect(corner.x).toBeCloseTo(0, 6);
   expect(corner.y).toBeCloseTo(0.6, 6);
   expect(screenPoint(reading(800, 450), { width: 1920, height: 1080 })).toEqual({ x: 960, y: 540 });
-  expect(screenPoint(reading(0, 0), { width: 1920, height: 1080 })).toEqual({ x: 240, y: 0 });
+  expect(screenPoint(reading(200, 0), { width: 1280, height: 720 })).toEqual({ x: 160, y: 0 });
   const pointerX = (pixel: number, width: number, height: number) => (pixel - (width - height * 4 / 3) / 2) * 0.6 / height;
   expect(pointerX(screenPoint(reading(1200, 450), { width: 2560, height: 1080 }).x, 2560, 1080)).toBeCloseTo(uiPoint(reading(1200, 450)).x, 3);
 });
@@ -70,7 +70,7 @@ test("[scenario] a window click reaches only the topmost of two overlapping butt
   feed(reading(100, 200, { held: POINTER_RIGHT }));
   clients.frames(1);
   const last = latest();
-  expect(last).toEqual({ x: Math.round(100 / 1600 * 1440 + 240), y: Math.round(200 / 900 * 1080), left: false, right: true });
+  expect(last).toEqual({ x: Math.round((100 - 800) * 1080 / 900 + 960), y: Math.round(200 * 1080 / 900), left: false, right: true });
   feed(reading(100, 200, { inside: false, held: POINTER_RIGHT }));
   clients.frames(1);
   expect(latest()).toEqual(last);
