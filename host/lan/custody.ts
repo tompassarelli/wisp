@@ -34,11 +34,34 @@ const carries = (pid: number, variable: string) => {
   }
 };
 
-/** The fleet session's own process: the outermost ancestor that carries this process's `NORTH_FLEET_SESSION`, which lives exactly as long as the session. */
+const carriesPrefix = (pid: number, prefix: string) => {
+  try {
+    return readFileSync(`/proc/${pid}/environ`, "latin1").split("\0").some((entry) => entry.startsWith(prefix));
+  } catch {
+    return false;
+  }
+};
+
+const DESKTOP_WRAPPER = "private-desktop";
+
+/** A process that exists only to run a private desktop's command: the desktop's own processes carry `PRIVATE_DESKTOP_RUN`, and its launcher and the capacity wrapper around it name `private-desktop` in their command line. */
+const wrapsDesktop = (pid: number) => {
+  if (carriesPrefix(pid, "PRIVATE_DESKTOP_RUN=")) return true;
+  try {
+    return readFileSync(`/proc/${pid}/cmdline`, "latin1").split("\0").includes(DESKTOP_WRAPPER);
+  } catch {
+    return false;
+  }
+};
+
+/** The fleet session's own process: the outermost ancestor that carries this process's `NORTH_FLEET_SESSION`, which lives exactly as long as the session. A private desktop's wrappers and everything inside them exit when the desktop's command does, so they never own a pool (wisp#93): the owner is the outermost carrier above the outermost wrapper, else the process that launched the desktop, else none. */
 export const sessionProcess = (session: string, from = process.pid) => {
-  let outermost = from;
-  for (let pid = parentOf(from); pid !== undefined && pid > 1 && carries(pid, `NORTH_FLEET_SESSION=${session}`); pid = parentOf(pid)) outermost = pid;
-  return markOf(outermost);
+  const ancestors = [from];
+  for (let pid = parentOf(from); pid !== undefined && pid > 1 && carries(pid, `NORTH_FLEET_SESSION=${session}`); pid = parentOf(pid)) ancestors.push(pid);
+  const wrapped = ancestors.findLastIndex(wrapsDesktop);
+  if (wrapped < 0 || wrapped + 1 < ancestors.length) return markOf(ancestors[ancestors.length - 1]!);
+  const launcher = parentOf(ancestors[wrapped]!);
+  return launcher === undefined || launcher <= 1 ? undefined : markOf(launcher);
 };
 
 const SESSION_POLL = "2 seconds";

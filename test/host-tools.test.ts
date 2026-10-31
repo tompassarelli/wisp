@@ -317,6 +317,17 @@ test("[boundary] lan pool: a pool or a queued waiter whose fleet session's proce
   expect(await settled(() => box.marked().length === 0, 15)).toBe(true);
 }, 120_000);
 
+test("[boundary] lan pool: a pool started inside a private desktop takes the process that launched the desktop as its owner, so it outlives the desktop's wrapper shell (wisp#93)", async () => {
+  const box = sandbox();
+  const pair = poolPair + 9;
+  const desktop = pool(box, { WISP_TEST_HOLDER: "quiet", NORTH_FLEET_SESSION: "desk", PRIVATE_DESKTOP_RUN: "/run/private-desktop.test" }, pair, [], ["sh", "-c", '"$@" & sleep 1', "sh"]);
+  await until(() => claimOf(box, pair)?.agent !== undefined, 30, "the pool's claim naming its owner");
+  expect(claimOf(box, pair)?.agent?.pid).toBe(process.pid);
+  await until(() => !existsSync(`/proc/${desktop.pid}`) || readFileSync(`/proc/${desktop.pid}/stat`, "utf8").includes(") Z "), 15, "the wrapper shell to exit");
+  await Bun.sleep(6000);
+  expect({ claimed: claimOf(box, pair)?.session, lockFree: await lockFree(box, pair) }).toEqual({ claimed: "desk", lockFree: false });
+}, 120_000);
+
 test("[boundary] lan pool: a pair is held while its check runs and released, with this host's queue lease on it, once it has been idle --release-idle seconds, while the session that started it lives on", async () => {
   const box = sandbox();
   const pair = poolPair + 8;
