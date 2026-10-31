@@ -10,7 +10,7 @@ use super::math::Mat4;
 pub const SOURCES: usize = 16;
 const BURSTS: usize = 8;
 /// Seconds a burst lasts.
-pub const BURST_LIFE: f32 = 1.9;
+pub const BURST_LIFE: f32 = 0.75;
 /// A model wider than this across the plane is a deck or a shore, not a body.
 const LARGEST_BODY: f32 = 700.0;
 const FRAMES_PER_SECOND: f32 = 60.0;

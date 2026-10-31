@@ -383,15 +383,22 @@ fn a_pose_hands_the_rig_its_clock_in_seconds_so_global_sequences_run_at_game_spe
 
 /// A fighter at `x` and height `z` over a stage with two pillars standing in the sea, as game frame `frame`.
 fn reacting(x: f32, z: f32, frame: u32) -> Scene {
-    let mut scene = Stage::scene(1.0, Preset::Water);
+    reacting_in(Preset::Water, 1.0, true, x, z, frame)
+}
+
+fn reacting_in(preset: Preset, facing: f32, bodies: bool, x: f32, z: f32, frame: u32) -> Scene {
+    let mut scene = Stage::scene(facing, preset);
     scene.poses.truncate(5);
-    let mut fighter = placed("fighter", x, -450.0, z, [0.95, 0.25, 0.2]);
-    fighter.id = 1;
-    let mut left = placed("pillar", -560.0, -420.0, 0.0, [0.5, 0.36, 0.2]);
-    left.id = 2;
-    let mut right = placed("pillar", 470.0, -420.0, 0.0, [0.5, 0.36, 0.2]);
-    right.id = 3;
-    scene.poses.extend([left, right, fighter]);
+    if bodies {
+        let mut fighter = placed("fighter", x, -450.0, z, [0.95, 0.25, 0.2]);
+        fighter.matrix[0] = facing;
+        fighter.id = 1;
+        let mut left = placed("pillar", -560.0, -420.0, 0.0, [0.5, 0.36, 0.2]);
+        left.id = 2;
+        let mut right = placed("pillar", 470.0, -420.0, 0.0, [0.5, 0.36, 0.2]);
+        right.id = 3;
+        scene.poses.extend([left, right, fighter]);
+    }
     scene.frame = frame;
     scene
 }
