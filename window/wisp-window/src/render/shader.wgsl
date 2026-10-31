@@ -10,7 +10,8 @@ struct Layer {
 const UNLIT = 0u;
 const LIT_AND_SHADOWED = 2u;
 const WRAP = 0.3;
-const RIM = 0.22;
+const RIM = 1.0;
+const RIM_EDGE = 2.5;
 const MAX_LIGHT = 1.1;
 
 @group(0) @binding(2) var<storage, read> slot_colors: array<vec4<f32>>;
@@ -126,12 +127,13 @@ fn light_of(in: Varying) -> vec3<f32> {
         visibility = sun_visibility(in.world, normal, facing);
     }
     let sky = 0.85 + 0.3 * (normal.z * 0.5 + 0.5);
-    var light = frame.light_ambient.xyz * sky + frame.light_key.xyz * diffuse * visibility;
+    var light = min(frame.light_ambient.xyz * sky + frame.light_key.xyz * diffuse * visibility, vec3<f32>(MAX_LIGHT));
     if (layer.lighting == LIT_AND_SHADOWED) {
-        let rim = pow(1.0 - clamp(dot(normal, view), 0.0, 1.0), 3.0);
-        light += rim * RIM * (frame.light_ambient.xyz + frame.light_key.xyz * 0.5);
+        let tint = frame.light_ambient.xyz + frame.light_key.xyz * 0.5;
+        let rim = pow(1.0 - clamp(dot(normal, view), 0.0, 1.0), RIM_EDGE);
+        light += rim * RIM * tint / max(max(tint.r, tint.g), max(tint.b, 0.001));
     }
-    return min(light, vec3<f32>(MAX_LIGHT));
+    return light;
 }
 
 fn lava_glow(in: Varying) -> vec3<f32> {
