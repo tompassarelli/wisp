@@ -125,7 +125,7 @@ impl Bake {
 }
 
 fn text(rectangle: [f32; 4], text: String, height: f32, color: u32, horizontal: Horizontal) -> UiFrame {
-    UiFrame { rectangle, text, texture: String::new(), solid: false, color: WHITE, text_color: color, alpha: 255, level: 1, font_file: String::new(), font_height: height, outline: false, horizontal, vertical: Vertical::Middle, scale: 1.0, plain: false, sprite: None }
+    UiFrame { rectangle, text, texture: String::new(), solid: false, color: WHITE, text_color: color, alpha: 255, level: 1, font_file: String::new(), font_height: height, outline: false, horizontal, vertical: Vertical::Middle, scale: 1.0, plain: false, sprite: None, backdrop: None, highlight: String::new() }
 }
 
 impl Menu {

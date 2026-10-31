@@ -14,12 +14,19 @@ use wgpu::util::DeviceExt;
 pub use glyphs::is_font;
 use glyphs::{Glyphs, Slot, ATLAS_SIZE};
 use layout::{Line, Pixels};
-pub use scene::{Horizontal, UiFrame, UiScene, Vertical};
+pub use scene::{Backdrop, Horizontal, UiFrame, UiScene, Vertical};
 use crate::render::Shot;
 
 const SHADER: &str = include_str!("shader.wgsl");
 const OUTLINE_ALPHA: f32 = 0.9;
 const INITIAL_QUADS: usize = 1024;
+const IMAGE: u32 = 0;
+const IMAGE_TRANSPOSED: u32 = 4;
+const IMAGE_ADDED: u32 = 5;
+/// An edge file holds eight square pieces side by side: left, right, top, bottom (both stored upright), then the top-left, top-right, bottom-left and bottom-right corners.
+const EDGE_PIECES: f32 = 8.0;
+/// A sixteenth of a piece kept off each side, so linear filtering never reads the neighbouring piece.
+const EDGE_TRIM: f32 = 1.0 / EDGE_PIECES / 32.0;
 
 /// Decoded images by the game's asset path, which the renderer fills as Bun pushes files.
 pub trait UiTextures {
@@ -35,7 +42,7 @@ struct Quad {
     coverage: u32,
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 enum Source {
     Glyphs,
     Image(usize),
@@ -148,7 +155,7 @@ impl UiRenderer {
                 targets: &[Some(wgpu::ColorTargetState {
                     format,
                     blend: Some(wgpu::BlendState {
-                        color: wgpu::BlendComponent { src_factor: wgpu::BlendFactor::SrcAlpha, dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha, operation: wgpu::BlendOperation::Add },
+                        color: wgpu::BlendComponent { src_factor: wgpu::BlendFactor::One, dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha, operation: wgpu::BlendOperation::Add },
                         alpha: wgpu::BlendComponent { src_factor: wgpu::BlendFactor::One, dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha, operation: wgpu::BlendOperation::Add },
                     }),
                     write_mask: wgpu::ColorWrites::ALL,
@@ -289,6 +296,7 @@ impl UiRenderer {
                 sprite += 1;
             }
             let alpha = frame.alpha as f32 / 255.0;
+            self.control(frame, pixels, area[3], alpha, textures);
             if frame.solid {
                 if pixels[2] > 0.0 && pixels[3] > 0.0 {
                     self.emit(Source::Glyphs, Quad { rect: pixels, uv: [0.0; 4], color: rgba(frame.color, alpha * (frame.color >> 24) as f32 / 255.0), coverage: 2 });
@@ -306,6 +314,72 @@ impl UiRenderer {
             }
         }
         true
+    }
+
+    /// A control template's look under the frame's own texture and text: its backdrop, then its highlight added over the whole frame.
+    fn control(&mut self, frame: &UiFrame, pixels: Pixels, area_height: f32, alpha: f32, textures: &dyn UiTextures) {
+        if let Some(backdrop) = &frame.backdrop {
+            self.backdrop(backdrop, pixels, area_height, alpha, textures);
+        }
+        if frame.highlight.is_empty() || pixels[2] <= 0.0 || pixels[3] <= 0.0 {
+            return;
+        }
+        if let Some(group) = self.image_group(&frame.highlight, textures) {
+            self.emit(Source::Image(group), Quad { rect: pixels, uv: [0.0, 0.0, 1.0, 1.0], color: [1.0, 1.0, 1.0, alpha], coverage: IMAGE_ADDED });
+        }
+    }
+
+    /// A BACKDROP: its background inside the insets, stretched or tiled from the top-left, then the edge file's sides and corners over it.
+    fn backdrop(&mut self, backdrop: &Backdrop, pixels: Pixels, area_height: f32, alpha: f32, textures: &dyn UiTextures) {
+        let unit = layout::unit_pixels(area_height);
+        let [x, y, width, height] = pixels.map(f32::round);
+        if width <= 0.0 || height <= 0.0 {
+            return;
+        }
+        let tint = [1.0, 1.0, 1.0, alpha];
+        if let Some(group) = (!backdrop.background.is_empty()).then(|| self.image_group(&backdrop.background, textures)).flatten() {
+            let [left, top, right, bottom] = backdrop.insets.map(|inset| (inset * unit).round());
+            let inner = [x + left, y + top, width - left - right, height - top - bottom];
+            let tile = backdrop.tile * unit;
+            if tile <= 0.0 {
+                self.emit(Source::Image(group), Quad { rect: inner, uv: [0.0, 0.0, 1.0, 1.0], color: tint, coverage: IMAGE });
+            } else {
+                let mut down = 0.0;
+                while down < inner[3] {
+                    let tall = tile.min(inner[3] - down);
+                    let mut across = 0.0;
+                    while across < inner[2] {
+                        let wide = tile.min(inner[2] - across);
+                        self.emit(Source::Image(group), Quad { rect: [inner[0] + across, inner[1] + down, wide, tall], uv: [0.0, 0.0, wide / tile, tall / tile], color: tint, coverage: IMAGE });
+                        across += tile;
+                    }
+                    down += tile;
+                }
+            }
+        }
+        let Some(group) = (!backdrop.edge.is_empty()).then(|| self.image_group(&backdrop.edge, textures)).flatten() else {
+            return;
+        };
+        let corner = (backdrop.corner * unit).round().min((width / 2.0).floor()).min((height / 2.0).floor());
+        let has = |flag: &str| backdrop.corners.is_empty() || backdrop.corners.split('|').any(|each| each == flag);
+        let (far_x, far_y, long_x, long_y) = (x + width - corner, y + height - corner, width - 2.0 * corner, height - 2.0 * corner);
+        let pieces: [(&str, [f32; 4], u32); 8] = [
+            ("L", [x, y + corner, corner, long_y], IMAGE),
+            ("R", [far_x, y + corner, corner, long_y], IMAGE),
+            ("T", [x + corner, y, long_x, corner], IMAGE_TRANSPOSED),
+            ("B", [x + corner, far_y, long_x, corner], IMAGE_TRANSPOSED),
+            ("UL", [x, y, corner, corner], IMAGE),
+            ("UR", [far_x, y, corner, corner], IMAGE),
+            ("BL", [x, far_y, corner, corner], IMAGE),
+            ("BR", [far_x, far_y, corner, corner], IMAGE),
+        ];
+        for (index, (flag, rect, coverage)) in pieces.into_iter().enumerate() {
+            if rect[2] <= 0.0 || rect[3] <= 0.0 || !has(flag) {
+                continue;
+            }
+            let start = index as f32 / EDGE_PIECES;
+            self.emit(Source::Image(group), Quad { rect, uv: [start + EDGE_TRIM, 0.0, start + 1.0 / EDGE_PIECES - EDGE_TRIM, 1.0], color: tint, coverage });
+        }
     }
 
     /// Lays one frame's text out and emits its glyphs: the outline first when the font has one, then the fill.
@@ -376,3 +450,6 @@ fn glyph_quad(slot: Slot, pen: f32, baseline: f32, color: [f32; 4]) -> Quad {
         coverage: 1,
     }
 }
+
+#[cfg(test)]
+mod tests;

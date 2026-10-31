@@ -25,6 +25,27 @@ pub struct UiFrame {
     /// Drawn as a flat rectangle of `color`, with no texture or text.
     pub solid: bool,
     pub sprite: Option<Shot>,
+    /// A Warcraft control template's backdrop, drawn under the frame's texture and text.
+    pub backdrop: Option<Backdrop>,
+    /// The texture a control template adds over its backdrop under the cursor; empty when not lit.
+    pub highlight: String,
+}
+
+/// A BACKDROP's look in UI units: a background tiled at `tile` (stretched when 0) inside `insets` (left, top, right, bottom), framed by an edge file of eight square pieces `corner` units across.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct Backdrop {
+    #[serde(default)]
+    pub background: String,
+    #[serde(default)]
+    pub edge: String,
+    #[serde(default)]
+    pub corner: f32,
+    #[serde(default)]
+    pub tile: f32,
+    #[serde(default)]
+    pub insets: [f32; 4],
+    #[serde(default)]
+    pub corners: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
@@ -76,6 +97,9 @@ struct Row<'a> {
     #[serde(default)]
     plain: bool,
     sprite: Option<Shot>,
+    backdrop: Option<Backdrop>,
+    #[serde(borrow, default)]
+    highlight: Cow<'a, str>,
 }
 
 #[derive(Deserialize, Default)]
@@ -141,6 +165,8 @@ impl UiScene {
                     plain: row.plain,
                     solid: false,
                     sprite: row.sprite,
+                    backdrop: row.backdrop,
+                    highlight: row.highlight.into_owned(),
                 })
             })
             .collect();
