@@ -38,9 +38,11 @@ export function screenPoint(reading: Pick<PointerReading, "x" | "y" | "width" | 
   return { x: Math.round((reading.x - reading.width / 2) * scale + screen.width / 2), y: Math.round(reading.y * scale) };
 }
 
+export type PointerClient = Pick<HeadlessClient, "natives" | "screen" | "mouseScreenX" | "mouseScreenY" | "heldMouseButtons" | "clickTarget">;
+
 /** The clients a window's mouse drives; `LockstepClients` is one. */
 export interface PointerClients {
-  client(slot: number): HeadlessClient;
+  client(slot: number): PointerClient;
   click(sender: number, x: number, y: number): boolean;
 }
 
