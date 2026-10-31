@@ -167,7 +167,7 @@ impl Stage {
         fighter.matrix[0] = facing;
         let eye = [0.0, -1500.0, 330.0];
         Scene {
-            camera: Camera { view: look_at(eye, [0.0, 0.0, 120.0]), eye, tangent: 0.5, near: 20.0, far: 12000.0, sky_far: 12000.0, rise: 0.0 },
+            camera: Camera { view: look_at(eye, [0.0, 0.0, 120.0]), eye, tangent: 0.5, near: 20.0, far: 12000.0, sky_far: 12000.0, rise: 0.0, ..Default::default() },
             light: Some(Light { toward: [0.3, -0.5, 0.8], key: [0.9, 0.85, 0.8], ambient: [0.45, 0.5, 0.55] }),
             fog: Some(Fog { color: [0.55, 0.7, 0.85], start: 2500.0, end: 9000.0, max: 0.75 }),
             poses: vec![placed("bed", 0.0, 0.0, 0.0, [0.55, 0.5, 0.35]), placed("shore", 0.0, 0.0, 0.0, [0.78, 0.68, 0.45]), placed("land", 0.0, 0.0, 0.0, [0.72, 0.62, 0.42]), placed("sea", 0.0, 0.0, 0.0, [1.0; 3]), placed("deck", 0.0, 0.0, 0.0, [0.45, 0.4, 0.5]), fighter, placed("fighter", 260.0, 0.0, 0.0, [0.2, 0.4, 0.95])],
