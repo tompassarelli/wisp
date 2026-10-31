@@ -2,7 +2,7 @@
 
 use std::borrow::Cow;
 
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 
 use crate::render::Shot;
 
@@ -58,11 +58,11 @@ struct Row<'a> {
     text: Cow<'a, str>,
     #[serde(borrow, default)]
     texture: Cow<'a, str>,
-    #[serde(default = "opaque")]
+    #[serde(default = "opaque", deserialize_with = "jass_bits")]
     color: u32,
-    #[serde(rename = "textColor", default = "opaque")]
+    #[serde(rename = "textColor", default = "opaque", deserialize_with = "jass_bits")]
     text_color: u32,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "jass_bits")]
     alpha: u32,
     #[serde(default)]
     visible: bool,
@@ -84,7 +84,7 @@ struct Font<'a> {
     file: Cow<'a, str>,
     #[serde(default)]
     height: f32,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "jass_bits")]
     flags: u32,
 }
 
@@ -92,6 +92,11 @@ struct Font<'a> {
 struct Alignment {
     vertical: Vertical,
     horizontal: Horizontal,
+}
+
+// JASS integers are signed 32-bit, so a colour such as BlzConvertColor(255, 255, 255, 255) arrives as -1.
+fn jass_bits<'de, D: Deserializer<'de>>(deserializer: D) -> Result<u32, D::Error> {
+    i64::deserialize(deserializer).map(|value| value as u32)
 }
 
 fn opaque() -> u32 {
@@ -164,6 +169,13 @@ mod tests {
         assert_eq!((top.horizontal, top.vertical, top.outline), (Horizontal::Center, Vertical::Middle, true));
         assert_eq!(top.font_file, "Fonts\\FRIZQT__.TTF");
         assert_eq!((scene.frames[0].horizontal, scene.frames[0].vertical), (Horizontal::Left, Vertical::Top));
+    }
+
+    #[test]
+    fn takes_the_games_signed_integers_as_their_32_bits() {
+        let scene = r#"{"ui":[{"name":"portrait","rectangle":[0,0.5,0.2,0.4],"texture":"card.blp","color":-1,"textColor":-16777216,"alpha":255,"visible":true,"font":{"file":"","height":0.01,"flags":-1}}]}"#;
+        let frames = UiScene::parse(scene.as_bytes()).expect("a frame tinted with BlzConvertColor(255, 255, 255, 255) parses").frames;
+        assert_eq!((frames[0].color, frames[0].text_color, frames[0].outline), (0xffff_ffff, 0xff00_0000, true));
     }
 
     #[test]

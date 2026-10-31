@@ -75,6 +75,7 @@ pub struct FrameLoop<S: Surface, C: Clock> {
     phase: Phase,
     pulse: Pulse,
     pub problem: Option<String>,
+    scene_failing: bool,
     _timer: TimerResolution,
 }
 
@@ -97,6 +98,7 @@ impl<S: Surface, C: Clock> FrameLoop<S, C> {
             phase: Phase::default(),
             pulse: Pulse::default(),
             problem: None,
+            scene_failing: false,
             _timer: TimerResolution::raise(),
         }
     }
@@ -236,8 +238,14 @@ impl<S: Surface, C: Clock> FrameLoop<S, C> {
                 Ok(()) => {
                     self.drawn_step = submission.step;
                     self.drawn_frame = Some(submission.frame);
+                    self.scene_failing = false;
                 }
-                Err(problem) => self.problem = Some(problem),
+                Err(problem) => {
+                    if !self.scene_failing {
+                        self.problem = Some(problem);
+                    }
+                    self.scene_failing = true;
+                }
             }
             outcome.parse_ms = Some(ms(began, self.clock.now_ns()));
         }
