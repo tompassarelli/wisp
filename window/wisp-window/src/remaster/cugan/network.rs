@@ -344,9 +344,7 @@ mod tests {
     use super::*;
 
     fn device() -> Option<(wgpu::Device, wgpu::Queue)> {
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
-        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default())).ok()?;
-        pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())).ok()
+        crate::test_gpu::device()
     }
 
     fn picture(width: usize, height: usize) -> Vec<f32> {

@@ -5,15 +5,7 @@ const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 const FRAMES: u32 = 60;
 
 fn adapter_device() -> Option<(wgpu::AdapterInfo, wgpu::Device, wgpu::Queue)> {
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
-    let wanted = std::env::var("WISP_GPU").ok();
-    let named = wanted.and_then(|name| pollster::block_on(instance.enumerate_adapters(wgpu::Backends::all())).into_iter().find(|adapter| adapter.get_info().name.contains(&name)));
-    let adapter = match named {
-        Some(adapter) => adapter,
-        None => pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions { force_fallback_adapter: false, ..Default::default() })).ok()?,
-    };
-    let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())).ok()?;
-    Some((adapter.get_info(), device, queue))
+    crate::test_gpu::with_info()
 }
 
 fn look_at(eye: [f32; 3], target: [f32; 3]) -> Mat4 {

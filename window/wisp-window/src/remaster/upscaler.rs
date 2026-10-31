@@ -97,10 +97,8 @@ mod tests {
 
     /// Any adapter on the machine, with its description made to say it is software.
     fn device() -> Option<(wgpu::Device, wgpu::Queue, wgpu::AdapterInfo)> {
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
-        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default())).ok()?;
-        let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())).ok()?;
-        let software = wgpu::AdapterInfo { name: "llvmpipe (LLVM 19.1.7, 256 bits)".into(), device_type: wgpu::DeviceType::Cpu, ..adapter.get_info() };
+        let (info, device, queue) = crate::test_gpu::with_info()?;
+        let software = wgpu::AdapterInfo { name: "llvmpipe (LLVM 19.1.7, 256 bits)".into(), device_type: wgpu::DeviceType::Cpu, ..info };
         Some((device, queue, software))
     }
 

@@ -9,12 +9,7 @@ const OUTPUT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 const PLAIN: Tuning = Tuning { bloom_strength: 0.0, occlusion_strength: 0.0, ..TUNING };
 
 fn gpu() -> Option<(wgpu::Device, wgpu::Queue)> {
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
-    let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions { power_preference: wgpu::PowerPreference::HighPerformance, ..Default::default() })).ok()?;
-    eprintln!("adapter: {}", adapter.get_info().name);
-    let timing = wgpu::Features::TIMESTAMP_QUERY | wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS;
-    let wanted = adapter.features() & timing;
-    pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor { required_features: wanted, ..Default::default() })).ok()
+    crate::test_gpu::device()
 }
 
 fn half(value: f32) -> u16 {

@@ -8,14 +8,7 @@ const SIDE: u32 = 128;
 const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 
 pub(super) fn device() -> Option<(wgpu::Device, wgpu::Queue)> {
-    static SHARED: std::sync::OnceLock<Option<(wgpu::Device, wgpu::Queue)>> = std::sync::OnceLock::new();
-    SHARED
-        .get_or_init(|| {
-            let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
-            let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions { power_preference: wgpu::PowerPreference::HighPerformance, force_fallback_adapter: false, ..Default::default() })).ok()?;
-            pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())).ok()
-        })
-        .clone()
+    crate::test_gpu::device()
 }
 
 fn translation(x: f32, y: f32, z: f32) -> Mat4 {

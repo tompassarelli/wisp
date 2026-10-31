@@ -31,6 +31,8 @@ pub mod remaster;
 pub mod settings;
 pub mod texture;
 pub mod ui;
+#[cfg(test)]
+mod test_gpu;
 
 use std::ffi::{c_char, c_void};
 use std::panic::{catch_unwind, AssertUnwindSafe};
