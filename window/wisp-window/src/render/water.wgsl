@@ -354,7 +354,7 @@ fn fragment_main(in: Surface) -> @location(0) vec4<f32> {
         let seam = pow(1.0 - abs(2.0 * field.z - 1.0), 6.0) * edge * (1.0 - hazed) * 0.6;
         melt = mix(0.55 + 0.9 * smoothstep(0.25, 0.7, field.y), 1.0, hazed);
         let toward = select(0.5, max(dot(normal, frame.light_toward.xyz), 0.0), frame.light_key.w > 0.5);
-        let cooled = vec3<f32>(0.13, 0.055, 0.04) * (0.6 + 0.9 * toward) * (0.55 + 0.9 * field.z);
+        let cooled = vec3<f32>(0.075, 0.018, 0.008) * (0.6 + 0.9 * toward) * (0.55 + 0.9 * field.z);
         colour = mix(colour, cooled, plate);
         rim += seam;
     }
@@ -378,7 +378,7 @@ fn fragment_main(in: Surface) -> @location(0) vec4<f32> {
     {
         let half = normalize(sun + view);
         let glints = mix(0.7, 0.45 + 0.55 * (noise(in.world.xy * 0.4 + time * 0.8) * noise(in.world.xy * 1.1 - time * 0.5) * 2.2), near);
-        colour += sun_colour * pow(max(dot(normal, half), 0.0), water.shine.x) * water.shine.y * glints;
+        colour += sun_colour * pow(max(dot(normal, half), 0.0), water.shine.x) * water.shine.y * glints * (1.0 - 0.9 * plate);
     }
 
     if (water.look.w > 0.0) {
