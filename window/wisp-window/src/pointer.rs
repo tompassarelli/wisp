@@ -28,11 +28,6 @@ pub struct PointerSample {
 }
 
 impl PointerSample {
-    /// The same reading with no press or release, for a sample that repeats the one before it so a click is delivered once.
-    pub fn repeated(self) -> Self {
-        Self { pressed: 0, released: 0, ..self }
-    }
-
     /// The masks and the inside flag in one number, for the sample the game's thread reads: held in bits 0 to 2, pressed in 4 to 6, released in 8 to 10, inside in bit 12.
     pub fn bits(self) -> u32 {
         self.held as u32 | (self.pressed as u32) << 4 | (self.released as u32) << 8 | (self.inside as u32) << 12
@@ -113,15 +108,6 @@ mod tests {
         let next = pointer.sample(1280, 720);
         assert_eq!((next.held, next.pressed, next.released), (0, 0, 1), "its release follows");
         assert_eq!(pointer.sample(1280, 720).released, 0, "an edge is delivered once");
-    }
-
-    #[test]
-    fn a_repeated_sample_keeps_the_position_and_drops_the_edges() {
-        let pointer = Pointer::default();
-        pointer.moved(5.0, 6.0);
-        pointer.button(MouseButton::Right, true);
-        let sample = pointer.sample(100, 100).repeated();
-        assert_eq!((sample.x, sample.held, sample.pressed), (5.0, 2, 0));
     }
 
     #[test]

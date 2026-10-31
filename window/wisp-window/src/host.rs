@@ -13,9 +13,10 @@ use winit::event_loop::{ActiveEventLoop, EventLoop, EventLoopProxy};
 use winit::keyboard::PhysicalKey;
 use winit::window::{Fullscreen, Window, WindowId};
 
-use crate::clock::now_ns;
+use crate::agent_window::{agent_launched, named_for_agent};
+use crate::clock::{now_ns, LibraryClock};
 use crate::draw::Gpu;
-use crate::frame::{Clock, End, Event, FrameLoop, Mailbox, Mode, Seam, Submission, Surface};
+use crate::frame::{End, Event, FrameLoop, Mailbox, Submission, Surface};
 use crate::input::Input;
 use crate::keys::{KeyEvent, Keys};
 use crate::menu;
@@ -23,6 +24,7 @@ use crate::metrics::{Metrics, Timings};
 use crate::pad::Pads;
 use crate::pointer::Pointer;
 use crate::present::PresentSetting;
+use crate::stepper::{self, Mode, Seam, Stepper};
 use crate::sync::lock;
 
 const WINDOW_WAIT: Duration = Duration::from_secs(10);
@@ -67,6 +69,7 @@ fn pack(size: PhysicalSize<u32>) -> u64 {
 struct Threads {
     window: JoinHandle<()>,
     render: JoinHandle<()>,
+    steps: JoinHandle<()>,
 }
 
 /// The window's state, shared through `Arc` by every thread that holds the handle; the threads stop with `stop` and are joined once, whichever thread gets there first.
@@ -151,27 +154,6 @@ impl ApplicationHandler<Command> for App {
     }
 }
 
-const AGENT_APP_ID: &str = "wisp-agent";
-
-fn agent_launched(var: &dyn Fn(&str) -> Option<std::ffi::OsString>) -> bool {
-    var("AI_AGENT").is_some_and(|value| !value.is_empty())
-}
-
-#[cfg(all(unix, not(target_os = "macos")))]
-fn named_for_agent(attributes: winit::window::WindowAttributes, agent: bool) -> winit::window::WindowAttributes {
-    use winit::platform::{wayland::WindowAttributesExtWayland, x11::WindowAttributesExtX11};
-    if !agent {
-        return attributes;
-    }
-    let attributes = WindowAttributesExtWayland::with_name(attributes, AGENT_APP_ID, AGENT_APP_ID);
-    WindowAttributesExtX11::with_name(attributes, AGENT_APP_ID, AGENT_APP_ID)
-}
-
-#[cfg(not(all(unix, not(target_os = "macos"))))]
-fn named_for_agent(attributes: winit::window::WindowAttributes, _: bool) -> winit::window::WindowAttributes {
-    attributes
-}
-
 fn any_thread(builder: &mut winit::event_loop::EventLoopBuilder<Command>) {
     #[cfg(all(unix, not(target_os = "macos")))]
     {
@@ -248,11 +230,21 @@ impl Host {
             return Err(lock(&shared.error).clone().unwrap_or_else(|| "no event loop".into()));
         };
         let aspect = width as f32 / height.max(1) as f32;
+        let steps = Arc::new(Stepper::default());
         let render_thread = {
-            let shared = shared.clone();
-            guarded(&shared.clone(), move || render_loop(shared, windows, aspect))
+            let (shared, steps) = (shared.clone(), steps.clone());
+            guarded(&shared.clone(), move || render_loop(shared, windows, aspect, steps))
         };
-        Ok(Self { shared, proxy: Mutex::new(proxy), threads: Mutex::new(Some(Threads { window: window_thread, render: render_thread })) })
+        let step_thread = {
+            let shared = shared.clone();
+            guarded(&shared.clone(), move || {
+                let seam = InputSeam { shared: shared.clone(), pads: RefCell::new(Pads::open()) };
+                let mode = || (!shared.closed.load(Ordering::Acquire)).then(|| mode_of(&shared));
+                stepper::run(steps, LibraryClock, shared.mailbox.clone(), mode, seam);
+            })
+        };
+        let threads = Threads { window: window_thread, render: render_thread, steps: step_thread };
+        Ok(Self { shared, proxy: Mutex::new(proxy), threads: Mutex::new(Some(threads)) })
     }
 
     pub fn start(&self) {
@@ -316,12 +308,13 @@ impl Host {
         lock(&self.shared.error).clone()
     }
 
-    /// Stops both threads and waits for them, and wakes a consumer blocked in `next_event` with a stop; safe to call again, and on a window that has already closed.
+    /// Stops the window, render and step clock threads and waits for them, and wakes a consumer blocked in `next_event` with a stop; safe to call again, and on a window that has already closed.
     pub fn stop(&self) {
         self.shared.mailbox.stop();
         let _ = lock(&self.proxy).send_event(Command::Exit);
         if let Some(threads) = lock(&self.threads).take() {
             let _ = threads.render.join();
+            let _ = threads.steps.join();
             let _ = threads.window.join();
         }
     }
@@ -334,6 +327,7 @@ impl Drop for Host {
 }
 
 struct WindowSurface {
+    refresh_ms: Option<f64>,
     gpu: Gpu,
     requested: PresentSetting,
     reported: (PresentSetting, usize),
@@ -363,6 +357,9 @@ impl Surface for WindowSurface {
         if wanted != self.requested {
             self.requested = wanted;
             self.gpu.set_present(wanted);
+        }
+        if let Some(millihertz) = self.window.current_monitor().and_then(|monitor| monitor.refresh_rate_millihertz()).filter(|millihertz| *millihertz > 0) {
+            self.refresh_ms = Some(1e6 / millihertz as f64);
         }
         let image = self.gpu.acquire();
         let shown = (self.gpu.setting(), self.gpu.image_count());
@@ -402,13 +399,9 @@ impl Surface for WindowSurface {
     fn blocks_on_display(&self) -> bool {
         self.gpu.setting() == PresentSetting::Fifo
     }
-}
 
-struct LibraryClock;
-
-impl Clock for LibraryClock {
-    fn now_ns(&self) -> u64 {
-        now_ns()
+    fn refresh_ms(&self) -> Option<f64> {
+        self.refresh_ms
     }
 }
 
@@ -439,7 +432,7 @@ fn mode_of(shared: &Shared) -> Mode {
     }
 }
 
-fn render_loop(shared: Arc<Shared>, windows: mpsc::Receiver<Arc<Window>>, aspect: f32) {
+fn render_loop(shared: Arc<Shared>, windows: mpsc::Receiver<Arc<Window>>, aspect: f32, steps: Arc<Stepper>) {
     let Ok(window) = windows.recv_timeout(WINDOW_WAIT) else {
         lock(&shared.error).get_or_insert_with(|| "no window appeared".into());
         shared.finish(End::Failed);
@@ -455,15 +448,14 @@ fn render_loop(shared: Arc<Shared>, windows: mpsc::Receiver<Arc<Window>>, aspect
     };
     *lock(&shared.info) = info_json(&gpu);
     let reported = (gpu.setting(), gpu.image_count());
-    let surface = WindowSurface { gpu, requested: PresentSetting::Fifo, reported, window, shared: shared.clone() };
-    let mut frames = FrameLoop::new(surface, LibraryClock, shared.mailbox.clone(), shared.metrics.clone());
-    let seam = InputSeam { shared: shared.clone(), pads: RefCell::new(Pads::open()) };
+    let surface = WindowSurface { gpu, refresh_ms: None, requested: PresentSetting::Fifo, reported, window, shared: shared.clone() };
+    let mut frames = FrameLoop::new(surface, LibraryClock, shared.mailbox.clone(), shared.metrics.clone(), steps);
     while !shared.mailbox.is_stopping() {
         if shared.closed.load(Ordering::Acquire) {
             wait_for_stop(&shared);
             return;
         }
-        frames.frame(mode_of(&shared), &seam);
+        frames.frame(mode_of(&shared));
         if let Some(problem) = frames.problem.take() {
             eprintln!("wisp-window: a scene did not load, so the window keeps the last one until one does: {problem}");
             *lock(&shared.error) = Some(problem);
@@ -474,23 +466,5 @@ fn render_loop(shared: Arc<Shared>, windows: mpsc::Receiver<Arc<Window>>, aspect
 fn wait_for_stop(shared: &Arc<Shared>) {
     while !shared.mailbox.is_stopping() {
         thread::sleep(Duration::from_millis(5));
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::ffi::OsString;
-
-    use super::agent_launched;
-
-    fn env(value: Option<&'static str>) -> impl Fn(&str) -> Option<OsString> {
-        move |key| if key == "AI_AGENT" { value.map(OsString::from) } else { None }
-    }
-
-    #[test]
-    fn an_ai_agent_marker_selects_the_agent_app_id() {
-        assert!(agent_launched(&env(Some("claude-code/2.1"))));
-        assert!(!agent_launched(&env(Some(""))));
-        assert!(!agent_launched(&env(None)));
     }
 }

@@ -294,16 +294,24 @@ How the native window meets it:
      blocks until the display releases the previous image, so the return
      time anchors the phase. Acquiring before sleeping is what makes the
      anchor real; sleeping first would only measure the window's own call.
-  3. Sleep until the sample point: anchor + n·T − lead, where the lead is
-     p99(step) + p99(wake + parse + draw) + two margins and n is the fewest
-     whole display frames that hold it. The p99s are moving windows over
-     the last 120 steps and frames, and the margin starts at 1 ms. The step's
-     share is capped at two sim periods, so one stall cannot hold every later
-     sample that far back.
-  4. Sample and hand the samples to the game. Its scene is aimed at the
-     vblank n frames after this acquire.
+  3. Aim the step clock ("The step clock") at vblank − lead, where the lead
+     is p99(step) + p99(wake + parse + draw) + two margins. The p99s are
+     moving windows over the last 120 steps and frames, and the margin
+     starts at 1 ms. The step's share is capped at two sim periods, so one
+     stall cannot hold every later sample that far back.
+  4. The step clock samples on its own thread and hands each sample to the
+     game. Its scene is aimed at the first vblank its lead reaches.
   5. On the frame that ends at that vblank, wait for the scene until the
      deadline, then draw the newest scene that has arrived and present.
+
+  T is the frame period the display reports for the monitor the window is
+  on (winit's refresh rate), or 60 Hz when it reports none. It is never the
+  measured interval between acquires: those include the loop's own waits,
+  and when niri held a window it did not show to one frame a second, the
+  median read a second, the sample point moved 980 ms into the frame, and
+  the frames stayed a second long after the window was shown again, so the
+  game ran at one step a second until it was restarted (Tom's playtest on
+  the laptop, 2026-11-01).
 
   With n fixed at 1, a step longer than a display frame could never make its
   deadline, and each late scene grew the margin, which only moved the
@@ -329,10 +337,11 @@ How the native window meets it:
   mode stays for development, and its extra compositor frame is reported, not
   hidden.
 - **Refresh rates above 60 Hz.** The sim stays at 60 steps a second. The
-  window presents at every vblank. A step runs on the first vblank whose
-  anchor is at or after the step's 60 Hz due time, and its sample point is
-  set from that vblank (at 144 Hz, steps fall 2 or 3 vblanks apart). Vblanks
-  between steps redraw the last scene. The target is stated at 60 Hz.
+  window presents at every vblank, and vblanks between steps redraw the last
+  scene. At a whole multiple or fraction of 60 Hz (120, 240, 30, or 59.94)
+  the step clock locks its phase to the vblanks; at any other rate (144,
+  165, 75) it runs free and each scene shows at the first vblank its lead
+  reaches. The target is stated at 60 Hz.
 
 How it is measured:
 
@@ -494,10 +503,8 @@ The native window takes over the page's whole job, not only its drawing
   so a key never also presses a button.
 - **Mouse.** winit's cursor and button events reach the window thread, which
   keeps the cursor in physical pixels, the buttons held and the presses and
-  releases since the last sample (`pointer.rs`); the render thread reads them
-  at the sample point with the keys, and a sample that repeats the one before
-  it (a slow frame queues up to six) carries the position but no press, so a
-  click is delivered once, and a button pressed since the last sample reads held
+  releases since the last sample (`pointer.rs`); the step clock reads them
+  at each step with the keys, so a click is delivered once, and a button pressed since the last sample reads held
   in this one with its release in the next, so a click quicker than a frame is
   still a press the game sees held for one step. The sample carries the window's size, and
   `src/headless/pointer.ts` maps the cursor onto Warcraft's 0.8 by 0.6 UI
@@ -730,17 +737,14 @@ So the bounds split in two:
 
 ### Who owns the frame
 
-The render thread owns the frame, alone. The worker calls `wisp_window_start`
-once its frame loop is ready, so the first sample has a consumer. From then
-on, each frame runs in this order:
+The render thread owns the frame, and the step clock owns the samples. The
+worker calls `wisp_window_start` once its frame loop is ready, so the first
+sample has a consumer. From then on, each frame runs in this order:
 
 1. **Acquire the next image.** Under `Fifo` this blocks until the display
    releases one, and its return is the frame's anchor ("Lowest-latency present
-   path"). T is the median of the measured acquire intervals, not a constant.
-2. **Sample input.** The sample is the frame number, its time on the library's
-   clock and the button mask. It goes onto a bounded queue of 8. When the
-   queue is full, the oldest samples stay and the new one is counted in
-   `droppedSamples`.
+   path"). T is the period the display reports, never a measured interval.
+2. **Aim the step clock** at the vblank the next scene should show at.
 3. **Wait for the scene.** The frame that ends at the vblank a sample was aimed
    at ("Frame pacing") waits until that sample's scene arrives, or until the
    scene deadline, whichever is first. The deadline is the measured p99 draw
@@ -750,6 +754,23 @@ on, each frame runs in this order:
    aimed at this frame has not, it redraws the last scene and counts a late
    scene (`lateScenes`), and the late scene is drawn on the next frame.
 5. **Present.**
+
+#### The step clock
+
+The game steps on its own 60 Hz clock thread (window/wisp-window/src/stepper.rs),
+never on the display's acquire or present, so a window the compositor
+throttles, covers or stops handing images to keeps stepping at 60 a second.
+At each due time the thread reads input (pads through SDL on that thread, the
+keys and the pointer) and queues the sample: its frame number, its time on the
+library's clock and the button mask. The queue is bounded at 8. When it is
+full, the oldest samples stay and the new one is counted in `droppedSamples`.
+
+Due times are one sixtieth of a second apart. While the render thread aims
+the clock, each due time moves at most 0.25 ms toward the aimed phase, so the
+rate stays within 1.5 % of 60 Hz and settles on a display slightly off it,
+such as 59.94 Hz. An aim older than 100 ms is dropped, and the clock then runs
+free at exactly 60 Hz. A clock more than six steps behind, as after a suspend,
+starts again from now instead of running the steps it missed.
 
 The game's thread takes samples in order, oldest first. A step that ran late
 catches up by stepping twice in one frame. Every sample still becomes exactly

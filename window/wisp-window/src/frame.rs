@@ -1,39 +1,20 @@
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
-use std::thread;
-use std::time::Duration;
 
-use crate::input::Input;
+use crate::clock::Clock;
 use crate::metrics::{ms, Beat, Metrics, Pulse, Series, Timings};
 pub use crate::mailbox::{End, Event, Mailbox, Sample, Submission};
-use crate::pacing::{Pacer, Phase, StepClock};
+use crate::pacing::{Pacer, Phase};
+use crate::stepper::{Aim, Mode, Stepper, STEP_NS};
 use crate::sync::lock;
 use crate::timer::TimerResolution;
 
 const NOMINAL_PERIOD_MS: f64 = 1000.0 / 60.0;
-const PERIOD_WINDOW: usize = 120;
-const PERIOD_MINIMUM: usize = 5;
+const SHORTEST_PERIOD_MS: f64 = 1.0;
 const MISSED_PERIODS: f64 = 1.5;
 const SAMPLE_MEMORY: usize = 64;
 const UNMEASURED_LIMIT: usize = 8;
-
-/// The frame loop's time: when things happen, and how long it waits for a scene.
-pub trait Clock {
-    fn now_ns(&self) -> u64;
-
-    /// Sleeps until `target_ns` on this clock.
-    fn sleep_until(&self, target_ns: u64) {
-        let wait = target_ns.saturating_sub(self.now_ns());
-        if wait > 0 {
-            thread::sleep(Duration::from_nanos(wait));
-        }
-    }
-
-    /// Waits until the scene for `frame` arrives or `deadline_ns` passes on this clock; true when it arrived.
-    fn wait_for_scene(&self, mailbox: &Mailbox, frame: u32, deadline_ns: u64) -> bool {
-        mailbox.wait_for_scene(frame, Duration::from_nanos(deadline_ns.saturating_sub(self.now_ns())))
-    }
-}
+const AIM_TOLERANCE_NS: u64 = 1_000_000;
 
 /// What the frame loop draws on: `acquire` blocks until the display hands back an image, and `None` means nothing is showing right now.
 pub trait Surface {
@@ -55,38 +36,28 @@ pub trait Surface {
     fn blocks_on_display(&self) -> bool {
         true
     }
+    /// The display's frame in milliseconds as the display reports its rate, or none, which the loop takes as 60 Hz. The loop never measures it from its own frames: they include its own waits, and a window the compositor held to one frame a second would keep pacing to that second.
+    fn refresh_ms(&self) -> Option<f64> {
+        None
+    }
 }
 
-/// How the loop reads input.
-pub trait Seam {
-    fn input(&self) -> Input;
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-#[repr(u8)]
-pub enum Mode {
-    Loading,
-    Game,
-    Baseline,
-}
-
-/// The render thread's frame: acquire, sample, wait for the scene until its deadline, draw the newest scene that has arrived, present.
+/// The render thread's frame: acquire, aim the step clock, wait for the scene aimed at this frame's vblank until its deadline, draw the newest scene that has arrived, present. The game steps on the step clock's thread whether or not a frame comes.
 pub struct FrameLoop<S: Surface, C: Clock> {
     surface: S,
     clock: C,
     mailbox: Arc<Mailbox>,
     metrics: Arc<Mutex<Metrics>>,
-    frame: u32,
+    stepper: Arc<Stepper>,
     previous_acquire: Option<u64>,
-    periods: VecDeque<f64>,
     drawn_step: u64,
     drawn_frame: Option<u32>,
     sample_times: [Option<(u32, u64)>; SAMPLE_MEMORY],
     previous_frame_late: bool,
-    pending: VecDeque<Aim>,
-    unmeasured: VecDeque<Aim>,
+    pending: VecDeque<Aimed>,
+    unmeasured: VecDeque<Aimed>,
+    waited: Option<u32>,
     pacer: Pacer,
-    steps: StepClock,
     phase: Phase,
     pulse: Pulse,
     pub problem: Option<String>,
@@ -95,23 +66,22 @@ pub struct FrameLoop<S: Surface, C: Clock> {
 }
 
 impl<S: Surface, C: Clock> FrameLoop<S, C> {
-    pub fn new(surface: S, clock: C, mailbox: Arc<Mailbox>, metrics: Arc<Mutex<Metrics>>) -> Self {
+    pub fn new(surface: S, clock: C, mailbox: Arc<Mailbox>, metrics: Arc<Mutex<Metrics>>, stepper: Arc<Stepper>) -> Self {
         Self {
             surface,
             clock,
             mailbox,
             metrics,
-            frame: 0,
+            stepper,
             previous_acquire: None,
-            periods: VecDeque::new(),
             drawn_step: 0,
             drawn_frame: None,
             sample_times: [None; SAMPLE_MEMORY],
             previous_frame_late: false,
             pending: VecDeque::new(),
             unmeasured: VecDeque::new(),
+            waited: None,
             pacer: Pacer::default(),
-            steps: StepClock::default(),
             phase: Phase::default(),
             pulse: Pulse::default(),
             problem: None,
@@ -121,21 +91,16 @@ impl<S: Surface, C: Clock> FrameLoop<S, C> {
     }
 
     pub fn period_ms(&self) -> f64 {
-        if self.periods.len() < PERIOD_MINIMUM {
-            return NOMINAL_PERIOD_MS;
-        }
-        let mut sorted: Vec<f64> = self.periods.iter().copied().collect();
-        sorted.sort_by(f64::total_cmp);
-        sorted[sorted.len() / 2]
+        self.surface.refresh_ms().filter(|period| *period >= SHORTEST_PERIOD_MS).unwrap_or(NOMINAL_PERIOD_MS)
     }
 
     /// Runs one frame and returns whether it presented; false means the surface had no image.
-    pub fn frame(&mut self, mode: Mode, seam: &impl Seam) -> bool {
+    pub fn frame(&mut self, mode: Mode) -> bool {
         let blocking = self.surface.blocks_on_display();
         let period_ms = self.period_ms();
         let predicted = if blocking { None } else { self.phase.next_vblank_ns(self.clock.now_ns(), period_ms) };
         if let Some(vblank) = predicted {
-            self.sleep_until(vblank);
+            self.clock.sleep_until(vblank);
         }
         let asked = self.clock.now_ns();
         let Some(image) = self.surface.acquire() else {
@@ -145,20 +110,16 @@ impl<S: Surface, C: Clock> FrameLoop<S, C> {
         let acquired = self.clock.now_ns();
         let (anchor, stamp) = self.anchor(blocking, predicted, acquired, period_ms);
         let interval = self.previous_acquire.map(|before| ms(before, stamp));
-        if let Some(interval) = interval {
-            self.periods.push_back(interval);
-            if self.periods.len() > PERIOD_WINDOW {
-                self.periods.pop_front();
-            }
-        }
-        let period_ms = self.period_ms();
+        let lead_ns = (self.pacer.lead_ms() * 1e6) as u64;
+        self.stepper.aim(Aim::for_display(anchor, (period_ms * 1e6) as u64, lead_ns, acquired));
         let outcome = if mode == Mode::Loading {
+            self.stepper.take();
             self.pending.clear();
             self.unmeasured.clear();
             self.surface.idle();
             Outcome::default()
         } else {
-            self.sample_and_wait(mode, seam, anchor, period_ms)
+            self.wait_and_load(anchor, period_ms, lead_ns)
         };
         let drawing = self.clock.now_ns();
         self.surface.draw(&image, self.drawn_step);
@@ -188,7 +149,7 @@ impl<S: Surface, C: Clock> FrameLoop<S, C> {
         true
     }
 
-    /// The frame's anchor, which deadlines count from, and its stamp, which the period is measured between: a blocking acquire is locked to the display's phase so its wake lateness leaves the anchor alone, and any other mode counts from the extrapolated vblank.
+    /// The frame's anchor, which deadlines count from, and its stamp, which the frame's interval is measured between: a blocking acquire is locked to the display's phase so its wake lateness leaves the anchor alone, and any other mode counts from the extrapolated vblank.
     fn anchor(&mut self, blocking: bool, predicted: Option<u64>, acquired: u64, period_ms: f64) -> (u64, u64) {
         let extrapolated = predicted.unwrap_or(acquired);
         let anchor = if blocking || predicted.is_none() { self.phase.lock(acquired, period_ms) } else { extrapolated };
@@ -220,28 +181,20 @@ impl<S: Surface, C: Clock> FrameLoop<S, C> {
         metrics.flag(Series::DroppedSamples, outcome.dropped);
     }
 
-    /// Sleeps to `target_ns` and returns how many nanoseconds after it the thread woke.
-    fn sleep_until(&self, target_ns: u64) -> u64 {
-        self.clock.sleep_until(target_ns);
-        self.clock.now_ns().saturating_sub(target_ns)
-    }
-
-    /// On a frame that steps the game, sleeps to the pacer's sample point, samples and queues one sample for each step that came due, the last aimed at the vblank the plan names; then, on whichever frame that vblank ends, waits for the scene aimed at it until the pacer's deadline. Every frame draws the newest scene that has arrived, so a late scene costs one frame of latency and never the present.
-    fn sample_and_wait(&mut self, mode: Mode, seam: &impl Seam, anchor: u64, period_ms: f64) -> Outcome {
+    /// Waits until the pacer's deadline for the scene of the newest step aimed at the vblank this frame presents at, whether the step clock has taken it or has it still due, then loads the newest scene that has arrived, so a late scene costs one frame of latency and never the present.
+    fn wait_and_load(&mut self, anchor: u64, period_ms: f64, lead_ns: u64) -> Outcome {
         let mut outcome = Outcome::default();
-        let steps = self.steps.steps_due(anchor, period_ms);
-        if steps > 0 {
-            self.sample(mode, seam, anchor, period_ms, steps, &mut outcome);
-        }
+        self.collect(&mut outcome, lead_ns, period_ms);
         let period_ns = (period_ms * 1e6) as u64;
         let ends_by = anchor + period_ns + period_ns / 2;
-        let target = self.pending.iter().filter(|aim| aim.vblank_ns <= ends_by).map(|aim| aim.frame).max();
-        if let Some(target) = target {
+        if let Some(target) = self.target(ends_by, lead_ns, period_ms) {
             let deadline = anchor + (self.pacer.scene_deadline_ms(period_ms) * 1e6) as u64;
             outcome.late = !self.clock.wait_for_scene(&self.mailbox, target, deadline) && !self.mailbox.is_stopping();
-            let (due, later): (Vec<Aim>, Vec<Aim>) = self.pending.drain(..).partition(|aim| aim.frame <= target);
+            self.waited = Some(target);
+            self.collect(&mut outcome, lead_ns, period_ms);
+            let (due, later): (Vec<Aimed>, Vec<Aimed>) = self.pending.drain(..).partition(|aimed| aimed.frame <= target);
             self.pending = later.into();
-            self.unmeasured.extend(due.into_iter().filter(|aim| aim.frame == target));
+            self.unmeasured.extend(due.into_iter().filter(|aimed| aimed.frame == target));
         }
         self.measure_arrivals();
         outcome.ready_ns = Some(self.clock.now_ns());
@@ -265,36 +218,46 @@ impl<S: Surface, C: Clock> FrameLoop<S, C> {
         outcome
     }
 
-    fn sample(&mut self, mode: Mode, seam: &impl Seam, anchor: u64, period_ms: f64, steps: u32, outcome: &mut Outcome) {
-        let plan = self.pacer.plan(period_ms);
-        let late = self.sleep_until(anchor + (plan.offset_ms * 1e6) as u64);
-        self.pacer.record_wake(late as f64 / 1e6);
-        let sampled_ns = self.clock.now_ns();
-        let mut input = seam.input();
-        let mut last = self.frame;
-        for _ in 0..steps {
-            let sample = Sample { frame: self.frame, sampled_ns, input };
-            input = input.repeated();
-            last = sample.frame;
-            self.frame = self.frame.wrapping_add(1);
-            self.sample_times[sample.frame as usize % SAMPLE_MEMORY] = Some((sample.frame, sample.sampled_ns));
-            if mode == Mode::Baseline {
-                self.mailbox.submit(Submission { bytes: b"{}".to_vec(), step: sample.frame as u64, frame: sample.frame, arrived_ns: self.clock.now_ns() });
-            } else if !self.mailbox.push_sample(sample) {
-                outcome.dropped = true;
+    /// Takes the steps the clock took since the last look, each aimed at the vblank its lead reaches; one a frame already waited for is only measured.
+    fn collect(&mut self, outcome: &mut Outcome, lead_ns: u64, period_ms: f64) {
+        for taken in self.stepper.take() {
+            self.sample_times[taken.frame as usize % SAMPLE_MEMORY] = Some((taken.frame, taken.sampled_ns));
+            self.pacer.record_wake(taken.late_ns as f64 / 1e6);
+            outcome.dropped |= taken.dropped;
+            let aimed = Aimed { frame: taken.frame, sampled_ns: taken.sampled_ns, vblank_ns: self.vblank_of(taken.sampled_ns, lead_ns, period_ms) };
+            match self.waited {
+                Some(waited) if taken.frame < waited => {}
+                Some(waited) if taken.frame == waited => self.unmeasured.push_back(aimed),
+                _ => self.pending.push_back(aimed),
             }
         }
-        let vblank_ns = anchor + plan.vblanks_ahead as u64 * (period_ms * 1e6) as u64;
-        self.pending.push_back(Aim { frame: last, sampled_ns, vblank_ns });
     }
 
-    /// Gives the pacer each awaited step's time from its sample to its scene's arrival, whether the scene came in time or after its frame drew without it, so the plan learns the step's whole tail.
+    /// The newest step aimed at a vblank by `ends_by`: one taken and not yet waited for, or one the clock has still due.
+    fn target(&self, ends_by: u64, lead_ns: u64, period_ms: f64) -> Option<u32> {
+        let mut target = self.pending.iter().filter(|aimed| aimed.vblank_ns <= ends_by).map(|aimed| aimed.frame).max();
+        let (mut frame, mut due) = self.stepper.next(self.clock.now_ns());
+        while self.vblank_of(due, lead_ns, period_ms) <= ends_by {
+            target = Some(frame);
+            frame = frame.wrapping_add(1);
+            due += STEP_NS;
+        }
+        target
+    }
+
+    /// The first vblank a step sampled at `sampled_ns` can show at, given the lead; a sample read up to 1 ms after its aimed time still counts toward that vblank.
+    fn vblank_of(&self, sampled_ns: u64, lead_ns: u64, period_ms: f64) -> u64 {
+        let reach = (sampled_ns + lead_ns).saturating_sub(AIM_TOLERANCE_NS);
+        self.phase.next_vblank_ns(reach, period_ms).map_or(reach, |vblank| vblank.max(reach))
+    }
+
+    /// Gives the pacer each awaited step's time from its sample to its scene's arrival, whether the scene came in time or after its frame drew without it, so the lead learns the step's whole tail.
     fn measure_arrivals(&mut self) {
         let mailbox = &self.mailbox;
         let pacer = &mut self.pacer;
-        self.unmeasured.retain(|aim| match mailbox.arrived_ns(aim.frame) {
+        self.unmeasured.retain(|aimed| match mailbox.arrived_ns(aimed.frame) {
             Some(arrived) => {
-                pacer.record_work(ms(aim.sampled_ns, arrived));
+                pacer.record_work(ms(aimed.sampled_ns, arrived));
                 false
             }
             None => true,
@@ -318,9 +281,9 @@ struct Times {
     presented: u64,
 }
 
-/// A sample whose scene is aimed at the vblank `vblank_ns`.
+/// A step whose scene is aimed at the vblank `vblank_ns`.
 #[derive(Clone, Copy)]
-struct Aim {
+struct Aimed {
     frame: u32,
     sampled_ns: u64,
     vblank_ns: u64,

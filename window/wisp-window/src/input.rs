@@ -11,10 +11,3 @@ pub struct Input {
     pub axis_y: f32,
     pub pointer: PointerSample,
 }
-
-impl Input {
-    /// The same reading for a sample that repeats the one before it: a click is delivered once.
-    pub fn repeated(self) -> Self {
-        Self { pointer: self.pointer.repeated(), ..self }
-    }
-}

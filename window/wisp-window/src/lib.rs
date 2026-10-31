@@ -2,8 +2,9 @@
 //!
 //! Bun loads this library with `bun:ffi`. Every exported function is `catch_unwind`-guarded, because a Rust panic must not
 //! unwind into Bun. A window handle is a counted reference to the host: `wisp_window_attach` gives another thread its own, and
-//! `wisp_window_stop` joins both library threads, so a thread that outlives the stop reaches a stopped host, never freed memory.
+//! `wisp_window_stop` joins the library's threads, so a thread that outlives the stop reaches a stopped host, never freed memory.
 
+mod agent_window;
 mod capture;
 mod audio;
 mod clock;
@@ -23,6 +24,7 @@ mod offscreen;
 pub mod offscreen_ffi;
 mod pacing;
 mod present;
+mod stepper;
 mod pad;
 mod pad_sdl;
 mod pointer;

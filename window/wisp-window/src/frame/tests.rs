@@ -1,60 +1,11 @@
 use super::*;
-use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
-use std::time::Instant;
+use std::thread::{self, JoinHandle};
+use std::time::{Duration, Instant};
+
+use crate::input::Input;
+use crate::stepper::{self, Seam, Stepper};
 
 const PERIOD_NS: u64 = 16_666_667;
-/// How long the test's clock lets a consumer answer in real time before the scene counts as late: far more than any host's scheduling
-/// delay, so only the samples the script holds back are late.
-const ANSWER_GRACE: Duration = Duration::from_secs(1);
-const WARMUP: u32 = PERIOD_MINIMUM as u32 + 1;
-const FRAMES: u32 = 22;
-/// After the pacer has measured ten on-time steps, so it aims each sample at the frame that takes it.
-const LATE_SAMPLE: u32 = 15;
-const LATE_FRAMES: u32 = 2;
-
-/// The library's clock in the test: the fake display moves it to each vblank, so every interval is exactly one period, and a scene
-/// that does not come within the grace moves it to the deadline, so lateness follows the script, not the host's load.
-#[derive(Clone, Default)]
-struct TestClock(Arc<AtomicU64>);
-
-impl Clock for TestClock {
-    fn now_ns(&self) -> u64 {
-        self.0.load(Ordering::Acquire)
-    }
-
-    fn wait_for_scene(&self, mailbox: &Mailbox, frame: u32, deadline_ns: u64) -> bool {
-        let arrived = mailbox.wait_for_scene(frame, ANSWER_GRACE);
-        if !arrived {
-            self.0.fetch_max(deadline_ns, Ordering::AcqRel);
-        }
-        arrived
-    }
-}
-
-struct FakeSurface {
-    clock: TestClock,
-    acquires: Arc<AtomicU32>,
-    presented: Arc<Mutex<Vec<u64>>>,
-    drawing: AtomicU32,
-}
-
-impl Surface for FakeSurface {
-    type Image = ();
-
-    fn acquire(&mut self) -> Option<()> {
-        let acquired = self.acquires.fetch_add(1, Ordering::AcqRel) + 1;
-        self.clock.0.store(acquired as u64 * PERIOD_NS, Ordering::Release);
-        Some(())
-    }
-
-    fn draw(&mut self, _: &(), step: u64) {
-        self.drawing.store(step as u32, Ordering::Release);
-    }
-
-    fn present(&self, _: ()) {
-        lock(&self.presented).push(self.drawing.load(Ordering::Acquire) as u64);
-    }
-}
 
 struct Quiet;
 
@@ -104,69 +55,83 @@ fn stop_during_submit_leaves_no_scene_behind() {
     assert!(!mailbox.wait_for_scene(0, Duration::from_secs(5)), "a stopped mailbox does not wait for a scene");
 }
 
-#[test]
-fn late_scene_keeps_presents_on_clock() {
-    let mailbox = Arc::new(Mailbox::default());
-    let metrics = Arc::new(Mutex::new(Metrics::default()));
-    let presented = Arc::new(Mutex::new(Vec::new()));
-    let acquires = Arc::new(AtomicU32::new(0));
-    let clock = TestClock::default();
-    let surface = FakeSurface { clock: clock.clone(), acquires: acquires.clone(), presented: presented.clone(), drawing: AtomicU32::new(0) };
-    let mut frames = FrameLoop::new(surface, clock, mailbox.clone(), metrics.clone());
-    for _ in 0..WARMUP {
-        frames.frame(Mode::Loading, &Quiet);
+#[derive(Clone)]
+struct RealClock;
+
+impl Clock for RealClock {
+    fn now_ns(&self) -> u64 {
+        crate::clock::now_ns()
     }
-    let consumer = {
-        let (mailbox, acquires) = (mailbox.clone(), acquires.clone());
-        thread::spawn(move || {
-            let mut seen = Vec::new();
-            while let Event::Frame(sample) = mailbox.next_event(Duration::from_secs(10)) {
-                if sample.frame == LATE_SAMPLE {
-                    while acquires.load(Ordering::Acquire) < WARMUP + LATE_SAMPLE + LATE_FRAMES + 1 {
-                        thread::sleep(Duration::from_millis(1));
-                    }
-                }
-                seen.push(sample.frame);
-                mailbox.submit(Submission { bytes: b"{}".to_vec(), step: sample.frame as u64 + 1, frame: sample.frame, arrived_ns: sample.sampled_ns });
-            }
-            seen
-        })
+}
+
+/// A window the compositor does not show: no image, after the 4 ms the real surface sleeps for one.
+struct Unshown;
+
+impl Surface for Unshown {
+    type Image = ();
+
+    fn acquire(&mut self) -> Option<()> {
+        thread::sleep(Duration::from_millis(4));
+        None
+    }
+
+    fn draw(&mut self, _: &(), _: u64) {}
+
+    fn present(&self, _: ()) {}
+}
+
+fn answer_every_sample(mailbox: &Arc<Mailbox>) -> JoinHandle<u32> {
+    let mailbox = mailbox.clone();
+    thread::spawn(move || {
+        let mut stepped = 0;
+        while let Event::Frame(sample) = mailbox.next_event(Duration::from_secs(10)) {
+            stepped += 1;
+            mailbox.submit(Submission { bytes: b"{}".to_vec(), step: sample.frame as u64 + 1, frame: sample.frame, arrived_ns: crate::clock::now_ns() });
+        }
+        stepped
+    })
+}
+
+#[test]
+fn the_step_clock_steps_sixty_times_a_second_on_its_own_thread_while_the_window_has_no_image() {
+    const RUN: Duration = Duration::from_secs(2);
+    let mailbox = Arc::new(Mailbox::default());
+    let steps = Arc::new(Stepper::default());
+    let consumer = answer_every_sample(&mailbox);
+    let began = Instant::now();
+    let clock_thread = {
+        let (steps, mailbox) = (steps.clone(), mailbox.clone());
+        thread::spawn(move || stepper::run(steps, RealClock, mailbox, || Some(Mode::Game), Quiet))
     };
-    for _ in 0..FRAMES {
-        frames.frame(Mode::Game, &Quiet);
+    let mut frames = FrameLoop::new(Unshown, RealClock, mailbox.clone(), Arc::new(Mutex::new(Metrics::default())), steps);
+    while began.elapsed() < RUN {
+        assert!(!frames.frame(Mode::Game), "nothing was drawn");
     }
     mailbox.stop();
-    let seen = consumer.join().unwrap();
-
-    assert_eq!(seen, (0..FRAMES).collect::<Vec<_>>(), "the consumer got every sample in order");
-    let metrics = lock(&metrics);
-    let flags = |which: Series| metrics.series(which.index() as u32).iter().map(|flag| *flag as u32).collect::<Vec<_>>();
-    let late: Vec<u32> = (0..FRAMES).map(|frame| u32::from((LATE_SAMPLE..LATE_SAMPLE + LATE_FRAMES).contains(&frame))).collect();
-    assert_eq!(flags(Series::LateScenes), late, "exactly the frames waiting on the slow sample were late");
-    assert_eq!(flags(Series::MissedPresents).iter().sum::<u32>(), 0, "no present missed");
-    assert_eq!(flags(Series::DroppedSamples).iter().sum::<u32>(), 0, "no sample dropped");
-
-    let steps = lock(&presented).clone();
-    let shown = &steps[WARMUP as usize..];
-    assert_eq!(shown.len(), FRAMES as usize, "every frame presented, the late ones included");
-    assert_eq!(shown[LATE_SAMPLE as usize], LATE_SAMPLE as u64, "the late frame redraws the previous scene");
-    assert_eq!(shown[(LATE_SAMPLE + 1) as usize], LATE_SAMPLE as u64, "so does the next while the slow sample is outstanding");
-    assert_eq!(shown[(LATE_SAMPLE + LATE_FRAMES) as usize], (LATE_SAMPLE + LATE_FRAMES) as u64 + 1, "the frame after catches up to its own scene");
-    assert!(shown.windows(2).all(|pair| pair[0] <= pair[1]), "scenes never go backwards");
+    let elapsed = began.elapsed().as_secs_f64();
+    clock_thread.join().unwrap();
+    let stepped = consumer.join().unwrap();
+    let expected = elapsed * 60.0;
+    assert!((stepped as f64 - expected).abs() <= 2.0, "{stepped} steps in {elapsed:.3} s with no image, {expected:.1} were due");
 }
 
 mod simulated {
     use super::super::*;
+    use std::time::Duration;
+    use crate::stepper::Stepper;
     use std::cell::RefCell;
     use std::rc::Rc;
 
+    use super::{Quiet, PERIOD_NS};
+
     const DRAW_NS: u64 = 2_000_000;
-    const SECONDS: f64 = 60.0;
+    const UNSHOWN_TRY_NS: u64 = 4_000_000;
+    const SECOND_NS: u64 = 1_000_000_000;
     const WINDOW_FRAMES: usize = 300;
     /// The step's measured quantiles in wisp#145 (p50 4.5 ms, p95 14.5 ms) and a tail past one sim period, so some steps miss any deadline the pacer could choose.
     const STEP_QUANTILES: [(f64, f64); 6] = [(0.0, 2.0), (0.5, 4.5), (0.95, 14.5), (0.99, 18.0), (0.999, 24.0), (1.0, 30.0)];
 
-    fn step_ms(frame: u32) -> f64 {
+    fn scripted_step_ms(frame: u32) -> f64 {
         let mut x = (frame as u64 + 1).wrapping_mul(0x9E37_79B9_7F4A_7C15);
         x ^= x >> 31;
         x = x.wrapping_mul(0xBF58_476D_1CE4_E5B9);
@@ -177,36 +142,63 @@ mod simulated {
         ms0 + (ms1 - ms0) * (u - u0) / (u1 - u0)
     }
 
-    /// The game's thread and the display on one fake timeline: the worker takes each sample once it is queued and free, answers after the scripted step, and the display shows a presented image at the first vblank after the present.
+    fn quick_step_ms(_: u32) -> f64 {
+        2.0
+    }
+
+    /// The step clock, the game's thread and the display on one fake timeline: the clock takes each step at its due time, the worker takes each sample once it is queued and free and answers after the scripted step, and the display hands back an image at the first tick of its own grid after the last present, which is the vblank grid while the window is shown and a coarser one while the compositor throttles it, and none at all while it is unshown; it reports its vblank period as the window's monitor does.
     struct World {
         now_ns: u64,
-        period_ns: u64,
+        refresh_ns: u64,
+        image_every_ns: u64,
+        unshown: bool,
+        step_ms: fn(u32) -> f64,
         worker_free_ns: u64,
         in_flight: VecDeque<(u64, u32)>,
         presented_ns: Option<u64>,
         acquires: Vec<u64>,
+        shown: Vec<u64>,
     }
 
     #[derive(Clone)]
     struct SimClock {
         world: Rc<RefCell<World>>,
         mailbox: Arc<Mailbox>,
+        stepper: Arc<Stepper>,
     }
 
     impl SimClock {
-        fn advance(&self, to_ns: u64) {
+        fn serve(&self) {
             let mut world = self.world.borrow_mut();
             while let Event::Frame(sample) = self.mailbox.next_event(Duration::ZERO) {
                 let began = sample.sampled_ns.max(world.worker_free_ns);
-                let arrival = began + (step_ms(sample.frame) * 1e6) as u64;
+                let arrival = began + ((world.step_ms)(sample.frame) * 1e6) as u64;
                 world.worker_free_ns = arrival;
                 world.in_flight.push_back((arrival, sample.frame));
             }
-            world.now_ns = world.now_ns.max(to_ns);
             while let Some(&(arrival, frame)) = world.in_flight.front().filter(|(arrival, _)| *arrival <= world.now_ns) {
                 world.in_flight.pop_front();
                 self.mailbox.submit(Submission { bytes: b"{}".to_vec(), step: frame as u64 + 1, frame, arrived_ns: arrival });
             }
+        }
+
+        /// Moves the timeline to `to_ns`, taking each step that falls due on the way at its due time, as the step clock's thread does.
+        fn advance(&self, to_ns: u64) {
+            loop {
+                let now = self.now_ns();
+                let due = self.stepper.due_ns(now).max(now);
+                if due > to_ns {
+                    break;
+                }
+                self.world.borrow_mut().now_ns = due;
+                self.serve();
+                self.stepper.tick(due, Mode::Game, &Quiet, &self.mailbox);
+                self.serve();
+            }
+            let mut world = self.world.borrow_mut();
+            world.now_ns = world.now_ns.max(to_ns);
+            drop(world);
+            self.serve();
         }
 
         fn arrival_of(&self, frame: u32) -> Option<u64> {
@@ -224,19 +216,19 @@ mod simulated {
         }
 
         fn wait_for_scene(&self, mailbox: &Mailbox, frame: u32, deadline_ns: u64) -> bool {
-            self.advance(0);
-            if mailbox.wait_for_scene(frame, Duration::ZERO) {
-                return true;
-            }
-            match self.arrival_of(frame) {
-                Some(arrival) if arrival <= deadline_ns => {
-                    self.advance(arrival);
-                    true
+            loop {
+                self.advance(0);
+                if mailbox.wait_for_scene(frame, Duration::ZERO) {
+                    return true;
                 }
-                _ => {
+                let now = self.now_ns();
+                let next_step = self.stepper.due_ns(now).max(now);
+                let next = self.arrival_of(frame).map_or(next_step, |arrival| arrival.min(next_step));
+                if next > deadline_ns {
                     self.advance(deadline_ns);
-                    false
+                    return mailbox.wait_for_scene(frame, Duration::ZERO);
                 }
+                self.advance(next);
             }
         }
     }
@@ -247,51 +239,74 @@ mod simulated {
         type Image = ();
 
         fn acquire(&mut self) -> Option<()> {
-            let (now, period, presented) = {
+            let (now, every, presented, unshown) = {
                 let world = self.0.world.borrow();
-                (world.now_ns, world.period_ns, world.presented_ns)
+                (world.now_ns, world.image_every_ns, world.presented_ns, world.unshown)
             };
-            let vblank = presented.unwrap_or(now).max(now).div_ceil(period) * period;
-            self.0.advance(vblank);
-            self.0.world.borrow_mut().acquires.push(vblank);
+            if unshown {
+                self.0.advance(now + UNSHOWN_TRY_NS);
+                return None;
+            }
+            let at = presented.unwrap_or(now).max(now).div_ceil(every) * every;
+            self.0.advance(at);
+            self.0.world.borrow_mut().acquires.push(at);
             Some(())
         }
 
-        fn draw(&mut self, _: &(), _: u64) {
+        fn draw(&mut self, _: &(), step: u64) {
             let now = self.0.now_ns();
             self.0.advance(now + DRAW_NS);
+            self.0.world.borrow_mut().shown.push(step);
         }
 
         fn present(&self, _: ()) {
             let mut world = self.0.world.borrow_mut();
             world.presented_ns = Some(world.now_ns);
         }
+
+        fn refresh_ms(&self) -> Option<f64> {
+            Some(self.0.world.borrow().refresh_ns as f64 / 1e6)
+        }
     }
 
-    struct Run {
-        intervals_ns: Vec<u64>,
-        late: Vec<bool>,
-        steps_ms: Vec<f64>,
+    struct Sim {
+        frames: FrameLoop<SimDisplay, SimClock>,
+        clock: SimClock,
+        metrics: Arc<Mutex<Metrics>>,
     }
 
-    fn run(hz: f64) -> Run {
-        let period_ns = (1e9 / hz) as u64;
-        let mailbox = Arc::new(Mailbox::default());
-        let world = World { now_ns: period_ns, period_ns, worker_free_ns: 0, in_flight: VecDeque::new(), presented_ns: None, acquires: Vec::new() };
-        let clock = SimClock { world: Rc::new(RefCell::new(world)), mailbox: mailbox.clone() };
-        let metrics = Arc::new(Mutex::new(Metrics::default()));
-        let mut frames = FrameLoop::new(SimDisplay(clock.clone()), clock.clone(), mailbox, metrics.clone());
-        for _ in 0..super::WARMUP {
-            frames.frame(Mode::Loading, &super::Quiet);
+    impl Sim {
+        fn new(period_ns: u64, step_ms: fn(u32) -> f64) -> Self {
+            let mailbox = Arc::new(Mailbox::default());
+            let stepper = Arc::new(Stepper::default());
+            let world = World { now_ns: period_ns, refresh_ns: period_ns, image_every_ns: period_ns, unshown: false, step_ms, worker_free_ns: 0, in_flight: VecDeque::new(), presented_ns: None, acquires: Vec::new(), shown: Vec::new() };
+            let clock = SimClock { world: Rc::new(RefCell::new(world)), mailbox: mailbox.clone(), stepper: stepper.clone() };
+            let metrics = Arc::new(Mutex::new(Metrics::default()));
+            let frames = FrameLoop::new(SimDisplay(clock.clone()), clock.clone(), mailbox, metrics.clone(), stepper);
+            Self { frames, clock, metrics }
         }
-        let count = (hz * SECONDS) as usize;
-        for _ in 0..count {
-            frames.frame(Mode::Game, &super::Quiet);
+
+        fn now_ns(&self) -> u64 {
+            self.clock.now_ns()
         }
-        let acquires = clock.world.borrow().acquires.clone();
-        let late = lock(&metrics).series(Series::LateScenes.index() as u32).iter().map(|flag| *flag > 0.0).collect();
-        let steps_ms = (0..frames.frame).map(step_ms).collect();
-        Run { intervals_ns: acquires[super::WARMUP as usize..].windows(2).map(|pair| pair[1] - pair[0]).collect(), late, steps_ms }
+
+        fn run_until(&mut self, until_ns: u64) {
+            while self.now_ns() < until_ns {
+                self.frames.frame(Mode::Game);
+            }
+        }
+
+        fn stepped(&self) -> u32 {
+            self.clock.stepper.next(self.now_ns()).0
+        }
+
+        fn world(&self) -> std::cell::RefMut<'_, World> {
+            self.clock.world.borrow_mut()
+        }
+
+        fn late(&self) -> Vec<bool> {
+            lock(&self.metrics).series(Series::LateScenes.index() as u32).iter().map(|flag| *flag > 0.0).collect()
+        }
     }
 
     fn quantile(values: &[f64], at: f64) -> f64 {
@@ -301,15 +316,20 @@ mod simulated {
     }
 
     fn a_slow_step_costs_at_most_a_late_scene(hz: f64) {
-        let run = run(hz);
+        const SECONDS: u64 = 60;
         let period_ns = (1e9 / hz) as u64;
-        assert!((quantile(&run.steps_ms, 0.5) - 4.5).abs() < 0.3 && (quantile(&run.steps_ms, 0.95) - 14.5).abs() < 0.5, "the script steps at p50 4.5 ms and p95 14.5 ms");
-        assert!(run.steps_ms.iter().filter(|step| **step * 1e6 > 1e9 / 60.0).count() > 10, "some steps outlast a sim period");
-        let longest = run.intervals_ns.iter().max().copied().unwrap_or(0);
+        let mut sim = Sim::new(period_ns, scripted_step_ms);
+        sim.run_until(SECONDS * SECOND_NS);
+        let steps_ms: Vec<f64> = (0..sim.stepped()).map(scripted_step_ms).collect();
+        assert!((quantile(&steps_ms, 0.5) - 4.5).abs() < 0.3 && (quantile(&steps_ms, 0.95) - 14.5).abs() < 0.5, "the script steps at p50 4.5 ms and p95 14.5 ms");
+        assert!(steps_ms.iter().filter(|step| **step * 1e6 > 1e9 / 60.0).count() > 10, "some steps outlast a sim period");
+        let acquires = sim.world().acquires.clone();
+        let longest = acquires.windows(2).map(|pair| pair[1] - pair[0]).max().unwrap_or(0);
         assert_eq!(longest, period_ns, "at {hz} Hz every present lands on the next vblank");
-        let windows: Vec<usize> = run.late.chunks(WINDOW_FRAMES).map(|window| window.iter().filter(|late| **late).count()).collect();
-        let late: usize = windows.iter().sum();
-        assert!(late * WINDOW_FRAMES < 3 * run.late.len(), "at {hz} Hz {late} of {} frames were late, the oracle allows under 3 in {WINDOW_FRAMES}: {windows:?}", run.late.len());
+        let late = sim.late();
+        let windows: Vec<usize> = late.chunks(WINDOW_FRAMES).map(|window| window.iter().filter(|late| **late).count()).collect();
+        let total: usize = windows.iter().sum();
+        assert!(total * WINDOW_FRAMES < 3 * late.len(), "at {hz} Hz {total} of {} frames were late, the oracle allows under 3 in {WINDOW_FRAMES}: {windows:?}", late.len());
     }
 
     #[test]
@@ -320,5 +340,71 @@ mod simulated {
     #[test]
     fn a_slow_step_costs_at_most_a_late_scene_at_120_hz() {
         a_slow_step_costs_at_most_a_late_scene(120.0);
+    }
+
+    fn one_slow_step(frame: u32) -> f64 {
+        if frame == 30 { 40.0 } else { 2.0 }
+    }
+
+    #[test]
+    fn a_late_scene_redraws_the_last_one_and_the_frames_after_catch_up() {
+        let mut sim = Sim::new(PERIOD_NS, one_slow_step);
+        sim.run_until(2 * SECOND_NS);
+        let late = sim.late();
+        let shown = sim.world().shown.clone();
+        let acquires = sim.world().acquires.clone();
+        assert!(acquires.windows(2).all(|pair| pair[1] - pair[0] == PERIOD_NS), "every frame presented on the next vblank, the late ones included");
+        let late_frames: Vec<usize> = late.iter().enumerate().filter(|(_, late)| **late).map(|(frame, _)| frame).collect();
+        assert!((1..=3).contains(&late_frames.len()), "only the frames waiting behind the slow step were late: {late_frames:?}");
+        for frame in &late_frames {
+            assert_eq!(shown[*frame], shown[frame - 1], "late frame {frame} redraws the scene before it");
+        }
+        assert!(shown.windows(2).all(|pair| pair[0] <= pair[1]), "scenes never go backwards");
+        let after = &shown[late_frames[late_frames.len() - 1] + 3..];
+        let repeated = after.windows(2).filter(|pair| pair[1] == pair[0]).count();
+        let skipped = after.windows(2).filter(|pair| pair[1] > pair[0] + 1).count();
+        assert!(repeated <= 1 && skipped <= 1 && after.windows(2).all(|pair| pair[1] <= pair[0] + 2), "the frames after show one step each but for the one frame the longer lead moves the step across: {after:?}");
+        let behind = sim.stepped() as u64 - shown[shown.len() - 1];
+        assert!(behind <= 3, "the last frame shows a scene {behind} steps behind the clock");
+    }
+
+    #[test]
+    fn a_window_throttled_to_one_frame_a_second_paces_to_the_display_again_once_it_is_shown() {
+        const THROTTLED_SECONDS: u64 = 30;
+        const SHOWN_SECONDS: u64 = 5;
+        let mut sim = Sim::new(PERIOD_NS, quick_step_ms);
+        sim.world().image_every_ns = SECOND_NS;
+        sim.run_until(THROTTLED_SECONDS * SECOND_NS);
+        sim.world().image_every_ns = PERIOD_NS;
+        sim.run_until((THROTTLED_SECONDS + SHOWN_SECONDS) * SECOND_NS);
+        let acquires = sim.world().acquires.clone();
+        let settled: Vec<u64> = acquires.windows(2).map(|pair| pair[1] - pair[0]).skip(acquires.len() - 60).collect();
+        assert!(settled.iter().all(|interval| *interval == PERIOD_NS), "the last frames come at the display's 60 Hz, not the throttle's: {settled:?}");
+        let seconds = (sim.now_ns() - PERIOD_NS) as f64 / 1e9;
+        assert!((sim.stepped() as f64 - seconds * 60.0).abs() <= 2.0, "{} steps in {seconds:.2} s", sim.stepped());
+    }
+
+    #[test]
+    fn a_window_shown_once_a_second_still_steps_sixty_times_a_second() {
+        const SECONDS: u64 = 20;
+        let mut sim = Sim::new(PERIOD_NS, quick_step_ms);
+        sim.world().image_every_ns = SECOND_NS;
+        sim.run_until(SECONDS * SECOND_NS);
+        let seconds = (sim.now_ns() - PERIOD_NS) as f64 / 1e9;
+        assert!((sim.stepped() as f64 - seconds * 60.0).abs() <= 2.0, "{} steps in {seconds:.2} s of one frame a second", sim.stepped());
+        let shown = sim.world().shown.clone();
+        assert!(shown.windows(2).skip(1).all(|pair| (59..=61).contains(&(pair[1] - pair[0]))), "each frame shows the scene a second on: {shown:?}");
+    }
+
+    #[test]
+    fn a_window_with_no_image_to_draw_still_steps_sixty_times_a_second() {
+        const SECONDS: u64 = 5;
+        let mut sim = Sim::new(PERIOD_NS, quick_step_ms);
+        sim.world().unshown = true;
+        while sim.now_ns() < SECONDS * SECOND_NS {
+            assert!(!sim.frames.frame(Mode::Game), "nothing was drawn");
+        }
+        let seconds = (sim.now_ns() - PERIOD_NS) as f64 / 1e9;
+        assert!((sim.stepped() as f64 - seconds * 60.0).abs() <= 1.0, "{} steps in {seconds:.2} s with no image", sim.stepped());
     }
 }
