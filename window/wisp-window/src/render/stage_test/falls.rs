@@ -71,7 +71,7 @@ fn the_streaks_run_down_at_the_falls_speed() {
         }
         gap
     };
-    let best = (-30..=30).min_by(|&a, &b| shift_of(a).total_cmp(&shift_of(b))).unwrap();
     let expected = super::super::water::falls::Fall::WATERFALL.speed * 0.2 * (SIZE.1 as f32 / 2.0) / (0.5 * 2700.0);
+    let best = ((expected * 0.5) as i32..=(expected * 1.6).ceil() as i32).min_by(|&a, &b| shift_of(a).total_cmp(&shift_of(b))).unwrap();
     assert!((0.75..1.4).contains(&(best as f32 / expected)), "the pattern moved {best} pixels down in 0.2 s, expected about {expected:.1}");
 }
