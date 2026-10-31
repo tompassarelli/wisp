@@ -8,7 +8,7 @@ export function createEvents(): Events {
   return fromHandle<Events>(world.events.create());
 }
 
-export function onEvents(events: Events, handler: () => void): void {
+export function onEvents(events: Events, handler: (this: void) => void): void {
   const world = boundWorld();
   world.log?.("TriggerAddAction", [events, handler]);
   world.events.addAction(asHandle(events), handler);
