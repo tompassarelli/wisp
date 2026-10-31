@@ -1,7 +1,7 @@
 # Game API (plan)
 
-Status: planned, 31 October 2026, revised once after an adversarial review
-(see "Review"). This page plans only; each box at the end is its own issue.
+Status: planned, 31 October 2026, revised after an adversarial review and
+again when boxes G3 to G8 were written (see "Review"). This page plans only; each box at the end is its own issue.
 
 Decision (proxy at Tom's question, 31 October 2026): gameplay and presentation
 code calls Wisp's own game API, shaped for this game, not Warcraft III's
@@ -212,8 +212,11 @@ module contract. So the Warcraft backend is a TSTL plugin,
   template, with arguments substituted in place. Most templates are one
   native call, with the arguments in the same order.
 - A template may name several natives only where every Smashcraft site
-  already makes those calls together, as in `isHuman(slot)`, which is the
-  controller and slot-state pair. Where call sites combine natives in
+  already makes those calls together, as in `eventKey`, which is
+  `GetHandleId(BlzGetTriggerPlayerKey())` at all 6 sites. A template is one
+  expression, because a call has no statements to expand into, and each
+  argument appears at most once, because a repeated argument would run twice
+  or need a local. Where call sites combine natives in
   different ways, the API keeps the parts. One case is frame events:
   `game/ui/frames.ts:120-158` registers many frames on one shared trigger and
   dispatches on `GetHandleId(BlzGetTriggerFrame())`, so no per-frame
@@ -221,9 +224,10 @@ module contract. So the Warcraft backend is a TSTL plugin,
 - Using an API function as a value (passing it, storing it) is a compile
   error that names the call, because under Lua no function exists to pass.
   Code that has to treat natives as values stays on raw natives as Warcraft
-  backend code. The one such file is the soak handle ledger
+  backend code. Three files do: the soak handle ledger
   (`platform/soakHandles.ts`), which reassigns `natives.AddSpecialEffect`
-  and its kin.
+  and its kin, and `host/loop/sessionRates.ts` and `host/loop/handleLedger.ts`,
+  which wrap natives by name in the globals table.
 - The lowering table names natives only as they appear in
   `src/natives/warcraft.d.ts`, the generated declarations, and composes them
   only as Smashcraft's own code does. It holds interface facts, like the
@@ -333,9 +337,9 @@ keeps lockstep determinism by changing none of its inputs:
   it (native-window-plan.md, "Seam (revised)"). The sim still never
   reads elapsed time. Elapsed time is a local read in the clock family
   (`localElapsed`) and is used only for the draw alpha and for diagnostics.
-- **Who plays.** The players family's `isHuman(slot)` is the lobby's fact
-  at match start: on Warcraft, the controller and slot-state pair; on native,
-  the session's slots.
+- **Who plays.** The players family's `playerControl(player)` and
+  `playerSlotState(player)` are the lobby's facts at match start: on Warcraft,
+  the controller and slot-state natives; on native, the session's slots.
 - **Read-backs** (screen, pointer, camera, effect place) are `local` reads,
   never inputs to the sim.
 - **One match runs one backend.** A Warcraft client and a native client in
@@ -413,13 +417,15 @@ and the Smashcraft call sites that move (counted above).
     `src/headless/natives/sound.ts`), played by the cpal mixer in W6
     (native-window-plan.md, "Sound").
 - **Input** (`wisp/game/input`). 48 sites in 19 files, 16 natives.
-  - Calls: `addKeyEvent(events, player, key, modifiers, down)`, `eventKey`,
-    local `keyDown`, local `windowFocused`, local `pointerPosition`,
-    `eventPointer`, `mouseDown`, `setPointer`, `showCursor`,
-    `addChatEvent(events, player, text, exact)`, `chatText`,
-    `lockWarcraftControls`.
-  - Warcraft: `BlzTriggerRegisterPlayerKeyEvent` (with
-    `ConvertOsKeyType`; that call is the one Smashcraft makes today),
+  - Calls: `osKey(code)`, `addKeyEvent(events, player, key, modifiers, down)`,
+    `eventKey`, local `keyDown`, local `windowFocused`, local `pointerX`,
+    `pointerY`, `eventPointerX`, `eventPointerY`, `mouseDown`, `setPointer`,
+    `showCursor`, `addChatEvent(events, player, text, exact)`, `chatText`,
+    `addPointerMoveEvent(events, player)`, `enableSelections`,
+    `enableUserControl`.
+  - Warcraft: `ConvertOsKeyType`, which stays a call of its own because
+    `platform/osKeys.ts` caches its result; `BlzTriggerRegisterPlayerKeyEvent`,
+    `TriggerRegisterPlayerEvent(EVENT_PLAYER_MOUSE_MOVE)`,
     `GetHandleId(BlzGetTriggerPlayerKey())` (every key-reading site makes
     that pair), `BlzIsKeyPressed`, `BlzIsLocalClientActive`,
     `BlzGetMouseScreenPosX/Y`, `BlzGetTriggerPlayerMouseX/Y`,
@@ -443,37 +449,46 @@ and the Smashcraft call sites that move (counted above).
 - **Timers and frame loop** (`wisp/game/clock`). 61 sites in 17 files, 9
   natives.
   - Calls: `createTimer`, `startTimer(timer, seconds, periodic, handler)`,
-    `pauseTimer`, `destroyTimer`, local `localElapsed`, `holdGameSpeed`,
-    `restartMatch`, and the constant `FRAME_SECONDS`. There is no
+    `pauseTimer`, `destroyTimer`, local `localElapsed`, `setNormalSpeed`,
+    `lockSpeed`, local `gameSpeed`, `restartMatch`, and the constant `FRAME_SECONDS`. There is no
     `onFrame` composite: `host/loop/shell.ts:350-352` keeps the tick timer
     it creates and hands it to `startFrameClock`, so only the parts lower
     one to one.
   - Warcraft: `CreateTimer`, `TimerStart`, `PauseTimer`, `DestroyTimer`,
-    `TimerGetElapsed`, `SetGameSpeed`/`GetGameSpeed`/`SetMapFlag`,
-    `RestartGame`.
+    `TimerGetElapsed`, `SetGameSpeed(MAP_SPEED_NORMAL)`,
+    `SetMapFlag(MAP_LOCK_SPEED, true)`, `GetGameSpeed`, `RestartGame`.
   - Native owner: the window's frame clock (native-window-plan.md, "Seam
     (revised)", W1b/W1c), stepping `host/window/simWorker.ts`. The native
     clock counts integer frames. `src/headless/natives/timerDeadline.ts`'s
     binary32 rounding stays in headless only.
 - **Players** (`wisp/game/players`). 169 sites in 46 files, 10 natives.
   - Calls: `player(slot)`, `playerSlot`, `localPlayer`, `eventPlayer`,
-    `isHuman(slot)`, `isComputer(slot)`, `playerName`,
-    `setPlayerColor`, `addLeaveEvent(events, player)`.
+    `playerControl(player)`, `playerSlotState(player)`, `playerName`,
+    `setPlayerColor(player, color)`, `addLeaveEvent(events, player)`. The
+    pair stays two calls: Smashcraft holds `Player(slot)` in a local and tests
+    the pair for humans and for computers, and `playerFiles.ts:91` tests the
+    slot state alone.
   - Warcraft: `Player`, `GetPlayerId`, `GetLocalPlayer`,
-    `GetTriggerPlayer`, `GetPlayerController` with `GetPlayerSlotState` (the
-    pair Smashcraft tests today), `GetPlayerName`, `SetPlayerColor` with
+    `GetTriggerPlayer`, `GetPlayerController`, `GetPlayerSlotState`,
+    `GetPlayerName`, `SetPlayerColor` with
     `ConvertPlayerColor`, `TriggerRegisterPlayerEvent(EVENT_PLAYER_LEAVE)`.
   - Native owner: the netcode session's slots (`src/netcode`, `host/net`),
     filled from the lobby.
 - **Units and positions** (`wisp/game/bodies`). 53 sites in 9 files, 34
   natives.
-  - Calls: `worldOrigin`, `createBody(player, kind, x, y, facing)`,
-    `removeBody`, `placeBody`, `setBodyHeight`, `setBodyFacing`,
-    `setBodyColor`, `setBodyTint`, `setBodyScale`, `setBodyTimeScale`,
-    `setBodyAnimation`, `showBody`, local `bodyHidden`, `setBodyTeamGlow`.
-    Warcraft-only object setup (`setBodyObjectFields`) is a no-op on
-    native.
-  - Warcraft: `GetRectCenter(GetPlayableMapRect())`,
+  - Calls: `mapCenter`, `locationX`, `locationY`, `removeLocation`,
+    `createBody(player, kind, x, y, facing)`, `removeBody`, `setBodyX`,
+    `setBodyY`, `setBodyHeight`, `setBodyFacing`, `setBodyColor`,
+    `setBodyTint`, `setBodyScale`, `setBodyTimeScale`, `setBodyAnimation`,
+    `setBodyAnimationIndex`, `showBody`, local `bodyHidden`,
+    `setBodyTeamGlow`, and local diagnostic reads `bodyKind`,
+    `bodyMoveSpeed`, `bodyAttackCooldown`. Warcraft-only object setup keeps
+    one call per native (`setBodyName`, `setBodySelectionScale`,
+    `setBodyMoveSpeed`, `setBodyAttackCooldown`, `setBodyBlendTime`,
+    `setBodyInvulnerable`, `setBodyPathing`, `pauseBody`, `addBodyAbility`,
+    `removeBodyAbility`, `setAbilityTooltip`), each a no-op on native.
+    Sites set these in different runs, so no composite reproduces them.
+  - Warcraft: `GetRectCenter(GetPlayableMapRect())` (`mapCenter`),
     `GetLocationX/Y`, `RemoveLocation`, `CreateUnit`, `RemoveUnit`,
     `SetUnitX/Y`, `SetUnitFlyHeight`, `BlzSetUnitFacingEx`, `SetUnitColor`,
     `SetUnitVertexColor`, `SetUnitScale`, `SetUnitTimeScale`,
@@ -520,7 +535,9 @@ and the Smashcraft call sites that move (counted above).
     `BlzGetTriggerSyncData`, `BlzGetTriggerSyncPrefix`.
   - Native owner: Wisp's transport (`src/netcode`, `host/net`, `relay/`).
 - **Files** (`wisp/game/files`). 33 sites in 7 files, 4 natives.
-  - Calls: `writeFile(path, lines)`; reads stay in `src/map/fileio.ts`.
+  - Calls: `clearFileLines`, `startFile`, `addFileLine(text)`, `endFile(path)`,
+    one per native, because sites add lines in loops and between other calls
+    and a `lines` array would allocate; reads stay in `src/map/fileio.ts`.
   - Warcraft: `PreloadGenClear`, `PreloadGenStart`, `Preload`,
     `PreloadGenEnd`.
   - Native owner: host file I/O on Bun, in the game's data folder.
@@ -563,8 +580,9 @@ native capture on main's build afterwards.
    family each but land in that order. Together they are the lockstep path, so
    each one's box runs the four-client playable journey for divergence as
    well as the Lua diff.
-5. **Sound** (78), then **camera and world look** (80), then **units and
-   positions** (53), then **files** (33). Handle ids move with frames (step
+5. **Sound** (78), **camera and world look** (80), **units and positions**
+   (53) and **files** (33), in any order: they share no call and take no
+   events value. Handle ids move with frames (step
    2) and input (step 4), and the diagnostics stay raw.
 6. **Shrink headless** once every family has moved. The Bun runtime runs
    only the native backend. The Warcraft emulation in `src/headless`
@@ -572,13 +590,38 @@ native capture on main's build afterwards.
    entry points of each store) remains only as what the 32-bit Lua runs of
    the Warcraft backend's bundle need. Every quirk with no Lua test that
    needs it is deleted, with its doc rows in headless.md. Every Wisp
-   example and fixture map moves onto the API in the same change, because only
-   main is supported.
+   example and fixture map moves onto the API or into a Lua run, because only
+   main is supported. This step is several landings (G8a to G8d), and each
+   leaves both backends green.
 
 ## Boxes
 
-Placement: both boxes are code-only work on public repos (wisp,
-smashcraft), so they go to the cloud lane while the credit lasts.
+Placement: every box is code-only work on public repos (wisp, smashcraft), so
+it goes to the cloud lane while the credit lasts.
+
+**What can run in parallel.** A box starts once the boxes it names have landed:
+
+- G1 lands first, because every other box needs its plugin.
+- After G1, these run at once: G2, G3, G5, G6 and G7b. G3 (strings and math)
+  needs only G1's plugin.
+- G4a needs G2 as well, because its registrations take an events value.
+- The lockstep path lands strictly in order: G4a, G4b, G4c, G4d. Each one's
+  four-client check then names the one family that broke it.
+- G7a follows G4a, which adds nested templates. G5, G6, G7a and G7b run beside
+  the lockstep path.
+- G8a, G8b, G8c and G8d land in order, after every family.
+
+**Rules for parallel boxes:**
+
+- `build/before.*` comes from the codemod commit's actual parent. When another
+  box lands first, rebase and rebuild `before`, because the bundle changes.
+- The codemod is a script in the lane. On a rebase conflict, reset to
+  origin/main, then rerun the pin update and the script. Never merge pin files.
+- G2 and G3 both take from `jassFormat.ts`. The second to land moves its half
+  from wherever the first left it.
+- Each box's list comes from the survey at smashcraft e611550e48, and its counts
+  are what its `rg` printed there. `ConvertPlayerColor` is in G7a's list and
+  `TriggerRegisterPlayerEvent` in G4c's, because a site of each outlasts G4a.
 
 ### G1: effects family
 
@@ -647,7 +690,8 @@ Smashcraft lands two commits: the pin update alone, then a codemod. The
 codemod moves the 48 UI natives in `game/ui`, `game/render`, `host/loop`,
 `host/entries` and `platform/` (`BlzSetAbilityTooltip` goes to bodies and
 `BlzEnableCursor` to input), the 51 event sites, and the 2 frame-id
-`GetHandleId` sites.
+`GetHandleId` sites. `BlzFrameSetModel` and `BlzFrameSetSpriteAnimate`
+(`game/ui/liveCard.ts`) landed after the survey and move too.
 
 Done when:
 
@@ -667,6 +711,475 @@ Not required:
 - widget components above the API (see prior-art.md);
 - frames with a colour but no texture;
 - any other family.
+
+### G3: strings and math
+
+ETA: 60 min. Depends on: G1. Runs beside G2, G5, G6 and G7b.
+
+Wisp:
+
+- `src/game/text.d.ts`, `src/game/warcraft/text.ts` and
+  `src/game/native/text.ts`, from `src/headless/natives/math.ts` (the eight
+  rows only) and the formatting half of `jassFormat.ts`: `describeNumber`,
+  `fixed` and `leadingNumber`.
+- The rules in `docs/game-api.md`: `formatReal` keeps `R2S`'s binary32 text
+  with ties away from zero, because replays are text.
+
+Smashcraft lands two commits: the pin update alone, then a codemod of the 8
+natives. Every call is one to one, so the lowering needs nothing beyond G1's
+template format.
+
+Done when:
+
+1. In smashcraft `ts/`, `rg -o '\b(I2R|I2S|R2I|R2S|R2SW|S2I|S2R|StringLength)\(' src | wc -l` prints `0`. It prints 235 at e611550e48.
+2. The normalized bundle diff prints nothing, and
+   `bun wisp perf compare build/before.perf build/after.perf --threshold 0`
+   exits 0.
+3. Smashcraft's `bun run test` passes in Bun and Lua32, with parity checksums
+   equal on playable-human-four.
+4. A Bun test and a Lua32 test of `src/game/native/text.ts` give the same text
+   for the same table of values, ties included.
+5. The native window's scripted standalone run shows character select, and its
+   headless client counts zero emulated calls of those 8 natives.
+
+Not required:
+
+- lowering `toReal` to nothing;
+- `SubString`, `SquareRoot`, `Atan2` and the bit natives, which Smashcraft does
+  not call;
+- any other family.
+
+### G4a: players
+
+ETA: 90 min. Depends on: G1, G2. First box of the lockstep path.
+
+Wisp:
+
+- The template format grows two forms in `src/game/warcraft/lowering.ts` and
+  `plugins/game-api.ts`: a global as an argument
+  (`TriggerRegisterPlayerEvent($1, $2, EVENT_PLAYER_LEAVE)`) and a nested
+  native (`SetPlayerColor($1, ConvertPlayerColor($2))`). A template is still
+  one expression, and each `$n` is used at most once.
+- `src/game/players.d.ts`, `src/game/warcraft/players.ts` and
+  `src/game/native/players.ts`, over the netcode session's slots. `Player`
+  moves here from `effects.d.ts`.
+- Headless binds each client's slots into its world.
+
+Smashcraft lands two commits: the pin update alone, then a codemod. The second
+also makes `ts/scripts/wisp/perfLua.ts` fail a run when `clients.firstDivergence()`
+is set, because no perf run checks that today. `ConvertPlayerColor` at `SetUnitColor` moves with bodies (G7a) and the
+mouse-move `TriggerRegisterPlayerEvent` with input (G4c).
+
+Done when:
+
+1. In smashcraft `ts/`, `rg -o '\b(GetLocalPlayer|GetPlayerController|GetPlayerId|GetPlayerName|GetPlayerSlotState|GetTriggerPlayer|Player|SetPlayerColor)\(' src | wc -l` prints `0`, and
+   `rg -c EVENT_PLAYER_LEAVE src` prints nothing. The first prints
+   164 at e611550e48.
+2. The normalized bundle diff prints nothing, and
+   `bun wisp perf compare build/before.perf build/after.perf --threshold 0`
+   exits 0.
+3. Smashcraft's `bun run test` passes in Bun and Lua32, with parity checksums
+   equal on playable-human-four.
+4. `bun wisp perf playable-human-four` exits 0 with its four clients undiverged,
+   and `bun wisp net pair --humans 4 --relay local --script
+   test/native/pads/trailer/online-rollback.pad --frames 600` ends with
+   `checksums match on all 4`.
+5. The native window's scripted standalone run reaches a match with the
+   lobby's slots, and its headless client counts zero emulated calls of those
+   8 natives.
+
+Not required:
+
+- native lobby features beyond the slots (one-team maps, switching maps);
+- any other family.
+
+### G4b: sync messages
+
+ETA: 90 min. Depends on: G4a.
+
+Wisp:
+
+- `src/game/sync.d.ts`, `src/game/warcraft/sync.ts` and
+  `src/game/native/sync.ts`. Under headless the module delivers through
+  `src/headless/syncChannel.ts`, moved with it. Under `net` runs it delivers
+  through `host/net`.
+- The contract: delivery in the same order per peer, including the sender, and
+  a 255-character limit. The native backend throws on a longer message, which
+  headless Bun tests catch.
+
+Smashcraft lands two commits: the pin update alone, then a codemod of the 4
+natives.
+
+Done when:
+
+1. In smashcraft `ts/`, `rg -o '\b(BlzGetTriggerSyncData|BlzGetTriggerSyncPrefix|BlzSendSyncData|BlzTriggerRegisterPlayerSyncEvent)\(' src | wc -l` prints `0`. It prints 39 at e611550e48.
+2. The normalized bundle diff prints nothing, and
+   `bun wisp perf compare build/before.perf build/after.perf --threshold 0`
+   exits 0.
+3. Smashcraft's `bun run test` passes in Bun and Lua32, with parity checksums
+   equal on playable-human-four.
+4. `bun wisp perf playable-human-four` exits 0 with its four clients undiverged,
+   and `bun wisp net pair --humans 4 --relay local --script
+   test/native/pads/trailer/online-rollback.pad --frames 600` ends with
+   `checksums match on all 4`.
+5. A Wisp test sends a 256-character message on the native backend and sees it
+   refused, and its headless client counts zero emulated calls of those 4
+   natives on playable-human-four.
+
+Not required:
+
+- server-sent messages;
+- changing the relay or the wire format.
+
+### G4c: input
+
+ETA: 90 min. Depends on: G4b.
+
+Wisp:
+
+- `src/game/input.d.ts`, `src/game/warcraft/input.ts` and
+  `src/game/native/input.ts`, reading the samples that
+  `host/window/frameLoop.ts` delivers and `src/headless/pointer.ts`.
+- `eventKey` lowers to `GetHandleId(BlzGetTriggerPlayerKey())`, the 6 sites'
+  pair. `osKey(code)` lowers to `ConvertOsKeyType($1)` and stays its own call,
+  because `platform/osKeys.ts` caches its result and `addKeyEvent` takes that
+  value.
+
+Smashcraft lands two commits: the pin update alone, then a codemod of the 17
+natives, which takes the 6 key `GetHandleId` sites with them.
+
+Done when:
+
+1. In smashcraft `ts/`, `rg -o '\b(BlzEnableCursor|BlzEnableSelections|BlzGetMouseScreenPosX|BlzGetMouseScreenPosY|BlzGetTriggerPlayerKey|BlzGetTriggerPlayerMouseX|BlzGetTriggerPlayerMouseY|BlzIsKeyPressed|BlzIsLocalClientActive|BlzIsMouseButtonPressed|BlzSetMousePos|BlzTriggerRegisterPlayerKeyEvent|ConvertOsKeyType|EnableUserControl|GetEventPlayerChatString|TriggerRegisterPlayerChatEvent|TriggerRegisterPlayerEvent)\(' src | wc -l` prints `0`. It prints 50 at e611550e48.
+2. The normalized bundle diff prints nothing, and
+   `bun wisp perf compare build/before.perf build/after.perf --threshold 0`
+   exits 0.
+3. Smashcraft's `bun run test` passes in Bun and Lua32, with parity checksums
+   equal on playable-human-four.
+4. `bun wisp perf playable-human-four` exits 0 with its four clients undiverged,
+   and `bun wisp net pair --humans 4 --relay local --script
+   test/native/pads/trailer/online-rollback.pad --frames 600` ends with
+   `checksums match on all 4`.
+5. The native window's scripted standalone run moves a fighter by key and
+   selects a card by mouse, and its headless client counts zero emulated calls
+   of those 17 natives.
+
+Not required:
+
+- the typed character, relative motion, cursor icon, cage or frame under the
+  pointer (the proposed input completion box);
+- new pad sampling in Rust.
+
+### G4d: clock
+
+ETA: 90 min. Depends on: G4c. Last box of the lockstep path.
+
+Wisp:
+
+- `src/game/clock.d.ts`, `src/game/warcraft/clock.ts` and
+  `src/game/native/clock.ts`: integer frames, fired by the window's frame clock
+  through `host/window/simWorker.ts` and by the frame step under headless.
+- `timerDeadline.ts` stays in `src/headless`. A timer whose period is not a
+  whole number of frames fires on the frame at or after its deadline. If that
+  changes a parity checksum, the map's period changes; the native clock gains
+  no rounding.
+
+Smashcraft lands two commits: the pin update alone, then a codemod of the 9
+natives. `TimerGetElapsed` becomes `localElapsed`.
+
+Done when:
+
+1. In smashcraft `ts/`, `rg -o '\b(CreateTimer|DestroyTimer|GetGameSpeed|PauseTimer|RestartGame|SetGameSpeed|SetMapFlag|TimerGetElapsed|TimerStart)\(' src | wc -l` prints `0`. It prints 61 at e611550e48.
+2. The normalized bundle diff prints nothing, and
+   `bun wisp perf compare build/before.perf build/after.perf --threshold 0`
+   exits 0.
+3. Smashcraft's `bun run test` passes in Bun and Lua32, with parity checksums
+   equal on playable-human-four.
+4. `bun wisp perf playable-human-four` exits 0 with its four clients undiverged,
+   and `bun wisp net pair --humans 4 --relay local --script
+   test/native/pads/trailer/online-rollback.pad --frames 600` ends with
+   `checksums match on all 4`.
+5. The native window's scripted standalone run holds 60 ticks/s through a
+   match, and its headless client counts zero emulated calls of those 9
+   natives.
+
+Not required:
+
+- a composite `onFrame`;
+- changing how `betweenFrames.ts` computes its alpha;
+- saved games.
+
+### G5: sound
+
+ETA: 75 min. Depends on: G1. Runs beside every box before G8a.
+
+Wisp:
+
+- `src/game/sound.d.ts`, `src/game/warcraft/sound.ts` and
+  `src/game/native/sound.ts`, from `src/headless/natives/sound.ts`. The cues
+  still reach `host/window/soundPlayer.ts`.
+
+Smashcraft lands two commits: the pin update alone, then a codemod of the 19
+natives, all one to one.
+
+Done when:
+
+1. In smashcraft `ts/`, `rg -o '\b(ClearMapMusic|CreateSound|CreateSoundFromLabel|EndThematicMusic|GetSoundFileDuration|KillSoundWhenDone|PlayMusic|PlayThematicMusic|SetSoundDistanceCutoff|SetSoundDistances|SetSoundDuration|SetSoundPitch|SetSoundPosition|SetSoundVolume|StartSound|StopMusic|StopSound|VolumeGroupReset|VolumeGroupSetVolume)\(' src | wc -l` prints `0`. It prints 78 at e611550e48.
+2. The normalized bundle diff prints nothing, and
+   `bun wisp perf compare build/before.perf build/after.perf --threshold 0`
+   exits 0.
+3. Smashcraft's `bun run test` passes in Bun and Lua32, with parity checksums
+   equal on playable-human-four.
+4. `bun wisp headless --sound-cues FILE --json` lists the same cues before and
+   after the codemod.
+5. The native window's scripted standalone run reports `audioPlayed` above 0
+   and no missing sound, and its headless client counts zero emulated calls of
+   those 19 natives.
+
+Not required:
+
+- mixer changes in Rust;
+- any other family.
+
+### G6: camera and world look
+
+ETA: 90 min. Depends on: G1. Runs beside every box before G8a.
+
+Wisp:
+
+- `src/game/view.d.ts`, `src/game/warcraft/view.ts` and
+  `src/game/native/view.ts`, from `src/headless/natives/cameraCine.ts`. Fog,
+  sky, terrain, day and night, and light calls that the emulation only records
+  move as records.
+- One call per native, so `GetCameraTargetPositionX/Y/Z` and
+  `GetCameraEyePositionX/Y/Z` are six local reads.
+
+Smashcraft lands two commits: the pin update alone, then a codemod of the 35
+natives. `WispSetSkyLook` and `WispResetSkyLook` stay as they are: they are
+Wisp's own window hooks, guarded by `typeof`, and an API call has no value to
+guard.
+
+Done when:
+
+1. In smashcraft `ts/`, `rg -o '\b(BlzSetMinShadowCastingPointLightCount|BlzSetTerrainFogDrawOverSky|BlzSetTerrainFogMaxLinearDensity|BlzShowSkyBox|BlzShowTerrain|CameraSetSmoothingFactor|DisplayCineFilter|FogEnable|FogMaskEnable|GetCameraEyePositionX|GetCameraEyePositionY|GetCameraEyePositionZ|GetCameraField|GetCameraTargetPositionX|GetCameraTargetPositionY|GetCameraTargetPositionZ|PanCameraToTimed|ResetTerrainFog|SetCameraBounds|SetCameraField|SetCameraPosition|SetCineFilterBlendMode|SetCineFilterDuration|SetCineFilterEndColor|SetCineFilterEndUV|SetCineFilterStartColor|SetCineFilterStartUV|SetCineFilterTexMapFlags|SetCineFilterTexture|SetDayNightModels|SetSkyModel|SetTerrainFogEx|SetTerrainFogExV|SetTimeOfDay|SetTimeOfDayScale)\(' src | wc -l` prints `0`. It prints 80 at e611550e48.
+2. The normalized bundle diff prints nothing, and
+   `bun wisp perf compare build/before.perf build/after.perf --threshold 0`
+   exits 0.
+3. Smashcraft's `bun run test` passes in Bun and Lua32, with parity checksums
+   equal on playable-human-four.
+4. The native window's scripted standalone run frames a match with the same
+   camera pose as before the codemod, and its headless client counts zero
+   emulated calls of those 35 natives.
+
+Not required:
+
+- drawing fog, sky or the filter in Rust (W4);
+- depth of field and world-to-screen.
+
+### G7a: units and positions
+
+ETA: 90 min. Depends on: G1, and G4a for nested templates. Runs beside every
+other box before G8a.
+
+Wisp:
+
+- `src/game/bodies.d.ts`, `src/game/warcraft/bodies.ts` and
+  `src/game/native/bodies.ts`, from `src/headless/natives/units.ts`.
+  `copyBlend` loses its last headless user.
+- `mapCenter` lowers to `GetRectCenter(GetPlayableMapRect())`, and
+  `setBodyColor(body, color)` to `SetUnitColor($1, ConvertPlayerColor($2))`.
+- Calls that only set up Warcraft's unit are no-ops on the native backend,
+  declared as such.
+
+Smashcraft lands two commits: the pin update alone, then a codemod of the 34
+natives and the last `ConvertPlayerColor`. Its `worldOrigin` in
+`host/loop/shell.ts` stays a local function over the parts.
+
+Done when:
+
+1. In smashcraft `ts/`, `rg -o '\b(BlzGetUnitAttackCooldown|BlzSetAbilityTooltip|BlzSetUnitAttackCooldown|BlzSetUnitFacingEx|BlzSetUnitName|BlzSetUnitRealField|BlzShowUnitTeamGlow|ConvertPlayerColor|CreateUnit|GetLocationX|GetLocationY|GetPlayableMapRect|GetRectCenter|GetUnitMoveSpeed|GetUnitTypeId|IsUnitHidden|PauseUnit|RemoveLocation|RemoveUnit|SetUnitAnimation|SetUnitAnimationByIndex|SetUnitBlendTime|SetUnitColor|SetUnitFlyHeight|SetUnitInvulnerable|SetUnitMoveSpeed|SetUnitPathing|SetUnitScale|SetUnitTimeScale|SetUnitVertexColor|SetUnitX|SetUnitY|ShowUnit|UnitAddAbility|UnitRemoveAbility)\(' src | wc -l` prints `0`. It prints 56 at e611550e48.
+2. The normalized bundle diff prints nothing, and
+   `bun wisp perf compare build/before.perf build/after.perf --threshold 0`
+   exits 0.
+3. Smashcraft's `bun run test` passes in Bun and Lua32, with parity checksums
+   equal on playable-human-four.
+4. The native window's scripted standalone run draws the fighters in their team
+   colours, and its headless client counts zero emulated calls of those 35
+   natives.
+
+Not required:
+
+- the `setModel`, `attach` and `queueAnimation` calls (proposed box);
+- any other family.
+
+### G7b: files
+
+ETA: 60 min. Depends on: G1. Runs beside every box before G8a.
+
+Wisp:
+
+- `src/game/files.d.ts`, `src/game/warcraft/files.ts` and
+  `src/game/native/files.ts`: the host's file I/O in the game's data folder.
+  Preload's 259-byte cut stays in `src/headless/natives/preloadText.ts`.
+
+Smashcraft lands two commits: the pin update alone, then a codemod of the 4
+natives.
+
+Done when:
+
+1. In smashcraft `ts/`, `rg -o '\b(Preload|PreloadGenClear|PreloadGenEnd|PreloadGenStart)\(' src | wc -l` prints `0`. It prints 33 at e611550e48.
+2. The normalized bundle diff prints nothing, and
+   `bun wisp perf compare build/before.perf build/after.perf --threshold 0`
+   exits 0.
+3. Smashcraft's `bun run test` passes in Bun and Lua32, with parity checksums
+   equal on playable-human-four.
+4. A Wisp test writes a 300-byte line on the native backend and reads all 300
+   bytes back, and its headless client counts zero emulated calls of those 4
+   natives on playable-human-four.
+
+Not required:
+
+- moving reads out of `src/map/fileio.ts`;
+- saved games.
+
+### G8a: Wisp constants and opaque handles
+
+ETA: 90 min. Depends on: G2, G4d, G5, G6, G7a, G7b. First shrink box.
+
+Wisp:
+
+- `plugins/game-api.ts` lowers a family constant (`EffectAnimation.attack`) to
+  the global the native expects, the same global read as today. G1 added no
+  constants, and the plugin has no form for them yet.
+- Each family's `.d.ts` declares the constants Smashcraft uses, and the native
+  backend gives them Wisp's own values. Until this box they are Warcraft's raw
+  globals, so a family's codemod leaves them in place.
+- Every `export type X = <warcraft type>` in `src/game/*.d.ts` becomes opaque.
+
+Smashcraft lands two commits: the pin update alone, then a codemod of the
+constants and of the handle type names. `platform/soakHandles.ts`,
+`host/loop/sessionRates.ts`, `host/loop/handleLedger.ts` and
+`host/loop/objectData.ts` hold the only casts to a Warcraft type, for
+`GetHandleId` and the by-name wrappers.
+
+Done when:
+
+1. In smashcraft `ts/`, after
+   `grep -oE '^declare (const|var|let) [A-Za-z0-9_]+' node_modules/wisp/src/natives/warcraft.d.ts | awk '{print $3}' > /tmp/constants.txt`,
+   `rg -o -w -f /tmp/constants.txt src | wc -l` prints `0`. It prints 233 at
+   e611550e48.
+2. In wisp, `rg -n '^export type \w+ = [a-z]' src/game/*.d.ts | wc -l` prints
+   `0`, and smashcraft's `bun run check` passes.
+3. The normalized bundle diff prints nothing, and
+   `bun wisp perf compare build/before.perf build/after.perf --threshold 0`
+   exits 0.
+4. Smashcraft's `bun run test` passes in Bun and Lua32, with parity checksums
+   equal on playable-human-four.
+
+Not required:
+
+- removing `GetHandleId` from the diagnostics;
+- Wisp's own code (G8b).
+
+### G8b: Wisp's own code on the API
+
+ETA: 90 min. Depends on: G8a.
+
+Wisp:
+
+- `src/map`, `src/ui` and `examples/` move onto the API, 177 native sites at
+  ac1f9d30, 13 of them in `src/map/fileio.ts`. That file keeps its raw reads as Warcraft backend code,
+  and the native backend gets its own reader.
+- `test/` fixtures do not move here (G8d).
+
+Done when:
+
+1. The survey script over `src/map`, `src/ui` and `examples`, skipping
+   `src/map/fileio.ts`, prints `total natives 0 sites 0`.
+2. `examples/sample`'s compiled bundle diffs empty before and after, with the
+   same normalizing `sed`.
+3. Wisp's `bun test` passes in Bun and Lua32, and smashcraft's `bun run test`
+   passes on a pin of this commit.
+4. `examples/sample` runs in the native window's scripted standalone run with
+   no emulated call of any native.
+
+Not required:
+
+- calls the families lack: a missing call is added to its family in this box,
+  with its lowering row, and nothing else is added.
+
+### G8c: Bun runs only the native backend
+
+ETA: 90 min. Depends on: G8b.
+
+Wisp:
+
+- A map on Bun gets no Warcraft global from `src/headless/client.ts`. Only
+  Wisp's own hooks (`WispSetPlaying`, `WispSetSkyLook`, `WispResetSkyLook`)
+  remain. A `warcraftNatives: true` client option keeps the table for the
+  fixtures that G8d moves, and G8d removes it.
+- Headless Bun/Lua parity still holds: Bun logs each call's lowering row, and
+  Lua logs the same native.
+
+Smashcraft:
+
+- `platform/soakHandles.ts`, `host/loop/sessionRates.ts` and
+  `host/loop/handleLedger.ts` wrap natives by name, so they install nothing on
+  Bun and run only in Lua32. Their tests move to Lua32 or read the native
+  backend's log. The `GetHandleId` diagnostics follow them.
+- The 20 sites in `ts/test` and `ts/scripts` that run on Bun move to the API.
+
+Done when:
+
+1. On Bun, a headless client's `emulatedCalls` sums to 0 over
+   playable-human-four.
+2. In smashcraft `ts/`, the survey script over `src`, skipping those three
+   files, `host/loop/objectData.ts` and the `Wisp*` hooks, prints `total
+   natives 0 sites 0`.
+3. Smashcraft's `bun run test` passes in Bun and Lua32, with parity checksums
+   equal on playable-human-four.
+4. The normalized bundle diff prints nothing, and
+   `bun wisp perf compare build/before.perf build/after.perf --threshold 0`
+   exits 0.
+5. `bun wisp perf playable-human-four` exits 0 with its four clients undiverged,
+   and `bun wisp net pair --humans 4 --relay local --script
+   test/native/pads/trailer/online-rollback.pad --frames 600` ends with
+   `checksums match on all 4`.
+
+Not required:
+
+- deleting any emulation (G8d).
+
+### G8d: delete what no Lua test needs
+
+ETA: 90 min. Depends on: G8c. Last box. If `test/` holds more Bun-only fixtures
+than one worker can land, stop with `Split:` by fixture directory.
+
+Wisp:
+
+- Each `test/` fixture that still needs `warcraftNatives: true` moves to its
+  Lua run or goes with the quirk it tests. `test/` holds 1,034 native
+  sites at ac1f9d30.
+- The option goes. So does every native-named entry point and quirk with no Lua
+  test that needs it, with its row in [headless.md](headless.md). `client.ts`'s
+  table and `warcraft3Natives.ts` stay as what the 32-bit Lua runs need.
+
+Done when:
+
+1. `rg -n 'warcraftNatives' src host test | wc -l` prints `0`.
+2. `rg -l 'timerDeadline|preloadText' src/game | wc -l` prints `0`.
+3. Wisp's `bun test` passes in Bun and Lua32, and smashcraft's `bun run test`
+   passes on a pin of this commit.
+4. The normalized bundle diff prints nothing, and
+   `bun wisp perf compare build/before.perf build/after.perf --threshold 0`
+   exits 0.
+5. The native window's scripted standalone run plays a match on the pinned
+   build.
+
+Not required:
+
+- removing the Warcraft backend or Lua runs;
+- generating `docs/game-api.md` from the declarations.
 
 ## What extension engines were asked for
 
@@ -992,6 +1505,20 @@ The reviewer confirmed these claims as they stood:
 - `wisp play --standalone --window native`, `playable-human-four` and the
   native window plan's labels;
 - that Smashcraft's sim reads no native, and the line citations.
+
+Writing boxes G3 to G8 against Smashcraft's call sites and G1's lowering format
+corrected the first draft of the families:
+
+- `isHuman(slot)`, `worldOrigin`, `placeBody`, `holdGameSpeed`,
+  `pointerPosition`, `setBodyObjectFields` and `writeFile(path, lines)` could
+  not lower byte for byte. Each needed a local, two statements, an allocation
+  or a repeated argument. They became one call per native.
+- G1 has no constants and no nested or global template arguments. G4a adds the
+  arguments, and G8a adds the constants.
+- `bun wisp headless desync` is not the divergence check, because that journey
+  plants a desync on purpose, and no perf run checks divergence today, so G4a
+  adds the check to `perfLua.ts`.
+- Value uses of natives were three files, not one.
 
 On clean-room, the reviewer noted that the lowering table is a new kind of
 file. Its rule is above, and G1 records it in clean-room.md.
