@@ -404,7 +404,7 @@ impl Renderer {
             self.uv_scratch.extend_from_slice(model.rig.uv_rows());
             let slot = (group + self.counts[key]) as usize;
             self.counts[key] += 1;
-            self.instance_scratch[slot] = Instance { model: water::with_reach(pose.matrix, model.liquid.as_ref().filter(|_| model.body.is_none()).map(|(_, surface)| surface.half)), tint: [pose.color[0], pose.color[1], pose.color[2], pose.alpha], team: [pose.team[0], pose.team[1], pose.team[2], 1.0], base: [base as u32, color_base as u32] };
+            self.instance_scratch[slot] = Instance { model: water::with_reach(pose.matrix, model.liquid.as_ref().filter(|_| model.body.is_none()).map(|(_, surface)| surface.half)), tint: [pose.color[0], pose.color[1], pose.color[2], pose.alpha], team: [pose.team[0], pose.team[1], pose.team[2], f32::from(u8::from(pose.unit))], base: [base as u32, color_base as u32] };
             if pose.sequence >= 0 && pose.alpha > 0.0 {
                 for (index, ((emitter, slot), sample)) in model.emitters.iter().zip(model.rig.emitters()).enumerate() {
                     let Some(slot) = *slot else { continue };
@@ -442,7 +442,7 @@ impl Renderer {
             placed[12] = scene.camera.eye[0];
             placed[13] = scene.camera.eye[1];
             placed[14] = scene.camera.eye[2];
-            self.instance_scratch.push(Instance { model: placed, tint: [1.0, 1.0, 1.0, 1.0], team: [1.0; 4], base: [sky_base as u32, sky_color_base as u32] });
+            self.instance_scratch.push(Instance { model: placed, tint: [1.0, 1.0, 1.0, 1.0], team: [1.0, 1.0, 1.0, 0.0], base: [sky_base as u32, sky_color_base as u32] });
         }
         if self.instance_scratch.len() > self.instance_capacity {
             self.instance_capacity = self.instance_scratch.len().next_power_of_two();

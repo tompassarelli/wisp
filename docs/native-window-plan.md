@@ -1189,7 +1189,7 @@ The scene pass draws in linear light into a 4x multisampled half-float target an
 
 **Per-stage grade.** A stage's grade (lift, gamma, gain, saturation) is derived from its own light: shadows lean toward the ambient colour, highlights toward the key colour, and saturation is restored after the curve. A stage with no light uses a neutral grade. Smashcraft's stage look docs (smashcraft: docs/design/home-stages.md) name where an explicit per-stage grade would be set if a derived one is not enough.
 
-**Rim light** is the lighting session's, in the model shader, because it needs the surface normal, which this pass does not have.
+**Rim light** is the lighting session's, in the model shader, because it needs the surface normal, which this pass does not have. It lights units only: the scene marks a pose `unit` (the fighters and other units the host places, not effects or doodads), the instance carries the mark in its team colour's fourth channel, and a stage or backdrop model gets no rim, because the rim brightened Gryphon Aerie's backdrop until it blended with the fighters (2026-10-31).
 
 Cost and tuning constants are `post::look::TUNING`. `bloom_strength` and `occlusion_strength` are the graphics settings' bloom and ssao keys (`Renderer::set_post_tuning`): a strength of zero skips that effect's passes, so the Low preset pays only for the composite.
 

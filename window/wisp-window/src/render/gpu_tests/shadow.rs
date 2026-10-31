@@ -1,6 +1,6 @@
 use super::*;
 
-fn flat_quad(vertices: &mut Vec<Vertex>, indices: &mut Vec<u32>, reach: f32, height: f32) -> (u32, u32) {
+pub(super) fn flat_quad(vertices: &mut Vec<Vertex>, indices: &mut Vec<u32>, reach: f32, height: f32) -> (u32, u32) {
     let base = vertices.len() as u32;
     for (x, y) in [(-reach, -reach), (reach, -reach), (reach, reach), (-reach, reach)] {
         vertices.push(Vertex { position: [x, y, height], normal: [0.0, 0.0, 1.0], uv: [0.0, 0.0], bones: [0; 4], weights: [1.0, 0.0, 0.0, 0.0] });
@@ -23,7 +23,7 @@ fn shade_under_a_caster(features: crate::settings::Features) -> Option<(f32, f32
     scene.camera = scene::Camera { view: translation(0.0, 0.0, -500.0), eye: [0.0, 0.0, 500.0], tangent: 1.0, near: 1.0, far: 10_000.0, sky_far: 10_000.0, rise: 0.0, reach: 2000.0 };
     let slant = std::f32::consts::FRAC_1_SQRT_2;
     scene.light = Some(scene::Light { toward: [slant, 0.0, slant], key: [0.7; 3], ambient: [0.4; 3] });
-    scene.poses = vec![scene::Pose { id: 0, model: "stage".into(), matrix: IDENTITY, sequence: 0, frame: 0.0, clock: 0.0, alpha: 1.0, color: [1.0; 3], team: TEAM }];
+    scene.poses = vec![scene::Pose { id: 0, model: "stage".into(), matrix: IDENTITY, sequence: 0, frame: 0.0, clock: 0.0, alpha: 1.0, color: [1.0; 3], team: TEAM, unit: false }];
     let image = render(&mut renderer, &device, &queue, &scene);
     let at = |x| f32::from(pixel(&image, x, SIDE / 2)[0]) / 255.0;
     Some((at(38), at(96)))
@@ -80,7 +80,7 @@ fn box_on_floor(features: crate::settings::Features, half: [f32; 3], centre: [f3
     let mut scene = Scene { frame: 0, clear: BACKGROUND, ..Scene::default() };
     let slant = std::f32::consts::FRAC_1_SQRT_2;
     scene.light = Some(scene::Light { toward: [slant, 0.0, slant], key: [0.7; 3], ambient: [0.4; 3] });
-    scene.poses = vec![scene::Pose { id: 0, model: "stage".into(), matrix: IDENTITY, sequence: 0, frame: 0.0, clock: 0.0, alpha: 1.0, color: [1.0; 3], team: TEAM }];
+    scene.poses = vec![scene::Pose { id: 0, model: "stage".into(), matrix: IDENTITY, sequence: 0, frame: 0.0, clock: 0.0, alpha: 1.0, color: [1.0; 3], team: TEAM, unit: false }];
     Some(reaches.iter().map(|&reach| {
         scene.camera = scene::Camera { view: translation(0.0, 0.0, -eye), eye: [0.0, 0.0, eye], tangent: TANGENT, near: eye - 200.0, far: 20_000.0, sky_far: 20_000.0, rise: 0.0, reach };
         render_at(&mut renderer, &device, &queue, &scene, WIDE)

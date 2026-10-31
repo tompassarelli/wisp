@@ -34,6 +34,7 @@ struct Varying {
     @location(3) tint: vec4<f32>,
     @location(4) team: vec3<f32>,
     @location(5) fade: f32,
+    @location(6) rim: f32,
 };
 
 fn placement(vertex: Vertex, instance: Instance) -> mat4x4<f32> {
@@ -79,6 +80,7 @@ fn vertex_main(vertex: Vertex, instance: Instance) -> Varying {
     out.normal = normalize((placed * vec4<f32>(vertex.normal, 0.0)).xyz);
     out.tint = tint_of(instance);
     out.team = instance.team.xyz;
+    out.rim = instance.team.w;
     out.fade = fade_of(instance);
     return out;
 }
@@ -181,7 +183,7 @@ fn light_of(in: Varying) -> vec3<f32> {
     }
     let sky = 0.85 + 0.3 * (normal.z * 0.5 + 0.5);
     var light = min(frame.light_ambient.xyz * sky + frame.light_key.xyz * diffuse * visibility, vec3<f32>(MAX_LIGHT));
-    if (layer.lighting == LIT_AND_SHADOWED) {
+    if (layer.lighting == LIT_AND_SHADOWED && in.rim > 0.5) {
         let tint = frame.light_ambient.xyz + frame.light_key.xyz * 0.5;
         let rim = pow(1.0 - clamp(dot(normal, view), 0.0, 1.0), RIM_EDGE);
         light += rim * RIM * tint / max(max(tint.r, tint.g), max(tint.b, 0.001));

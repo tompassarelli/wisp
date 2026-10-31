@@ -43,7 +43,7 @@ fn particle_and_blend_sheet(priority_plane: Option<i32>) -> [f32; 3] {
     renderer.add_model("sheet", ModelData { vertices, indices: vec![0, 1, 2, 0, 2, 3], parts: vec![model::Part { color_slot: 0, first_index: 0, index_count: 6, layers: vec![layer] }], rig: Box::new(FlatRig::new([1.0; 4])), emitters: Vec::new() });
     let mut scene = Scene { frame: 0, clear: BACKGROUND, ..Scene::default() };
     scene.camera = scene::Camera { view: IDENTITY, eye: [0.0; 3], tangent: 1.0, near: 1.0, far: 10_000.0, sky_far: 10_000.0, rise: 0.0, reach: 0.0 };
-    scene.poses = vec![scene::Pose { id: 0, model: "sheet".into(), matrix: IDENTITY, sequence: 0, frame: 0.0, clock: 0.0, alpha: 1.0, color: [1.0; 3], team: TEAM }];
+    scene.poses = vec![scene::Pose { id: 0, model: "sheet".into(), matrix: IDENTITY, sequence: 0, frame: 0.0, clock: 0.0, alpha: 1.0, color: [1.0; 3], team: TEAM, unit: false }];
     let _ = render(&mut renderer, &device, &queue, &scene);
     if let Some(priority_plane) = priority_plane {
         let view = upload(&device, &queue, &crate::texture::Image { width: 1, height: 1, rgba: texel(FAR, 1.0).to_vec() });

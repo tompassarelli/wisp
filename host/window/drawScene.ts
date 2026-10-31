@@ -24,6 +24,7 @@ interface NativePose {
   readonly alpha: number;
   readonly color: number[];
   readonly team: number[];
+  readonly unit: boolean;
 }
 
 const TEAMS = [[255, 3, 3], [0, 66, 255], [28, 230, 185], [84, 0, 129], [255, 252, 1], [254, 138, 14], [32, 192, 0], [229, 91, 176], [149, 150, 151], [126, 191, 241], [16, 98, 70], [78, 42, 4]];
@@ -204,7 +205,7 @@ export function drawScene(scene: RenderScene, library: ModelLibrary) {
     const destroyed = destroyedSample(pose, sequences, scene.frame);
     if (destroyed === "gone") return undefined;
     const sample = destroyed ?? animationSample(sequences, { animation: pose.animation, subAnimations: pose.subAnimations, elapsed: pose.animationElapsed }, pose.unit === true ? "unit" : "effect");
-    return { id: pose.handle.id, model: pose.model, matrix: Array.from(transform(pose)), sequence: sample.sequence, frame: sample.frame, clock: pose.animationClock, alpha: pose.alpha / 255, color: pose.color.map((value) => value / 255), team: (TEAMS[pose.teamColor] ?? NEUTRAL_TEAM).map((value) => value / 255) };
+    return { id: pose.handle.id, model: pose.model, matrix: Array.from(transform(pose)), sequence: sample.sequence, frame: sample.frame, clock: pose.animationClock, alpha: pose.alpha / 255, color: pose.color.map((value) => value / 255), team: (TEAMS[pose.teamColor] ?? NEUTRAL_TEAM).map((value) => value / 255), unit: pose.unit === true };
   };
   const frames = nativeUi(scene.ui.map((frame) => skinned(frame, library.controlSkin)));
   library.show(uiAssets(frames));

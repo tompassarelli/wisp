@@ -22,7 +22,15 @@ test("drawScene_reduces_to_loaded_poses", () => {
   expect(drawn.poses[0]?.frame).toBe(599);
   expect(drawn.poses[0]?.team).toEqual([0, 66 / 255, 1]);
   expect(drawn.poses[0]?.matrix.slice(12, 15)).toEqual([10, 20, 30]);
+  expect(drawn.poses[0]?.unit).toBe(false);
   expect(drawn.camera.view).toHaveLength(16);
+});
+
+test("drawScene_marks_a_unit_pose_for_the_rim_light", () => {
+  const sequences = new Map<string, readonly AnimationSequence[]>([["loaded.mdx", [STAND]]]);
+  const unit = { ...pose("loaded.mdx"), unit: true } as unknown as RenderScene["effects"][number];
+  const drawn = drawScene({ ...scene, effects: [unit, pose("loaded.mdx")] } as unknown as RenderScene, { sequences: (path) => sequences.get(path), show: () => undefined, loading: () => 0, light: () => undefined });
+  expect(drawn.poses.map((placed) => placed.unit)).toEqual([true, false]);
 });
 
 test("modelLibrary_reports_a_missing_model", async () => {

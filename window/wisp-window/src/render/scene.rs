@@ -82,6 +82,9 @@ pub struct Pose {
     pub alpha: f32,
     pub color: [f32; 3],
     pub team: [f32; 3],
+    /// Whether the pose is a unit, which takes the rim light; a stage piece or effect does not.
+    #[serde(default)]
+    pub unit: bool,
 }
 
 /// A weather the map added: the four letters of its id in Warcraft's weather table and the rect it covers (min x, min y, max x, max y).

@@ -127,7 +127,7 @@ fn placed(model: &str, x: f32, y: f32, z: f32, color: [f32; 3]) -> Pose {
     matrix[12] = x;
     matrix[13] = y;
     matrix[14] = z;
-    Pose { id: 0, model: model.into(), matrix, sequence: 0, frame: 0.0, clock: 0.0, alpha: 1.0, color, team: [1.0; 3] }
+    Pose { id: 0, model: model.into(), matrix, sequence: 0, frame: 0.0, clock: 0.0, alpha: 1.0, color, team: [1.0; 3], unit: false }
 }
 
 /// A fighter's effect whose path names a liquid without being one.
@@ -187,7 +187,7 @@ impl Stage {
     }
 
     fn scene(facing: f32, preset: Preset) -> Scene {
-        let mut fighter = placed("fighter", -240.0, 0.0, 0.0, [0.95, 0.25, 0.2]);
+        let mut fighter = Pose { unit: true, ..placed("fighter", -240.0, 0.0, 0.0, [0.95, 0.25, 0.2]) };
         fighter.matrix[0] = facing;
         let eye = [0.0, -1500.0, 330.0];
         Scene {
@@ -471,16 +471,16 @@ fn an_effect_whose_path_names_a_liquid_leaves_the_sea_water() {
 fn the_far_sea_mirrors_the_sky_and_not_the_clear_colour() {
     let size = (960, 640);
     let Some(mut stage) = Stage::new(size) else { return };
-    let mut scene = Stage::scene(1.0, Preset::Water);
-    scene.clear = [0.0; 3];
+    let scene = Scene { clear: [0.0; 3], ..Stage::scene(1.0, Preset::Water) };
     stage.draw(&scene);
     let rgba = stage.read();
     if let Ok(dir) = std::env::var("WISP_WATER_CAPTURE_DIR") {
         std::fs::create_dir_all(&dir).unwrap();
         capture::write(&PathBuf::from(dir).join("far-sea.png"), size.0, size.1, &rgba).unwrap();
     }
-    let darkest = (300..340).flat_map(|y| (0..280).map(move |x| (x, y))).map(|(x, y)| pixel(&rgba, size.0, x, y).iter().map(|&channel| u32::from(channel)).sum::<u32>()).min().unwrap();
-    assert!(darkest > 150, "the far sea shows the dark clear colour, its darkest pixel sums to {darkest}");
+    let darkest = |rgba: &[u8]| (300..340).flat_map(|y| (0..280).map(move |x| (x, y))).map(|(x, y)| pixel(&rgba, size.0, x, y).iter().map(|&channel| u32::from(channel)).sum::<u32>()).min().unwrap();
+    let (black, white) = (darkest(&rgba), { stage.draw(&Scene { clear: [1.0; 3], ..scene }); darkest(&stage.read()) });
+    assert!(black.abs_diff(white) <= 16, "the far sea changes with the clear colour: its darkest pixel sums to {black} over black and {white} over white");
 }
 
 /// Tomb of Sargeras lays a narrow water strip at the deck before a wide sea far below it; the scene is mirrored in the sea's plane, so a reflection sits under what it reflects.

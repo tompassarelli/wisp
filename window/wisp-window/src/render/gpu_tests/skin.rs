@@ -18,7 +18,7 @@ fn a_vertex_group_of_six_bones_draws_where_the_mean_of_its_bones_puts_it() {
     renderer.add_model("six", crate::render::source::build(six_bone_quad(), crate::remaster::Quality::Off).expect("a model of six bones builds"));
     let mut scene = Scene { frame: 0, clear: BACKGROUND, ..Scene::default() };
     scene.camera = scene::Camera { view: IDENTITY, eye: [0.0; 3], tangent: 1.0, near: 1.0, far: 10_000.0, sky_far: 10_000.0, rise: 0.0, reach: 0.0 };
-    scene.poses = vec![scene::Pose { id: 0, model: "six".into(), matrix: IDENTITY, sequence: 0, frame: 0.0, clock: 0.0, alpha: 1.0, color: [1.0; 3], team: TEAM }];
+    scene.poses = vec![scene::Pose { id: 0, model: "six".into(), matrix: IDENTITY, sequence: 0, frame: 0.0, clock: 0.0, alpha: 1.0, color: [1.0; 3], team: TEAM, unit: false }];
     let image = render(&mut renderer, &device, &queue, &scene);
     let drawn = |x: u32| pixel(&image, x, SIDE / 2)[0] > 160;
     // The bones shift the quad by 20 world units on average, which at a depth of 100 and a tangent of 1 is 12.8 pixels, so it spans pixels 64 to 89.6.

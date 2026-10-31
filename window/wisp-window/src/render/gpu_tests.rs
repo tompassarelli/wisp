@@ -6,6 +6,7 @@ use image::ImageEncoder;
 
 mod lightning;
 mod remaster;
+mod rim;
 mod shadow;
 
 const SIDE: u32 = 128;
@@ -247,7 +248,7 @@ fn centre_of_pose(sheets: &[Sheet], geoset: [f32; 4], alpha: f32) -> [f32; 3] {
     renderer.add_model("sheets", ModelData { vertices, indices, parts, rig: Box::new(FlatRig::new(geoset)), emitters: Vec::new() });
     let mut scene = Scene { frame: 0, clear: BACKGROUND, ..Scene::default() };
     scene.camera = scene::Camera { view: IDENTITY, eye: [0.0; 3], tangent: 1.0, near: 1.0, far: 10_000.0, sky_far: 10_000.0, rise: 0.0, reach: 0.0 };
-    scene.poses = vec![scene::Pose { id: 0, model: "sheets".into(), matrix: IDENTITY, sequence: 0, frame: 0.0, clock: 0.0, alpha, color: [1.0; 3], team: TEAM }];
+    scene.poses = vec![scene::Pose { id: 0, model: "sheets".into(), matrix: IDENTITY, sequence: 0, frame: 0.0, clock: 0.0, alpha, color: [1.0; 3], team: TEAM, unit: false }];
     let scope = device.push_error_scope(wgpu::ErrorFilter::Validation);
     let light = light_at_centre(&mut renderer, &device, &queue, &scene);
     let error = pollster::block_on(scope.pop());
@@ -395,7 +396,7 @@ fn a_rig_is_posed_with_the_scene_clock_in_seconds() {
     renderer.add_model("clock", ModelData { vertices, indices: vec![0, 1, 2], parts: vec![draw], rig: Box::new(ClockRig(seen.clone())), emitters: Vec::new() });
     let mut scene = Scene::default();
     scene.camera = scene::Camera { view: IDENTITY, eye: [0.0; 3], tangent: 1.0, near: 1.0, far: 10_000.0, sky_far: 10_000.0, rise: 0.0, reach: 0.0 };
-    scene.poses = vec![scene::Pose { id: 0, model: "clock".into(), matrix: IDENTITY, sequence: 0, frame: 0.0, clock: 2.5, alpha: 1.0, color: [1.0; 3], team: TEAM }];
+    scene.poses = vec![scene::Pose { id: 0, model: "clock".into(), matrix: IDENTITY, sequence: 0, frame: 0.0, clock: 2.5, alpha: 1.0, color: [1.0; 3], team: TEAM, unit: false }];
     let _ = render(&mut renderer, &device, &queue, &scene);
     assert_eq!(*seen.lock().unwrap(), 2.5, "the pose clock reaches the rig as seconds, which the rig turns into global sequence milliseconds");
 }
