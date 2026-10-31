@@ -487,7 +487,7 @@ fn a_model_drawn_into_a_sprite_frame_binds_the_current_scene_uniform() {
     let shot = sprite::Shot { model: "fighter".into(), sequence: 0, frame: 0.0, clock: 0.0, bounds: [-40.0, 0.0, 0.0, 40.0, 0.0, 120.0], team: [1.0; 3] };
     let scope = device.push_error_scope(wgpu::ErrorFilter::Validation);
     let mut encoder = device.create_command_encoder(&Default::default());
-    renderer.draw_sprite(&mut encoder, 0, (96, 128), &shot, None);
+    renderer.draw_sprite(&mut encoder, &mut crate::gpu_time::PassTimer::off(), 0, (96, 128), &shot, None);
     queue.submit([encoder.finish()]);
     let _ = device.poll(wgpu::PollType::wait_indefinitely());
     let error = pollster::block_on(scope.pop());

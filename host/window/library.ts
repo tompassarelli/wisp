@@ -54,13 +54,15 @@ export const buildWindowLibrary = (path: string, windowDirectory: string) => Eff
   }
   const [program, ...args] = buildCommand(windowDirectory);
   const target = workingTarget();
+  const source = sourceHash(windowDirectory);
   console.log(`building wisp-window in ${target} for ${dirname(dirname(path))} (first run of this revision)`);
   // CARGO_INCREMENTAL beats a user-level build.incremental = false, which would leave every rebuild non-incremental
   const code = yield* ChildProcessSpawner.ChildProcessSpawner.use((spawner) => spawner.exitCode(ChildProcess.make(program!, args, {
-    cwd: windowDirectory, env: { CARGO_TARGET_DIR: target, CARGO_INCREMENTAL: "1" }, extendEnv: true, stdin: "ignore", stdout: "inherit", stderr: "inherit",
+    cwd: windowDirectory, env: { CARGO_TARGET_DIR: target, CARGO_INCREMENTAL: "1", WISP_WINDOW_SOURCE: source }, extendEnv: true, stdin: "ignore", stdout: "inherit", stderr: "inherit",
   }))).pipe(Effect.mapError((failure) => new WindowLibraryFailure({ problem: `${program}: ${failure.message}` })));
   const built = join(target, "release", basename(path));
   if (Number(code) !== 0 || !existsSync(built)) return yield* new WindowLibraryFailure({ problem: `building wisp-window with ${program} exited ${Number(code)}` });
+  if (!readFileSync(built).includes(source)) return yield* new WindowLibraryFailure({ problem: `${built} is not built from source ${source}: another checkout's build is in the shared target folder` });
   publishLibrary(built, path);
   return path;
 }).pipe(Effect.provide(BunServices.layer));

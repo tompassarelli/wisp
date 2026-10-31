@@ -28,6 +28,7 @@ mod pad_sdl;
 mod pointer;
 mod surface_target;
 mod mixer;
+pub mod gpu_time;
 pub mod post;
 mod sync;
 mod timer;
@@ -343,13 +344,19 @@ pub unsafe extern "C" fn wisp_window_release(handle: *mut c_void) {
     })
 }
 
-/// The button names (by bit of the next_event mask) and metric names (by number) as JSON; returns its full length.
+/// The source hash `buildWindowLibrary` passes in; cargo rebuilds the crate when it changes, so worktrees sharing one target folder never publish each other's build.
+const SOURCE: &str = match option_env!("WISP_WINDOW_SOURCE") {
+    Some(source) => source,
+    None => "",
+};
+
+/// The button names (by bit of the next_event mask), metric names (by number) and the source hash the library was built from as JSON; returns its full length.
 ///
 /// # Safety
 /// `out` has room for `capacity` bytes.
 #[no_mangle]
 pub unsafe extern "C" fn wisp_window_vocabulary(out: *mut u8, capacity: usize) -> usize {
-    guard(0, || copy_text(&format!("{{\"buttons\":{:?},\"metrics\":{:?}}}", input::BUTTONS, metrics::SERIES), out, capacity))
+    guard(0, || copy_text(&format!("{{\"buttons\":{:?},\"metrics\":{:?},\"source\":{:?}}}", input::BUTTONS, metrics::SERIES, SOURCE), out, capacity))
 }
 
 /// Opens the sound output: a cpal stream on the default device, or a mixer into nothing when the machine has none (`wisp_audio_info` says which).

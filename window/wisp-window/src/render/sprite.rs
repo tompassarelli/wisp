@@ -208,7 +208,7 @@ impl Renderer {
     }
 
     /// Draws `shot` into sprite `index`'s target of `size`, lit by the scene's light colours from the camera's upper left; a sprite already showing this pose is left as it is.
-    pub(crate) fn draw_sprite(&mut self, encoder: &mut wgpu::CommandEncoder, index: usize, size: (u32, u32), shot: &Shot, scene_light: Option<&Light>) {
+    pub(crate) fn draw_sprite(&mut self, encoder: &mut wgpu::CommandEncoder, timer: &mut crate::gpu_time::PassTimer, index: usize, size: (u32, u32), shot: &Shot, scene_light: Option<&Light>) {
         let Some(&id) = self.model_ids.get(shot.model.as_str()) else { return };
         let model = &mut self.models[id];
         let bones = model.bones;
@@ -260,7 +260,7 @@ impl Renderer {
                 label: Some("sprite"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment { view: &slot.msaa, depth_slice: None, resolve_target: Some(&slot.resolved), ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT), store: wgpu::StoreOp::Discard } })],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment { view: &slot.depth, depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(1.0), store: wgpu::StoreOp::Discard }), stencil_ops: None }),
-                timestamp_writes: None,
+                timestamp_writes: timer.writes(crate::gpu_time::Pass::Sprites),
                 occlusion_query_set: None,
                 multiview_mask: None,
             });

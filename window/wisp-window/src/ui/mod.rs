@@ -206,7 +206,7 @@ impl UiRenderer {
     }
 
     /// Records the scene's frames over `target`, with `area` (x, y, width, height in pixels) as the screen the 0.8 x 0.6 units fill.
-    pub fn draw(&mut self, encoder: &mut wgpu::CommandEncoder, target: &wgpu::TextureView, target_size: (u32, u32), area: Pixels, textures: &dyn UiTextures) {
+    pub fn draw(&mut self, encoder: &mut wgpu::CommandEncoder, timer: &mut crate::gpu_time::PassTimer, target: &wgpu::TextureView, target_size: (u32, u32), area: Pixels, textures: &dyn UiTextures) {
         if self.scene.frames.is_empty() && self.overlay.frames.is_empty() {
             return;
         }
@@ -229,7 +229,7 @@ impl UiRenderer {
             label: Some("ui"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment { view: target, depth_slice: None, resolve_target: None, ops: wgpu::Operations { load: wgpu::LoadOp::Load, store: wgpu::StoreOp::Store } })],
             depth_stencil_attachment: None,
-            timestamp_writes: None,
+            timestamp_writes: timer.writes(crate::gpu_time::Pass::Ui),
             occlusion_query_set: None,
             multiview_mask: None,
         });

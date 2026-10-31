@@ -1,5 +1,6 @@
 //! The render passes of a frame: the sky, the solid scene, and with water the mirrored scene, the water over the refracted solids, and what blends over it.
 
+use crate::gpu_time::{Pass, PassTimer};
 use crate::post::Look;
 
 use super::ripples::Placement;
@@ -39,6 +40,7 @@ struct Attachments<'a> {
     resolve: Option<&'a wgpu::TextureView>,
     depth_ops: Option<wgpu::Operations<f32>>,
     size: (u32, u32),
+    timestamps: Option<wgpu::RenderPassTimestampWrites<'a>>,
 }
 
 impl Attachments<'_> {
@@ -48,7 +50,7 @@ impl Attachments<'_> {
                 label: Some(self.label),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment { view: self.color, depth_slice: None, resolve_target: self.resolve, ops: wgpu::Operations { load: self.load, store: wgpu::StoreOp::Store } })],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment { view: self.depth, depth_ops: self.depth_ops, stencil_ops: None }),
-                timestamp_writes: None,
+                timestamp_writes: self.timestamps,
                 occlusion_query_set: None,
                 multiview_mask: None,
             })
@@ -98,16 +100,16 @@ impl Renderer {
     }
 
     /// The sky and the scene seen from under the water plane, at the reflection's size, for the water pass to read.
-    fn draw_reflection(&self, encoder: &mut wgpu::CommandEncoder, clear: wgpu::Color, procedural_sky: bool) {
+    fn draw_reflection(&self, encoder: &mut wgpu::CommandEncoder, timer: &mut PassTimer, clear: wgpu::Color, procedural_sky: bool) {
         let (Some(water), true) = (self.water.targets.as_ref(), self.water_level.is_some()) else { return };
         let sky = self.sky_group_of.as_ref().filter(|_| !procedural_sky);
         if let Some(group) = sky {
-            let mut pass = Attachments { label: "reflected sky", color: &water.reflect_color, depth: &water.reflect_depth, load: wgpu::LoadOp::Clear(clear), resolve: None, depth_ops: fresh(wgpu::StoreOp::Discard), size: water.reflect_size }.begin(encoder);
+            let mut pass = Attachments { label: "reflected sky", color: &water.reflect_color, depth: &water.reflect_depth, load: wgpu::LoadOp::Clear(clear), resolve: None, depth_ops: fresh(wgpu::StoreOp::Discard), size: water.reflect_size, timestamps: timer.writes(Pass::Reflection) }.begin(encoder);
             pass.set_bind_group(0, &self.mirror_sky.group, &[]);
             self.draw_both(&mut pass, std::slice::from_ref(group), Stage::Everything, None);
         }
         let load = if sky.is_some() { wgpu::LoadOp::Load } else { wgpu::LoadOp::Clear(clear) };
-        let mut pass = Attachments { label: "reflection", color: &water.reflect_color, depth: &water.reflect_depth, load, resolve: Some(&water.reflect_resolved), depth_ops: fresh(wgpu::StoreOp::Discard), size: water.reflect_size }.begin(encoder);
+        let mut pass = Attachments { label: "reflection", color: &water.reflect_color, depth: &water.reflect_depth, load, resolve: Some(&water.reflect_resolved), depth_ops: fresh(wgpu::StoreOp::Discard), size: water.reflect_size, timestamps: timer.writes(Pass::Reflection) }.begin(encoder);
         if procedural_sky {
             self.post.draw_reflected_sky(&mut pass);
         }
@@ -118,11 +120,16 @@ impl Renderer {
     /// Draws `scene` into `target`, a surface view of `size` in this renderer's format, in the encoder's order: the sky, then the world.
     /// The world fills the window and keeps the reach of the `aspect` picture (the game's width over its height) in view: a taller or wider window shows more world, never bars.
     pub fn draw(&mut self, encoder: &mut wgpu::CommandEncoder, target: &wgpu::TextureView, size: (u32, u32), aspect: f32, scene: &Scene) {
+        self.draw_timed(encoder, &mut PassTimer::off(), target, size, aspect, scene);
+    }
+
+    /// `draw`, with each pass writing its stamps through `timer`.
+    pub fn draw_timed(&mut self, encoder: &mut wgpu::CommandEncoder, timer: &mut PassTimer, target: &wgpu::TextureView, size: (u32, u32), aspect: f32, scene: &Scene) {
         self.fit_targets(size);
         self.particles.begin(scene.frame);
         let window = size.0 as f32 / size.1.max(1) as f32;
         if self.prepare(scene, aspect, window, size) && !self.groups.is_empty() {
-            self.shadow.draw(encoder, &self.models, &self.groups, &self.instance_buffer);
+            self.shadow.draw(encoder, timer.writes(Pass::Shadow), &self.models, &self.groups, &self.instance_buffer);
         }
 
         let clear = (if scene.clear == [0.0; 3] { super::CLEAR } else { scene.clear.map(f64::from) }).map(linear_of);
@@ -142,12 +149,12 @@ impl Renderer {
         let targets = self.targets.as_ref().expect("fit_targets ran");
         let images = self.water_level.and_then(|_| self.water.group(&self.device, &targets.depth));
 
-        self.draw_reflection(encoder, clear, procedural_sky);
+        self.draw_reflection(encoder, timer, clear, procedural_sky);
         if procedural_sky {
-            self.post.draw_clouds(encoder);
+            self.post.draw_clouds(encoder, timer);
         }
         {
-            let mut pass = Attachments { label: "sky", color: &targets.color, depth: &targets.depth, load: wgpu::LoadOp::Clear(clear), resolve: None, depth_ops: fresh(wgpu::StoreOp::Discard), size }.begin(encoder);
+            let mut pass = Attachments { label: "sky", color: &targets.color, depth: &targets.depth, load: wgpu::LoadOp::Clear(clear), resolve: None, depth_ops: fresh(wgpu::StoreOp::Discard), size, timestamps: timer.writes(Pass::Sky) }.begin(encoder);
             if procedural_sky {
                 self.post.draw_sky(&mut pass);
             } else if let Some(group) = self.sky_group_of.as_ref() {
@@ -158,11 +165,11 @@ impl Renderer {
         let refracted = self.water.targets.as_ref().map(|water| &water.refracted);
         if let (Some(images), Some(refracted)) = (&images, refracted) {
             {
-                let mut pass = Attachments { label: "solid", color: &targets.color, depth: &targets.depth, load: wgpu::LoadOp::Load, resolve: Some(refracted), depth_ops: fresh(wgpu::StoreOp::Store), size }.begin(encoder);
+                let mut pass = Attachments { label: "solid", color: &targets.color, depth: &targets.depth, load: wgpu::LoadOp::Load, resolve: Some(refracted), depth_ops: fresh(wgpu::StoreOp::Store), size, timestamps: timer.writes(Pass::Scene) }.begin(encoder);
                 pass.set_bind_group(0, &self.main.group, &[]);
                 self.draw_both(&mut pass, &self.groups, Stage::Solid, None);
             }
-            let mut pass = Attachments { label: "water", color: &targets.color, depth: &targets.depth, load: wgpu::LoadOp::Load, resolve: Some(&targets.resolved), depth_ops: None, size }.begin(encoder);
+            let mut pass = Attachments { label: "water", color: &targets.color, depth: &targets.depth, load: wgpu::LoadOp::Load, resolve: Some(&targets.resolved), depth_ops: None, size, timestamps: timer.writes(Pass::Scene) }.begin(encoder);
             pass.set_bind_group(0, &self.main.group, &[]);
             self.draw_both(&mut pass, &self.groups, Stage::Water, Some(images));
             self.draw_both(&mut pass, &self.groups, Stage::Soft, None);
@@ -171,7 +178,7 @@ impl Renderer {
             self.weather.draw(&mut pass, &self.particles);
             drop(pass);
         } else {
-            let mut pass = Attachments { label: "scene", color: &targets.color, depth: &targets.depth, load: wgpu::LoadOp::Load, resolve: Some(&targets.resolved), depth_ops: fresh(wgpu::StoreOp::Store), size }.begin(encoder);
+            let mut pass = Attachments { label: "scene", color: &targets.color, depth: &targets.depth, load: wgpu::LoadOp::Load, resolve: Some(&targets.resolved), depth_ops: fresh(wgpu::StoreOp::Store), size, timestamps: timer.writes(Pass::Scene) }.begin(encoder);
             pass.set_bind_group(0, &self.main.group, &[]);
             self.draw_both(&mut pass, &self.groups, Stage::Everything, None);
             self.particles.draw(&mut pass);
@@ -179,6 +186,6 @@ impl Renderer {
             self.weather.draw(&mut pass, &self.particles);
             drop(pass);
         }
-        self.post.encode(encoder, target);
+        self.post.encode(encoder, target, timer);
     }
 }

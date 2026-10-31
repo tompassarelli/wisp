@@ -861,7 +861,46 @@ The probe reports the following as figures, not gates:
 - `presentedMs`, `inputToPresentMs` and `wakeMs`;
 - `stepMs` and `sceneMs`;
 - `gcPauseMs` and `workerGcPauseMs`;
-- `missedPresentsAfterLateScene`.
+- `missedPresentsAfterLateScene`;
+- `cpuEncodeMs`, the render thread's time to record and finish a frame's
+  commands, beside `drawMs`, which also holds the submit;
+- `gpuPassMs`, the GPU's time per kind of pass from timestamp queries
+  (`frame` spans the first pass's beginning to the last one's end; then
+  `shadow`, `reflection`, `clouds`, `sky`, `scene`, `post`, `sprites`, `ui`,
+  and `counter` for the baseline), only for the passes that ran. Each frame
+  writes its stamps into one query set of a ring of four, resolves them into
+  that slot's readback buffer and maps it after the submit; a later frame
+  reads the slots whose map finished, so the render thread never waits on the
+  GPU for its own figures, and a frame that finds every slot still mapping
+  goes untimed. On an adapter without `TIMESTAMP_QUERY`, or a run whose stamps
+  never came back, the result has `gpuPassMsAbsent` with the reason instead;
+- `stageMs`, a spread for each stage time the game returned with its steps
+  (`StandaloneSession.stages`, such as the sim tick, a rollback's
+  resimulation or the scene build).
+
+The window's five-second pulse line prints `gpu p99` (the frame span) beside
+`draw p99`, or `gpu untimed`, so a player's own log separates GPU time from
+the producer's.
+
+Measured 31 October 2026 on gex45's RTX PRO 4000 (Blackwell, Vulkan, `Fifo`,
+private desktop at 2880x1920, `bun wisp window probe --frames 700`, the sample
+map's scene; CPU pressure 59% before and 84% after over ten seconds, load 56 to
+78 on 20 cores from the farm and Warcraft clients), in milliseconds:
+
+Series | p50 | p95 | p99 | max
+--- | --- | --- | --- | ---
+`gpuPassMs.frame` | 0.44 | 0.44 | 0.50 | 0.58
+`gpuPassMs.sky` | 0.03 | 0.03 | 0.03 | 0.10
+`gpuPassMs.scene` | 0.07 | 0.07 | 0.07 | 0.09
+`gpuPassMs.post` | 0.28 | 0.28 | 0.28 | 0.29
+`cpuEncodeMs` | 0.68 | 1.98 | 4.61 | 5.98
+`drawMs` | 0.99 | 3.21 | 5.38 | 8.51
+`presentedMs` | 24.75 | 79.72 | 138.47 | 159.39
+
+The sample scene drew no shadow, reflection, cloud, sprite or UI pass, so
+those keys are absent. The GPU finishes a frame in under 0.6 ms while frames
+present 25 ms apart (104 missed presents, 49 late scenes): on this loaded host
+the CPU side, not the GPU, sets the frame rate.
 
 `sceneMs.p99` above 1 ms still triggers the binary scene layout.
 

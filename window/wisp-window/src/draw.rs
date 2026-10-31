@@ -8,6 +8,8 @@ use std::sync::Arc;
 use winit::window::Window;
 
 use crate::capture;
+use crate::gpu_time::{GpuClock, Pass, PassTimer};
+use crate::metrics::Timings;
 use crate::menu::{self, Menu};
 use crate::present::PresentSetting;
 use crate::settings::{self, Settings, Store, PRESETS};
@@ -119,6 +121,8 @@ pub struct Gpu {
     menu: Menu,
     sweep: Option<Sweep>,
     images: HashSet<u64>,
+    clock: Result<GpuClock, String>,
+    encode_ms: Option<f64>,
     pub adapter: String,
     pub backend: String,
 }
@@ -135,7 +139,7 @@ impl Gpu {
             apply_limit_buckets: false,
         }))
         .map_err(|e| format!("adapter: {e}"))?;
-        let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor { required_limits: crate::remaster::device_limits(&adapter.limits()), ..Default::default() })).map_err(|e| format!("device: {e}"))?;
+        let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor { required_features: GpuClock::features(adapter.features()), required_limits: crate::remaster::device_limits(&adapter.limits()), ..Default::default() })).map_err(|e| format!("device: {e}"))?;
         let mut config = surface.get_default_config(&adapter, size.width.max(1), size.height.max(1)).ok_or("surface not supported by the adapter")?;
         let formats = surface.get_capabilities(&adapter).formats;
         let plain = config.format.remove_srgb_suffix();
@@ -188,7 +192,8 @@ impl Gpu {
         let mut renderer = Renderer::new(device.clone(), queue.clone(), config.format, crate::remaster::Quality::Off, settings.features()).with_upscaler(Arc::new(upscaler));
         renderer.set_quality(settings.quality(settings::developer_quality()));
         let ui = UiRenderer::new(device.clone(), queue.clone(), config.format);
-        Ok(Self { surface, config, device, queue, pipeline, vertices, renderer, ui, aspect, scene: None, capture, adapter_handle: adapter, present, settings, store, menu: Menu::default(), sweep, images: HashSet::new(), adapter: info.name, backend: format!("{:?}", info.backend) })
+        let clock = GpuClock::new(&device, &queue);
+        Ok(Self { surface, config, device, queue, pipeline, vertices, renderer, ui, aspect, scene: None, capture, adapter_handle: adapter, present, settings, store, menu: Menu::default(), sweep, images: HashSet::new(), clock, encode_ms: None, adapter: info.name, backend: format!("{:?}", info.backend) })
     }
 
     /// Applies what the player did at the options screen since the last frame, saving a change.
@@ -301,17 +306,18 @@ impl Gpu {
     pub fn draw(&mut self, texture: &wgpu::SurfaceTexture, step: u64) {
         let began = Instant::now();
         let view = texture.texture.create_view(&Default::default());
+        let mut timer = self.clock.as_mut().map_or_else(|_| PassTimer::off(), GpuClock::begin);
         if let Some(scene) = &self.scene {
             let frame = scene.frame;
             let mut encoder = self.device.create_command_encoder(&Default::default());
             let size = (self.config.width, self.config.height);
-            self.renderer.draw(&mut encoder, &view, size, self.aspect, scene);
+            self.renderer.draw_timed(&mut encoder, &mut timer, &view, size, self.aspect, scene);
             let bake = self.renderer.bake_progress().map(|progress| menu::Bake { progress, filter: progress.total > 0 && progress.ready() && self.renderer.upscales_with_filter(), playing: scene.playing, pending: self.renderer.art_pending() });
             self.ui.set_overlay(self.menu.scene(&self.settings, bake));
             let area = ui_area(size);
-            self.ui.each_sprite(area, |index, extent, shot| self.renderer.draw_sprite(&mut encoder, index, extent, shot, scene.light.as_ref()));
-            self.ui.draw(&mut encoder, &view, size, area, &self.renderer);
-            self.queue.submit([encoder.finish()]);
+            self.ui.each_sprite(area, |index, extent, shot| self.renderer.draw_sprite(&mut encoder, &mut timer, index, extent, shot, scene.light.as_ref()));
+            self.ui.draw(&mut encoder, &mut timer, &view, size, area, &self.renderer);
+            self.encode_ms = Some(submit(&mut self.clock, &self.queue, encoder, timer, began));
             let after = self.capture.as_ref().map_or(u32::MAX, |capture| capture.after);
             let modelled = scene.poses.is_empty() || scene.poses.iter().any(|pose| self.renderer.has_model(&pose.model));
             let ready = scene.pending == 0 && modelled;
@@ -336,7 +342,7 @@ impl Gpu {
                     ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color { r, g, b, a: 1.0 }), store: wgpu::StoreOp::Store },
                 })],
                 depth_stencil_attachment: None,
-                timestamp_writes: None,
+                timestamp_writes: timer.writes(Pass::Counter),
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
@@ -344,7 +350,17 @@ impl Gpu {
             pass.set_vertex_buffer(0, self.vertices.slice(..));
             pass.draw(0..VERTICES as u32, 0..1);
         }
-        self.queue.submit([encoder.finish()]);
+        self.encode_ms = Some(submit(&mut self.clock, &self.queue, encoder, timer, began));
+    }
+
+    /// The last frame's encode time and the GPU times that came back since the last call.
+    pub fn timings(&mut self) -> Timings {
+        Timings { cpu_encode_ms: self.encode_ms.take(), gpu: self.clock.as_mut().map_or_else(|_| Vec::new(), GpuClock::collect) }
+    }
+
+    /// Why this window cannot time its passes on the GPU, if it cannot.
+    pub fn gpu_timing_unavailable(&self) -> Option<&str> {
+        self.clock.as_ref().err().map(String::as_str)
     }
 }
 
@@ -440,6 +456,20 @@ impl Gpu {
         }
         let _ = capture::write(path, width, height, &rgba);
     }
+}
+
+/// Resolves the frame's stamps, finishes and submits its commands, and returns the milliseconds from `began` to the finished command buffer, the frame's encode time.
+fn submit(clock: &mut Result<GpuClock, String>, queue: &wgpu::Queue, mut encoder: wgpu::CommandEncoder, timer: PassTimer, began: Instant) -> f64 {
+    if let Ok(clock) = clock.as_mut() {
+        clock.finish(&mut encoder, timer);
+    }
+    let commands = encoder.finish();
+    let encode_ms = began.elapsed().as_secs_f64() * 1000.0;
+    queue.submit([commands]);
+    if let Ok(clock) = clock.as_mut() {
+        clock.submitted();
+    }
+    encode_ms
 }
 
 fn ui_area(size: (u32, u32)) -> [f32; 4] {

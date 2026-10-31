@@ -143,13 +143,13 @@ impl Shadow {
     }
 
     /// Draws every solid layer of every group into the depth map.
-    pub fn draw(&self, encoder: &mut wgpu::CommandEncoder, models: &[GpuModel], groups: &[Group], instances: &wgpu::Buffer) {
+    pub fn draw(&self, encoder: &mut wgpu::CommandEncoder, timestamps: Option<wgpu::RenderPassTimestampWrites<'_>>, models: &[GpuModel], groups: &[Group], instances: &wgpu::Buffer) {
         let mut pass = encoder
             .begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("sun"),
                 color_attachments: &[],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment { view: &self.view, depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(1.0), store: wgpu::StoreOp::Store }), stencil_ops: None }),
-                timestamp_writes: None,
+                timestamp_writes: timestamps,
                 occlusion_query_set: None,
                 multiview_mask: None,
             })

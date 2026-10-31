@@ -4,7 +4,7 @@ use std::thread;
 use std::time::Duration;
 
 use crate::input::Input;
-use crate::metrics::{ms, Beat, Metrics, Pulse, Series};
+use crate::metrics::{ms, Beat, Metrics, Pulse, Series, Timings};
 pub use crate::mailbox::{End, Event, Mailbox, Sample, Submission};
 use crate::pacing::{Pacer, Phase, StepClock};
 use crate::sync::lock;
@@ -34,6 +34,10 @@ pub trait Surface {
     /// Takes the scene a submission carried; the surface keeps what it needs to draw it.
     fn load_scene(&mut self, bytes: &[u8]) -> Result<(), String> {
         serde_json::from_slice::<serde_json::Value>(bytes).map(drop).map_err(|_| "the scene was not JSON".to_string())
+    }
+    /// What the surface measured of the frame it just drew; nothing by default.
+    fn timings(&mut self) -> Timings {
+        Timings::default()
     }
     fn present(&self, image: Self::Image);
     /// Runs while the window shows its loading state: takes what Bun sent so far.
@@ -144,6 +148,7 @@ impl<S: Surface, C: Clock> FrameLoop<S, C> {
         let drawing = self.clock.now_ns();
         self.surface.draw(&image, self.drawn_step);
         let drawn = self.clock.now_ns();
+        let timings = self.surface.timings();
         self.surface.present(image);
         let presented = self.clock.now_ns();
         if let Some(arrived) = outcome.arrived_ns {
@@ -157,8 +162,8 @@ impl<S: Surface, C: Clock> FrameLoop<S, C> {
         }
         if mode != Mode::Loading {
             let times = Times { asked, acquired, drawing, drawn, presented };
-            self.publish(&outcome, &times, interval, missed);
-            let beat = Beat { presented_ns: presented, interval_ms: interval, step: self.drawn_step, late: outcome.late, dropped: outcome.dropped, acquire_ms: ms(asked, acquired), draw_ms: ms(drawing, drawn) };
+            self.publish(&outcome, &times, &timings, interval, missed);
+            let beat = Beat { presented_ns: presented, interval_ms: interval, step: self.drawn_step, late: outcome.late, dropped: outcome.dropped, acquire_ms: ms(asked, acquired), draw_ms: ms(drawing, drawn), gpu_ms: timings.gpu.iter().map(|frame| frame.span_ms).collect() };
             if let Some(line) = self.pulse.beat(beat) {
                 eprintln!("{line}");
             }
@@ -175,13 +180,19 @@ impl<S: Surface, C: Clock> FrameLoop<S, C> {
         (anchor, if blocking { acquired } else { extrapolated })
     }
 
-    fn publish(&self, outcome: &Outcome, times: &Times, interval: Option<f64>, missed: bool) {
+    fn publish(&self, outcome: &Outcome, times: &Times, timings: &Timings, interval: Option<f64>, missed: bool) {
         let mut metrics = lock(&self.metrics);
         if let Some(interval) = interval {
             metrics.push(Series::Presented, interval);
         }
         metrics.push(Series::Acquire, ms(times.asked, times.acquired));
         metrics.push(Series::Draw, ms(times.drawing, times.drawn));
+        if let Some(encode) = timings.cpu_encode_ms {
+            metrics.push(Series::CpuEncode, encode);
+        }
+        for frame in &timings.gpu {
+            metrics.gpu(frame);
+        }
         if let Some(parse) = outcome.parse_ms {
             metrics.push(Series::Parse, parse);
             if let Some(sampled) = self.drawn_sample_ns() {
@@ -419,7 +430,7 @@ mod tests {
 
         assert_eq!(seen, (0..FRAMES).collect::<Vec<_>>(), "the consumer got every sample in order");
         let metrics = lock(&metrics);
-        let flags = |which: Series| metrics.series(which as u32).iter().map(|flag| *flag as u32).collect::<Vec<_>>();
+        let flags = |which: Series| metrics.series(which.index() as u32).iter().map(|flag| *flag as u32).collect::<Vec<_>>();
         let late: Vec<u32> = (0..FRAMES).map(|frame| u32::from((LATE_SAMPLE..LATE_SAMPLE + LATE_FRAMES).contains(&frame))).collect();
         assert_eq!(flags(Series::LateScenes), late, "exactly the frames waiting on the slow sample were late");
         assert_eq!(flags(Series::MissedPresents).iter().sum::<u32>(), 0, "no present missed");

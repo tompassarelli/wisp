@@ -1,8 +1,8 @@
 import { Effect, Schedule } from "effect";
 import { RenderFailure } from "../render/headlessRender";
 import { openNativeWindow } from "./binding";
-import { type RenderSeries, RENDER_SERIES, renderSeriesSince, sum } from "./renderSeries";
-import { spread, summed } from "./stats";
+import { type RenderSeries, RENDER_SERIES, gpuReport, renderSeriesSince, sum } from "./renderSeries";
+import { spread, spreads, summed } from "./stats";
 import { openSimPlayer } from "./simPlayer";
 import type { NativeGameModule } from "./simProtocol";
 
@@ -16,6 +16,7 @@ interface WindowFigures {
   readonly backend: string;
   readonly presentMode: string;
   readonly desiredMaximumFrameLatency: number;
+  readonly gpuTimingUnavailable?: string | undefined;
   readonly render: RenderSeries;
 }
 
@@ -25,6 +26,8 @@ export interface ProbeSamples extends WindowFigures {
   readonly stepMs: readonly number[];
   readonly encodeMs: readonly number[];
   readonly readAssetMs: readonly number[];
+  /** The stage times the game returned with its steps, one series per name. */
+  readonly stageMs: Readonly<Record<string, readonly number[]>>;
 }
 
 /** Runs the game through the production player and window, stepped on a worker thread, for `warmupFrames + frames` frames and keeps the last `frames` of each series. */
@@ -35,18 +38,20 @@ export const measureWindow = (game: NativeGameModule, title: string, frames: num
   });
   const result = yield* sim.completed;
   console.error(`probe: the run completed at ${Math.round(performance.now())} ms`);
-  const series = result.series as Record<string, number[]> & { render?: RenderSeries };
+  const series = result.series as Record<string, number[]> & { render?: RenderSeries; stages?: Record<string, number[]> };
   const keep = (values: readonly number[] | undefined) => (values ?? []).slice(-frames);
   if (series.render === undefined) return yield* new RenderFailure({ cause: new Error("the run ended before its measured frames") });
   return {
     frames, warmupFrames, adapter: String(result.adapter), backend: String(result.backend), presentMode: String(result.presentMode),
     desiredMaximumFrameLatency: Number(result.desiredMaximumFrameLatency), render: series.render,
+    gpuTimingUnavailable: typeof result.gpuTimingUnavailable === "string" ? result.gpuTimingUnavailable : undefined,
     wakeMs: keep(series.wakes), stepMs: keep(series.steps), encodeMs: keep(series.encodes), readAssetMs: series.readAssets ?? [],
+    stageMs: Object.fromEntries(Object.entries(series.stages ?? {}).map(([name, values]) => [name, keep(values)])),
   } satisfies ProbeSamples;
 }));
 
-/** The figures the plan's first box asks for, from the render thread alone: the gated counts with their bounds, and the present-path times beside them. */
-const renderReport = (render: RenderSeries) => {
+/** The figures the plan's first box asks for, from the render thread alone: the gated counts with their bounds, the present-path times beside them, and the CPU's encode time apart from the GPU's time per pass. */
+const renderReport = (render: RenderSeries, gpuTimingUnavailable: string | undefined) => {
   const counts = {
     missedPresents: sum(render.missedPresents), missedPresentsAfterLateScene: sum(render.missedPresentsAfterLateScene),
     lateScenes: sum(render.lateScenes), droppedSamples: sum(render.droppedSamples),
@@ -54,7 +59,8 @@ const renderReport = (render: RenderSeries) => {
   return {
     ...counts,
     gates: { missedPresents: counts.missedPresents === 0, lateScenes: counts.lateScenes <= LATE_SCENES_BOUND, droppedSamples: counts.droppedSamples === 0 },
-    presentedMs: spread(render.presentedMs), inputToPresentMs: spread(render.inputToPresentMs), drawMs: spread(render.drawMs), parseMs: spread(render.parseMs),
+    presentedMs: spread(render.presentedMs), inputToPresentMs: spread(render.inputToPresentMs), drawMs: spread(render.drawMs), cpuEncodeMs: spread(render.cpuEncodeMs), parseMs: spread(render.parseMs),
+    ...gpuReport((name) => render[name], gpuTimingUnavailable),
   };
 };
 
@@ -63,17 +69,18 @@ const renderReport = (render: RenderSeries) => {
  * holds the wake and the worker's heap runs the game, so both are reported as figures beside the gated counts.
  */
 export function probeReport(samples: ProbeSamples, pauses: ReadonlyMap<string, readonly number[]>, mainHeap: string | undefined) {
-  const { wakeMs, stepMs, encodeMs, readAssetMs, render, ...rest } = samples;
+  const { wakeMs, stepMs, encodeMs, readAssetMs, stageMs, render, gpuTimingUnavailable, ...rest } = samples;
   const main = mainHeap === undefined ? [] : pauses.get(mainHeap) ?? [];
   const worker = [...pauses].filter(([heap]) => heap !== mainHeap).flatMap(([, values]) => values);
   return {
     ...rest,
-    ...renderReport(render),
+    ...renderReport(render, gpuTimingUnavailable),
     wakeMs: spread(wakeMs), stepMs: spread(stepMs),
     sceneMs: spread(summed(encodeMs, render.parseMs)), encodeMs: spread(encodeMs),
     gcPauseMs: { ...spread(main), count: main.length },
     workerGcPauseMs: { ...spread(worker), count: worker.length },
     readAssetMs: spread(readAssetMs),
+    stageMs: spreads(stageMs),
   };
 }
 
@@ -93,5 +100,6 @@ export const measureBaseline = (title: string, frames: number, warmupFrames: num
   yield* Effect.all([framesTaken, windowEnded]).pipe(Effect.repeat({ schedule: Schedule.spaced(BASELINE_POLL), until: ([taken, ended]) => taken >= wanted || ended }));
   if ((yield* framesTaken) < wanted) return yield* new RenderFailure({ cause: new Error(window.error() ?? "the window closed before the baseline finished") });
   const render = renderSeriesSince(window, Object.fromEntries(RENDER_SERIES.map((name) => [name, warmupFrames])) as Record<(typeof RENDER_SERIES)[number], number>, frames);
-  return { baseline: true, frames, warmupFrames, ...window.info(), ...renderReport(render) };
+  const { gpuTimingUnavailable, ...info } = window.info();
+  return { baseline: true, frames, warmupFrames, ...info, ...renderReport(render, gpuTimingUnavailable) };
 }));

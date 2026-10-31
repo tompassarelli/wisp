@@ -22,6 +22,8 @@ export interface StandaloneFrame {
   readonly checksum?: string;
   readonly capture: boolean;
   readonly done: boolean;
+  /** Named stage times of this step in milliseconds, such as the sim tick or a rollback's resimulation; the native window keeps a series per name and reports each one's spread. */
+  readonly stages?: Readonly<Record<string, number>> | undefined;
 
   readonly serverMs: number;
 }

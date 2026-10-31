@@ -8,6 +8,8 @@ mod look;
 
 use std::mem::size_of;
 
+use crate::gpu_time::{Pass, PassTimer};
+
 pub use look::{agx, srgb_encode, tone_map, Grade, Look, Params, Tuning, LUT_SIZE, TUNING};
 
 const COMMON: &str = include_str!("common.wgsl");
@@ -324,19 +326,19 @@ impl Post {
     }
 
     /// Paints the sky's cloud layers and sun shafts into the small cloud texture the sky pass lays over its gradient, when the stage's sky has clouds; call it before the scene pass.
-    pub fn draw_clouds(&self, encoder: &mut wgpu::CommandEncoder) {
+    pub fn draw_clouds(&self, encoder: &mut wgpu::CommandEncoder, timer: &mut PassTimer) {
         if self.clouded {
             let targets = self.targets.as_ref().expect("fit ran");
-            Self::fullscreen(encoder, "clouds", &targets.cloud, wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT), &self.pipelines.cloud, &self.cloud_group);
+            Self::fullscreen(encoder, timer.writes(Pass::Clouds), "clouds", &targets.cloud, wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT), &self.pipelines.cloud, &self.cloud_group);
         }
     }
 
-    fn fullscreen(encoder: &mut wgpu::CommandEncoder, label: &str, target: &wgpu::TextureView, load: wgpu::LoadOp<wgpu::Color>, pipeline: &wgpu::RenderPipeline, group: &wgpu::BindGroup) {
+    fn fullscreen(encoder: &mut wgpu::CommandEncoder, timestamps: Option<wgpu::RenderPassTimestampWrites<'_>>, label: &str, target: &wgpu::TextureView, load: wgpu::LoadOp<wgpu::Color>, pipeline: &wgpu::RenderPipeline, group: &wgpu::BindGroup) {
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some(label),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment { view: target, depth_slice: None, resolve_target: None, ops: wgpu::Operations { load, store: wgpu::StoreOp::Store } })],
             depth_stencil_attachment: None,
-            timestamp_writes: None,
+            timestamp_writes: timestamps,
             occlusion_query_set: None,
             multiview_mask: None,
         });
@@ -346,16 +348,20 @@ impl Post {
     }
 
     /// Occlusion and the bloom chain when their strengths are above zero, then the composite onto `target`; `fit` and `prepare` have run.
-    pub fn encode(&self, encoder: &mut wgpu::CommandEncoder, target: &wgpu::TextureView) {
-        self.encode_marked(encoder, target, &mut |_, _| ());
+    pub fn encode(&self, encoder: &mut wgpu::CommandEncoder, target: &wgpu::TextureView, timer: &mut PassTimer) {
+        self.encode_with(encoder, target, timer, &mut |_, _| ());
     }
 
     /// `encode`, calling `mark` with the encoder and the pass's name after each pass, so a caller can write timestamps between them.
     pub fn encode_marked(&self, encoder: &mut wgpu::CommandEncoder, target: &wgpu::TextureView, mark: &mut dyn FnMut(&mut wgpu::CommandEncoder, &str)) {
+        self.encode_with(encoder, target, &mut PassTimer::off(), mark);
+    }
+
+    fn encode_with(&self, encoder: &mut wgpu::CommandEncoder, target: &wgpu::TextureView, timer: &mut PassTimer, mark: &mut dyn FnMut(&mut wgpu::CommandEncoder, &str)) {
         let targets = self.targets.as_ref().expect("fit ran");
         let clear = wgpu::LoadOp::Clear(wgpu::Color::BLACK);
         let mut run = |encoder: &mut wgpu::CommandEncoder, label: &str, view: &wgpu::TextureView, load, pipeline: &wgpu::RenderPipeline, group: &wgpu::BindGroup| {
-            Self::fullscreen(encoder, label, view, load, pipeline, group);
+            Self::fullscreen(encoder, timer.writes(Pass::Post), label, view, load, pipeline, group);
             mark(encoder, label);
         };
         if self.occluding {

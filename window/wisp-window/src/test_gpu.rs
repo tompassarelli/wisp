@@ -15,7 +15,7 @@ pub(crate) fn with_info() -> Shared {
                 None => pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions { power_preference: wgpu::PowerPreference::HighPerformance, force_fallback_adapter: false, ..Default::default() })).ok()?,
             };
             eprintln!("adapter: {}", adapter.get_info().name);
-            let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())).ok()?;
+            let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor { required_features: crate::gpu_time::GpuClock::features(adapter.features()), ..Default::default() })).ok()?;
             Some((adapter.get_info(), device, queue))
         })
         .clone()

@@ -19,7 +19,7 @@ use crate::frame::{Clock, End, Event, FrameLoop, Mailbox, Mode, Seam, Submission
 use crate::input::Input;
 use crate::keys::{KeyEvent, Keys};
 use crate::menu;
-use crate::metrics::Metrics;
+use crate::metrics::{Metrics, Timings};
 use crate::pad::Pads;
 use crate::pointer::Pointer;
 use crate::present::PresentSetting;
@@ -390,6 +390,10 @@ impl Surface for WindowSurface {
         self.absorb();
     }
 
+    fn timings(&mut self) -> Timings {
+        self.gpu.timings()
+    }
+
     fn present(&self, image: Self::Image) {
         self.window.pre_present_notify();
         self.gpu.present(image);
@@ -423,7 +427,8 @@ impl Seam for InputSeam {
 }
 
 fn info_json(gpu: &Gpu) -> String {
-    format!("{{\"adapter\":{:?},\"backend\":{:?},\"presentMode\":{:?},\"desiredMaximumFrameLatency\":1,\"imageCount\":{}}}", gpu.adapter, gpu.backend, gpu.setting().name(), gpu.image_count())
+    let untimed = gpu.gpu_timing_unavailable().map_or(String::new(), |why| format!(",\"gpuTimingUnavailable\":{why:?}"));
+    format!("{{\"adapter\":{:?},\"backend\":{:?},\"presentMode\":{:?},\"desiredMaximumFrameLatency\":1,\"imageCount\":{}{untimed}}}", gpu.adapter, gpu.backend, gpu.setting().name(), gpu.image_count())
 }
 
 fn mode_of(shared: &Shared) -> Mode {

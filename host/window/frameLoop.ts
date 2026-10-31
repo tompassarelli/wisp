@@ -1,7 +1,8 @@
 import { Effect } from "effect";
 import type { StandaloneFrame, StandaloneInput } from "../render/standaloneFrames";
 import type { InputSample, WindowView } from "./binding";
-import { spread } from "./stats";
+import { gpuReport } from "./renderSeries";
+import { spread, spreads } from "./stats";
 
 /** What `openStandalone` gives a window that drives the session itself: the scene before the first step, one step, and the end of the run, whose result comes back with the sound figures added. */
 export interface NativePlayer {
@@ -31,6 +32,8 @@ export interface FrameSeries {
   readonly encodes: number[];
   readonly frames: number[];
   readonly intervals: number[];
+  /** The stage times the game returned with its steps (`StandaloneFrame.stages`), one series per name. */
+  readonly stages: Record<string, number[]>;
 }
 
 export interface FrameLoop {
@@ -47,7 +50,7 @@ const thrown = (cause: unknown) => (cause instanceof Error ? cause.message : Str
 
 /** The step, scene and bookkeeping for each sample of a native window, on whichever thread runs the game. */
 export function createFrameLoop(player: NativePlayer, window: WindowView, options: FrameLoopOptions, finished: (result: Readonly<Record<string, unknown>>) => void): FrameLoop {
-  const series: FrameSeries = { wakes: [], steps: [], encodes: [], frames: [], intervals: [] };
+  const series: FrameSeries = { wakes: [], steps: [], encodes: [], frames: [], intervals: [], stages: {} };
   const prepared = player.prepare();
   let ended = false, disposed = false, previous = 0, firstFrameAt = 0;
 
@@ -62,7 +65,8 @@ export function createFrameLoop(player: NativePlayer, window: WindowView, option
         gpu: window.info().adapter, ...window.info(), isolated: false, startupMs: options.startupMs, prepared: { models: prepared.models.length, step: prepared.step },
         frames: series.frames.length, elapsedMs, fps: series.frames.length * 1000 / elapsedMs,
         frameMs: spread(series.frames), intervalMs: spread(series.intervals), presentedMs: spread(Array.from(window.metric("presentedMs"))),
-        requestMs: spread(series.steps), renderMs: spread(Array.from(window.metric("drawMs"))), inputToPresentMs: spread(Array.from(window.metric("inputToPresentMs"))),
+        requestMs: spread(series.steps), renderMs: spread(Array.from(window.metric("drawMs"))), cpuEncodeMs: spread(Array.from(window.metric("cpuEncodeMs"))),
+        ...gpuReport((name) => Array.from(window.metric(name)), window.info().gpuTimingUnavailable), stageMs: spreads(series.stages), inputToPresentMs: spread(Array.from(window.metric("inputToPresentMs"))),
         wakeMs: spread(series.wakes), encodeMs: spread(series.encodes), parseMs: spread(Array.from(window.metric("parseMs"))),
         audioEvents: 0, audioReadyEvents: 0, audioPlayed: 0, audioDecodedAssets: 0, missingSounds: [] as string[],
         ...options.extraResult?.(series),
@@ -82,6 +86,7 @@ export function createFrameLoop(player: NativePlayer, window: WindowView, option
     try {
       const input: StandaloneInput = options.scripted ? { buttons: [], axisX: 0, axisY: 0 } : { buttons: window.buttons(sample.mask), axisX: sample.axisX, axisY: sample.axisY, pointer: sample.pointer, keys: sample.keys };
       const frame = player.advance(input);
+      for (const [name, ms] of Object.entries(frame.stages ?? {})) (series.stages[name] ??= []).push(ms);
       const stepped = performance.now();
       window.submit(options.encodeScene === undefined ? JSON.stringify(frame.scene) : options.encodeScene(frame.scene), frame.step, sample.frame);
       const submitted = performance.now();

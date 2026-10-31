@@ -86,6 +86,8 @@ export interface WindowInfo {
   readonly desiredMaximumFrameLatency: number;
   /** The distinct images `Fifo` has handed back so far; the swapchain's image count once the acquires have cycled. */
   readonly imageCount: number;
+  /** Why the window cannot time its passes on the GPU; absent when it can. */
+  readonly gpuTimingUnavailable?: string;
 }
 
 /** What the thread that steps the game needs from an open window: the samples and scenes, the status and the measured series. Any thread can hold one. */

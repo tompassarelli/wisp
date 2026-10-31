@@ -32,6 +32,8 @@ export interface StandaloneSession {
   checksum(): string;
   frame?(): number;
   finished?(): boolean;
+  /** The named stage times of the last step in milliseconds, such as the sim tick, a rollback's resimulation or the scene build; the native window reports a spread for each name. */
+  stages?(): Readonly<Record<string, number>>;
   close(): void;
   /** Frames advance on their own (a networked match); `step` only hands over the input and the scene is read as it stands. */
   readonly paced?: boolean;
@@ -140,6 +142,7 @@ export const openStandalone = (game: StandaloneGame, options: StandaloneOptions 
     const outside = session.client.missingNatives.find((missing) => missing.outsideProfile === true);
     if (outside !== undefined) throw new Error(`p${outside.client} frame ${outside.frame}: ${missingNativeMessage(outside)}`);
     const frame = session.frame?.() ?? session.client.frame;
+    const stages = session.stages?.();
     const checksum = recordChecksums ? session.checksum() : undefined;
     steps++;
     if (checksum !== undefined) checksums.push({ step: steps, frame, checksum, simulationMs: performance.now() - start });
@@ -150,7 +153,7 @@ export const openStandalone = (game: StandaloneGame, options: StandaloneOptions 
     soundOffset = session.client.soundLog.length;
     soundPlayer?.cues(cues);
     const frameOf = { scene: { ...scene, frame, units: [], effects: scene.effects.filter((effect) => effect.alpha > 0 && effect.scale > 0 && !effect.flat), ui: scene.ui.filter((element) => element.visible && element.alpha > 0) },
-      sounds: cues, step: steps, frame, ...(checksum === undefined ? {} : { checksum }), capture, done, serverMs: performance.now() - start } satisfies StandaloneFrame;
+      sounds: cues, step: steps, frame, ...(checksum === undefined ? {} : { checksum }), capture, done, ...(stages === undefined ? {} : { stages }), serverMs: performance.now() - start } satisfies StandaloneFrame;
     return { frame: frameOf, saved: capture ? scene : undefined };
   };
   const step = (body: string) => Effect.gen(function*() {

@@ -32,3 +32,7 @@ export const gcPausesByHeap = (log: string): Map<string, number[]> => {
 
 /** The heap whose collections come first in a log, which is the main thread's VM because it starts before any worker. */
 export const firstHeap = (log: string): string | undefined => /\[GC<(0x[0-9a-f]+)>/.exec(log)?.[1];
+
+/** A spread for each named series, for the stage times a game returns with its steps. */
+export const spreads = (series: Readonly<Record<string, readonly number[]>>): Record<string, Spread> =>
+  Object.fromEntries(Object.entries(series).map(([name, values]) => [name, spread(values)]));

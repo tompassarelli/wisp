@@ -78,7 +78,7 @@ fn run_with(device: &wgpu::Device, queue: &wgpu::Queue, light: impl Fn(u32, u32)
         })),
         Some(depth_of) => write_depth(device, queue, &mut encoder, &depth_view, depth_of),
     }
-    post.encode(&mut encoder, &target_view);
+    post.encode(&mut encoder, &target_view, &mut crate::gpu_time::PassTimer::off());
     let buffer = device.create_buffer(&wgpu::BufferDescriptor { label: None, size: (SIDE * SIDE * 4) as u64, usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ, mapped_at_creation: false });
     encoder.copy_texture_to_buffer(
         target.as_image_copy(),
