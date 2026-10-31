@@ -9,7 +9,7 @@ import { Quests } from "../game/native/quests";
 import { enforceStandaloneProfile } from "./standaloneProfile";
 import { FRAMES_PER_SECOND, steppedFrames } from "../game/native/frameRate";
 import { describeNumber } from "../game/native/textFormat";
-import { EmulatedCalls, logUnlessLocal } from "./nativeCalls";
+import { checkIntentionalNoops, EmulatedCalls, loggedNative, logUnlessLocal } from "./nativeCalls";
 import { Lightnings } from "../game/native/lightnings";
 import { Weathers } from "./weather";
 import { ViewNatives } from "./natives/view";
@@ -215,49 +215,11 @@ export class HeadlessClient {
     };
 
     const count = this.emulated.count;
-    const logged = (name: string, parameters: number, behave: (this: void, ...args: unknown[]) => unknown): ((this: void, ...args: unknown[]) => unknown) => {
-      switch (parameters) {
-        case 0: return () => {
-          log.push({ name, args: [] });
-          count(name);
-          return behave();
-        };
-        case 1: return (a: unknown) => {
-          log.push({ name, args: [a] });
-          count(name);
-          return behave(a);
-        };
-        case 2: return (a: unknown, b: unknown) => {
-          log.push({ name, args: [a, b] });
-          count(name);
-          return behave(a, b);
-        };
-        case 3: return (a: unknown, b: unknown, c: unknown) => {
-          log.push({ name, args: [a, b, c] });
-          count(name);
-          return behave(a, b, c);
-        };
-        case 4: return (a: unknown, b: unknown, c: unknown, d: unknown) => {
-          log.push({ name, args: [a, b, c, d] });
-          count(name);
-          return behave(a, b, c, d);
-        };
-        default: return (...args: unknown[]) => {
-          log.push({ name, args });
-          count(name);
-          return behave(...args);
-        };
-      }
-    };
     const arity = new Map<string, number>();
     const declared = new Set<string>();
     const missing = new Set<string>();
     const noops = options.intentionalNoops ?? {};
-    for (const name of Object.keys(noops)) {
-      if (!options.declarations.functions.some(([native]) => native === name) || (noops[name] ?? "").trim() === "") {
-        throw new Error(`intentional no-op ${name} needs a declared native and a concrete reason`);
-      }
-    }
+    checkIntentionalNoops(noops, options.declarations.functions);
     for (const [name, returns, parameters] of options.declarations.functions) {
       declared.add(name);
       arity.set(name, parameters);
@@ -269,7 +231,7 @@ export class HeadlessClient {
         }
         return fallback();
       })) as (this: void, ...args: unknown[]) => unknown;
-      this.natives[name] = local[name] === undefined ? logged(name, parameters, behave) : this.emulated.counting(name, behave);
+      this.natives[name] = local[name] === undefined ? loggedNative(log, count, name, parameters, behave) : this.emulated.counting(name, behave);
     }
 
     for (const [name, type] of options.declarations.constants) this.natives[name] = WARCRAFT3_ENUM_VALUES[name] ?? (type === "number" ? 0 : type === "boolean" ? name === "TRUE" : name);
@@ -286,7 +248,7 @@ export class HeadlessClient {
     for (const name of Object.keys(extra)) {
       const value = extra[name];
       this.natives[name] = typeof value === "function" && declared.has(name) && local[name] === undefined
-        ? logged(name, arity.get(name) ?? 5, value as (this: void, ...args: unknown[]) => unknown)
+        ? loggedNative(log, count, name, arity.get(name) ?? 5, value as (this: void, ...args: unknown[]) => unknown)
         : value;
     }
     enforceStandaloneProfile(options.standaloneProfile, declared, this.natives, (native) => { this.missingNatives.push({ native, client: this.slot, frame: this.frame, outsideProfile: true }); });

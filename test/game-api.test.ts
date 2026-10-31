@@ -73,6 +73,7 @@ const families = [
   { name: "input", table: input, backend: nativeInput },
   { name: "clock", table: clock, backend: nativeClock },
   { name: "bodies", table: bodies, backend: nativeBodies },
+  { name: "view", table: view, backend: nativeView },
 ] as const;
 
 test.each(families)("every $name lowering row names a declared native with the arity of its Wisp function and an implemented backend call", ({ name, table, backend }) => {
@@ -366,19 +367,6 @@ test("view calls compile to the native calls they replaced, byte for byte", () =
   expect(raw.diagnostics).toBe("");
   expect(lowered.lua).toBe(raw.lua);
   expect(lowered.lua).toContain("GetCameraTargetPositionX()");
-});
-
-test("every view lowering row names a declared native with the arity of its Wisp function and an implemented backend call", () => {
-  const declared = new Map(readNativeDeclarations().functions.map(([name, , parameters]) => [name, parameters] as const));
-  const dts = readFileSync(join(root, "src/game/view.d.ts"), "utf8");
-  const exported = [...dts.matchAll(/export declare function (\w+)\(([^)]*)\)/g)].map(match => [match[1]!, (match[2] ?? "").trim() === "" ? 0 : (match[2] ?? "").split(",").length] as const);
-  expect(exported.map(([name]) => name).sort()).toEqual(Object.keys(view).sort());
-  expect(Object.keys(nativeView).sort()).toEqual(Object.keys(view).sort());
-  for (const [name, parameters] of exported) {
-    const template = parseTemplate(view[name] ?? "");
-    expect(declared.get(template.native)).toBe(template.args.length);
-    expect(template.args.filter(part => "arg" in part).length).toBe(parameters);
-  }
 });
 
 test("the view backend logs the native call of its lowering row, keeps each client's view apart and shares it with the client's Warcraft-named natives", () => {
