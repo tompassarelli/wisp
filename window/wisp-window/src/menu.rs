@@ -113,7 +113,7 @@ pub struct Bake {
 }
 
 impl Bake {
-    fn label(self) -> String {
+    pub fn label(self) -> String {
         match (self.progress.ready(), self.filter) {
             (false, _) if self.playing => format!("Preparing {}%, paused in the match", self.progress.percent()),
             (false, _) => format!("Preparing {}%", self.progress.percent()),

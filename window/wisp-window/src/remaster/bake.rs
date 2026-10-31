@@ -35,9 +35,20 @@ struct Job {
     bytes: Arc<[u8]>,
 }
 
+struct Missing {
+    job: Job,
+    key: String,
+}
+
+enum Step {
+    Check(Job),
+    Bake(Missing),
+}
+
 #[derive(Default)]
 struct State {
-    queue: Vec<Job>,
+    unchecked: Vec<Job>,
+    queue: Vec<Missing>,
     seen: HashSet<String>,
     progress: Progress,
     playing: bool,
@@ -77,11 +88,11 @@ impl Baker {
         }
         state.began.get_or_insert_with(Instant::now);
         state.progress.total += 1;
-        state.queue.push(Job { path: path.to_string(), bytes });
+        state.unchecked.push(Job { path: path.to_string(), bytes });
         self.shared.wake.notify_all();
     }
 
-    /// While the game is playing, no texture starts baking.
+    /// While the game is playing, no texture starts baking; the check of what the cache already holds is only file reads and hashing, so it goes on and the progress stays true.
     pub fn set_playing(&self, playing: bool) {
         let mut state = lock(&self.shared);
         if state.playing && !playing && state.upscaled_while_playing > 0 {
@@ -110,46 +121,63 @@ fn lock(shared: &Shared) -> MutexGuard<'_, State> {
 
 fn run(shared: &Shared, quality: Quality, cache: &Cache, upscaler: &Upscaler) {
     loop {
-        let job = {
+        let step = {
             let mut state = lock(shared);
-            while !state.stopped && (state.playing || state.queue.is_empty()) {
+            while !state.stopped && state.unchecked.is_empty() && (state.playing || state.queue.is_empty()) {
                 state = shared.wake.wait(state).unwrap_or_else(|poisoned| poisoned.into_inner());
             }
             if state.stopped {
                 return;
             }
-            state.queue.pop().expect("the queue is not empty")
+            match state.unchecked.pop() {
+                Some(job) => Step::Check(job),
+                None => Step::Bake(state.queue.pop().expect("a texture is waiting to bake")),
+            }
         };
-        let (edges, role) = (Edges::for_path(&job.path), Role::for_path(&job.path));
-        let key = cache_key(&job.bytes, quality, upscaler, edges, role);
-        let baked = !cache.holds(&key);
-        if baked {
-            match prepare(&job.bytes, quality, Some(cache), upscaler, edges, role, &job.path) {
-                Ok(prepared) if prepared.relief.is_none() => cache.keep_as_is(&key),
-                Ok(_) => {}
-                Err(error) => {
-                    eprintln!("wisp remaster: {}: {error}", job.path);
-                    cache.keep_as_is(&key);
+        let baked = match step {
+            Step::Check(job) => {
+                let key = cache_key(&job.bytes, quality, upscaler, Edges::for_path(&job.path), Role::for_path(&job.path));
+                if cache.holds(&key) {
+                    finish(shared, false);
+                } else {
+                    lock(shared).queue.push(Missing { job, key });
                 }
+                false
             }
-        }
-        let mut state = lock(shared);
-        state.progress.done += 1;
-        if baked {
-            state.upscaled += 1;
-            if state.playing {
-                state.upscaled_while_playing += 1;
+            Step::Bake(Missing { job, key }) => {
+                let (edges, role) = (Edges::for_path(&job.path), Role::for_path(&job.path));
+                match prepare(&job.bytes, quality, Some(cache), upscaler, edges, role, &job.path) {
+                    Ok(prepared) if prepared.relief.is_none() => cache.keep_as_is(&key),
+                    Ok(_) => {}
+                    Err(error) => {
+                        eprintln!("wisp remaster: {}: {error}", job.path);
+                        cache.keep_as_is(&key);
+                    }
+                }
+                finish(shared, true);
+                true
             }
-        }
-        if state.queue.is_empty() {
-            let elapsed = state.began.take().map_or(0, |began| began.elapsed().as_millis());
-            eprintln!("wisp remaster: {} textures ready ({} baked now, the rest from the cache) in {elapsed} ms", state.progress.total, state.upscaled);
-            state.upscaled = 0;
-        }
-        drop(state);
+        };
         if baked {
             thread::sleep(BETWEEN);
         }
+    }
+}
+
+/// Counts one texture as ready, and reports once the last of the queue is.
+fn finish(shared: &Shared, baked: bool) {
+    let mut state = lock(shared);
+    state.progress.done += 1;
+    if baked {
+        state.upscaled += 1;
+        if state.playing {
+            state.upscaled_while_playing += 1;
+        }
+    }
+    if state.unchecked.is_empty() && state.queue.is_empty() {
+        let elapsed = state.began.take().map_or(0, |began| began.elapsed().as_millis());
+        eprintln!("wisp remaster: {} textures ready ({} baked now, the rest from the cache) in {elapsed} ms", state.progress.total, state.upscaled);
+        state.upscaled = 0;
     }
 }
 
@@ -192,6 +220,35 @@ mod tests {
         for seed in [1, 2] {
             assert!(cache.holds(&cache_key(&png(seed), Quality::Standard, &upscaler, Edges::Mirror, Role::Figure)));
         }
+        let _ = std::fs::remove_dir_all(directory);
+    }
+
+    #[test]
+    fn progress_counts_the_cached_textures_at_once_and_each_baked_one_as_it_finishes() {
+        let directory = std::env::temp_dir().join(format!("wisp-bake-progress-test-{}", std::process::id()));
+        let cache = Arc::new(Cache::at(directory.clone()).unwrap());
+        let upscaler = Arc::new(Upscaler::classical());
+        let first = Baker::start(Quality::Standard, cache.clone(), upscaler.clone());
+        for seed in [1, 2, 3] {
+            first.add(&format!("old{seed}.png"), png(seed));
+        }
+        assert!(until_ready(&first).ready());
+        drop(first);
+        let baker = Baker::start(Quality::Standard, cache, upscaler);
+        baker.set_playing(true);
+        for seed in [1, 2, 3, 4, 5] {
+            baker.add(&format!("new{seed}.png"), png(seed));
+        }
+        for _ in 0..2000 {
+            if baker.progress().done == 3 {
+                break;
+            }
+            thread::sleep(Duration::from_millis(1));
+        }
+        thread::sleep(Duration::from_millis(100));
+        assert_eq!(baker.progress(), Progress { done: 3, total: 5 }, "the three cached textures count while the match holds the two unbaked");
+        baker.set_playing(false);
+        assert_eq!(until_ready(&baker), Progress { done: 5, total: 5 });
         let _ = std::fs::remove_dir_all(directory);
     }
 }
