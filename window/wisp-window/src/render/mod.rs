@@ -36,7 +36,7 @@ use crate::decode_pool::Pool;
 use crate::remaster::{self, Baker, Cache, Edges, Loaded, Quality, Upscaler};
 use crate::settings::Features;
 use math::{mirrored, multiply, projection, Mat4, IDENTITY};
-use gpu::{bone_storage, frame_group, instance_storage, color_storage, repeat_sampler, upload, uv_storage, white};
+use gpu::{bone_storage, frame_group, frame_uniform_buffer, instance_storage, color_storage, repeat_sampler, upload, uv_storage, white};
 use {lightning::Lightning, weather::Weather};
 use model::{Filter, ModelData, ModelEmitter, Paint, Vertex};
 use uniforms::{FrameUniform, Instance, LayerUniform, SceneFrame};
@@ -165,13 +165,12 @@ impl Renderer {
     pub fn new(device: wgpu::Device, queue: wgpu::Queue, format: wgpu::TextureFormat, quality: Quality, features: Features) -> Self {
         let (pipelines, frame_layout, layer_layout) = pipelines::build(&device, HDR);
         let sampler = repeat_sampler(&device);
-        let uniform = |label| device.create_buffer(&wgpu::BufferDescriptor { label: Some(label), size: size_of::<SceneFrame>() as u64, usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
         let bone_buffer = bone_storage(&device, BONES_AT_START);
         let color_buffer = color_storage(&device, SLOTS_AT_START);
         let uv_buffer = uv_storage(&device, SLOTS_AT_START);
         let instance_buffer = instance_storage(&device, INSTANCES_AT_START);
         let set = |label| {
-            let buffer = uniform(label);
+            let buffer = frame_uniform_buffer(&device, label);
             let group = frame_group(&device, &frame_layout, &buffer, &bone_buffer, &color_buffer, &uv_buffer);
             FrameSet { buffer, group }
         };
@@ -313,11 +312,6 @@ impl Renderer {
         let targets = Targets::new(&self.device, size);
         self.post.fit(size, &targets.resolved, &targets.depth);
         self.targets = Some(targets);
-    }
-
-    /// The six shared frame fields alone, for the passes that read no water state.
-    fn frame_uniform(scene: &Scene, aspect: f32, window: f32, far: f32) -> FrameUniform {
-        Self::scene_frame(scene, aspect, window, far, (1, 1), 0.0, false, Glow::NONE).base
     }
 
     /// `mirror` is set when the frame is the mirrored copy drawn for the reflection, whose geometry below `plane` is cut away.

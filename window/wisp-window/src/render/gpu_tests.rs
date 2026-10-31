@@ -464,3 +464,21 @@ fn an_alpha_keyed_particle_cuts_at_three_quarters_and_adds_the_rest() {
     assert_pixel(particle_light(4, texel(SOURCE, 0.5)), background, "alpha 0.5 is cut out");
     assert_pixel(particle_light(4, texel(SOURCE, 0.8)), [0, 1, 2].map(|channel| source[channel] * 0.8 + background[channel]), "alpha 0.8 adds by its alpha");
 }
+
+#[test]
+fn a_model_drawn_into_a_sprite_frame_binds_the_current_scene_uniform() {
+    let Some((device, queue)) = device() else { return };
+    let mut renderer = Renderer::new(device.clone(), queue.clone(), FORMAT, crate::remaster::Quality::Off, crate::settings::Preset::High.features());
+    let draw = model::Part { color_slot: 0, first_index: 0, index_count: 3, layers: vec![model::Layer { paint: Paint::None, filter: Filter::Opaque, color_slot: 1, unshaded: false }] };
+    let corner = |x: f32, y: f32| Vertex { position: [x, y, 0.0], normal: [0.0, 0.0, 1.0], uv: [0.0; 2], bones: [0; 4], weights: [1.0, 0.0, 0.0, 0.0] };
+    renderer.add_model("fighter", ModelData { vertices: vec![corner(-40.0, 0.0), corner(40.0, 0.0), corner(0.0, 120.0)], indices: vec![0, 1, 2], parts: vec![draw], rig: Box::new(FlatRig::new([1.0; 4])), emitters: Vec::new() });
+    let shot = sprite::Shot { model: "fighter".into(), sequence: 0, frame: 0.0, clock: 0.0, bounds: [-40.0, 0.0, 0.0, 40.0, 0.0, 120.0], team: [1.0; 3] };
+    let scope = device.push_error_scope(wgpu::ErrorFilter::Validation);
+    let mut encoder = device.create_command_encoder(&Default::default());
+    renderer.draw_sprite(&mut encoder, 0, (96, 128), &shot, None);
+    queue.submit([encoder.finish()]);
+    let _ = device.poll(wgpu::PollType::wait_indefinitely());
+    let error = pollster::block_on(scope.pop());
+    assert!(error.is_none(), "wgpu validation: {error:?}");
+    assert!(renderer.sprite_view(0, (96, 128)).is_some(), "the sprite was drawn");
+}

@@ -5,7 +5,7 @@ use std::mem::size_of;
 use crate::texture::Image;
 
 use super::math::Mat4;
-use super::Instance;
+use super::{Instance, SceneFrame};
 
 /// The rectangle (x, y, width, height) of the largest `aspect` picture centred in `size`.
 pub fn fitted(size: (u32, u32), aspect: f32) -> [u32; 4] {
@@ -13,6 +13,10 @@ pub fn fitted(size: (u32, u32), aspect: f32) -> [u32; 4] {
     let height = (width / aspect).floor().max(1.0);
     let (width, height) = (width as u32, (height as u32).min(size.1));
     [(size.0 - width) / 2, (size.1 - height) / 2, width, height]
+}
+
+pub(super) fn frame_uniform_buffer(device: &wgpu::Device, label: &str) -> wgpu::Buffer {
+    device.create_buffer(&wgpu::BufferDescriptor { label: Some(label), size: size_of::<SceneFrame>() as u64, usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false })
 }
 
 pub(super) fn bone_storage(device: &wgpu::Device, count: usize) -> wgpu::Buffer {

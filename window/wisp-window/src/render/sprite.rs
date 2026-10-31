@@ -6,10 +6,11 @@
 
 use serde::Deserialize;
 
-use super::gpu::{bone_storage, frame_group, instance_storage, color_storage, uv_storage};
+use super::gpu::{bone_storage, frame_group, frame_uniform_buffer, instance_storage, color_storage, uv_storage};
 use super::math::{Mat4, IDENTITY};
 use super::model::{Part, Vertex};
 use super::scene::{Camera, Light, Scene};
+use super::water::Glow;
 use super::{Instance, Renderer, DEPTH, HDR, SAMPLES};
 
 const MARGIN: f32 = 1.06;
@@ -175,7 +176,7 @@ impl Renderer {
                 })
                 .create_view(&Default::default())
         };
-        let frame = self.device.create_buffer(&wgpu::BufferDescriptor { label: Some("sprite frame"), size: size_of::<super::FrameUniform>() as u64, usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
+        let frame = frame_uniform_buffer(&self.device, "sprite frame");
         let bone_capacity = 256;
         let bones = bone_storage(&self.device, bone_capacity);
         let color_capacity = 64;
@@ -233,7 +234,7 @@ impl Renderer {
         let aspect = size.0 as f32 / size.1 as f32;
         let (camera, light) = framing(bounds, aspect, scene_light);
         let far = camera.far;
-        let uniform = Self::frame_uniform(&Scene { camera, light: Some(light), ..Scene::default() }, aspect, aspect, far);
+        let uniform = Self::scene_frame(&Scene { camera, light: Some(light), ..Scene::default() }, aspect, aspect, far, size, 0.0, false, Glow::NONE);
         if bones > slot.bone_capacity {
             slot.bone_capacity = bones.next_power_of_two();
             slot.bones = bone_storage(&self.device, slot.bone_capacity);
