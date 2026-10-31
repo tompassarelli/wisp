@@ -359,16 +359,14 @@ jobs:
             fail "$(grep -c . <<< "$new") failing that main's run passes:" "$(printf '%s\n' "$new" | sed 's/^/- /')"
           fi
           if [ "$CI_RESULT" != success ]; then
-            jobs=$(gh api "repos/$GH_REPO/actions/runs/$GITHUB_RUN_ID/jobs?per_page=100" --jq '.jobs[] | select(.name | startswith("ci / ")) | select(.conclusion == "failure") | [.id, .name, .html_url] | @tsv')
-            detail=
-            failing=
-            while IFS=$'\t' read -r id name url; do
-              [ -n "$id" ] || continue
-              tests=$(gh api "repos/$GH_REPO/actions/jobs/$id/logs" 2> /dev/null | sed -E 's/^\xEF\xBB\xBF//; s/^[0-9T:.-]+Z //' | grep -E '^test .* \.\.\. FAILED$|^\(fail\) ' | sed -E 's/^test (.*) \.\.\. FAILED$/\1/; s/^\(fail\) //' | sort -u | head -30)
-              failing+="${failing:+, }${name#ci / }${tests:+ ($(grep -c . <<< "$tests") failing: $(head -1 <<< "$tests"))}"
-              detail+="- [$name]($url)"$'\n'"$(sed 's/^/    - /' <<< "$tests")"$'\n'
-            done <<< "$jobs"
-            fail "CI jobs failed on the rebased commit: ${failing:-$CI_RESULT}" "$detail"
+            bun install --frozen-lockfile > /dev/null
+            bun host/checks/ciBaseline.ts "$GITHUB_RUN_ID" > ci-verdict.json || fail "couldn't compare the failed CI jobs with main's" ""
+            line() { jq -r --arg key "$1" '.[$key][] | "- [\(.name)](\(.url))" + (if (.tests | length) > 0 then ":\n" + (.tests | map("    - " + .) | join("\n")) else " (no test named: a crash or a failed step)" end)' ci-verdict.json; }
+            [ "$(jq '.known + .fresh | length' ci-verdict.json)" != 0 ] || fail "CI ended $CI_RESULT with no failed job to compare" ""
+            [ "$(jq '.known | length' ci-verdict.json)" = 0 ] || printf "CI jobs main's last runs fail too, not held against this landing:\n%s\n" "$(line known)" >> "$GITHUB_STEP_SUMMARY"
+            if [ "$(jq '.fresh | length' ci-verdict.json)" != 0 ]; then
+              fail "CI jobs failed on the rebased commit that main's last runs pass: $(jq -r '[.fresh[] | .name | ltrimstr("ci / ")] | join(", ")' ci-verdict.json)" "$(line fresh)"
+            fi
           fi
           case "$CODE_HEALTH:$CODE_HEALTH_VERDICT" in
             success:pass) ;;
