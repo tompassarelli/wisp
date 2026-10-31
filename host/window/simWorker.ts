@@ -92,5 +92,5 @@ const run = async (init: SimWorkerInit) => {
 self.onmessage = (event: MessageEvent<SimWorkerInit | SimWorkerAttach>) => {
   const message = event.data;
   if (message.type === "attach") attached.resolve(message.handle);
-  else run(message).catch((cause) => send({ type: "failed", problem: problemOf(cause) }));
+  else run(message).catch((cause) => send({ type: "failed", problem: problemOf(cause) })).finally(() => process.exit(0));
 };
