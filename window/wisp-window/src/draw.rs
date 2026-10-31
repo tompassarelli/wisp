@@ -12,7 +12,7 @@ use crate::menu::{self, Menu};
 use crate::present::PresentSetting;
 use crate::settings::{self, Settings, Store, PRESETS};
 use crate::surface_target::SurfaceTarget;
-use crate::render::{fitted, DrawScene, Renderer};
+use crate::render::{DrawScene, Renderer};
 use crate::ui::{is_font, UiRenderer};
 
 
@@ -303,10 +303,9 @@ impl Gpu {
             let mut encoder = self.device.create_command_encoder(&Default::default());
             let size = (self.config.width, self.config.height);
             self.renderer.draw(&mut encoder, &view, size, self.aspect, scene);
-            let [left, top, width, height] = fitted(size, self.aspect);
             let bake = self.renderer.bake_progress().map(|progress| menu::Bake { progress, filter: progress.total > 0 && progress.ready() && self.renderer.upscales_with_filter(), playing: scene.playing, pending: self.renderer.art_pending() });
             self.ui.set_overlay(self.menu.scene(&self.settings, bake));
-            let area = [left as f32, top as f32, width as f32, height as f32];
+            let area = ui_area(size);
             self.ui.each_sprite(area, |index, extent, shot| self.renderer.draw_sprite(&mut encoder, index, extent, shot, scene.light.as_ref()));
             self.ui.draw(&mut encoder, &view, size, area, &self.renderer);
             self.queue.submit([encoder.finish()]);
@@ -439,9 +438,19 @@ impl Gpu {
     }
 }
 
+fn ui_area(size: (u32, u32)) -> [f32; 4] {
+    [0.0, 0.0, size.0 as f32, size.1 as f32]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_ui_area_is_the_window_after_a_resize_from_16_9_to_3_2() {
+        assert_eq!(ui_area((1280, 720)), [0.0, 0.0, 1280.0, 720.0]);
+        assert_eq!(ui_area((2880, 1920)), [0.0, 0.0, 2880.0, 1920.0]);
+    }
 
     #[test]
     fn counter_lights_the_set_bits() {
