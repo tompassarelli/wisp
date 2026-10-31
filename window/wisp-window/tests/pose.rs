@@ -1,5 +1,5 @@
 use serde::Deserialize;
-use wisp_window::model::{global_sequence_frame, rotate, sample, skin_position, Key, LineType, Mat4, Model, Playhead, Pose, Track};
+use wisp_window::model::{global_sequence_frame, rotate, sample, skin_position, SkinVertex, Key, LineType, Mat4, Model, Playhead, Pose, Track};
 
 const MDL: &str = include_str!("fixtures/rig.mdl");
 const MDX: &[u8] = include_bytes!("fixtures/rig.mdx");
@@ -23,7 +23,8 @@ fn close(actual: f32, expected: f32) -> bool {
 fn check_model(model: &Model) {
     let cases: Vec<Case> = serde_json::from_str(EXPECTED).expect("expected.json");
     assert!(!cases.is_empty());
-    let skins: Vec<_> = model.geosets.iter().map(|geoset| geoset.skin_vertices().expect("skin")).collect();
+    let blends = model.blends();
+    let skins: Vec<_> = model.geosets.iter().map(|geoset| geoset.skin_vertices(&blends)).collect();
     let mut pose = Pose::new(model, &[]).expect("pose");
     let mut playhead = Playhead::new(model);
     for case in &cases {
@@ -120,8 +121,27 @@ fn pose_rotate_turns_a_vector_by_a_normalised_quaternion() {
 }
 
 #[test]
-fn pose_group_of_five_bones_is_refused() {
+fn pose_group_of_six_bones_skins_as_the_equal_weight_mean_of_its_bones() {
     let mut model = Model::from_mdl(MDL).expect("mdl");
-    model.geosets[0].groups[3] = vec![0, 1, 2, 3, 4];
-    assert!(model.geosets[0].skin_vertices().is_err());
+    let group = vec![0, 1, 2, 3, 4, 5];
+    model.geosets[0].groups[3] = group.clone();
+    let blends = model.blends();
+    assert_eq!(blends.len(), 1);
+    let skin = model.geosets[0].skin_vertices(&blends);
+    let mut pose = Pose::new(&model, &[]).expect("pose");
+    let mut playhead = Playhead::new(&model);
+    playhead.set_sequence(&model, Some(0));
+    playhead.frame = 500.0;
+    pose.update(&playhead);
+    let grouped: Vec<_> = (0..skin.len()).filter(|&at| model.geosets[0].vertex_group[at] == 3).collect();
+    assert!(!grouped.is_empty());
+    for at in grouped {
+        let position = skin_position(&skin[at], pose.matrices());
+        let mut mean = [0.0f32; 3];
+        for &bone in &group {
+            let moved = skin_position(&SkinVertex { bones: [bone, 0, 0, 0], weights: [1.0, 0.0, 0.0, 0.0], ..skin[at] }, pose.matrices());
+            (0..3).for_each(|axis| mean[axis] += moved[axis] / group.len() as f32);
+        }
+        assert!((0..3).all(|axis| close(position[axis], mean[axis])), "vertex {at}: {position:?} vs {mean:?}");
+    }
 }

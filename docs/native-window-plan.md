@@ -1123,7 +1123,7 @@ yet are created by that box. Each graphics run takes the gpu lease as
   shader. `window/wisp-window/tests/pose.rs` poses `tests/fixtures/rig.mdl`
   and `rig.mdx` and matches war3-model's node matrices and vertex positions
   from `rig.expected.json`; `bun test/window/poseFixtures.ts` regenerates all
-  three. Billboarded nodes and groups over four bones are not posed yet.
+  three. A matrix group of more than four bones is one extra palette entry after the nodes (`Model::blends`), the mean of the group's node matrices that `Pose::update` writes, so its vertices still name one bone and the shader stays at four (wisp#147). Billboarded nodes are not posed yet.
 
   Done when:
   `cd ~/code/wisp/main && bun wisp render compare --reference chrome --candidate native --scenes test/render/models.json`

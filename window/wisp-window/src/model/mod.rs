@@ -11,7 +11,7 @@ mod track;
 use std::fmt;
 
 pub use pose::{Mat4, Playhead, Pose};
-pub use skin::{skin_position, SkinVertex};
+pub use skin::{skin_position, Blends, SkinVertex};
 pub use emitter::{Emitter2, Scalar, LINE_EMITTER, XY_QUAD};
 pub use track::{global_sequence_frame, rotate, sample, Key, LineType, Track};
 
@@ -137,7 +137,6 @@ pub enum ModelError {
     Chunk { chunk: &'static str, reason: &'static str },
     MissingParent { node: usize, parent: usize },
     ParentCycle { node: usize },
-    GroupTooLarge { vertex: usize, bones: usize },
 }
 
 impl fmt::Display for ModelError {
@@ -149,7 +148,6 @@ impl fmt::Display for ModelError {
             Self::Chunk { chunk, reason } => write!(out, "chunk {chunk}: {reason}"),
             Self::MissingParent { node, parent } => write!(out, "node {node} names parent {parent}, which the model does not define"),
             Self::ParentCycle { node } => write!(out, "node {node} is its own ancestor"),
-            Self::GroupTooLarge { vertex, bones } => write!(out, "vertex {vertex} is skinned to {bones} bones; the palette skin takes four"),
         }
     }
 }

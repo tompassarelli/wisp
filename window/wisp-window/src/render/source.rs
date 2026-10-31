@@ -30,7 +30,7 @@ struct MdxRig {
 
 impl Rig for MdxRig {
     fn bone_count(&self) -> usize {
-        self.model.nodes.len().max(1)
+        self.pose.matrices().len().max(1)
     }
 
     fn pose(&mut self, sequence: i32, frame: f32, clock_seconds: f32, out: &mut [Mat4]) {
@@ -138,7 +138,10 @@ fn without_stand_in(mut layers: Vec<Layer>) -> Vec<Layer> {
 }
 
 pub fn model(bytes: &[u8], quality: Quality) -> Result<ModelData, String> {
-    let parsed = model::Model::from_mdx(bytes).map_err(|error| error.to_string())?;
+    build(model::Model::from_mdx(bytes).map_err(|error| error.to_string())?, quality)
+}
+
+pub(super) fn build(parsed: model::Model, quality: Quality) -> Result<ModelData, String> {
     // A model lives as long as the window does, and its pose borrows it, so it is leaked rather than made self-referential.
     let model: &'static model::Model = Box::leak(Box::new(parsed));
     let mut slots = Vec::new();
@@ -165,13 +168,14 @@ pub fn model(bytes: &[u8], quality: Quality) -> Result<ModelData, String> {
         layer_draws.push(layers);
     }
     let next_slot = (model.geosets.len() + slots.len()) as u32;
+    let blends = model.blends();
     let mut vertices = Vec::new();
     let mut indices = Vec::new();
     let mut parts = Vec::new();
     for (geoset_index, geoset) in model.geosets.iter().enumerate() {
         let base = vertices.len() as u32;
         let first_index = indices.len() as u32;
-        for (index, skin) in geoset.skin_vertices().map_err(|error| error.to_string())?.into_iter().enumerate() {
+        for (index, skin) in geoset.skin_vertices(&blends).into_iter().enumerate() {
             vertices.push(Vertex {
                 position: skin.position,
                 normal: geoset.normals.get(index).copied().unwrap_or([0.0, 0.0, 1.0]),

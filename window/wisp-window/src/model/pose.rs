@@ -1,4 +1,4 @@
-use super::{Model, ModelError, Node};
+use super::{Blends, Model, ModelError, Node};
 
 /// Column-major, as `gl-matrix` and WGSL's `mat4x4<f32>` store it.
 pub type Mat4 = [f32; 16];
@@ -52,6 +52,7 @@ pub struct Pose<'model> {
     model: &'model Model,
     order: Vec<usize>,
     matrices: Vec<Mat4>,
+    blends: Blends,
 }
 
 impl<'model> Pose<'model> {
@@ -86,10 +87,11 @@ impl<'model> Pose<'model> {
                 }
             }
         }
-        Ok(Self { model, order, matrices: vec![IDENTITY; model.nodes.len()] })
+        let blends = model.blends();
+        Ok(Self { model, order, matrices: vec![IDENTITY; model.nodes.len() + blends.len()], blends })
     }
 
-    /// The palette, indexed by node object id; upload it as the storage buffer the skinning vertex shader reads.
+    /// The palette, indexed by node object id with the blend entries of `Model::blends` after the nodes; upload it as the storage buffer the skinning vertex shader reads.
     pub fn matrices(&self) -> &[Mat4] {
         &self.matrices
     }
@@ -103,6 +105,7 @@ impl<'model> Pose<'model> {
             }
             self.matrices[id] = matrix;
         }
+        self.blends.write(&mut self.matrices);
     }
 }
 

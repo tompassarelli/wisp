@@ -35,6 +35,7 @@ fn main() {
     let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())).expect("device");
     let mut renderer = Renderer::new(device.clone(), queue.clone(), FORMAT, Quality::Off, wisp_window::settings::Preset::High.features());
     let clock: f32 = std::env::var("WISP_SHOT_CLOCK").ok().and_then(|value| value.parse().ok()).unwrap_or(0.0);
+    let facing = std::env::var("WISP_SHOT_FACING").ok().and_then(|value| value.parse::<f32>().ok()).unwrap_or(0.0).to_radians();
     let mut poses = Vec::new();
     for (index, path) in args[2..].iter().enumerate() {
         let bytes = stocks.iter().find_map(|stock| std::fs::read(stock.join(path)).ok()).expect("model");
@@ -47,9 +48,14 @@ fn main() {
                 }
             }
         }
-        let (sequence, frame) = model.sequences.iter().position(|s| s.name.to_ascii_lowercase().starts_with("stand")).map_or((0, 0.0), |at| (at as i32, model.sequences[at].interval[0] as f32));
+        let wanted = std::env::var("WISP_SHOT_SEQUENCE").unwrap_or_else(|_| "stand".into()).to_ascii_lowercase();
+        let through: f32 = std::env::var("WISP_SHOT_AT").ok().and_then(|value| value.parse().ok()).unwrap_or(0.0);
+        let (sequence, frame) = model.sequences.iter().position(|s| s.name.to_ascii_lowercase().starts_with(&wanted)).map_or((0, 0.0), |at| {
+            let [from, to] = model.sequences[at].interval;
+            (at as i32, from as f32 + (to - from) as f32 * through)
+        });
         renderer.ingest(path, bytes);
-        poses.push(serde_json::json!({ "model": path, "matrix": [1.0,0.0,0.0,0.0, 0.0,1.0,0.0,0.0, 0.0,0.0,1.0,0.0, index as f32 * 700.0, 0.0, 0.0, 1.0], "sequence": sequence, "frame": frame, "clock": clock, "alpha": 1.0, "color": [1.0, 1.0, 1.0], "team": [1.0, 0.0, 0.0] }));
+        poses.push(serde_json::json!({ "model": path, "matrix": [facing.cos(),facing.sin(),0.0,0.0, -facing.sin(),facing.cos(),0.0,0.0, 0.0,0.0,1.0,0.0, index as f32 * 700.0, 0.0, 0.0, 1.0], "sequence": sequence, "frame": frame, "clock": clock, "alpha": 1.0, "color": [1.0, 1.0, 1.0], "team": [1.0, 0.0, 0.0] }));
     }
     std::thread::sleep(std::time::Duration::from_secs(2));
     renderer.pump();
@@ -57,8 +63,12 @@ fn main() {
         println!("problem: {problem}");
     }
     let centre = (args.len() as f32 - 3.0) * 350.0;
-    let view = look_at([centre, -1400.0, 500.0], [centre, 0.0, 150.0]);
-    let scene = serde_json::json!({ "camera": { "view": view, "eye": [centre, -1400.0, 500.0], "tangent": 0.6, "near": 10.0, "far": 20000.0, "skyFar": 20000.0, "rise": 0.0 }, "poses": poses, "clear": [0.3, 0.4, 0.6], "frame": 1 });
+    let (eye, aim_z) = match std::env::var("WISP_SHOT_DISTANCE").ok().and_then(|value| value.parse::<f32>().ok()) {
+        Some(distance) => ([centre, -distance * 10f32.to_radians().cos(), 100.0 + distance * 10f32.to_radians().sin()], 100.0),
+        None => ([centre, -1400.0, 500.0], 150.0),
+    };
+    let view = look_at(eye, [centre, 0.0, aim_z]);
+    let scene = serde_json::json!({ "camera": { "view": view, "eye": eye, "tangent": 0.6, "near": 10.0, "far": 20000.0, "skyFar": 20000.0, "rise": 0.0 }, "poses": poses, "clear": [0.3, 0.4, 0.6], "frame": 1 });
     let scene = DrawScene::parse(scene.to_string().as_bytes()).expect("scene");
     let target = device.create_texture(&wgpu::TextureDescriptor { label: None, size: wgpu::Extent3d { width: SIDE.0, height: SIDE.1, depth_or_array_layers: 1 }, mip_level_count: 1, sample_count: 1, dimension: wgpu::TextureDimension::D2, format: FORMAT, usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC, view_formats: &[] });
     let mut encoder = device.create_command_encoder(&Default::default());

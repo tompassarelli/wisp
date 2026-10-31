@@ -475,3 +475,6 @@ fn a_model_drawn_into_a_sprite_frame_binds_the_current_scene_uniform() {
     assert!(error.is_none(), "wgpu validation: {error:?}");
     assert!(renderer.sprite_view(0, (96, 128)).is_some(), "the sprite was drawn");
 }
+
+
+mod skin;
