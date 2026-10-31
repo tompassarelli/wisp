@@ -123,11 +123,11 @@ fn a_shadow_edge_is_sharp_beside_a_low_caster_and_wide_beside_a_high_one() {
 #[test]
 fn a_wall_s_shadow_starts_at_its_foot() {
     let high = crate::settings::Features { shadows: crate::settings::Shadows::Map(512), ..sunlit_only(crate::settings::Preset::High.features()) };
-    let Some(images) = box_on_floor(high, [40.0, 40.0, 30.0], [0.0, 0.0, 30.0], EYE, &[3100.0]) else { return };
+    let Some(images) = box_on_floor(high, [2.0, 40.0, 30.0], [0.0, 0.0, 30.0], EYE, &[3100.0]) else { return };
     let levels = along_the_floor(&images[0]);
-    let (lit, dark) = (levels[column_of(EYE, -120.0)], levels[column_of(EYE, -55.0)]);
+    let (lit, dark) = (levels[column_of(EYE, -90.0)], levels[column_of(EYE, -20.0)]);
     assert!(lit - dark > 20.0, "the wall casts a shadow: lit {lit}, in shadow {dark}");
-    let beside_the_foot = levels[column_of(EYE, -43.0)];
-    assert!(beside_the_foot < dark + 0.15 * (lit - dark), "3 units from the wall's foot the floor is {beside_the_foot}, shadow {dark}, lit {lit}");
+    let beside_the_foot = levels[column_of(EYE, -4.0)];
+    assert!(beside_the_foot < dark + 0.15 * (lit - dark), "2 units from the wall's foot the floor is {beside_the_foot}, shadow {dark}, lit {lit}");
 }
 
