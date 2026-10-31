@@ -1,5 +1,5 @@
-import { type Pointer, dlopen } from "bun:ffi";
-import { windowLibraryPath } from "./binding";
+import type { Pointer } from "bun:ffi";
+import { openWindowLibrary, windowLibraryPath } from "./binding";
 
 const symbols = {
   wisp_offscreen_open: { args: ["u32", "u32"], returns: "ptr" },
@@ -41,7 +41,7 @@ const textFrom = (read: (out: Uint8Array, capacity: number) => number | bigint):
 };
 
 export function openOffscreen(width: number, height: number, library: string = windowLibraryPath()): Offscreen {
-  const loaded = dlopen(library, symbols);
+  const loaded = openWindowLibrary(library, symbols);
   const call = loaded.symbols;
   const handle = call.wisp_offscreen_open(width, height);
   if (handle === null) {

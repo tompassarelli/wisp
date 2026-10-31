@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { adoptNativeWindow, openNativeWindow, windowLibraryPath } from "../host/window/binding";
+import { adoptNativeWindow, openNativeWindow, openWindowLibrary, windowLibraryPath } from "../host/window/binding";
 import { standaloneWindowArgument } from "../host/play/standalone";
 
 const hasDisplay = (process.env.WAYLAND_DISPLAY ?? process.env.DISPLAY) !== undefined && existsSync(windowLibraryPath());
@@ -38,4 +38,10 @@ try { openNativeWindow({ title: "forced failure", width: 320, height: 200 }); } 
   const [out, status] = await Promise.all([new Response(run.stdout).text(), run.exited]);
   expect(out).toContain("the window didn't open: forced open failure");
   expect(status).toBe(0);
+});
+
+test.skipIf(!existsSync(windowLibraryPath()))("[spec docs/native-window-plan.md] the window library reports the window source it was built from, and one built from other source is refused before any call", () => {
+  openWindowLibrary(windowLibraryPath(), { wisp_window_now_ns: { args: [], returns: "f64" } }).close();
+  expect(() => openWindowLibrary(windowLibraryPath(), { wisp_window_now_ns: { args: [], returns: "f64" } }, "0000000000000000"))
+    .toThrow(/was built from window source [0-9a-f]{16}, and this wisp's window\/ source is 0000000000000000/);
 });

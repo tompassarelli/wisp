@@ -71,6 +71,15 @@ const EVENT_CLOSED: u32 = 2;
 const EVENT_FAILED: u32 = 3;
 const EVENT_STOPPED: u32 = 4;
 
+/// Copies up to `capacity` bytes of the hash of the window source this library was built from, the hash Bun keys its builds by; returns its full length.
+///
+/// # Safety
+/// `out` must point to `capacity` writable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn wisp_window_source(out: *mut u8, capacity: usize) -> usize {
+    guard(0, || copy_text(env!("WISP_WINDOW_SOURCE"), out, capacity))
+}
+
 /// Nanoseconds on the library's monotonic clock, the clock every sample time is on.
 #[no_mangle]
 pub extern "C" fn wisp_window_now_ns() -> f64 {

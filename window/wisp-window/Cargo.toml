@@ -39,5 +39,8 @@ evdev = { version = "0.13", optional = true }
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.62.2", features = ["Win32_Media"] }
 
+[build-dependencies]
+sha2 = "0.10"
+
 [dev-dependencies]
 image-blp-pixels = { package = "image", version = "0.24.9", default-features = false }

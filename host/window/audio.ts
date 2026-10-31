@@ -1,5 +1,4 @@
-import { dlopen } from "bun:ffi";
-import { windowLibraryPath } from "./binding";
+import { openWindowLibrary, windowLibraryPath } from "./binding";
 
 const symbols = {
   wisp_audio_open: { args: [], returns: "ptr" },
@@ -43,7 +42,7 @@ const textFrom = (read: (out: Uint8Array, capacity: number) => number | bigint) 
 };
 
 export function openNativeAudio(library?: string): NativeAudio {
-  const loaded = dlopen(library ?? windowLibraryPath(), symbols);
+  const loaded = openWindowLibrary(library ?? windowLibraryPath(), symbols);
   const call = loaded.symbols;
   const handle = call.wisp_audio_open();
   if (handle === null) {

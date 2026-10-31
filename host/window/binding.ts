@@ -1,10 +1,10 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { type Pointer, dlopen } from "bun:ffi";
+import { type FFIFunction, type Library as FfiLibrary, type Pointer, dlopen } from "bun:ffi";
 import { Effect } from "effect";
 import type { PointerReading } from "../../src/headless/pointer";
 import { type KeyTransition, unpackKey } from "../../src/headless/keyInput";
-import { buildWindowLibrary, cachedWindowLibrary } from "./library";
+import { buildWindowLibrary, cachedWindowLibrary, sourceHash } from "./library";
 
 const root = join(import.meta.dir, "../..");
 const windowDirectory = join(root, "window");
@@ -19,6 +19,28 @@ export function windowLibraryPath(): string {
 
 /** `windowLibraryPath()`, built first from this package's `window/` source when it is not there and `WISP_WINDOW_LIBRARY` is unset. */
 export const prepareWindowLibrary = Effect.suspend(() => process.env.WISP_WINDOW_LIBRARY === undefined ? buildWindowLibrary(windowLibraryPath(), windowDirectory) : Effect.succeed(windowLibraryPath()));
+
+let ownSource: string | undefined;
+const windowSource = () => ownSource ??= existsSync(join(windowDirectory, "Cargo.toml")) ? sourceHash(windowDirectory) : "";
+
+/** Opens the window library at `path` for `symbols` after checking it was built from this package's `window/` source (`expected`, empty where the package ships no source): Bun calls each symbol with the arguments declared here, so a library from another revision would be called with the wrong ones. */
+export function openWindowLibrary<Symbols extends Record<string, FFIFunction>>(path: string, symbols: Symbols, expected: string = windowSource()): FfiLibrary<Symbols> {
+  if (expected !== "") {
+    let built = "none, it predates wisp_window_source";
+    try {
+      const probe = dlopen(path, { wisp_window_source: { args: ["ptr", "usize"], returns: "usize" } });
+      const out = new Uint8Array(64);
+      built = new TextDecoder().decode(out.subarray(0, Number(probe.symbols.wisp_window_source(out, out.length))));
+      probe.close();
+    } catch (cause) {
+      if (!String(cause).includes("wisp_window_source")) throw cause;
+    }
+    if (built !== expected) {
+      throw new Error(`the wisp-window library at ${path} was built from window source ${built}, and this wisp's window/ source is ${expected}; build the library from this wisp revision, or unset WISP_WINDOW_LIBRARY so Wisp builds it`);
+    }
+  }
+  return dlopen(path, symbols);
+}
 
 const symbols = {
   wisp_window_now_ns: { args: [], returns: "f64" },
@@ -206,7 +228,7 @@ const viewOf = (library: Library, handle: Pointer, vocabulary: { buttons: string
 
 /** The worker thread's view of a window: it loads the library again and uses the reference `NativeWindow.lend` took for it, which the library guards with its own locks. `release` gives that reference back and unloads this view's copy; the host outlives the window's stop until every reference is released. */
 export function adoptNativeWindow(lent: number, library?: string): WindowView & { release(): void } {
-  const loaded = dlopen(library ?? windowLibraryPath(), symbols);
+  const loaded = openWindowLibrary(library ?? windowLibraryPath(), symbols);
   return {
     ...viewOf(loaded, lent as Pointer, vocabularyOf(loaded)),
     release: () => {
@@ -217,7 +239,7 @@ export function adoptNativeWindow(lent: number, library?: string): WindowView & 
 }
 
 export function openNativeWindow(options: NativeWindowOptions): NativeWindow {
-  const library = dlopen(options.library ?? windowLibraryPath(), symbols);
+  const library = openWindowLibrary(options.library ?? windowLibraryPath(), symbols);
   const call = library.symbols;
   const vocabulary = vocabularyOf(library);
   const title = Buffer.from(options.title);
