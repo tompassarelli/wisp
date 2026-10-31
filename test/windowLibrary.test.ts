@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { cachedWindowLibrary, publishLibrary, workingTarget } from "../host/window/library";
+import { cachedWindowLibrary, publishLibrary, windowBuildEnvironment, workingTarget } from "../host/window/library";
 
 test("[spec docs/native-window-plan.md] a library built from a package's window source is cached under a hash of that source", () => {
   const folder = mkdtempSync(join(tmpdir(), "window-library-"));
@@ -57,4 +57,12 @@ test("[spec docs/native-window-plan.md] every revision builds in one shared fold
   } finally {
     rmSync(folder, { recursive: true });
   }
+});
+
+test("[spec docs/native-window-plan.md] the library builds incrementally with no rustc wrapper, since sccache set in the player's environment refuses an incremental build", () => {
+  const environment = windowBuildEnvironment("/target", "hash");
+  expect(environment.CARGO_INCREMENTAL).toBe("1");
+  expect(environment.RUSTC_WRAPPER).toBe("");
+  expect(environment.CARGO_TARGET_DIR).toBe("/target");
+  expect(environment.WISP_WINDOW_SOURCE).toBe("hash");
 });

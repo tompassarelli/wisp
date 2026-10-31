@@ -47,6 +47,14 @@ const buildCommand = (windowDirectory: string) => hasNix()
   ? ["nix", "develop", "--extra-experimental-features", "nix-command flakes", `path:${windowDirectory}`, "--command", "cargo", "build", "--release", "--locked"]
   : ["cargo", "build", "--release", "--locked"];
 
+/** The variables the library's cargo build adds to the player's environment: the shared target folder, an incremental build and the source hash the library embeds. */
+export const windowBuildEnvironment = (target: string, source: string) => ({
+  CARGO_TARGET_DIR: target,
+  // CARGO_INCREMENTAL beats a user-level build.incremental = false; sccache refuses an incremental build, and an empty RUSTC_WRAPPER turns off a wrapper set anywhere
+  CARGO_INCREMENTAL: "1", RUSTC_WRAPPER: "",
+  WISP_WINDOW_SOURCE: source,
+});
+
 /** Builds `window/` from this package into the user cache when `path` does not exist yet, then returns `path` (wisp:docs/native-window-plan.md, "Where a consumer gets the library"). */
 export const buildWindowLibrary = (path: string, windowDirectory: string) => Effect.gen(function*() {
   if (existsSync(path)) return path;
@@ -57,9 +65,8 @@ export const buildWindowLibrary = (path: string, windowDirectory: string) => Eff
   const target = workingTarget();
   const source = sourceHash(windowDirectory);
   console.log(`building wisp-window in ${target} for ${dirname(dirname(path))} (first run of this revision)`);
-  // CARGO_INCREMENTAL beats a user-level build.incremental = false, which would leave every rebuild non-incremental
   const code = yield* ChildProcessSpawner.ChildProcessSpawner.use((spawner) => spawner.exitCode(ChildProcess.make(program!, args, {
-    cwd: windowDirectory, env: { CARGO_TARGET_DIR: target, CARGO_INCREMENTAL: "1", WISP_WINDOW_SOURCE: source }, extendEnv: true, stdin: "ignore", stdout: "inherit", stderr: "inherit",
+    cwd: windowDirectory, env: windowBuildEnvironment(target, source), extendEnv: true, stdin: "ignore", stdout: "inherit", stderr: "inherit",
   }))).pipe(Effect.mapError((failure) => new WindowLibraryFailure({ problem: `${program}: ${failure.message}` })));
   const built = join(target, "release", basename(path));
   if (Number(code) !== 0 || !existsSync(built)) return yield* new WindowLibraryFailure({ problem: `building wisp-window with ${program} exited ${Number(code)}` });
