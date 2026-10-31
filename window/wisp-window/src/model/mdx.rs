@@ -73,6 +73,15 @@ impl<'a> Reader<'a> {
     }
 
     fn track<const N: usize>(&mut self) -> Result<Track<N>, ModelError> {
+        self.track_of(Self::floats::<N>)
+    }
+
+    /// A track whose keys are texture indices: the format stores them as integers, read here into the track's floats.
+    fn index_track(&mut self) -> Result<Track<1>, ModelError> {
+        self.track_of(|reader| Ok([reader.i32()? as f32]))
+    }
+
+    fn track_of<const N: usize>(&mut self, read: impl Fn(&mut Self) -> Result<[f32; N], ModelError>) -> Result<Track<N>, ModelError> {
         let keys = self.count()?;
         let line = LineType::from_code(self.i32()?).ok_or(ModelError::Chunk { chunk: "track", reason: "unknown interpolation" })?;
         let global = self.i32()?;
@@ -80,8 +89,8 @@ impl<'a> Reader<'a> {
         track.global_sequence = (global != NO_ID).then_some(global as usize);
         for _ in 0..keys {
             let frame = self.i32()?;
-            let value = self.floats::<N>()?;
-            let (in_tan, out_tan) = if line.has_tangents() { (self.floats::<N>()?, self.floats::<N>()?) } else { ([0.0; N], [0.0; N]) };
+            let value = read(self)?;
+            let (in_tan, out_tan) = if line.has_tangents() { (read(self)?, read(self)?) } else { ([0.0; N], [0.0; N]) };
             track.keys.push(Key { frame, value, in_tan, out_tan });
         }
         Ok(track)

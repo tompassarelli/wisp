@@ -17,6 +17,7 @@ const CASES = [
 const mdl = await Bun.file(`${fixtures}/rig.mdl`).text();
 const data = parseMDL(mdl);
 await Bun.write(`${fixtures}/rig.mdx`, generateMDX(data));
+await Bun.write(`${fixtures}/water-flipbook.mdx`, generateMDX(parseMDL(await Bun.file(`${fixtures}/water-flipbook.mdl`).text())));
 
 const renderer = new ModelRenderer(data) as unknown as {
   rendererData: { frame: number; animation: number; animationInfo: unknown; globalSequencesFrames: number[]; nodes: { matrix: Float32Array }[] };

@@ -229,4 +229,12 @@ mod tests {
         let plain = vec![layer(Paint::Texture("base.tga".into()), Filter::Opaque)];
         assert_eq!(without_stand_in(plain).len(), 1);
     }
+
+    #[test]
+    fn a_binary_model_whose_layer_flips_through_water_frames_is_drawn_by_the_water_pass() {
+        let data = model(include_bytes!("../../tests/fixtures/water-flipbook.mdx"), Quality::Off).unwrap();
+        let paints: Vec<Paint> = data.parts.iter().flat_map(|part| part.layers.iter().map(|layer| layer.paint.clone())).collect();
+        assert_eq!(paints, vec![Paint::Water]);
+    }
 }
+

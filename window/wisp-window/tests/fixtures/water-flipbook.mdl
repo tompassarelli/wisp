@@ -1,0 +1,31 @@
+Version { FormatVersion 800, }
+Model "Water flipbook" { NumGeosets 1, NumBones 1, BlendTime 0, MinimumExtent { -50, -60, 0 }, MaximumExtent { 50, 60, 0 }, BoundsRadius 80, }
+Sequences 1 { Anim "Stand" { Interval { 0, 1000 }, MinimumExtent { -50, -60, 0 }, MaximumExtent { 50, 60, 0 }, BoundsRadius 80, } }
+GlobalSequences 1 { Duration 270, }
+Textures 5 {
+  Bitmap { Image "war3mapImported\Sea.tga", WrapWidth, WrapHeight, }
+  Bitmap { Image "war3mapImported\SeaHighlights.tga", WrapWidth, WrapHeight, }
+  Bitmap { Image "ReplaceableTextures\Water\Water00.blp", WrapWidth, WrapHeight, }
+  Bitmap { Image "ReplaceableTextures\Water\Water01.blp", WrapWidth, WrapHeight, }
+  Bitmap { Image "ReplaceableTextures\Water\Water02.blp", WrapWidth, WrapHeight, }
+}
+Materials 1 {
+  Material {
+    Layer { FilterMode Blend, Unshaded, TwoSided, static TextureID 0, static Alpha 1, }
+    Layer { FilterMode Additive, Unshaded, TwoSided, static TextureID 1, static Alpha 0.3, }
+    Layer { FilterMode Additive, Unshaded, TwoSided, TextureID 4 { DontInterp, GlobalSeqId 0, 0: 2, 90: 3, 180: 4, 270: 2, }, static Alpha 0.38, }
+  }
+}
+Geoset {
+  Vertices 4 { { -50, -60, 0 }, { 50, -60, 0 }, { 50, 60, 0 }, { -50, 60, 0 }, }
+  Normals 4 { { 0, 0, 1 }, { 0, 0, 1 }, { 0, 0, 1 }, { 0, 0, 1 }, }
+  TVertices 4 { { 0, 0 }, { 1, 0 }, { 1, 1 }, { 0, 1 }, }
+  VertexGroup { 0, 0, 0, 0, }
+  Faces 1 6 { Triangles { { 0, 1, 2, 0, 2, 3 }, } }
+  Groups 1 1 { Matrices { 0 }, }
+  MinimumExtent { -50, -60, 0 }, MaximumExtent { 50, 60, 0 }, BoundsRadius 80,
+  Anim { MinimumExtent { -50, -60, 0 }, MaximumExtent { 50, 60, 0 }, BoundsRadius 80, }
+  MaterialID 0, SelectionGroup 0,
+}
+Bone "Surface" { ObjectId 0, GeosetId Multiple, GeosetAnimId None, }
+PivotPoints 1 { { 0, 0, 0 }, }

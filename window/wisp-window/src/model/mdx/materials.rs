@@ -51,7 +51,7 @@ pub(super) fn parse_materials(chunk: &mut Reader, model: &mut Model) -> Result<(
                 for slot in 0..chunk.count()? {
                     let id = chunk.i32()?;
                     chunk.take(4)?;
-                    let track = (chunk.bytes.get(chunk.at..chunk.at + 4) == Some(b"KMTF".as_slice())).then(|| chunk.keyword().and_then(|_| chunk.track::<1>())).transpose()?;
+                    let track = (chunk.bytes.get(chunk.at..chunk.at + 4) == Some(b"KMTF".as_slice())).then(|| chunk.keyword().and_then(|_| chunk.index_track())).transpose()?;
                     if slot == 0 {
                         texture_id = id;
                         texture_track = track;
@@ -61,7 +61,7 @@ pub(super) fn parse_materials(chunk: &mut Reader, model: &mut Model) -> Result<(
             while chunk.at < layer_start + layer_size {
                 match chunk.keyword()? {
                     b"KMTA" => alpha.track = Some(chunk.track::<1>()?),
-                    b"KMTF" => texture_track = Some(chunk.track::<1>()?),
+                    b"KMTF" => texture_track = Some(chunk.index_track()?),
                     b"KMTE" => {
                         chunk.track::<1>()?;
                     }
@@ -102,10 +102,9 @@ mod tests {
             int(&mut layer, value);
         }
         layer.extend_from_slice(b"KMTF");
-        for value in [1, 0, -1, 0] {
+        for value in [1, 0, -1, 0, 3] {
             int(&mut layer, value);
         }
-        float(&mut layer, 3.0);
         let mut chunk = Vec::new();
         for value in [0, 0] {
             int(&mut chunk, value);
