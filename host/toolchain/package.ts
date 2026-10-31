@@ -41,18 +41,6 @@ async function moveDeclarations(source: string, destination: string): Promise<vo
   }
 }
 
-const isMapSource = (target: string | undefined): target is string =>
-  target !== undefined && target.startsWith("./src/") && target.endsWith(".ts") && !target.endsWith(".d.ts");
-
-const declared = (target: string) => ({ types: `./types/${target.slice(2, -3)}.d.ts`, tstl: target.slice(0, -3) });
-
-const mapSource = (target: string) => isMapSource(target) ? { ...declared(target), default: target } : target;
-
-const conditions = (target: Record<string, string>) => {
-  const { types, ...rest } = target;
-  return isMapSource(types) ? { ...declared(types), ...rest } : target;
-};
-
 // tsserver requires a CommonJS module whose export is the plugin factory.
 
 const editorPluginProgram = (output: string) => attempt(async () => {
@@ -98,7 +86,11 @@ export const packageProgram = (output: string, revision?: string) => Effect.scop
   delete manifest.scripts;
   delete manifest.devDependencies;
   manifest.exports = Object.fromEntries(Object.entries(exports).map(([path, target]) =>
-    [path, typeof target === "string" ? mapSource(target) : conditions(target)]));
+    [path, typeof target !== "string"
+      ? target
+      : target.startsWith("./src/") && target.endsWith(".ts") && !target.endsWith(".d.ts")
+      ? { types: `./types/${target.slice(2, -3)}.d.ts`, tstl: target.slice(0, -3), default: target }
+      : target]));
   yield* attempt(async () => {
     await Bun.write(join(staging, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`);
     await mkdir(dirname(target), { recursive: true });
