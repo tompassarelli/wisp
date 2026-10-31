@@ -89,10 +89,27 @@ function textJustify(value: unknown): string {
   return typeof value === "string" ? (value.startsWith("TEXT_JUSTIFY_") ? value.slice("TEXT_JUSTIFY_".length) : value).toLowerCase() : "";
 }
 
-function textAlignment(alignment: Frame["alignment"]): TextAlignment | undefined {
-  if (alignment === undefined) return undefined;
+function textAlignment(alignment: NonNullable<Frame["alignment"]>): TextAlignment {
   const vertical = textJustify(alignment.vertical), horizontal = textJustify(alignment.horizontal);
   return { vertical: vertical === "middle" || vertical === "bottom" ? vertical : "top", horizontal: horizontal === "center" || horizontal === "right" ? horizontal : "left" };
+}
+
+const BUTTON_ALIGNMENT: NonNullable<Frame["alignment"]> = { vertical: "MIDDLE", horizontal: "CENTER" };
+const buttonTypes = new Map<string, boolean>();
+const alignments = new WeakMap<NonNullable<Frame["alignment"]>, TextAlignment>();
+
+function isButton(type: string): boolean {
+  let button = buttonTypes.get(type);
+  if (button === undefined) buttonTypes.set(type, button = type.toLowerCase().includes("button"));
+  return button;
+}
+
+function frameAlignment(frame: Frame): TextAlignment | undefined {
+  const declared = frame.alignment ?? (isButton(frame.type) ? BUTTON_ALIGNMENT : undefined);
+  if (declared === undefined) return undefined;
+  let aligned = alignments.get(declared);
+  if (aligned === undefined) alignments.set(declared, aligned = textAlignment(declared));
+  return aligned;
 }
 
 function styleText(frame: Frame, declared: { readonly font?: TemplateFont; readonly justify?: TemplateJustify }): void {
@@ -140,6 +157,37 @@ export interface FrameSnapshot {
   readonly plain: boolean;
   /** Set only on a frame that shows a model: the path, the model's camera index and the sequence index to play. */
   readonly sprite?: { readonly model: string; readonly camera: number; readonly animation: number; readonly time: number };
+}
+
+type PlacedPoint = readonly [readonly [number, number], { readonly x: number; readonly y: number }];
+
+function fitCorners(placed: readonly PlacedPoint[], width: number, height: number): [number, number, number, number] | undefined {
+  const corners: [number, number, number, number] = [0, 0, 0, 0];
+  let found = 0;
+  for (const [share, at] of placed) {
+    const left = at.x - share[0] * width;
+    const top = at.y + share[1] * height;
+    if (found === 0) {
+      corners[0] = left;
+      corners[1] = top;
+      corners[2] = left + width;
+      corners[3] = top - height;
+    } else {
+
+      if (share[0] === 0) corners[0] = at.x;
+      if (share[0] === 1) corners[2] = at.x;
+      if (share[1] === 0) corners[1] = at.y;
+      if (share[1] === 1) corners[3] = at.y;
+    }
+    found++;
+  }
+  return found === 0 ? undefined : corners;
+}
+
+class Placements {
+  readonly known = new Map<Frame, Rectangle | undefined>();
+  readonly ancestors = new Set<Frame>();
+  cycles = 0;
 }
 
 export class Frames {
@@ -244,14 +292,15 @@ export class Frames {
 
   snapshot(options: { readonly visibleOnly?: boolean } = {}): FrameSnapshot[] {
     const snapshots: FrameSnapshot[] = [];
+    const placements = new Placements();
     for (const frame of this.all) {
       if (frame.destroyed) continue;
       const visible = this.shown(frame);
       if (options.visibleOnly && (!visible || frame.alpha <= 0)) continue;
       snapshots.push({ handle: { kind: frame.kind, id: frame.id }, name: frame.name, type: frame.type,
-        parentId: frame.parent?.id, rectangle: this.rectangle(frame), text: frame.text, texture: frame.texture,
+        parentId: frame.parent?.id, rectangle: this.rectangle(frame, placements), text: frame.text, texture: frame.texture,
         color: frame.color, textColor: frame.textColor, alpha: frame.alpha, visible, level: this.drawLevel(frame),
-        font: frame.font, alignment: textAlignment(frame.alignment ?? (frame.type.toLowerCase().includes("button") ? { vertical: "MIDDLE", horizontal: "CENTER" } : undefined)), scale: frame.scale, plain: frame.plain,
+        font: frame.font, alignment: frameAlignment(frame), scale: frame.scale, plain: frame.plain,
         ...(frame.model === "" ? {} : { sprite: { model: frame.model, camera: frame.modelCamera, animation: frame.spriteAnimation, time: frame.spriteTime } }) });
     }
     return snapshots;
@@ -263,17 +312,33 @@ export class Frames {
     return 0;
   }
 
-  private rectangle(frame: Frame, visited: Set<Frame> = new Set()): Rectangle | undefined {
-    if (visited.has(frame)) return undefined;
-    const ancestors = new Set(visited);
-    ancestors.add(frame);
-    const corners: [number, number, number, number] = [0, 0, 0, 0];
-    let found = 0;
+  private rectangle(frame: Frame, placements: Placements = new Placements()): Rectangle | undefined {
+    if (placements.known.has(frame)) return placements.known.get(frame);
+    if (placements.ancestors.has(frame)) {
+      placements.cycles++;
+      return undefined;
+    }
+    const cycles = placements.cycles;
+    placements.ancestors.add(frame);
+    const rectangle = this.place(frame, placements);
+    placements.ancestors.delete(frame);
+    if (placements.cycles === cycles) placements.known.set(frame, rectangle);
+    return rectangle;
+  }
+
+  private place(frame: Frame, placements: Placements): Rectangle | undefined {
     // Scale multiplies size and relative offsets, not absolute points, and children inherit it (wisp#125, test/frames125).
     let scale = 1;
     for (let at: Frame | undefined = frame; at !== undefined; at = at.parent) scale *= at.scale;
-    const width = frame.width * scale, height = frame.height * scale;
-    const placed: (readonly [readonly [number, number], { readonly x: number; readonly y: number }])[] = [];
+    const corners = fitCorners(this.placedPoints(frame, scale, placements), frame.width * scale, frame.height * scale);
+    if (corners === undefined) return undefined;
+    // A GAME_UI child leaving x 0..0.8 is not drawn, even on a wide screen (wisp#125, test/frames125).
+    if (frame.parent !== undefined && this.gameUi.has(frame.parent) && (corners[0] < -EDGE || corners[2] > f32(0.8) + EDGE)) return undefined;
+    return corners;
+  }
+
+  private placedPoints(frame: Frame, scale: number, placements: Placements): PlacedPoint[] {
+    const placed: PlacedPoint[] = [];
     for (const [point, at] of frame.points) {
       const share = this.points.get(point);
       if (share !== undefined) placed.push([share, at]);
@@ -281,39 +346,20 @@ export class Frames {
     for (const anchor of frame.anchors) {
       const share = NAMED_POINTS.get(anchor.point);
       const relativeShare = NAMED_POINTS.get(anchor.relativePoint);
-      const relative = this.rectangle(anchor.relative, ancestors);
+      const relative = this.rectangle(anchor.relative, placements);
       if (share === undefined || relativeShare === undefined || relative === undefined) continue;
       const [left, top, right, bottom] = relative;
       placed.push([share, { x: left + relativeShare[0] * (right - left) + anchor.x * scale, y: top - relativeShare[1] * (top - bottom) + anchor.y * scale }]);
     }
-    for (const [share, at] of placed) {
-      const left = at.x - share[0] * width;
-      const top = at.y + share[1] * height;
-      if (found === 0) {
-        corners[0] = left;
-        corners[1] = top;
-        corners[2] = left + width;
-        corners[3] = top - height;
-      } else {
-
-        if (share[0] === 0) corners[0] = at.x;
-        if (share[0] === 1) corners[2] = at.x;
-        if (share[1] === 0) corners[1] = at.y;
-        if (share[1] === 1) corners[3] = at.y;
-      }
-      found++;
-    }
-    if (found === 0) return undefined;
-    // A GAME_UI child leaving x 0..0.8 is not drawn, even on a wide screen (wisp#125, test/frames125).
-    if (frame.parent !== undefined && this.gameUi.has(frame.parent) && (corners[0] < -EDGE || corners[2] > f32(0.8) + EDGE)) return undefined;
-    return corners;
+    return placed;
   }
 
   at(x: number, y: number, takes: (frame: Frame) => boolean): Frame | undefined {
     let found: Frame | undefined;
+    const placements = new Placements();
     for (const frame of this.all) {
       if (!frame.enabled || !takes(frame) || !this.shown(frame)) continue;
-      const rectangle = this.rectangle(frame);
+      const rectangle = this.rectangle(frame, placements);
       if (rectangle === undefined) continue;
       const [left, top, right, bottom] = rectangle;
       if (x < left || x > right || y > top || y < bottom) continue;
