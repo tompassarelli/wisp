@@ -5,7 +5,7 @@ use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use super::{cache_key, prepare, Cache, Edges, Quality, Upscaler};
+use super::{cache_key, prepare, Cache, Edges, Quality, Role, Upscaler};
 
 /// Rest between two upscaled textures, so the render thread's frames are not queued behind one network run after another.
 const BETWEEN: Duration = Duration::from_millis(16);
@@ -120,10 +120,11 @@ fn run(shared: &Shared, quality: Quality, cache: &Cache, upscaler: &Upscaler) {
             }
             state.queue.pop().expect("the queue is not empty")
         };
-        let key = cache_key(&job.bytes, quality, upscaler, Edges::for_path(&job.path));
+        let (edges, role) = (Edges::for_path(&job.path), Role::for_path(&job.path));
+        let key = cache_key(&job.bytes, quality, upscaler, edges, role);
         let baked = !cache.holds(&key);
         if baked {
-            match prepare(&job.bytes, quality, Some(cache), upscaler, Edges::for_path(&job.path), &job.path) {
+            match prepare(&job.bytes, quality, Some(cache), upscaler, edges, role, &job.path) {
                 Ok(prepared) if prepared.relief.is_none() => cache.keep_as_is(&key),
                 Ok(_) => {}
                 Err(error) => {
@@ -189,7 +190,7 @@ mod tests {
         baker.set_playing(false);
         assert!(until_ready(&baker).ready());
         for seed in [1, 2] {
-            assert!(cache.holds(&cache_key(&png(seed), Quality::Standard, &upscaler, Edges::Mirror)));
+            assert!(cache.holds(&cache_key(&png(seed), Quality::Standard, &upscaler, Edges::Mirror, Role::Figure)));
         }
         let _ = std::fs::remove_dir_all(directory);
     }

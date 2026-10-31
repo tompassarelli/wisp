@@ -5,6 +5,7 @@ mod cache;
 pub mod check;
 mod cugan;
 mod relief;
+mod role;
 mod upscale;
 mod upscaler;
 
@@ -15,6 +16,7 @@ use crate::texture::Image;
 pub use bake::{Baker, Progress};
 pub use cache::Cache;
 pub use cugan::{device_limits, Edges, NOTICE as REAL_CUGAN_NOTICE};
+pub use role::Role;
 pub use upscaler::{Upscaler, FILTER};
 
 /// Textures this large or larger are already high resolution (backdrops, loading screens) and are left as they are.
@@ -74,11 +76,11 @@ pub struct Maps {
 }
 
 /// Bumped whenever the output of `enhance` changes, so stale cache entries are never read.
-const ALGORITHM: u32 = 2;
+const ALGORITHM: u32 = 3;
 
-/// Names the source, the quality, how the texture continues past its edges and the method that made it (the model and weights, or the edge-directed filter), so a change to any of them refills the cache.
-pub fn cache_key(source: &[u8], quality: Quality, upscaler: &Upscaler, edges: Edges) -> String {
-    cache::digest(source, &format!("{}-v{ALGORITHM}-{}-{edges:?}", quality.name(), upscaler.method()))
+/// Names the source, the quality, how the texture continues past its edges and the method that made it for its role (the model and weights, or the edge-directed filter), so a change to any of them refills the cache.
+pub fn cache_key(source: &[u8], quality: Quality, upscaler: &Upscaler, edges: Edges, role: Role) -> String {
+    cache::digest(source, &format!("{}-v{ALGORITHM}-{}-{edges:?}", quality.name(), upscaler.method(role)))
 }
 
 impl Edges {
@@ -99,15 +101,15 @@ pub struct Prepared {
 }
 
 /// Decodes a texture file and remasters it, reading the result from `cache` when this file and quality were seen before and storing it there when not.
-pub fn prepare(bytes: &[u8], quality: Quality, cache: Option<&Cache>, upscaler: &Upscaler, edges: Edges, name: &str) -> Result<Prepared, String> {
-    let key = (quality != Quality::Off).then(|| cache_key(bytes, quality, upscaler, edges));
+pub fn prepare(bytes: &[u8], quality: Quality, cache: Option<&Cache>, upscaler: &Upscaler, edges: Edges, role: Role, name: &str) -> Result<Prepared, String> {
+    let key = (quality != Quality::Off).then(|| cache_key(bytes, quality, upscaler, edges, role));
     if let (Some(cache), Some(key)) = (cache, &key) {
         if let Some(maps) = cache.load(key) {
             return Ok(Prepared { albedo: maps.albedo, relief: Some(maps.relief) });
         }
     }
     let decoded = crate::texture::decode(bytes)?;
-    let enhanced = enhance(&decoded, quality, upscaler, edges, name);
+    let enhanced = enhance(&decoded, quality, upscaler, edges, role, name);
     upscaler.announce(&mut std::io::stderr());
     match enhanced {
         Some(maps) => {
@@ -121,10 +123,10 @@ pub fn prepare(bytes: &[u8], quality: Quality, cache: Option<&Cache>, upscaler: 
 }
 
 /// What the art on screen draws a texture with: its remastered maps from `cache` when the bake made them, else the decoded original with `unbaked` set when the bake has yet to reach it. It never runs the upscaler, so drawing never waits on it.
-pub fn load(bytes: &[u8], quality: Quality, cache: Option<&Cache>, upscaler: &Upscaler, edges: Edges) -> Result<Loaded, String> {
+pub fn load(bytes: &[u8], quality: Quality, cache: Option<&Cache>, upscaler: &Upscaler, edges: Edges, role: Role) -> Result<Loaded, String> {
     if quality != Quality::Off {
         if let Some(cache) = cache {
-            let key = cache_key(bytes, quality, upscaler, edges);
+            let key = cache_key(bytes, quality, upscaler, edges, role);
             if let Some(maps) = cache.load(&key) {
                 return Ok(Loaded { prepared: Prepared { albedo: maps.albedo, relief: Some(maps.relief) }, unbaked: false });
             }
@@ -142,12 +144,12 @@ pub struct Loaded {
 }
 
 /// Upscales `image` (the first doubling by `upscaler`, any further ones by the edge-directed filter) and derives its relief, or returns `None` when the quality is off or the texture is already large.
-pub fn enhance(image: &Image, quality: Quality, upscaler: &Upscaler, edges: Edges, name: &str) -> Option<Maps> {
+pub fn enhance(image: &Image, quality: Quality, upscaler: &Upscaler, edges: Edges, role: Role, name: &str) -> Option<Maps> {
     if quality == Quality::Off || image.width.max(image.height) >= LARGEST_SOURCE {
         return None;
     }
     let steps = quality.upscale_steps();
-    let (albedo, fallback) = upscaler.doubled(image, edges, name);
+    let (albedo, fallback) = upscaler.doubled(image, edges, role, name);
     let albedo = if steps > 1 { upscale::steps(&albedo, steps - 1) } else { albedo };
     let relief = relief::derive(&albedo);
     Some(Maps { albedo, relief, fallback })
@@ -172,15 +174,15 @@ mod tests {
 
     #[test]
     fn off_and_large_textures_are_left_alone() {
-        assert!(enhance(&checker(8), Quality::Off, &Upscaler::classical(), Edges::Mirror, "test").is_none());
-        assert!(enhance(&Image { width: 1024, height: 4, rgba: vec![0; 1024 * 16] }, Quality::Standard, &Upscaler::classical(), Edges::Mirror, "test").is_none());
+        assert!(enhance(&checker(8), Quality::Off, &Upscaler::classical(), Edges::Mirror, Role::Figure, "test").is_none());
+        assert!(enhance(&Image { width: 1024, height: 4, rgba: vec![0; 1024 * 16] }, Quality::Standard, &Upscaler::classical(), Edges::Mirror, Role::Figure, "test").is_none());
     }
 
     #[test]
     fn each_step_doubles_both_sides_and_relief_matches_the_albedo() {
-        let standard = enhance(&checker(8), Quality::Standard, &Upscaler::classical(), Edges::Mirror, "test").unwrap();
+        let standard = enhance(&checker(8), Quality::Standard, &Upscaler::classical(), Edges::Mirror, Role::Figure, "test").unwrap();
         assert_eq!((standard.albedo.width, standard.albedo.height), (16, 16));
-        let high = enhance(&checker(8), Quality::High, &Upscaler::classical(), Edges::Mirror, "test").unwrap();
+        let high = enhance(&checker(8), Quality::High, &Upscaler::classical(), Edges::Mirror, Role::Figure, "test").unwrap();
         assert_eq!((high.albedo.width, high.relief.height), (32, 32));
         assert_eq!(high.relief.rgba.len(), 32 * 32 * 4);
     }
@@ -188,20 +190,20 @@ mod tests {
     #[test]
     fn a_flat_texture_stays_flat_and_its_normals_point_out() {
         let flat = Image { width: 6, height: 6, rgba: [90, 120, 150, 255].repeat(36) };
-        let maps = enhance(&flat, Quality::Standard, &Upscaler::classical(), Edges::Mirror, "test").unwrap();
+        let maps = enhance(&flat, Quality::Standard, &Upscaler::classical(), Edges::Mirror, Role::Figure, "test").unwrap();
         assert!(maps.albedo.rgba.chunks_exact(4).all(|pixel| pixel.iter().zip([90u8, 120, 150, 255]).all(|(got, want)| got.abs_diff(want) <= 1)));
         assert!(maps.relief.rgba.chunks_exact(4).all(|pixel| pixel[0].abs_diff(128) <= 1 && pixel[1].abs_diff(128) <= 1 && pixel[2] >= 254));
     }
 
     #[test]
     fn upscaling_stays_within_the_source_range() {
-        let maps = enhance(&checker(8), Quality::High, &Upscaler::classical(), Edges::Mirror, "test").unwrap();
+        let maps = enhance(&checker(8), Quality::High, &Upscaler::classical(), Edges::Mirror, Role::Figure, "test").unwrap();
         assert!(maps.albedo.rgba.chunks_exact(4).all(|pixel| (30..=220).contains(&pixel[0]) && (30..=200).contains(&pixel[2])));
     }
 
     #[test]
     fn the_cache_key_follows_the_bytes_the_quality_and_the_edges() {
-        let key = |source: &[u8], quality, edges| cache_key(source, quality, &Upscaler::classical(), edges);
+        let key = |source: &[u8], quality, edges| cache_key(source, quality, &Upscaler::classical(), edges, Role::Figure);
         assert_ne!(key(b"a", Quality::Standard, Edges::Mirror), key(b"b", Quality::Standard, Edges::Mirror));
         assert_ne!(key(b"a", Quality::Standard, Edges::Mirror), key(b"a", Quality::High, Edges::Mirror));
         assert_ne!(key(b"a", Quality::High, Edges::Mirror), key(b"a", Quality::High, Edges::Wrap));

@@ -33,8 +33,8 @@ impl Renderer {
             if let Some(baker) = &self.baker {
                 baker.add(path, bytes.clone());
             }
-            let (quality, cache, upscaler, edges) = (self.quality, self.cache.clone(), self.upscaler.clone(), Edges::for_path(path));
-            self.decoder.submit(self.next_job, move || remaster::load(&bytes, quality, cache.as_deref(), &upscaler, edges));
+            let (quality, cache, upscaler, edges, role) = (self.quality, self.cache.clone(), self.upscaler.clone(), Edges::for_path(path), Role::for_path(path));
+            self.decoder.submit(self.next_job, move || remaster::load(&bytes, quality, cache.as_deref(), &upscaler, edges, role));
         }
     }
 
@@ -124,7 +124,7 @@ impl Renderer {
 
     /// True when the GPU cannot run the learned upscaler, so the bake doubles textures with the edge-directed filter.
     pub fn upscales_with_filter(&self) -> bool {
-        self.upscaler.method() == remaster::FILTER
+        self.upscaler.method(Role::Figure) == remaster::FILTER
     }
 
     /// True while the art on screen is not yet the art wanted.

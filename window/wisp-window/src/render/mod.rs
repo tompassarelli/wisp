@@ -37,7 +37,7 @@ use std::sync::Arc;
 
 use crate::decode_pool::Pool;
 use crate::model::Facing;
-use crate::remaster::{self, Baker, Cache, Edges, Loaded, Quality, Upscaler};
+use crate::remaster::{self, Baker, Cache, Edges, Loaded, Quality, Role, Upscaler};
 use crate::settings::{Features, Shadows};
 use math::{mirrored, multiply, projection, Mat4, IDENTITY};
 use gpu::{bone_storage, frame_group, frame_uniform_buffer, instance_storage, color_storage, repeat_sampler, upload, uv_storage, white};

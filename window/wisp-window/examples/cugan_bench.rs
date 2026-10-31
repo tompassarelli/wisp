@@ -1,8 +1,8 @@
-//! Times Real-CUGAN 2x on the window's own adapter: `cargo run --release -p wisp-window --example cugan_bench -- FILES...`. Each file is a PNG, BLP, TGA or DDS texture, and a leading `+` on its name, or `terrainart_` in it, has it wrapped as a tiling texture, and one of 1024 pixels or more on a side is skipped as the remaster skips it; the report gives the start-up (pipelines and weights), each texture's time and the total, then the megapixels per second. Nothing is written.
+//! Times Real-CUGAN 2x on the window's own adapter, every file as a figure whatever its path: `cargo run --release -p wisp-window --example cugan_bench -- FILES...`. Each file is a PNG, BLP, TGA or DDS texture, and a leading `+` on its name, or `terrainart_` in it, has it wrapped as a tiling texture, and one of 1024 pixels or more on a side is skipped as the remaster skips it; the report gives the start-up (pipelines and weights), each texture's time and the total, then the megapixels per second. Nothing is written.
 
 use std::time::Instant;
 
-use wisp_window::remaster::{self, Cache, Edges, Quality, Upscaler, LARGEST_SOURCE};
+use wisp_window::remaster::{self, Cache, Edges, Quality, Role, Upscaler, LARGEST_SOURCE};
 use wisp_window::texture::decode;
 
 fn main() {
@@ -13,7 +13,7 @@ fn main() {
     let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor { required_limits: wisp_window::remaster::device_limits(&adapter.limits()), ..Default::default() })).expect("a device");
     let upscaler = Upscaler::on(device, queue, &info);
     upscaler.announce(&mut std::io::stderr());
-    println!("adapter {} ({:?}, {:?}); method {}; start-up {:.0} ms", info.name, info.device_type, info.backend, upscaler.method(), started.elapsed().as_secs_f64() * 1000.0);
+    println!("adapter {} ({:?}, {:?}); method {}; start-up {:.0} ms", info.name, info.device_type, info.backend, upscaler.method(Role::Figure), started.elapsed().as_secs_f64() * 1000.0);
     let (mut pixels, mut total, mut count, mut fallbacks) = (0u64, 0.0, 0, 0);
     let mut textures = Vec::new();
     let mut files = Vec::new();
@@ -32,7 +32,7 @@ fn main() {
             continue;
         }
         let started = Instant::now();
-        let (doubled, fell_back) = upscaler.doubled(&image, edges, &path);
+        let (doubled, fell_back) = upscaler.doubled(&image, edges, Role::Figure, &path);
         upscaler.announce(&mut std::io::stderr());
         fallbacks += usize::from(fell_back);
         let seconds = started.elapsed().as_secs_f64();
@@ -48,7 +48,7 @@ fn main() {
     let filter = Upscaler::classical();
     let started = Instant::now();
     for (image, edges) in &textures {
-        filter.doubled(image, *edges, "");
+        filter.doubled(image, *edges, Role::Figure, "");
     }
     println!("the edge-directed filter alone on the same textures: {:.0} ms", started.elapsed().as_secs_f64() * 1000.0);
     let folder = std::env::temp_dir().join(format!("cugan-bench-{}", std::process::id()));
@@ -56,7 +56,7 @@ fn main() {
     for pass in ["first run, cache empty", "second run, cache full"] {
         let started = Instant::now();
         for (path, edges) in &files {
-            remaster::prepare(&std::fs::read(path).expect("read texture"), Quality::Standard, Some(&cache), &upscaler, *edges, path).expect("prepare");
+            remaster::prepare(&std::fs::read(path).expect("read texture"), Quality::Standard, Some(&cache), &upscaler, *edges, Role::Figure, path).expect("prepare");
         }
         println!("remaster load of the same {} files, {pass}: {:.0} ms", files.len(), started.elapsed().as_secs_f64() * 1000.0);
     }

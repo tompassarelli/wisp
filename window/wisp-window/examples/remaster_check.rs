@@ -1,7 +1,7 @@
 //! Runs the remaster's measured gates over texture files and reports, per texture, palette drift, wrap-edge seam error, and detail kept and added against the Classic original.
 //! Usage: `remaster_check --out DIR [--quality standard|high] [--worst N] [--classical] (--imports MAP_IMPORTS_DIR | TEXTURE...)`.
 //! It measures the upscaler the window would run: Real-CUGAN on the machine's GPU, or the edge-directed filter with `--classical` or when only a software adapter exists.
-//! `MAP_IMPORTS_DIR` is one unpacked map under `$XDG_CACHE_HOME/wisp/map-imports`. Terrain art (`terrainart/` paths, or `war3.w3mod_terrainart_*` file names from an install extract) is sampled with wrap, which turns on the seam gate.
+//! `MAP_IMPORTS_DIR` is one unpacked map under `$XDG_CACHE_HOME/wisp/map-imports`. Terrain art (`terrainart/` paths, or `war3.w3mod_terrainart_*` file names from an install extract) is sampled with wrap, which turns on the seam gate. Each texture's role picks its upscaler: figures take Real-CUGAN, scenery (terrain, doodads, `Stage*` imports) the edge-directed filter.
 //! Side-by-side crops of the worst N textures are written to DIR as `remaster-check-NAME.png`, outside any repository. Exits 1 when a texture fails.
 
 use std::path::{Path, PathBuf};
@@ -11,7 +11,7 @@ use std::sync::Mutex;
 use image::imageops::{resize, FilterType};
 use image::RgbaImage;
 use wisp_window::remaster::check::{fold, measure, most_changed_block, Report, LIMITS};
-use wisp_window::remaster::{device_limits, enhance, Edges, Quality, Upscaler};
+use wisp_window::remaster::{device_limits, enhance, Edges, Quality, Role, Upscaler};
 use wisp_window::texture::{decode, Image};
 
 const THREADS: usize = 4;
@@ -26,6 +26,7 @@ struct Row {
     report: Report,
     path: PathBuf,
     edges: Edges,
+    role: Role,
 }
 
 enum Outcome {
@@ -95,8 +96,8 @@ fn check(name: &str, path: &Path, quality: Quality, upscaler: &Upscaler) -> Outc
     if source.width.min(source.height) < MIN_SIDE {
         return Outcome::Left;
     }
-    let edges = Edges::for_path(&logical_path(name));
-    let enhanced = enhance(&source, quality, upscaler, edges, name);
+    let (edges, role) = (Edges::for_path(&logical_path(name)), Role::for_path(&logical_path(name)));
+    let enhanced = enhance(&source, quality, upscaler, edges, role, name);
     let mut notice = Vec::new();
     upscaler.announce(&mut notice);
     if !notice.is_empty() {
@@ -104,7 +105,7 @@ fn check(name: &str, path: &Path, quality: Quality, upscaler: &Upscaler) -> Outc
     }
     let Some(maps) = enhanced else { return Outcome::Left };
     match measure(&source, &maps.albedo, edges == Edges::Wrap) {
-        Ok(report) => Outcome::Measured(Row { name: name.into(), size: (source.width, source.height), report, path: path.into(), edges }),
+        Ok(report) => Outcome::Measured(Row { name: name.into(), size: (source.width, source.height), report, path: path.into(), edges, role }),
         Err(error) => Outcome::Unreadable(name.into(), error),
     }
 }
@@ -162,7 +163,7 @@ fn error_panel(source: &RgbaImage, folded: &RgbaImage) -> RgbaImage {
 
 fn write_crop(row: &Row, quality: Quality, upscaler: &Upscaler, out: &Path) -> Result<PathBuf, String> {
     let source = decode(&std::fs::read(&row.path).map_err(|error| error.to_string())?)?;
-    let upscaled = enhance(&source, quality, upscaler, row.edges, &row.name).ok_or("left alone")?.albedo;
+    let upscaled = enhance(&source, quality, upscaler, row.edges, row.role, &row.name).ok_or("left alone")?.albedo;
     let factor = (upscaled.width / source.width) as usize;
     let seam_worst = row.report.worst(&LIMITS).name == "seam";
     let (source, upscaled) = if seam_worst { (roll(&source, source.width as usize / 2, source.height as usize / 2), roll(&upscaled, upscaled.width as usize / 2, upscaled.height as usize / 2)) } else { (source, upscaled) };
@@ -194,7 +195,6 @@ fn main() {
     std::fs::create_dir_all(&out).expect("create the output folder");
     let outcomes = run(&inputs, quality, &upscaler);
     upscaler.announce(&mut std::io::stderr());
-    println!("upscaler: {}", upscaler.method());
     let mut rows = Vec::new();
     let (mut left, mut unreadable) = (0, 0);
     for outcome in outcomes {
@@ -206,6 +206,9 @@ fn main() {
                 eprintln!("unreadable {name}: {error}");
             }
         }
+    }
+    for (role, label) in [(Role::Figure, "figures (fighters, effects)"), (Role::Scenery, "scenery (stages, terrain)")] {
+        println!("upscaler for {label}: {} on {} textures", upscaler.method(role), rows.iter().filter(|row| row.role == role).count());
     }
     rows.sort_by(|a, b| b.report.worst(&LIMITS).ratio().total_cmp(&a.report.worst(&LIMITS).ratio()).then_with(|| a.name.cmp(&b.name)));
     println!("limits: hue {}deg, saturation {}, seam {}, detail kept >= {}, detail added <= {}, alpha moved {}", LIMITS.hue_degrees, LIMITS.saturation, LIMITS.seam, LIMITS.detail_kept, LIMITS.detail_added, LIMITS.alpha_moved);
