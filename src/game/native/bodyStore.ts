@@ -31,7 +31,7 @@ const TURNS_PER_RADIAN = 0.1591549664735794;
 
 // Warcraft stores facing in radians with products rounded toward zero (wisp:docs/warsmash-notes.md, Unit position and facing).
 
-export function bodyFacing(degrees: number): number {
+function bodyFacing(degrees: number): number {
   let radians = multiplyFloat32TowardZero(f32(degrees), RADIANS_PER_DEGREE);
   if (radians >= TURN || radians < -TURN) {
     const turns = multiplyFloat32TowardZero(radians, TURNS_PER_RADIAN);
