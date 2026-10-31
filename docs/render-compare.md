@@ -73,3 +73,33 @@ measured, bound }`.
 
 A later `compare --candidate native` is judged against the recorded bound
 of its regions; the bound is a number in the plan, not a rerun.
+
+## Native candidate
+
+`--candidate native` (or `--reference native`) draws the scenes through the
+native window's renderer with no window: `host/window/nativeRender.ts` builds
+each scene with the window's own `drawScene`, pushes the models and textures
+through `readAsset`-style reads into `wisp_offscreen_*`
+(`window/wisp-window/src/offscreen.rs`), waits until every file is built and
+reads the image back as a PNG. It draws at the Low graphics preset on the
+machine's default high-performance adapter, and `render.json` records that
+adapter. `chrome` names the ANGLE Vulkan backend, and `--out` defaults to
+`build/render/REFERENCE-CANDIDATE`.
+
+`bun wisp render compare --reference chrome --candidate native --scenes
+test/render/models.json` on gex45's RTX PRO 4000 (2026-10-31) measured:
+
+| Region | `maxDelta` | `p99Delta` | `meanDelta` | `differingFraction` |
+| --- | --- | --- | --- | --- |
+| Wisp121Checker flat | 42 | 10 | 8.98 | 1.000 |
+| Wisp121Checker edge | 160 | 134 | 73.56 | 0.999 |
+| Wisp121Blend flat | 37 | 36 | 11.94 | 1.000 |
+| Wisp121Blend edge | 91 | 90 | 26.12 | 1.000 |
+| Wisp121Pyramid flat | 54 | 10 | 9.21 | 1.000 |
+| Wisp121Pyramid edge | 165 | 56 | 26.17 | 0.966 |
+
+Every region is far outside the recorded bound of 0. By eye the native
+frames match Chrome's geometry, camera and blend order; they differ in the
+background (darker), the model colours (the native grade desaturates and
+darkens them) and the checker's far field, which the native renderer mips to
+a flat grey where Chrome shows moire.

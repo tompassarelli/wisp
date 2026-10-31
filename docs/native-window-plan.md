@@ -459,7 +459,7 @@ The native window takes over the page's whole job, not only its drawing
   present mode, the image count and the sample-to-present time.
 - **Window lifetime.** Closing the window closes the session.
 - **Captures and `--headless`.** Requested capture frames and `--headless`
-  run through an offscreen surface with no window (W3).
+  run through an offscreen surface with no window (W3). The offscreen renderer is built (`offscreen.rs`, the `wisp_offscreen_*` exports and `host/window/offscreen.ts`) and serves `bun wisp render compare --candidate native`; `headless --render` and the play-time capture still use Chrome and `WISP_WINDOW_CAPTURE`.
 
 ### Pads, keyboard and platforms
 

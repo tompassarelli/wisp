@@ -19,6 +19,8 @@ mod metrics;
 pub mod model;
 pub mod render;
 mod mailbox;
+mod offscreen;
+pub mod offscreen_ffi;
 mod pacing;
 mod present;
 mod pad;
@@ -47,11 +49,11 @@ use frame::{End, Event};
 use host::Host;
 use audio::Audio;
 
-fn guard<T>(fallback: T, body: impl FnOnce() -> T) -> T {
+pub(crate) fn guard<T>(fallback: T, body: impl FnOnce() -> T) -> T {
     catch_unwind(AssertUnwindSafe(body)).unwrap_or(fallback)
 }
 
-unsafe fn text<'a>(pointer: *const c_char, length: usize) -> &'a str {
+pub(crate) unsafe fn text<'a>(pointer: *const c_char, length: usize) -> &'a str {
     if pointer.is_null() {
         return "";
     }
@@ -102,7 +104,7 @@ pub unsafe extern "C" fn wisp_window_open_error(out: *mut u8, capacity: usize) -
     guard(0, || copy_text(&OPEN_ERROR.lock().unwrap_or_else(|poisoned| poisoned.into_inner()), out, capacity))
 }
 
-unsafe fn copy_text(value: &str, out: *mut u8, capacity: usize) -> usize {
+pub(crate) unsafe fn copy_text(value: &str, out: *mut u8, capacity: usize) -> usize {
     let length = value.len().min(capacity);
     if !out.is_null() {
         ptr::copy_nonoverlapping(value.as_ptr(), out, length);
