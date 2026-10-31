@@ -9,11 +9,11 @@ class WindowLibraryFailure extends Schema.TaggedError<WindowLibraryFailure, { re
   override get message() { return this.problem; }
 }
 
-const SOURCE_FILES = ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "flake.nix", "flake.lock"];
+const SOURCE_FILES = ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "flake.nix", "flake.lock", "wisp-window/Cargo.toml"];
 
 const sourceHash = (windowDirectory: string) => {
   const hasher = new Bun.CryptoHasher("sha256");
-  const sources = [...new Bun.Glob("wisp-window/{Cargo.toml,src/**,assets/**}").scanSync({ cwd: windowDirectory, onlyFiles: true })].map((file) => file.replaceAll("\\", "/")).sort();
+  const sources = [...new Bun.Glob("wisp-window/{src,assets}/**").scanSync({ cwd: windowDirectory, onlyFiles: true })].map((file) => file.replaceAll("\\", "/")).sort();
   for (const file of [...SOURCE_FILES, ...sources]) {
     const path = join(windowDirectory, file);
     if (existsSync(path)) hasher.update(`${file}\0`).update(readFileSync(path)).update("\0");
