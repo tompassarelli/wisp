@@ -3,7 +3,9 @@ import { mixCall } from "./callHash";
 import type { EffectDeaths, EffectPose, Handle } from "../game/native/types";
 import type { CameraPose, CineFilterPose, ClientFiles, IntentionalNoops, LocalNatives, MissingNative, NativeBehavior, NativeBehaviors, NativeCall, PlayerMouseInput, SoundCue, StandaloneProfile, SyncMessage, UnitPose, UnitStateFixtures } from "./clientTypes";
 import type { NativeDeclarations } from "./declarations";
-import { FRAME_POINTS, type Frame, type FrameTemplate, Frames } from "./frames";
+import { FRAME_POINTS, type Frame, type FrameTemplate, Frames } from "../game/native/frameStore";
+import { FrameUi } from "../game/native/frameUi";
+import { Quests } from "../game/native/quests";
 import { enforceStandaloneProfile } from "./standaloneProfile";
 import { FRAMES_PER_SECOND, steppedFrames } from "../game/native/frameRate";
 import { describeNumber } from "./jassFormat";
@@ -97,6 +99,8 @@ export class HeadlessClient {
   readonly lightnings = new Lightnings(kind => this.handle(kind));
   readonly weathers = new Weathers();
   readonly world: World;
+  readonly frameUi: FrameUi;
+  readonly quests: Quests;
   readonly textAreaAutoScroll = new Map<Handle, boolean>();
   readonly heldMouseButtons = new Set<unknown>();
   /** Pixels `BlzGetLocalClientWidth/Height` report, which a window's cursor is mapped into. */
@@ -175,10 +179,16 @@ export class HeadlessClient {
     this.scope = options.scope;
     this.preloadText = new PreloadText({ slot: options.slot, filePrefix: options.filePrefix, stored: options.files, files: this.files, published: this.published,
       messages: this.messages, errors: this.errors, missed: () => { this.missedLookups++; } });
+    this.frameUi = new FrameUi(() => this.frames, handle, () => this.natives.ORIGIN_FRAME_GAME_UI, options.screen);
+    this.quests = new Quests(handle);
     const behaviors = this.behaviors(options);
     const local = options.localNatives;
     const log = this.log;
-    this.world = { effects: this.effects, beams: this.lightnings, floatingText: this.textTags, log: logUnlessLocal(log, local) };
+    this.world = {
+      effects: this.effects, beams: this.lightnings, floatingText: this.textTags, frames: this.frameUi, events: this.timers, quests: this.quests,
+      display: (player, text) => { if (player === this.slot) this.messages.push(text); },
+      log: logUnlessLocal(log, local),
+    };
 
     const count = this.emulated.count;
     const logged = (name: string, parameters: number, behave: (this: void, ...args: unknown[]) => unknown): ((this: void, ...args: unknown[]) => unknown) => {
@@ -287,12 +297,10 @@ export class HeadlessClient {
     return this.units.liveHandleCounts();
   }
 
-  private behaviors({ humans, playerNames, network, screen }: ClientOptions): Readonly<Record<string, NativeBehavior>> {
+  private behaviors({ humans, playerNames, network }: ClientOptions): Readonly<Record<string, NativeBehavior>> {
     const handle = (kind: string): Handle => this.handle(kind);
     const frameContext: FrameContext = {
-      handle, screen, textAreaAutoScroll: this.textAreaAutoScroll,
-      frames: () => this.frames,
-      gameUiOrigin: () => this.natives.ORIGIN_FRAME_GAME_UI,
+      ui: this.frameUi, textAreaAutoScroll: this.textAreaAutoScroll,
       keyPressed: key => this.heldKeys.has(key),
       metaPressed: meta => (this.heldMeta & meta) === meta,
       mouseButtonPressed: button => this.heldMouseButtons.has(button),

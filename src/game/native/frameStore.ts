@@ -1,5 +1,5 @@
-import type { Handle } from "../game/native/types";
-import { f32 } from "../sim/f32";
+import type { Handle } from "./types";
+import { f32 } from "../../sim/f32";
 
 export interface Frame extends Handle {
 

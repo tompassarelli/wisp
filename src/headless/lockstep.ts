@@ -1,5 +1,5 @@
 import { ackFile, formatManifest, hostFile, manifestFile } from "../runtime/gameFiles";
-import type { FrameTemplate } from "./frames";
+import type { FrameTemplate } from "../game/native/frameStore";
 import { type Hash, type ModuleSet, ModulePublisher, type VersionFiles } from "../runtime/modules";
 import { type ClientFiles, type ClientScope, HeadlessClient, type LocalNatives, type MapEntry, type NativeBehaviors, type SyncMessage, WISP_LOCAL_NATIVES, describeCall, sameCall } from "./client";
 import type { NativeDeclarations } from "./declarations";

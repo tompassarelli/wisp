@@ -2,9 +2,10 @@ import { divideFloat32, roundToFloat32, subtractFloat32TowardZero } from "../../
 import { f32 } from "../../sim/f32";
 import type { Handle, HandleFactory } from "../../game/native/types";
 import type { NativeBehavior, PlayerMouseInput, SyncMessage } from "../clientTypes";
-import type { Frame } from "../frames";
+import type { Frame } from "../../game/native/frameStore";
+import type { EventStore } from "../../game/native/eventStore";
 import { FRAMES_PER_SECOND } from "../../game/native/frameRate";
-import { isFrame } from "./frames";
+import { isFrame } from "../../game/native/frameUi";
 import { after } from "./timerDeadline";
 import type { Unit, Units } from "./units";
 
@@ -79,7 +80,7 @@ const frameEnd = (frame: number): number => divideFloat32(frame, FRAMES_PER_SECO
 // Sync data is capped at 255 characters, preserving whole UTF-8 characters (wisp:docs/warsmash-notes.md).
 const SYNC_DATA_LIMIT = 255;
 
-export class TriggersTimers {
+export class TriggersTimers implements EventStore {
   private readonly timers: Timer[] = [];
   private readonly spellHits: { target: Unit; due: number; damage: number }[] = [];
   private timerOrder = 0;
@@ -212,6 +213,40 @@ export class TriggersTimers {
     }
   }
 
+  create(): Trigger {
+    return { ...this.handle("trigger"), actions: [], destroyed: false, running: false, interrupted: false };
+  }
+
+  addAction(events: Handle, handler: Callback): Handle {
+    (events as Trigger).actions.push(handler);
+    return this.handle("triggeraction");
+  }
+
+  destroy(events: Handle): void {
+    (events as Trigger).destroyed = true;
+  }
+
+  registerFrame(events: Handle, frame: unknown, event: unknown): Handle {
+    if (isFrame(frame)) this.registrations.push({ kind: "frame", trigger: events as Trigger, frame, event });
+    return this.handle("event");
+  }
+
+  hasFrame(events: Handle, frame: unknown, event: unknown): boolean {
+    return this.registrations.some(registration => registration.kind === "frame" && registration.trigger === events && registration.frame === frame && registration.event === event);
+  }
+
+  triggerFrame(): unknown {
+    return this.event.frame;
+  }
+
+  triggerFrameEvent(): unknown {
+    return this.event.frameEvent;
+  }
+
+  triggerFrameText(): string {
+    return this.event.frame?.text ?? "";
+  }
+
   handles(frame: Frame, event: unknown): boolean {
     return this.registrations.some((registration) =>
       registration.kind === "frame" && registration.frame === frame && registration.event === event && !registration.trigger.destroyed);
@@ -260,13 +295,10 @@ export class TriggersTimers {
   private triggerBehaviors(): Readonly<Record<string, NativeBehavior>> {
     return {
       GetTriggerPlayer: () => this.event.player,
-      BlzTriggerRegisterFrameEvent: (trigger: Trigger, frame: unknown, event: unknown) => {
-        if (isFrame(frame)) this.registrations.push({ kind: "frame", trigger, frame, event });
-        return this.handle("event");
-      },
-      BlzGetTriggerFrame: () => this.event.frame,
-      BlzGetTriggerFrameEvent: () => this.event.frameEvent,
-      BlzGetTriggerFrameText: () => this.event.frame?.text ?? "",
+      BlzTriggerRegisterFrameEvent: (trigger: Trigger, frame: unknown, event: unknown) => this.registerFrame(trigger, frame, event),
+      BlzGetTriggerFrame: () => this.triggerFrame(),
+      BlzGetTriggerFrameEvent: () => this.triggerFrameEvent(),
+      BlzGetTriggerFrameText: () => this.triggerFrameText(),
       BlzGetTriggerSyncData: () => this.event.syncData,
       BlzGetTriggerSyncPrefix: () => this.event.syncPrefix,
       GetEventPlayerChatString: () => this.event.chat,
@@ -276,16 +308,11 @@ export class TriggersTimers {
       BlzGetTriggerPlayerMousePosition: () => this.units.location(this.event.mouseX, this.event.mouseY),
       BlzGetTriggerPlayerMouseButton: () => this.event.mouseButton,
       GetExpiredTimer: () => this.event.timer,
-      CreateTrigger: (): Trigger => ({ ...this.handle("trigger"), actions: [], destroyed: false, running: false, interrupted: false }),
+      CreateTrigger: () => this.create(),
       BlzTriggerIsRunning: (trigger: Trigger) => trigger.running,
       BlzTriggerInterrupt: (trigger: Trigger) => { trigger.interrupted = true; },
-      DestroyTrigger: (trigger: Trigger) => {
-        trigger.destroyed = true;
-      },
-      TriggerAddAction: (trigger: Trigger, action: Callback) => {
-        trigger.actions.push(action);
-        return this.handle("triggeraction");
-      },
+      DestroyTrigger: (trigger: Trigger) => this.destroy(trigger),
+      TriggerAddAction: (trigger: Trigger, action: Callback) => this.addAction(trigger, action),
       BlzTriggerRegisterPlayerSyncEvent: (trigger: Trigger, player: number, prefix: string) => {
         this.registrations.push({ kind: "sync", trigger, player, prefix });
         return this.handle("event");

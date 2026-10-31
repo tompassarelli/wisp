@@ -1,19 +1,10 @@
-import { f32 } from "../../sim/f32";
-import type { Handle, HandleFactory } from "../../game/native/types";
+import type { Handle } from "../../game/native/types";
 import type { NativeBehavior } from "../clientTypes";
-import { FRAME_POINTS, type Frame, type Frames } from "../frames";
-import { describeValue } from "../jassFormat";
-
-export const isFrame = (value: unknown): value is Frame => typeof value === "object" && value !== null && "points" in value;
-
-// Engine: a JASS integer is signed, so BlzConvertColor gives white as -1; the native window reads a frame colour as an unsigned ARGB word.
-const argb = (color: number) => (color < 0 ? color + 4294967296 : color);
+import type { FrameUi } from "../../game/native/frameUi";
+import { f32 } from "../../sim/f32";
 
 export interface FrameContext {
-  readonly handle: HandleFactory;
-  readonly frames: (this: void) => Frames;
-  readonly gameUiOrigin: (this: void) => unknown;
-  readonly screen: { readonly width: number; readonly height: number };
+  readonly ui: FrameUi;
   readonly textAreaAutoScroll: Map<Handle, boolean>;
   readonly keyPressed: (this: void, key: number) => boolean;
   readonly metaPressed: (this: void, meta: number) => boolean;
@@ -22,7 +13,8 @@ export interface FrameContext {
   readonly mouseY: (this: void) => number;
 }
 
-export function inputNatives({ screen, textAreaAutoScroll, keyPressed, metaPressed, mouseButtonPressed, mouseX, mouseY }: FrameContext): Readonly<Record<string, NativeBehavior>> {
+export function inputNatives({ ui, textAreaAutoScroll, keyPressed, metaPressed, mouseButtonPressed, mouseX, mouseY }: FrameContext): Readonly<Record<string, NativeBehavior>> {
+  const screen = ui.screen;
   return {
     BlzGetLocalClientWidth: () => screen.width,
     BlzGetLocalClientHeight: () => screen.height,
@@ -41,118 +33,43 @@ export function inputNatives({ screen, textAreaAutoScroll, keyPressed, metaPress
   };
 }
 
-export function frameNatives({ handle, frames, gameUiOrigin }: FrameContext): Readonly<Record<string, NativeBehavior>> {
-  const memo = new Map<string, Frame>();
-  const memoized = (key: string, name = ""): Frame => {
-    const known = memo.get(key);
-    if (known !== undefined) return known;
-    const created = frames().add(handle("framehandle"), "", name, undefined, 0);
-    memo.set(key, created);
-    return created;
-  };
-  const created = (type: string, name: string, owner: unknown, context: number): Frame =>
-    frames().add(handle("framehandle"), type, name, isFrame(owner) ? owner : undefined, context);
+export function frameNatives({ ui }: FrameContext): Readonly<Record<string, NativeBehavior>> {
   return {
-    BlzGetOriginFrame: (type: unknown, index: number) => {
-      const frame = memoized(`origin ${describeValue(type)} ${index}`);
-      if (type === gameUiOrigin()) frames().gameUi.add(frame);
-      return frame;
-    },
-    BlzGetFrameByName: (name: string, context: number) => frames().named(name, context) ?? memoized(`name ${name} ${context}`, name),
-    BlzFrameGetChildrenCount: (frame: unknown) => (isFrame(frame) ? frames().children(frame).length : 0),
-    BlzFrameGetChild: (frame: Handle, index: number) => (isFrame(frame) ? frames().children(frame)[index] : undefined) ?? memoized(`child ${frame.id} ${index}`),
-    BlzCreateFrame: (name: string, owner: unknown, _priority: number, context: number) => frames().create(() => handle("framehandle"), name, isFrame(owner) ? owner : undefined, context),
-    BlzCreateSimpleFrame: (name: string, owner: unknown, context: number) => created(name, name, owner, context),
-    BlzCreateFrameByType: (type: string, name: string, owner: unknown, inherits: string, context: number) => { const frame = created(type, name, owner, context); frame.plain = inherits === ""; return frame; },
-    BlzDestroyFrame: (frame: unknown) => {
-      if (isFrame(frame)) frames().destroy(frame);
-    },
-    BlzFrameGetName: (frame: unknown) => (isFrame(frame) ? frame.name : ""),
-    BlzFrameGetParent: (frame: unknown) => (isFrame(frame) ? frame.parent : undefined),
-    BlzFrameSetText: (frame: unknown, text: string) => {
-      if (isFrame(frame)) frame.text = frame.textLimit >= 0 ? text.slice(0, frame.textLimit) : text;
-    },
-    BlzFrameGetText: (frame: unknown) => (isFrame(frame) ? frame.text : ""),
-    BlzFrameSetTexture: (frame: unknown, texture: string) => {
-      if (isFrame(frame)) frame.texture = texture;
-    },
-    BlzFrameSetModel: (frame: unknown, model: string, camera: number) => {
-      if (isFrame(frame)) {
-        frame.model = model;
-        frame.modelCamera = camera;
-      }
-    },
-    BlzFrameSetSpriteAnimate: (frame: unknown, animation: number) => {
-      if (isFrame(frame)) frame.spriteAnimation = animation;
-    },
-    WispFrameSetSpriteTime: (frame: unknown, seconds: number) => {
-      if (isFrame(frame)) frame.spriteTime = seconds;
-    },
-    BlzFrameSetVertexColor: (frame: unknown, color: number) => {
-      if (isFrame(frame)) frame.color = argb(color);
-    },
-    BlzFrameSetTextColor: (frame: unknown, color: number) => {
-      if (isFrame(frame)) frame.textColor = argb(color);
-    },
-    BlzFrameSetAlpha: (frame: unknown, alpha: number) => {
-      if (isFrame(frame)) frame.alpha = alpha;
-    },
-    BlzFrameGetAlpha: (frame: unknown) => (isFrame(frame) ? frame.alpha : 0),
-    BlzFrameSetTextSizeLimit: (frame: unknown, size: number) => {
-      if (isFrame(frame)) frame.textLimit = size;
-    },
-    BlzFrameGetTextSizeLimit: (frame: unknown) => (isFrame(frame) ? frame.textLimit : 0),
-    BlzFrameSetFont: (frame: unknown, file: string, height: number, flags: number) => {
-      if (isFrame(frame)) frame.font = { file, height, flags };
-    },
-    BlzFrameSetTextAlignment: (frame: unknown, vertical: unknown, horizontal: unknown) => {
-      if (isFrame(frame)) frame.alignment = { vertical, horizontal };
-    },
-    BlzFrameSetScale: (frame: unknown, scale: number) => {
-      if (isFrame(frame)) frame.scale = scale;
-    },
-    BlzFrameSetVisible: (frame: unknown, visible: boolean) => {
-      if (isFrame(frame)) frame.visible = visible;
-    },
-    BlzFrameIsVisible: (frame: unknown) => (isFrame(frame) ? frames().shown(frame) : false),
-    BlzFrameSetEnable: (frame: unknown, enabled: boolean) => {
-      if (isFrame(frame)) frame.enabled = enabled;
-    },
-    BlzFrameGetEnable: (frame: unknown) => (isFrame(frame) ? frame.enabled : false),
-    BlzFrameSetFocus: (frame: unknown, flag: boolean) => {
-      if (isFrame(frame)) frames().focus(frame, flag);
-    },
-    BlzFrameSetLevel: (frame: unknown, level: number) => {
-      if (isFrame(frame)) frame.level = level;
-    },
-    BlzFrameSetSize: (frame: unknown, width: number, height: number) => {
-      if (isFrame(frame)) {
-        frame.width = width;
-        frame.height = height;
-      }
-    },
-    BlzFrameSetAbsPoint: (frame: unknown, point: unknown, x: number, y: number) => {
-      if (isFrame(frame)) frame.points.set(point, { x, y });
-    },
-    BlzFrameClearAllPoints: (frame: unknown) => {
-      if (isFrame(frame)) {
-        frame.points.clear();
-        frame.anchors.length = 0;
-      }
-    },
-    BlzFrameSetPoint: (frame: unknown, point: unknown, relative: unknown, relativePoint: unknown, x: number, y: number) => {
-      if (!isFrame(frame) || !isFrame(relative)) return;
-      const name = (value: unknown) => typeof value === "number" ? FRAME_POINTS[value]?.[0] ?? "" : typeof value === "string" ? value : "";
-      const ownPoint = name(point).replace("FRAMEPOINT_", "");
-      for (let index = frame.anchors.length - 1; index >= 0; index--) if (frame.anchors[index]?.point === ownPoint) frame.anchors.splice(index, 1);
-      frame.anchors.push({ point: ownPoint, relative, relativePoint: name(relativePoint).replace("FRAMEPOINT_", ""), x, y });
-    },
-    BlzFrameSetAllPoints: (frame: unknown, relative: unknown) => {
-      if (!isFrame(frame) || !isFrame(relative)) return false;
-      frame.points.clear();
-      frame.anchors.length = 0;
-      for (const point of ["TOPLEFT", "BOTTOMRIGHT"]) frame.anchors.push({ point, relative, relativePoint: point, x: 0, y: 0 });
-      return true;
-    },
+    BlzGetOriginFrame: (type: unknown, index: number) => ui.originFrame(type, index),
+    BlzGetFrameByName: (name: string, context: number) => ui.named(name, context),
+    BlzFrameGetChildrenCount: (frame: unknown) => ui.childCount(frame),
+    BlzFrameGetChild: (frame: Handle, index: number) => ui.child(frame, index),
+    BlzCreateFrame: (name: string, owner: unknown, _priority: number, context: number) => ui.create(name, owner, context),
+    BlzCreateSimpleFrame: (name: string, owner: unknown, context: number) => ui.createSimple(name, owner, context),
+    BlzCreateFrameByType: (type: string, name: string, owner: unknown, inherits: string, context: number) => ui.createByType(type, name, owner, inherits, context),
+    BlzDestroyFrame: (frame: unknown) => { ui.destroy(frame); },
+    BlzFrameGetName: (frame: unknown) => ui.name(frame),
+    BlzFrameGetParent: (frame: unknown) => ui.parent(frame),
+    BlzFrameSetText: (frame: unknown, text: string) => { ui.setText(frame, text); },
+    BlzFrameGetText: (frame: unknown) => ui.text(frame),
+    BlzFrameSetTexture: (frame: unknown, texture: string) => { ui.setTexture(frame, texture); },
+    BlzFrameSetModel: (frame: unknown, model: string, camera: number) => { ui.setModel(frame, model, camera); },
+    BlzFrameSetSpriteAnimate: (frame: unknown, animation: number) => { ui.setSpriteAnimation(frame, animation); },
+    WispFrameSetSpriteTime: (frame: unknown, seconds: number) => { ui.setSpriteTime(frame, seconds); },
+    BlzFrameSetVertexColor: (frame: unknown, color: number) => { ui.setVertexColor(frame, color); },
+    BlzFrameSetTextColor: (frame: unknown, color: number) => { ui.setTextColor(frame, color); },
+    BlzFrameSetAlpha: (frame: unknown, alpha: number) => { ui.setAlpha(frame, alpha); },
+    BlzFrameGetAlpha: (frame: unknown) => ui.alpha(frame),
+    BlzFrameSetTextSizeLimit: (frame: unknown, size: number) => { ui.setTextLimit(frame, size); },
+    BlzFrameGetTextSizeLimit: (frame: unknown) => ui.textLimit(frame),
+    BlzFrameSetFont: (frame: unknown, file: string, height: number, flags: number) => { ui.setFont(frame, file, height, flags); },
+    BlzFrameSetTextAlignment: (frame: unknown, vertical: unknown, horizontal: unknown) => { ui.setTextAlignment(frame, vertical, horizontal); },
+    BlzFrameSetScale: (frame: unknown, scale: number) => { ui.setScale(frame, scale); },
+    BlzFrameSetVisible: (frame: unknown, visible: boolean) => { ui.setVisible(frame, visible); },
+    BlzFrameIsVisible: (frame: unknown) => ui.visible(frame),
+    BlzFrameSetEnable: (frame: unknown, enabled: boolean) => { ui.setEnabled(frame, enabled); },
+    BlzFrameGetEnable: (frame: unknown) => ui.enabled(frame),
+    BlzFrameSetFocus: (frame: unknown, flag: boolean) => { ui.setFocus(frame, flag); },
+    BlzFrameSetLevel: (frame: unknown, level: number) => { ui.setLevel(frame, level); },
+    BlzFrameSetSize: (frame: unknown, width: number, height: number) => { ui.setSize(frame, width, height); },
+    BlzFrameSetAbsPoint: (frame: unknown, point: unknown, x: number, y: number) => { ui.setAbsPoint(frame, point, x, y); },
+    BlzFrameClearAllPoints: (frame: unknown) => { ui.clearPoints(frame); },
+    BlzFrameSetPoint: (frame: unknown, point: unknown, relative: unknown, relativePoint: unknown, x: number, y: number) => { ui.setPoint(frame, point, relative, relativePoint, x, y); },
+    BlzFrameSetAllPoints: (frame: unknown, relative: unknown) => ui.setAllPoints(frame, relative),
   };
 }

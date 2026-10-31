@@ -1,4 +1,4 @@
-import type { FrameSnapshot } from "../../src/headless/frames";
+import type { FrameSnapshot } from "../../src/game/native/frameStore";
 
 /** The frames the native window draws: visible, with some alpha and a rectangle, and the fields its UI renderer reads (window/wisp-window/src/ui/scene.rs). */
 export function nativeUi(ui: readonly FrameSnapshot[]): FrameSnapshot[] {

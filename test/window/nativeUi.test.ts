@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { FrameSnapshot } from "../../src/headless/frames";
+import type { FrameSnapshot } from "../../src/game/native/frameStore";
 import { nativeUi, uiAssets } from "../../host/window/nativeUi";
 
 const frame = (over: Partial<FrameSnapshot>): FrameSnapshot => ({

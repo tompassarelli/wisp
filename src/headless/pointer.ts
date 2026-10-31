@@ -1,5 +1,5 @@
 import type { HeadlessClient } from "./client";
-import type { Frame } from "./frames";
+import type { Frame } from "../game/native/frameStore";
 import { f32 } from "../sim/f32";
 
 const UI_HALF_WIDTH = f32(0.4), UI_HEIGHT = f32(0.6);

@@ -1,6 +1,6 @@
 import type { EffectDeaths } from "../game/native/types";
 import type { ClientScope, LocalNatives, MapEntry, IntentionalNoops, StandaloneProfile, HeadlessClient, NativeBehaviors, UnitStateFixtures } from "./client";
-import type { FrameTemplate } from "./frames";
+import type { FrameTemplate } from "../game/native/frameStore";
 import type { SyncDelivery } from "./lockstep";
 import { parseNativeDeclarations } from "./declarations";
 import { type Journey, journeyLines, journeyProblems, runJourney } from "./journey";

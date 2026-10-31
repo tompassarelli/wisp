@@ -777,7 +777,7 @@ wisp:test/headless-bounds.test.ts).
   every pixel and a distractor blob outside `near`, the box equals the drawn
   connected blob's exactly.
 
-- **Frame scale.** A frame's rectangle (wisp:src/headless/frames.ts) uses
+- **Frame scale.** A frame's rectangle (wisp:src/game/native/frameStore.ts) uses
   its size times its scale, where the scale is its own `BlzFrameSetScale`
   times every ancestor's, so children inherit it. Relative-point offsets
   (`BlzFrameSetPoint`, template points) are scaled the same way; absolute

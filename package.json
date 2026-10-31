@@ -96,6 +96,8 @@
     "./scripts/wisp/watch": "./host/dev/watch.ts",
     "./scripts/wisp/xdg": "./host/os/xdg.ts",
     "./game/effects": { "types": "./src/game/effects.d.ts", "bun": "./src/game/native/effects.ts", "default": "./src/game/native/effects.ts" },
+    "./game/events": { "types": "./src/game/events.d.ts", "bun": "./src/game/native/events.ts", "default": "./src/game/native/events.ts" },
+    "./game/frames": { "types": "./src/game/frames.d.ts", "bun": "./src/game/native/frames.ts", "default": "./src/game/native/frames.ts" },
     "./src/game/native/animation": "./src/game/native/animation.ts",
     "./src/headless/client": "./src/headless/client.ts",
     "./src/headless/declarations": "./src/headless/declarations.ts",

@@ -6,7 +6,7 @@ import { parsableModel } from "../models/models";
 import { drawnPoses } from "../render/culling";
 import { nativeUi, uiAssets } from "./nativeUi";
 import { destroyedSample } from "./destroyedEffect";
-import type { FrameSnapshot } from "../../src/headless/frames";
+import type { FrameSnapshot } from "../../src/game/native/frameStore";
 import type { DrawnPose, RenderScene } from "../render/renderScene";
 import { NATIVE_RISE, SKY_FAR, camera, transform } from "../render/screen";
 
