@@ -21,7 +21,7 @@ struct Params {
     count: u32,
     weights_b: u32,
     bias_b: u32,
-    pad0: u32,
+    row0: u32,
     pad1: u32,
     pad2: u32,
     pad3: u32,
@@ -64,7 +64,8 @@ fn bias_of(oc0: u32) -> array<vec4<f32>, OCV> {
 
 // A valid convolution: kernel x kernel taps at `stride`, `step` being the output channels the weights are padded to.
 @compute @workgroup_size(8, 8, 1)
-fn convolve(@builtin(global_invocation_id) g: vec3<u32>) {
+fn convolve(@builtin(global_invocation_id) id: vec3<u32>) {
+    let g = vec3<u32>(id.x, id.y + p.row0, id.z);
     if (g.x >= p.out_w || g.y >= p.out_h) {
         return;
     }
@@ -88,7 +89,8 @@ fn convolve(@builtin(global_invocation_id) g: vec3<u32>) {
 
 // A 2x2 transposed convolution at stride 2: the workgroup's z picks one of the four taps and a block of output channels.
 @compute @workgroup_size(8, 8, 1)
-fn expand(@builtin(global_invocation_id) g: vec3<u32>) {
+fn expand(@builtin(global_invocation_id) id: vec3<u32>) {
+    let g = vec3<u32>(id.x, id.y + p.row0, id.z);
     if (g.x >= p.in_w || g.y >= p.in_h) {
         return;
     }
@@ -107,7 +109,8 @@ fn expand(@builtin(global_invocation_id) g: vec3<u32>) {
 
 // A 4x4 transposed convolution at stride 2 whose output is cropped by 3 on every side. Each output pixel sums a 2x2 neighbourhood of inputs, and `p.step` is 4.
 @compute @workgroup_size(8, 8, 1)
-fn expand_wide(@builtin(global_invocation_id) g: vec3<u32>) {
+fn expand_wide(@builtin(global_invocation_id) id: vec3<u32>) {
+    let g = vec3<u32>(id.x, id.y + p.row0, id.z);
     if (g.x >= p.out_w || g.y >= p.out_h) {
         return;
     }

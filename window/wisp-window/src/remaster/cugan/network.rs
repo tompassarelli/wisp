@@ -1,5 +1,8 @@
 //! Real-CUGAN's CUNet 2x graph on wgpu compute: the layers of `kernels.wgsl` strung in the order of the model's `.param` file. A tile of `w` x `h` pixels (both even) goes in with 18 pixels of context on every side, and `2 (w - 36)` x `2 (h - 36)` pixels of RGB come out.
 
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+
 use bytemuck::{Pod, Zeroable};
 use wgpu::util::DeviceExt;
 
@@ -12,6 +15,12 @@ pub const CONTEXT: u32 = 18;
 
 /// The most bytes one activation tensor may take. The widest one, 64 channels at twice the tile plus its context, sets how large a tile may be.
 const TENSOR_BUDGET: u64 = 160 << 20;
+
+/// Multiply-adds one submission may hold, so the window's frames, which share the GPU's queue, wait behind a few milliseconds of the network and not a whole texture of it: about 3 ms on a Radeon 890M, which runs the network at some 90 million a millisecond.
+const SLICE_MACS: u64 = 1 << 28;
+
+/// Rest between two polls while the GPU runs a slice.
+const POLL: std::time::Duration = std::time::Duration::from_micros(250);
 
 /// The limits a device needs for the upscaler: the default ones with one storage binding raised to the budget where the adapter allows it, so a 512 x 256 texture runs as one tile.
 pub fn device_limits(adapter: &wgpu::Limits) -> wgpu::Limits {
@@ -48,7 +57,8 @@ struct Params {
     count: u32,
     weights_b: u32,
     bias_b: u32,
-    pad: [u32; 4],
+    row0: u32,
+    pad: [u32; 3],
 }
 
 const LEAKY: u32 = 1;
@@ -162,7 +172,9 @@ impl Network {
         self.free.push(tensor.buffer);
     }
 
-    fn dispatch(&self, pass: &mut wgpu::ComputePass<'_>, pipeline: &wgpu::ComputePipeline, params: &Params, buffers: [&wgpu::Buffer; 3], groups: [u32; 3]) {
+    /// Records one dispatch of `macs` multiply-adds, submitting the work held so far first when this one would take it past the budget.
+    fn dispatch(&self, slices: &mut Slices, pipeline: &wgpu::ComputePipeline, params: &Params, buffers: [&wgpu::Buffer; 3], groups: [u32; 3], macs: u64) -> Result<(), String> {
+        slices.make_room(macs, &self.device, &self.queue)?;
         let uniform = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor { label: Some("cugan params"), contents: bytemuck::bytes_of(params), usage: wgpu::BufferUsages::UNIFORM });
         let [source, residual, destination] = buffers;
         let group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -176,9 +188,21 @@ impl Network {
                 wgpu::BindGroupEntry { binding: 4, resource: destination.as_entire_binding() },
             ],
         });
+        let mut pass = slices.encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("cugan"), timestamp_writes: None });
         pass.set_pipeline(pipeline);
         pass.set_bind_group(0, &group, &[]);
         pass.dispatch_workgroups(groups[0], groups[1], groups[2]);
+        slices.held += macs;
+        Ok(())
+    }
+
+    /// Records a dispatch whose workgroup rows are rows of 8 pixels, in bands of rows that each fit the budget.
+    fn dispatch_rows(&self, slices: &mut Slices, pipeline: &wgpu::ComputePipeline, params: &Params, buffers: [&wgpu::Buffer; 3], groups: [u32; 3], macs: u64) -> Result<(), String> {
+        let per_row = macs.div_ceil(u64::from(groups[1]).max(1));
+        for (first, rows) in bands(groups[1], per_row, slices.budget) {
+            self.dispatch(slices, pipeline, &Params { row0: first * 8, ..*params }, buffers, [groups[0], rows, groups[2]], per_row * u64::from(rows))?;
+        }
+        Ok(())
     }
 
     fn params(&self, layer: &Layer, input: &Tensor, output: &Tensor, residual: &Option<Residual<'_>>) -> Params {
@@ -214,127 +238,191 @@ impl Network {
         }
     }
 
-    fn convolution(&mut self, pass: &mut wgpu::ComputePass<'_>, input: &Tensor, layer: usize, residual: Option<Residual<'_>>) -> Tensor {
+    fn convolution(&mut self, slices: &mut Slices, input: &Tensor, layer: usize, residual: Option<Residual<'_>>) -> Result<Tensor, String> {
         let layer = self.layers[layer];
         let Kind::Convolution { kernel, stride } = layer.kind else { unreachable!("layer {layer:?} is not a convolution") };
         let output = self.tensor(layer.outputs, (input.width - kernel) / stride + 1, (input.height - kernel) / stride + 1);
         let params = self.params(&layer, input, &output, &residual);
         let (pipeline, block) = if layer.stride() == 4 { (&self.convolve_narrow, 4) } else { (&self.convolve, 16) };
         let groups = [output.width.div_ceil(8), output.height.div_ceil(8), layer.stride() / block];
-        self.dispatch(pass, pipeline, &params, [&input.buffer, residual.as_ref().map_or(&self.unused, |residual| &residual.source.buffer), &output.buffer], groups);
-        output
+        let macs = u64::from(output.plane()) * u64::from(output.channels) * u64::from(input.channels) * u64::from(kernel * kernel);
+        self.dispatch_rows(slices, pipeline, &params, [&input.buffer, residual.as_ref().map_or(&self.unused, |residual| &residual.source.buffer), &output.buffer], groups, macs)?;
+        Ok(output)
     }
 
-    fn doubling(&mut self, pass: &mut wgpu::ComputePass<'_>, input: &Tensor, layer: usize, residual: Option<Residual<'_>>) -> Tensor {
+    fn doubling(&mut self, slices: &mut Slices, input: &Tensor, layer: usize, residual: Option<Residual<'_>>) -> Result<Tensor, String> {
         let layer = self.layers[layer];
         let output = self.tensor(layer.outputs, input.width * 2, input.height * 2);
         let params = self.params(&layer, input, &output, &residual);
         let groups = [input.width.div_ceil(8), input.height.div_ceil(8), 4 * layer.stride() / 16];
-        self.dispatch(pass, &self.expand, &params, [&input.buffer, residual.as_ref().map_or(&self.unused, |residual| &residual.source.buffer), &output.buffer], groups);
-        output
+        let macs = u64::from(output.plane()) * u64::from(output.channels) * u64::from(input.channels);
+        self.dispatch_rows(slices, &self.expand, &params, [&input.buffer, residual.as_ref().map_or(&self.unused, |residual| &residual.source.buffer), &output.buffer], groups, macs)?;
+        Ok(output)
     }
 
-    fn doubling_wide(&mut self, pass: &mut wgpu::ComputePass<'_>, input: &Tensor, layer: usize) -> Tensor {
+    fn doubling_wide(&mut self, slices: &mut Slices, input: &Tensor, layer: usize) -> Result<Tensor, String> {
         let layer = self.layers[layer];
         let output = self.tensor(layer.outputs, input.width * 2 - 4, input.height * 2 - 4);
         let params = self.params(&layer, input, &output, &None);
-        self.dispatch(pass, &self.expand_wide, &params, [&input.buffer, &self.unused, &output.buffer], [output.width.div_ceil(8), output.height.div_ceil(8), 1]);
-        output
+        let macs = u64::from(output.plane()) * u64::from(output.channels) * u64::from(input.channels) * 4;
+        self.dispatch_rows(slices, &self.expand_wide, &params, [&input.buffer, &self.unused, &output.buffer], [output.width.div_ceil(8), output.height.div_ceil(8), 1], macs)?;
+        Ok(output)
     }
 
     /// Scales each channel of `tensor` in place by the squeeze-excitation gate that `first` and `second` compute from its means.
-    fn excite(&mut self, pass: &mut wgpu::ComputePass<'_>, tensor: &Tensor, first: usize, second: usize) {
+    fn excite(&mut self, slices: &mut Slices, tensor: &Tensor, first: usize, second: usize) -> Result<(), String> {
         let (first, second) = (self.layers[first], self.layers[second]);
         let plane = tensor.plane();
-        let mut params = Params { in_c: tensor.channels, in_cs: plane, count: plane, ..Params::default() };
-        self.dispatch(pass, &self.mean, &params, [&tensor.buffer, &self.unused, &self.means], [tensor.channels, 1, 1]);
-        params = Params { in_c: tensor.channels, out_c: first.outputs, weights: first.weights, bias: first.bias, weights_b: second.weights, bias_b: second.bias, ..Params::default() };
-        self.dispatch(pass, &self.gate, &params, [&self.means, &self.unused, &self.gates], [1, 1, 1]);
         let total = tensor.channels * plane;
+        let mut params = Params { in_c: tensor.channels, in_cs: plane, count: plane, ..Params::default() };
+        self.dispatch(slices, &self.mean, &params, [&tensor.buffer, &self.unused, &self.means], [tensor.channels, 1, 1], u64::from(total))?;
+        params = Params { in_c: tensor.channels, out_c: first.outputs, weights: first.weights, bias: first.bias, weights_b: second.weights, bias_b: second.bias, ..Params::default() };
+        self.dispatch(slices, &self.gate, &params, [&self.means, &self.unused, &self.gates], [1, 1, 1], u64::from(tensor.channels * first.outputs * 2))?;
         let groups = total.div_ceil(256);
         params = Params { in_cs: plane, count: total, ..Params::default() };
-        self.dispatch(pass, &self.scale, &params, [&self.gates, &self.unused, &tensor.buffer], [groups.min(65535), groups.div_ceil(65535), 1]);
+        self.dispatch(slices, &self.scale, &params, [&self.gates, &self.unused, &tensor.buffer], [groups.min(65535), groups.div_ceil(65535), 1], u64::from(total))
     }
 
     /// Runs one tile. `planes` is `3 * width * height` floats in `[0, 1]`, channel after channel; the result is the same layout at twice `(width - 36, height - 36)`.
     pub fn run(&mut self, planes: &[f32], width: u32, height: u32) -> Result<Vec<f32>, String> {
+        self.run_sliced(planes, width, height, SLICE_MACS).map(|(floats, _)| floats)
+    }
+
+    /// `run` in submissions of at most `budget` multiply-adds each, with no more than one waiting behind the one the GPU is running; also returns the multiply-adds of each submission.
+    fn run_sliced(&mut self, planes: &[f32], width: u32, height: u32, budget: u64) -> Result<(Vec<f32>, Vec<u64>), String> {
         if width % 2 != 0 || height % 2 != 0 || width <= CONTEXT * 2 + 4 || height <= CONTEXT * 2 + 4 {
             return Err(format!("a {width}x{height} tile is not even or has no pixels inside its context"));
         }
         let input = self.tensor(3, width, height);
         self.queue.write_buffer(&input.buffer, 0, bytemuck::cast_slice(planes));
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("cugan") });
-        let output = {
-            let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("cugan"), timestamp_writes: None });
-            self.record(&mut pass, input)
-        };
+        let mut slices = Slices::new(&self.device, budget);
+        let output = self.record(&mut slices, input)?;
         let bytes = u64::from(output.channels) * u64::from(output.plane()) * 4;
         let staging = self.device.create_buffer(&wgpu::BufferDescriptor { label: Some("cugan readback"), size: bytes, usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ, mapped_at_creation: false });
-        encoder.copy_buffer_to_buffer(&output.buffer, 0, &staging, 0, bytes);
-        let submission = self.queue.submit([encoder.finish()]);
+        slices.encoder.copy_buffer_to_buffer(&output.buffer, 0, &staging, 0, bytes);
+        slices.flush(&self.device, &self.queue)?;
         self.release(output);
         let (sender, receiver) = std::sync::mpsc::channel();
         staging.slice(..).map_async(wgpu::MapMode::Read, move |result| {
             let _ = sender.send(result);
         });
-        self.device.poll(wgpu::PollType::Wait { submission_index: Some(submission), timeout: None }).map_err(|error| format!("waiting for the upscaler: {error}"))?;
-        receiver.recv().map_err(|error| format!("upscaler readback: {error}"))?.map_err(|error| format!("upscaler readback: {error}"))?;
+        let mut mapped = None;
+        until(&self.device, || {
+            mapped = mapped.take().or_else(|| receiver.try_recv().ok());
+            mapped.is_some()
+        })?;
+        mapped.expect("the readback was mapped").map_err(|error| format!("upscaler readback: {error}"))?;
         let floats = bytemuck::cast_slice(&staging.slice(..).get_mapped_range().map_err(|error| format!("upscaler readback: {error}"))?).to_vec();
-        Ok(floats)
+        Ok((floats, slices.submitted))
     }
 
-    fn record(&mut self, pass: &mut wgpu::ComputePass<'_>, input: Tensor) -> Tensor {
-        let a = self.convolution(pass, &input, 0, None);
+    fn record(&mut self, slices: &mut Slices, input: Tensor) -> Result<Tensor, String> {
+        let a = self.convolution(slices, &input, 0, None)?;
         self.release(input);
-        let skip = self.convolution(pass, &a, 1, None);
+        let skip = self.convolution(slices, &a, 1, None)?;
         self.release(a);
-        let down = self.convolution(pass, &skip, 2, None);
-        let b = self.convolution(pass, &down, 3, None);
+        let down = self.convolution(slices, &skip, 2, None)?;
+        let b = self.convolution(slices, &down, 3, None)?;
         self.release(down);
-        let c = self.convolution(pass, &b, 4, None);
+        let c = self.convolution(slices, &b, 4, None)?;
         self.release(b);
-        self.excite(pass, &c, 5, 6);
-        let merged = self.doubling(pass, &c, 7, Some(Residual { source: &skip, crop: 4 }));
+        self.excite(slices, &c, 5, 6)?;
+        let merged = self.doubling(slices, &c, 7, Some(Residual { source: &skip, crop: 4 }))?;
         self.release(c);
         self.release(skip);
-        let d = self.convolution(pass, &merged, 8, None);
+        let d = self.convolution(slices, &merged, 8, None)?;
         self.release(merged);
-        let first = self.doubling_wide(pass, &d, 9);
+        let first = self.doubling_wide(slices, &d, 9)?;
         self.release(d);
 
-        let e = self.convolution(pass, &first, 10, None);
-        let skip_hi = self.convolution(pass, &e, 11, None);
+        let e = self.convolution(slices, &first, 10, None)?;
+        let skip_hi = self.convolution(slices, &e, 11, None)?;
         self.release(e);
-        let down = self.convolution(pass, &skip_hi, 12, None);
-        let f = self.convolution(pass, &down, 13, None);
+        let down = self.convolution(slices, &skip_hi, 12, None)?;
+        let f = self.convolution(slices, &down, 13, None)?;
         self.release(down);
-        let skip_mid = self.convolution(pass, &f, 14, None);
+        let skip_mid = self.convolution(slices, &f, 14, None)?;
         self.release(f);
-        self.excite(pass, &skip_mid, 15, 16);
-        let down = self.convolution(pass, &skip_mid, 17, None);
-        let g = self.convolution(pass, &down, 18, None);
+        self.excite(slices, &skip_mid, 15, 16)?;
+        let down = self.convolution(slices, &skip_mid, 17, None)?;
+        let g = self.convolution(slices, &down, 18, None)?;
         self.release(down);
-        let h = self.convolution(pass, &g, 19, None);
+        let h = self.convolution(slices, &g, 19, None)?;
         self.release(g);
-        self.excite(pass, &h, 20, 21);
-        let merged = self.doubling(pass, &h, 22, Some(Residual { source: &skip_mid, crop: 4 }));
+        self.excite(slices, &h, 20, 21)?;
+        let merged = self.doubling(slices, &h, 22, Some(Residual { source: &skip_mid, crop: 4 }))?;
         self.release(h);
         self.release(skip_mid);
-        let i = self.convolution(pass, &merged, 23, None);
+        let i = self.convolution(slices, &merged, 23, None)?;
         self.release(merged);
-        let j = self.convolution(pass, &i, 24, None);
+        let j = self.convolution(slices, &i, 24, None)?;
         self.release(i);
-        self.excite(pass, &j, 25, 26);
-        let merged = self.doubling(pass, &j, 27, Some(Residual { source: &skip_hi, crop: 16 }));
+        self.excite(slices, &j, 25, 26)?;
+        let merged = self.doubling(slices, &j, 27, Some(Residual { source: &skip_hi, crop: 16 }))?;
         self.release(j);
         self.release(skip_hi);
-        let k = self.convolution(pass, &merged, 28, None);
+        let k = self.convolution(slices, &merged, 28, None)?;
         self.release(merged);
-        let output = self.convolution(pass, &k, 29, Some(Residual { source: &first, crop: 20 }));
+        let output = self.convolution(slices, &k, 29, Some(Residual { source: &first, crop: 20 }))?;
         self.release(k);
         self.release(first);
-        output
+        Ok(output)
     }
+}
+
+/// The network's work on its way to the queue it shares with the window's frames: dispatches collect in one encoder until the next would take it past `budget` multiply-adds, and the encoder is then submitted; at most one submission waits behind the one the GPU is running, so the GPU never idles between slices and a frame queues behind two at the most.
+struct Slices {
+    budget: u64,
+    encoder: wgpu::CommandEncoder,
+    held: u64,
+    submitted: Vec<u64>,
+    ahead: Option<Arc<AtomicBool>>,
+}
+
+impl Slices {
+    fn new(device: &wgpu::Device, budget: u64) -> Self {
+        Self { budget, encoder: encoder(device), held: 0, submitted: Vec::new(), ahead: None }
+    }
+
+    fn make_room(&mut self, macs: u64, device: &wgpu::Device, queue: &wgpu::Queue) -> Result<(), String> {
+        if self.held > 0 && self.held + macs > self.budget {
+            self.flush(device, queue)?;
+        }
+        Ok(())
+    }
+
+    fn flush(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) -> Result<(), String> {
+        queue.submit([std::mem::replace(&mut self.encoder, encoder(device)).finish()]);
+        self.submitted.push(std::mem::take(&mut self.held));
+        let done = Arc::new(AtomicBool::new(false));
+        let signal = done.clone();
+        queue.on_submitted_work_done(move || signal.store(true, Ordering::Release));
+        match self.ahead.replace(done) {
+            Some(ahead) => until(device, || ahead.load(Ordering::Acquire)),
+            None => Ok(()),
+        }
+    }
+}
+
+/// Polls `device` without blocking until `finished`: a blocking poll holds the device lock the window's present needs for as long as the GPU takes, so every frame would wait out the network.
+fn until(device: &wgpu::Device, mut finished: impl FnMut() -> bool) -> Result<(), String> {
+    while !finished() {
+        device.poll(wgpu::PollType::Poll).map_err(|error| format!("waiting for the upscaler: {error}"))?;
+        if !finished() {
+            std::thread::sleep(POLL);
+        }
+    }
+    Ok(())
+}
+
+fn encoder(device: &wgpu::Device) -> wgpu::CommandEncoder {
+    device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("cugan") })
+}
+
+/// Bands `(first, count)` of `rows` rows, each of at most `budget` multiply-adds when a row costs `per_row`; a row that alone exceeds the budget is a band by itself.
+fn bands(rows: u32, per_row: u64, budget: u64) -> impl Iterator<Item = (u32, u32)> {
+    let size = (budget / per_row.max(1)).clamp(1, u64::from(rows.max(1))) as u32;
+    (0..rows).step_by(size as usize).map(move |first| (first, size.min(rows - first)))
 }
 
 
@@ -361,5 +449,26 @@ mod tests {
         assert_eq!(got.len(), expected.data().len());
         let worst = got.iter().zip(expected.data()).map(|(a, b)| (a - b).abs()).fold(0.0, f32::max);
         assert!(worst < 1e-3, "the GPU differs from the CPU pass by {worst}");
+    }
+
+    #[test]
+    fn a_tile_split_into_small_submissions_gives_the_same_pixels() {
+        let Some((device, queue)) = device() else { return };
+        let mut network = Network::new(device, queue).unwrap();
+        let (width, height) = (50, 46);
+        let (whole, one) = network.run_sliced(&picture(width, height), width as u32, height as u32, u64::MAX).unwrap();
+        let budget = 1 << 25;
+        let (sliced, submitted) = network.run_sliced(&picture(width, height), width as u32, height as u32, budget).unwrap();
+        assert_eq!(one.len(), 1);
+        assert!(submitted.len() > 10 && submitted.iter().all(|&macs| macs <= budget), "{submitted:?}");
+        assert_eq!(submitted.iter().sum::<u64>(), one[0]);
+        assert_eq!(sliced, whole);
+    }
+
+    #[test]
+    fn rows_are_banded_within_the_budget_and_a_costly_row_stands_alone() {
+        assert_eq!(bands(10, 3, 9).collect::<Vec<_>>(), [(0, 3), (3, 3), (6, 3), (9, 1)]);
+        assert_eq!(bands(4, 10, 9).collect::<Vec<_>>(), [(0, 1), (1, 1), (2, 1), (3, 1)]);
+        assert_eq!(bands(4, 1, u64::MAX).collect::<Vec<_>>(), [(0, 4)]);
     }
 }
