@@ -26,10 +26,13 @@ pub enum Edges {
 /// Pixels a tiling texture is wrapped by before the network sees it, and the reference tool was given the same; the network reaches 18, so the outermost two of its context come from mirroring the wrapped picture.
 const WRAP: usize = 16;
 
+/// Pixels a tile has inside its context at the least: the network rejects a tile of 40 or fewer across, so a smaller one is extended with more of its own context and the extra output is dropped.
+const MIN_INNER: usize = 6;
+
 /// Columns and rows of tiles, as few as possible, so that no tile's widest activation exceeds `floats`; the longer side of a tile is split first. The squeeze-excitation gates are computed per tile, so a texture that fits stays one tile.
 fn tiling(width: usize, height: usize, floats: u64) -> (usize, usize) {
     let (mut columns, mut rows) = (1, 1);
-    while widest_activation(width.div_ceil(columns), height.div_ceil(rows)) > floats && (columns < width || rows < height) {
+    while widest_activation(width.div_ceil(columns).max(MIN_INNER), height.div_ceil(rows).max(MIN_INNER)) > floats && (columns < width || rows < height) {
         if width.div_ceil(columns) >= height.div_ceil(rows) {
             columns += 1;
         } else {
@@ -60,18 +63,23 @@ impl Cugan {
     }
 
     fn upscale_mirrored(&mut self, image: &Image) -> Result<Image, String> {
+        let floats = self.network.tensor_floats();
+        self.upscale_within(image, floats)
+    }
+
+    fn upscale_within(&mut self, image: &Image, floats: u64) -> Result<Image, String> {
         let (width, height) = (image.width as usize, image.height as usize);
         if width == 0 || height == 0 {
             return Err("an empty texture".into());
         }
-        let (columns, rows) = tiling(width, height, self.network.tensor_floats());
+        let (columns, rows) = tiling(width, height, floats);
         let (tile_width, tile_height) = (width.div_ceil(columns), height.div_ceil(rows));
         let mut rgba = vec![255u8; width * height * 4 * 4];
         for row in 0..rows {
             for column in 0..columns {
                 let (x0, y0) = (column * tile_width, row * tile_height);
                 let (x1, y1) = ((x0 + tile_width).min(width), (y0 + tile_height).min(height));
-                let (inner_width, inner_height) = (x1 - x0 + (x1 - x0) % 2, y1 - y0 + (y1 - y0) % 2);
+                let (inner_width, inner_height) = ((x1 - x0 + (x1 - x0) % 2).max(MIN_INNER), (y1 - y0 + (y1 - y0) % 2).max(MIN_INNER));
                 let planes = gather(image, (x0, y0), (inner_width, inner_height));
                 let context = 2 * CONTEXT as usize;
                 let colour = self.network.run(&planes, (inner_width + context) as u32, (inner_height + context) as u32)?;
@@ -152,6 +160,50 @@ fn to_byte(value: f32) -> u8 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn device() -> Option<(wgpu::Device, wgpu::Queue)> {
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default())).ok()?;
+        pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())).ok()
+    }
+
+    fn texture(width: u32, height: u32) -> Image {
+        let rgba = (0..width * height).flat_map(|index| [(index * 53 % 251) as u8, (index * 29 % 241) as u8, (index * 7 % 233) as u8, 255]).collect();
+        Image { width, height, rgba }
+    }
+
+    #[test]
+    fn odd_and_tiny_textures_double_exactly_with_either_edge_rule() {
+        let Some((device, queue)) = device() else { return };
+        let mut cugan = Cugan::new(device, queue).unwrap();
+        for (width, height) in [(1, 1), (2, 2), (3, 5), (4, 4), (5, 7), (1, 40), (37, 38), (38, 38), (41, 43), (100, 3)] {
+            for edges in [Edges::Mirror, Edges::Wrap] {
+                let doubled = cugan.upscale(&texture(width, height), edges).unwrap_or_else(|error| panic!("{width}x{height} {edges:?}: {error}"));
+                assert_eq!((doubled.width, doubled.height), (width * 2, height * 2), "{width}x{height} {edges:?}");
+                assert_eq!(doubled.rgba.len(), (width * height * 16) as usize);
+            }
+        }
+    }
+
+    #[test]
+    fn a_flat_tiny_texture_stays_flat() {
+        let Some((device, queue)) = device() else { return };
+        let mut cugan = Cugan::new(device, queue).unwrap();
+        let flat = Image { width: 3, height: 1, rgba: [90, 120, 150, 255].repeat(3) };
+        let doubled = cugan.upscale(&flat, Edges::Mirror).unwrap();
+        assert!(doubled.rgba.chunks_exact(4).all(|pixel| pixel[..3].iter().zip([90u8, 120, 150]).all(|(got, want)| got.abs_diff(want) <= 3)), "{:?}", &doubled.rgba[..12]);
+    }
+
+    #[test]
+    fn tiles_of_37_and_38_pixels_at_the_texture_edge_run() {
+        let Some((device, queue)) = device() else { return };
+        let mut cugan = Cugan::new(device, queue).unwrap();
+        let image = texture(75, 38);
+        let budget = widest_activation(38, 38);
+        assert_eq!(tiling(75, 38, budget), (2, 1));
+        let doubled = cugan.upscale_within(&image, budget).unwrap();
+        assert_eq!((doubled.width, doubled.height), (150, 76));
+    }
 
     #[test]
     fn context_mirrors_without_repeating_the_edge() {

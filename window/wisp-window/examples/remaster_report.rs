@@ -34,13 +34,13 @@ fn main() {
         let (half_w, half_h) = (source.width / 2, source.height / 2);
         let half = resize(&original, half_w, half_h, FilterType::Triangle);
         let (bilinear, bicubic) = (resize(&half, source.width, source.height, FilterType::Triangle), resize(&half, source.width, source.height, FilterType::CatmullRom));
-        let edge = enhance(&plain(&half), Quality::Standard, &Upscaler::classical(), Edges::Mirror).expect("half-size texture is below the size limit");
+        let edge = enhance(&plain(&half), Quality::Standard, &Upscaler::classical(), Edges::Mirror, "report").expect("half-size texture is below the size limit");
         let edge = rgba(&edge.albedo);
         let started = Instant::now();
-        let standard = enhance(&source, Quality::Standard, &Upscaler::classical(), Edges::Mirror).expect("below the size limit");
+        let standard = enhance(&source, Quality::Standard, &Upscaler::classical(), Edges::Mirror, "report").expect("below the size limit");
         let standard_ms = started.elapsed().as_secs_f64() * 1000.0;
         let started = Instant::now();
-        let high = enhance(&source, Quality::High, &Upscaler::classical(), Edges::Mirror).expect("below the size limit");
+        let high = enhance(&source, Quality::High, &Upscaler::classical(), Edges::Mirror, "report").expect("below the size limit");
         let high_ms = started.elapsed().as_secs_f64() * 1000.0;
         let cache = Cache::at(Path::new(&out).join("cache")).expect("open the report cache");
         cache.store("probe", &standard);

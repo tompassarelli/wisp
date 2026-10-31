@@ -60,13 +60,13 @@ fn rgb_is_within_one_level_of_the_ncnn_port_and_alpha_is_todays_filter() {
         let source = load(&folder.join("png").join(format!("{name}.png")));
         let exact = folder.join("out-exact").join(format!("{name}.cugan.x2.png"));
         let reference = load(&if exact.exists() { exact } else { folder.join("out").join(format!("{name}.cugan.x2.png")) });
-        let ours = upscaler.doubled(&source, edges(name));
+        let ours = upscaler.doubled(&source, edges(name), name).0;
         let saved = folder.join("cugan-wgpu");
         std::fs::create_dir_all(&saved).unwrap();
         RgbaImage::from_raw(ours.width, ours.height, ours.rgba.clone()).unwrap().save(saved.join(format!("{name}.x2.png"))).unwrap();
         assert_eq!((ours.width, ours.height), (reference.width, reference.height), "{name}");
         let error = colour_error(&ours, &reference);
-        let todays = classical.doubled(&source, edges(name));
+        let todays = classical.doubled(&source, edges(name), name).0;
         assert!(ours.rgba.chunks_exact(4).zip(todays.rgba.chunks_exact(4)).all(|(a, b)| a[3] == b[3]), "{name}: alpha differs from today's filter");
         println!("{name}: colour error {error:.3} of 255");
         assert!(error <= 1.0, "{name}: colour error {error:.3} of 255 against the ncnn port");
@@ -91,7 +91,7 @@ fn seam(image: &Image, width: u32, height: u32) -> (f64, f64) {
 fn lords_grass_tiled_three_by_three_has_no_seam_the_source_lacks() {
     let (Some(folder), Some(upscaler)) = (folder(), upscaler()) else { return };
     let source = load(&folder.join("png/lords_grass.png"));
-    let ours = upscaler.doubled(&source, Edges::Wrap);
+    let ours = upscaler.doubled(&source, Edges::Wrap, "wrap").0;
     let (source_cell, our_cell) = (seam(&source, 64, 64), seam(&ours, 128, 128));
     let (source_whole, our_whole) = (seam(&source, source.width, source.height), seam(&ours, ours.width, ours.height));
     println!("first cell seam (columns, rows): source {source_cell:.3?}, upscaled {our_cell:.3?}; whole texture: source {source_whole:.3?}, upscaled {our_whole:.3?}");

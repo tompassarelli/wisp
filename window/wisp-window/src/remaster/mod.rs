@@ -69,6 +69,8 @@ impl FromStr for Quality {
 pub struct Maps {
     pub albedo: Image,
     pub relief: Image,
+    /// Real-CUGAN failed on this texture and the edge-directed filter made its colour, so it is not cached under the Real-CUGAN key.
+    pub fallback: bool,
 }
 
 /// Bumped whenever the output of `enhance` changes, so stale cache entries are never read.
@@ -97,7 +99,7 @@ pub struct Prepared {
 }
 
 /// Decodes a texture file and remasters it, reading the result from `cache` when this file and quality were seen before and storing it there when not.
-pub fn prepare(bytes: &[u8], quality: Quality, cache: Option<&Cache>, upscaler: &Upscaler, edges: Edges) -> Result<Prepared, String> {
+pub fn prepare(bytes: &[u8], quality: Quality, cache: Option<&Cache>, upscaler: &Upscaler, edges: Edges, name: &str) -> Result<Prepared, String> {
     let key = (quality != Quality::Off).then(|| cache_key(bytes, quality, upscaler, edges));
     if let (Some(cache), Some(key)) = (cache, &key) {
         if let Some(maps) = cache.load(key) {
@@ -105,11 +107,11 @@ pub fn prepare(bytes: &[u8], quality: Quality, cache: Option<&Cache>, upscaler: 
         }
     }
     let decoded = crate::texture::decode(bytes)?;
-    let enhanced = enhance(&decoded, quality, upscaler, edges);
+    let enhanced = enhance(&decoded, quality, upscaler, edges, name);
     upscaler.announce(&mut std::io::stderr());
     match enhanced {
         Some(maps) => {
-            if let (Some(cache), Some(key)) = (cache, &key) {
+            if let (Some(cache), Some(key), false) = (cache, &key, maps.fallback) {
                 cache.store(key, &maps);
             }
             Ok(Prepared { albedo: maps.albedo, relief: Some(maps.relief) })
@@ -140,15 +142,15 @@ pub struct Loaded {
 }
 
 /// Upscales `image` (the first doubling by `upscaler`, any further ones by the edge-directed filter) and derives its relief, or returns `None` when the quality is off or the texture is already large.
-pub fn enhance(image: &Image, quality: Quality, upscaler: &Upscaler, edges: Edges) -> Option<Maps> {
+pub fn enhance(image: &Image, quality: Quality, upscaler: &Upscaler, edges: Edges, name: &str) -> Option<Maps> {
     if quality == Quality::Off || image.width.max(image.height) >= LARGEST_SOURCE {
         return None;
     }
     let steps = quality.upscale_steps();
-    let albedo = upscaler.doubled(image, edges);
+    let (albedo, fallback) = upscaler.doubled(image, edges, name);
     let albedo = if steps > 1 { upscale::steps(&albedo, steps - 1) } else { albedo };
     let relief = relief::derive(&albedo);
-    Some(Maps { albedo, relief })
+    Some(Maps { albedo, relief, fallback })
 }
 
 #[cfg(test)]
@@ -170,15 +172,15 @@ mod tests {
 
     #[test]
     fn off_and_large_textures_are_left_alone() {
-        assert!(enhance(&checker(8), Quality::Off, &Upscaler::classical(), Edges::Mirror).is_none());
-        assert!(enhance(&Image { width: 1024, height: 4, rgba: vec![0; 1024 * 16] }, Quality::Standard, &Upscaler::classical(), Edges::Mirror).is_none());
+        assert!(enhance(&checker(8), Quality::Off, &Upscaler::classical(), Edges::Mirror, "test").is_none());
+        assert!(enhance(&Image { width: 1024, height: 4, rgba: vec![0; 1024 * 16] }, Quality::Standard, &Upscaler::classical(), Edges::Mirror, "test").is_none());
     }
 
     #[test]
     fn each_step_doubles_both_sides_and_relief_matches_the_albedo() {
-        let standard = enhance(&checker(8), Quality::Standard, &Upscaler::classical(), Edges::Mirror).unwrap();
+        let standard = enhance(&checker(8), Quality::Standard, &Upscaler::classical(), Edges::Mirror, "test").unwrap();
         assert_eq!((standard.albedo.width, standard.albedo.height), (16, 16));
-        let high = enhance(&checker(8), Quality::High, &Upscaler::classical(), Edges::Mirror).unwrap();
+        let high = enhance(&checker(8), Quality::High, &Upscaler::classical(), Edges::Mirror, "test").unwrap();
         assert_eq!((high.albedo.width, high.relief.height), (32, 32));
         assert_eq!(high.relief.rgba.len(), 32 * 32 * 4);
     }
@@ -186,14 +188,14 @@ mod tests {
     #[test]
     fn a_flat_texture_stays_flat_and_its_normals_point_out() {
         let flat = Image { width: 6, height: 6, rgba: [90, 120, 150, 255].repeat(36) };
-        let maps = enhance(&flat, Quality::Standard, &Upscaler::classical(), Edges::Mirror).unwrap();
+        let maps = enhance(&flat, Quality::Standard, &Upscaler::classical(), Edges::Mirror, "test").unwrap();
         assert!(maps.albedo.rgba.chunks_exact(4).all(|pixel| pixel.iter().zip([90u8, 120, 150, 255]).all(|(got, want)| got.abs_diff(want) <= 1)));
         assert!(maps.relief.rgba.chunks_exact(4).all(|pixel| pixel[0].abs_diff(128) <= 1 && pixel[1].abs_diff(128) <= 1 && pixel[2] >= 254));
     }
 
     #[test]
     fn upscaling_stays_within_the_source_range() {
-        let maps = enhance(&checker(8), Quality::High, &Upscaler::classical(), Edges::Mirror).unwrap();
+        let maps = enhance(&checker(8), Quality::High, &Upscaler::classical(), Edges::Mirror, "test").unwrap();
         assert!(maps.albedo.rgba.chunks_exact(4).all(|pixel| (30..=220).contains(&pixel[0]) && (30..=200).contains(&pixel[2])));
     }
 

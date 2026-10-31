@@ -123,7 +123,7 @@ fn run(shared: &Shared, quality: Quality, cache: &Cache, upscaler: &Upscaler) {
         let key = cache_key(&job.bytes, quality, upscaler, Edges::for_path(&job.path));
         let baked = !cache.holds(&key);
         if baked {
-            match prepare(&job.bytes, quality, Some(cache), upscaler, Edges::for_path(&job.path)) {
+            match prepare(&job.bytes, quality, Some(cache), upscaler, Edges::for_path(&job.path), &job.path) {
                 Ok(prepared) if prepared.relief.is_none() => cache.keep_as_is(&key),
                 Ok(_) => {}
                 Err(error) => {

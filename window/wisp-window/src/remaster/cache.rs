@@ -52,7 +52,7 @@ impl Cache {
     }
 
     pub fn load(&self, key: &str) -> Option<Maps> {
-        Some(Maps { albedo: read(&self.path(key, "albedo"))?, relief: read(&self.path(key, "relief"))? })
+        Some(Maps { albedo: read(&self.path(key, "albedo"))?, relief: read(&self.path(key, "relief"))?, fallback: false })
     }
 
     /// A failed write only costs the next run its remaster, so it is dropped rather than reported.
@@ -81,7 +81,7 @@ mod tests {
     fn stored_maps_read_back_exactly() {
         let directory = std::env::temp_dir().join(format!("wisp-remaster-test-{}", std::process::id()));
         let cache = Cache::at(directory.clone()).unwrap();
-        let maps = Maps { albedo: Image { width: 2, height: 1, rgba: vec![1, 2, 3, 4, 5, 6, 7, 8] }, relief: Image { width: 2, height: 1, rgba: vec![9, 8, 7, 6, 5, 4, 3, 2] } };
+        let maps = Maps { albedo: Image { width: 2, height: 1, rgba: vec![1, 2, 3, 4, 5, 6, 7, 8] }, relief: Image { width: 2, height: 1, rgba: vec![9, 8, 7, 6, 5, 4, 3, 2] }, fallback: false };
         assert!(cache.load("key").is_none());
         cache.store("key", &maps);
         let back = cache.load("key").unwrap();

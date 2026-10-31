@@ -92,7 +92,7 @@ fn check(name: &str, path: &Path, quality: Quality, upscaler: &Upscaler) -> Outc
         Err(error) => return Outcome::Unreadable(name.into(), error),
     };
     let edges = Edges::for_path(&logical_path(name));
-    let Some(maps) = enhance(&source, quality, upscaler, edges) else { return Outcome::Left };
+    let Some(maps) = enhance(&source, quality, upscaler, edges, name) else { return Outcome::Left };
     match measure(&source, &maps.albedo, edges == Edges::Wrap) {
         Ok(report) => Outcome::Measured(Row { name: name.into(), size: (source.width, source.height), report, path: path.into(), edges }),
         Err(error) => Outcome::Unreadable(name.into(), error),
@@ -152,7 +152,7 @@ fn error_panel(source: &RgbaImage, folded: &RgbaImage) -> RgbaImage {
 
 fn write_crop(row: &Row, quality: Quality, upscaler: &Upscaler, out: &Path) -> Result<PathBuf, String> {
     let source = decode(&std::fs::read(&row.path).map_err(|error| error.to_string())?)?;
-    let upscaled = enhance(&source, quality, upscaler, row.edges).ok_or("left alone")?.albedo;
+    let upscaled = enhance(&source, quality, upscaler, row.edges, &row.name).ok_or("left alone")?.albedo;
     let factor = (upscaled.width / source.width) as usize;
     let seam_worst = row.report.worst(&LIMITS).name == "seam";
     let (source, upscaled) = if seam_worst { (roll(&source, source.width as usize / 2, source.height as usize / 2), roll(&upscaled, upscaled.width as usize / 2, upscaled.height as usize / 2)) } else { (source, upscaled) };

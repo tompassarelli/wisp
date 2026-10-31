@@ -14,7 +14,7 @@ fn main() {
     let upscaler = Upscaler::on(device, queue, &info);
     upscaler.announce(&mut std::io::stderr());
     println!("adapter {} ({:?}, {:?}); method {}; start-up {:.0} ms", info.name, info.device_type, info.backend, upscaler.method(), started.elapsed().as_secs_f64() * 1000.0);
-    let (mut pixels, mut total, mut count) = (0u64, 0.0, 0);
+    let (mut pixels, mut total, mut count, mut fallbacks) = (0u64, 0.0, 0, 0);
     let mut textures = Vec::new();
     let mut files = Vec::new();
     for argument in std::env::args().skip(1) {
@@ -32,7 +32,9 @@ fn main() {
             continue;
         }
         let started = Instant::now();
-        let doubled = upscaler.doubled(&image, edges);
+        let (doubled, fell_back) = upscaler.doubled(&image, edges, &path);
+        upscaler.announce(&mut std::io::stderr());
+        fallbacks += usize::from(fell_back);
         let seconds = started.elapsed().as_secs_f64();
         assert_eq!(doubled.width, image.width * 2);
         println!("{path}: {}x{} in {:.0} ms", image.width, image.height, seconds * 1000.0);
@@ -42,11 +44,11 @@ fn main() {
         total += seconds;
         count += 1;
     }
-    println!("{count} textures, {:.2} Mpx, {:.0} ms, {:.2} Mpx/s", pixels as f64 / 1e6, total * 1000.0, pixels as f64 / 1e6 / total.max(1e-9));
+    println!("{count} textures, {fallbacks} on the fallback filter, {:.2} Mpx, {:.0} ms, {:.2} Mpx/s", pixels as f64 / 1e6, total * 1000.0, pixels as f64 / 1e6 / total.max(1e-9));
     let filter = Upscaler::classical();
     let started = Instant::now();
     for (image, edges) in &textures {
-        filter.doubled(image, *edges);
+        filter.doubled(image, *edges, "");
     }
     println!("the edge-directed filter alone on the same textures: {:.0} ms", started.elapsed().as_secs_f64() * 1000.0);
     let folder = std::env::temp_dir().join(format!("cugan-bench-{}", std::process::id()));
@@ -54,7 +56,7 @@ fn main() {
     for pass in ["first run, cache empty", "second run, cache full"] {
         let started = Instant::now();
         for (path, edges) in &files {
-            remaster::prepare(&std::fs::read(path).expect("read texture"), Quality::Standard, Some(&cache), &upscaler, *edges).expect("prepare");
+            remaster::prepare(&std::fs::read(path).expect("read texture"), Quality::Standard, Some(&cache), &upscaler, *edges, path).expect("prepare");
         }
         println!("remaster load of the same {} files, {pass}: {:.0} ms", files.len(), started.elapsed().as_secs_f64() * 1000.0);
     }
