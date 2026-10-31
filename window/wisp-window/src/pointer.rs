@@ -86,11 +86,13 @@ impl Pointer {
         state.held = 0;
     }
 
+    /// A button pressed since the last sample reads as held in this one even if it was released again, and that release is reported in the next sample, so a click quicker than a frame is still a press the game sees held for one step.
     pub fn sample(&self, width: u32, height: u32) -> PointerSample {
         let mut state = lock(&self.state);
-        let sample = PointerSample { x: state.x, y: state.y, width, height, inside: state.inside, held: state.held, pressed: state.pressed, released: state.released };
+        let quick = state.pressed & state.released;
+        let sample = PointerSample { x: state.x, y: state.y, width, height, inside: state.inside, held: state.held | state.pressed, pressed: state.pressed, released: state.released & !quick };
         state.pressed = 0;
-        state.released = 0;
+        state.released = quick;
         sample
     }
 }
@@ -100,15 +102,17 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_press_and_release_between_samples_both_reach_the_next_one() {
+    fn a_press_and_release_between_samples_reach_two_samples_in_order() {
         let pointer = Pointer::default();
         pointer.moved(10.0, 20.0);
         pointer.button(MouseButton::Left, true);
         pointer.button(MouseButton::Left, false);
         let sample = pointer.sample(1280, 720);
         assert_eq!((sample.x, sample.y, sample.width, sample.height), (10.0, 20.0, 1280, 720));
-        assert_eq!((sample.held, sample.pressed, sample.released), (0, 1, 1));
-        assert_eq!(pointer.sample(1280, 720).pressed, 0, "an edge is delivered once");
+        assert_eq!((sample.held, sample.pressed, sample.released), (1, 1, 0), "the press is held for one sample");
+        let next = pointer.sample(1280, 720);
+        assert_eq!((next.held, next.pressed, next.released), (0, 0, 1), "its release follows");
+        assert_eq!(pointer.sample(1280, 720).released, 0, "an edge is delivered once");
     }
 
     #[test]
@@ -128,8 +132,10 @@ mod tests {
         pointer.clear();
         pointer.left();
         let sample = pointer.sample(100, 100);
-        assert_eq!((sample.held, sample.released, sample.inside), (0, 1, false));
-        assert_eq!(sample.bits(), 1 << 8 | 1 << 4);
+        assert_eq!((sample.held, sample.pressed, sample.released, sample.inside), (1, 1, 0, false));
+        assert_eq!(sample.bits(), 1 | 1 << 4);
+        let next = pointer.sample(100, 100);
+        assert_eq!((next.held, next.released), (0, 1));
     }
 
     #[test]
