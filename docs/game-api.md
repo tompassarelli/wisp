@@ -17,7 +17,7 @@ An API function used as a value (passed, stored) is a compile error (TS9310), be
 
 ## Lowering table format
 
-`export const <family>: Lowering` maps each exported function name to a template `Native($1, $2, false)`: one native call whose arguments are the call's arguments (`$n`, 1-based, each at most once and in order) or the literals `false`, `true` or an integer. `parseTemplate` in `src/game/warcraft/lowering.ts` defines the grammar, and `test/game-api.test.ts` checks every row against `src/natives/warcraft.d.ts` and the native backend.
+`export const <family>: Lowering` maps each exported function name to a template `Native($1, $2, false)`: one expression whose arguments are the call's arguments (`$n`, 1-based, each at most once and in order), the literals `false`, `true` or an integer, a global constant (`TriggerRegisterPlayerEvent($1, $2, EVENT_PLAYER_LEAVE)`) or a nested native (`SetPlayerColor($1, ConvertPlayerColor($2))`). `parseTemplate` in `src/game/warcraft/lowering.ts` defines the grammar, and `test/game-api.test.ts` checks every row against `src/natives/warcraft.d.ts` and the native backend.
 
 ## Native backend and the call log
 
@@ -25,7 +25,7 @@ A host binds the world it is about to run with `bindWorld(world)`: `host/headles
 
 ## Effects
 
-`wisp/game/effects`: effects (`createEffect`, `destroyEffect`, position, scale, matrix, orientation, alpha, colour, animation, time and blend calls, `effectX`/`effectY`/`effectZ` local reads, `effectScale`), beams (`createBeam`, `moveBeam`, `setBeamColor`, `destroyBeam`) and floating text (`createFloatingText`, `setFloatingText*`). The stores are `src/game/native/effectStore.ts`, `lightnings.ts` and `textTags.ts`. `Effect`, `Beam`, `FloatingText`, `Player` and `EffectAnimation` alias Warcraft's `effect`, `lightning`, `texttag`, `player` and `animtype` until the families that own them become opaque.
+`wisp/game/effects`: effects (`createEffect`, `destroyEffect`, position, scale, matrix, orientation, alpha, colour, animation, time and blend calls, `effectX`/`effectY`/`effectZ` local reads, `effectScale`), beams (`createBeam`, `moveBeam`, `setBeamColor`, `destroyBeam`) and floating text (`createFloatingText`, `setFloatingText*`). The stores are `src/game/native/effectStore.ts`, `lightnings.ts` and `textTags.ts`. `Effect`, `Beam`, `FloatingText` and `EffectAnimation` alias Warcraft's `effect`, `lightning`, `texttag` and `animtype` until the families that own them become opaque.
 
 ## Frames
 
@@ -53,3 +53,7 @@ The rules, which both backends keep:
 ## Files
 
 `wisp/game/files`: the game's file output in its data folder, one call per Warcraft native because sites add lines in loops and between other calls: `clearFileLines`, `startFile`, `addFileLine(text)` and `endFile(path)`, and `preloadAsset(path)` for loading a model, texture or sound ahead of its first use. All five are local. `preloadAsset` lowers to `Preload` too, because Warcraft preloads an asset with the call that adds a file line, but it writes no file: the native backend only logs it, because Wisp loads an asset when it is first needed and an asset path must not become a line of the next file. Reads stay in `src/map/fileio.ts`. The store is `src/game/native/fileLines.ts`: it holds the lines added since the last `clearFileLines` and gives the host's sink a copy when `endFile` names the path. A line is kept whole, because the 259-byte line cut is a Warcraft quirk that stays in `src/headless/natives/preloadText.ts` for the Warcraft-named natives.
+
+## Players
+
+`wisp/game/players`: `player(slot)`, `playerSlot`, `localPlayer` (a local read), `eventPlayer`, `playerControl`, `playerSlotState`, `playerName`, `setPlayerColor(player, color)` and `addLeaveEvent(events, player)`. `setPlayerColor` lowers to `SetPlayerColor(player, ConvertPlayerColor(color))` and `addLeaveEvent` to `TriggerRegisterPlayerEvent(events, player, EVENT_PLAYER_LEAVE)`. The pair `playerControl` and `playerSlotState` stays two calls, because Smashcraft tests them apart. The store is `src/game/native/playerStore.ts`: a headless client fills it from its own slot, the humans it was started with and the player names, and `src/headless/natives/players.ts` runs the emulated natives over the same store. `Player`, `PlayerControl` and `PlayerSlotState` alias Warcraft's `player`, `mapcontrol` and `playerslotstate` until step 6 of the plan; `MAP_CONTROL_USER` and `PLAYER_SLOT_STATE_PLAYING` still come from the natives and equal what the store returns.

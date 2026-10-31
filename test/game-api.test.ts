@@ -9,10 +9,11 @@ import * as nativeFrames from "../src/game/native/frames";
 import * as nativeSound from "../src/game/native/sound";
 import * as nativeText from "../src/game/native/text";
 import * as filesApi from "../src/game/native/files";
+import * as nativePlayers from "../src/game/native/players";
 import { bindWorld } from "../src/game/native/world";
 import { HeadlessClient } from "../src/headless/client";
 import { readNativeDeclarations } from "../host/headless/headless";
-import { parseTemplate } from "../src/game/warcraft/lowering";
+import { parseTemplate, templateParts } from "../src/game/warcraft/lowering";
 import { effects } from "../src/game/warcraft/effects";
 import { events } from "../src/game/warcraft/events";
 import { frames } from "../src/game/warcraft/frames";
@@ -20,6 +21,7 @@ import { sound } from "../src/game/warcraft/sound";
 import type { VolumeGroup } from "../src/game/sound";
 import { text } from "../src/game/warcraft/text";
 import { files } from "../src/game/warcraft/files";
+import { players } from "../src/game/warcraft/players";
 
 const root = join(import.meta.dir, "..");
 
@@ -78,18 +80,23 @@ const families = [
   { name: "sound", table: sound, backend: nativeSound },
   { name: "text", table: text, backend: nativeText },
   { name: "files", table: files, backend: filesApi },
+  { name: "players", table: players, backend: nativePlayers },
 ] as const;
 
 test.each(families)("every $name lowering row names a declared native with the arity of its Wisp function and an implemented backend call", ({ name, table, backend }) => {
-  const declared = new Map(readNativeDeclarations().functions.map(([native, , parameters]) => [native, parameters] as const));
+  const declarations = readNativeDeclarations();
+  const declared = new Map(declarations.functions.map(([native, , parameters]) => [native, parameters] as const));
+  const constants = new Set(declarations.constants.map(([constant]) => constant));
   const dts = readFileSync(join(root, `src/game/${name}.d.ts`), "utf8");
   const exported = [...dts.matchAll(/export declare function (\w+)\(([^)]*)\)/g)].map(match => [match[1]!, (match[2] ?? "").trim() === "" ? 0 : (match[2] ?? "").split(/,(?![^()]*\))/).length] as const);
   expect(exported.map(([fn]) => fn).sort()).toEqual(Object.keys(table).sort());
   expect(Object.keys(backend).sort()).toEqual(Object.keys(table).sort());
   for (const [fn, parameters] of exported) {
     const template = parseTemplate(table[fn] ?? "");
-    expect(declared.get(template.native)).toBe(template.args.length);
-    expect(template.args.filter(part => "arg" in part).length).toBe(parameters);
+    const parts = templateParts(template);
+    for (const call of parts.calls) expect(declared.get(call.native)).toBe(call.args.length);
+    for (const global of parts.globals) expect(constants.has(global)).toBe(true);
+    expect(parts.arguments).toBe(parameters);
   }
 });
 
@@ -290,4 +297,58 @@ test("the files family lowers one to one and its native backend keeps a 300-byte
   natives.PreloadGenEnd?.("cut.txt");
   expect(client.files.get("cut.txt")?.[0]?.length).toBe(259);
   expect(Object.fromEntries(client.emulatedCalls)).toEqual({ PreloadGenClear: 1, Preload: 1, PreloadGenEnd: 1 });
+});
+
+test("player calls lower to the natives they replaced, with a nested native and a global argument, byte for byte", () => {
+  const lowered = compile(`import { createEvents } from "../../src/game/events";\nimport { addLeaveEvent, eventPlayer, localPlayer, player, playerControl, playerName, playerSlot, playerSlotState, setPlayerColor } from "../../src/game/players";\n` + `export function run(slot: number): void {
+  const leave = createEvents();
+  const who = player(slot);
+  addLeaveEvent(leave, who);
+  setPlayerColor(who, slot);
+  if (eventPlayer() === localPlayer() && playerControl(who) === MAP_CONTROL_USER && playerSlotState(who) === PLAYER_SLOT_STATE_PLAYING) BJDebugMsg(playerName(who) + playerSlot(who));
+}\n`);
+  const raw = compile(`export function run(slot: number): void {
+  const leave = CreateTrigger();
+  const who = Player(slot);
+  TriggerRegisterPlayerEvent(leave, who, EVENT_PLAYER_LEAVE);
+  SetPlayerColor(who, ConvertPlayerColor(slot));
+  if (GetTriggerPlayer() === GetLocalPlayer() && GetPlayerController(who) === MAP_CONTROL_USER && GetPlayerSlotState(who) === PLAYER_SLOT_STATE_PLAYING) BJDebugMsg(GetPlayerName(who) + GetPlayerId(who));
+}\n`);
+  expect(lowered.diagnostics).toBe("");
+  expect(raw.diagnostics).toBe("");
+  expect(lowered.lua).toBe(raw.lua);
+  expect(lowered.lua).toContain("ConvertPlayerColor(slot)");
+  expect(lowered.lua).toContain("TriggerRegisterPlayerEvent(leave, who, EVENT_PLAYER_LEAVE)");
+});
+
+test("the template grammar takes nested natives and globals and refuses a reused argument", () => {
+  expect(parseTemplate("SetPlayerColor($1, ConvertPlayerColor($2))")).toEqual({ native: "SetPlayerColor", args: [{ arg: 1 }, { call: { native: "ConvertPlayerColor", args: [{ arg: 2 }] } }] });
+  expect(parseTemplate("TriggerRegisterPlayerEvent($1, $2, EVENT_PLAYER_LEAVE)").args[2]).toEqual({ global: "EVENT_PLAYER_LEAVE" });
+  expect(() => parseTemplate("Native($1, Inner($1))")).toThrow("reuses or reorders $1");
+  expect(() => parseTemplate("Native($1")).toThrow("lowering template");
+});
+
+test("the native backend answers from each client's slots", () => {
+  const declarations = readNativeDeclarations();
+  const make = (slot: number) => new HeadlessClient({ slot, humans: [0, 1, 3], playerNames: { 1: "Ada" }, declarations, filePrefix: "game-api", localNatives: { GetLocalPlayer: "local" }, network: [] });
+  const [first, second] = [make(0), make(1)];
+  bindWorld(first.world);
+  const events = nativeEvents.createEvents();
+  nativeEvents.onEvents(events, () => undefined);
+  nativePlayers.addLeaveEvent(events, nativePlayers.player(3));
+  expect(nativePlayers.playerSlot(nativePlayers.localPlayer())).toBe(0);
+  expect(nativePlayers.playerControl(nativePlayers.player(3))).toBe(first.natives.MAP_CONTROL_USER);
+  expect(nativePlayers.playerControl(nativePlayers.player(2))).toBe(first.natives.MAP_CONTROL_NONE);
+  expect(nativePlayers.playerSlotState(nativePlayers.player(1))).toBe(first.natives.PLAYER_SLOT_STATE_PLAYING);
+  expect(nativePlayers.playerSlotState(nativePlayers.player(2))).toBe(first.natives.PLAYER_SLOT_STATE_EMPTY);
+  expect(nativePlayers.playerName(nativePlayers.player(1))).toBe("Ada");
+  expect(nativePlayers.playerName(nativePlayers.player(2))).toBe("Player 3");
+  nativePlayers.setPlayerColor(nativePlayers.player(1), 4);
+  bindWorld(second.world);
+  expect(nativePlayers.playerSlot(nativePlayers.localPlayer())).toBe(1);
+  bindWorld(undefined);
+  expect(first.players.color(1)).toBe(4);
+  expect(second.players.color(1)).toBeUndefined();
+  expect(first.log.map(call => call.name).slice(0, 7)).toEqual(["CreateTrigger", "TriggerAddAction", "Player", "TriggerRegisterPlayerEvent", "GetPlayerId", "Player", "GetPlayerController"]);
+  expect([...first.emulatedCalls.keys(), ...second.emulatedCalls.keys()]).toEqual([]);
 });

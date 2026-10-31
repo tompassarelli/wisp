@@ -58,4 +58,7 @@ export const fromHandle = <T>(handle: Handle): T => handle as T;
 /** The value a Warcraft player or animation type holds in the emulation: a slot number, or an animation name or number. */
 export const asNumber = (value: unknown): number => value as number;
 
+/** A value the contract names as a Warcraft handle type that the emulation holds as a plain value, such as a player's slot number. */
+export const fromValue = <T>(value: unknown): T => value as T;
+
 export const asAnimation = (value: unknown): string | number => value as string | number;

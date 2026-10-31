@@ -1,4 +1,5 @@
-import { type Events, type FrameEvent, type FrameKind, type FramePoint, type Frame, type OriginFrame, type Player, type Quest, type TextAlignment } from "../frames";
+import { type Events, type FrameEvent, type FrameKind, type FramePoint, type Frame, type OriginFrame, type Quest, type TextAlignment } from "../frames";
+import type { Player } from "../players";
 import type { QuestEntry } from "./quests";
 import { asHandle, fromHandle } from "./types";
 import { boundWorld, type World } from "./world";

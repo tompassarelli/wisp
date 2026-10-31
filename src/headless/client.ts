@@ -19,6 +19,8 @@ import { effectNatives, lightningNatives, textTagNatives } from "./natives/effec
 import { frameNatives, type FrameContext, inputNatives } from "./natives/frames";
 import { mathNatives } from "./natives/math";
 import { Playing } from "./natives/playing";
+import { playerNatives } from "./natives/players";
+import { Players } from "../game/native/playerStore";
 import { PreloadText } from "./natives/preloadText";
 import { Sounds } from "../game/native/soundStore";
 import { soundNatives } from "./natives/sound";
@@ -158,6 +160,7 @@ export class HeadlessClient {
   readonly soundLog: SoundCue[];
 
   readonly frames: Frames;
+  readonly players: Players;
 
   constructor(options: ClientOptions) {
     this.screen = options.screen;
@@ -184,11 +187,12 @@ export class HeadlessClient {
       messages: this.messages, errors: this.errors, missed: () => { this.missedLookups++; } });
     this.frameUi = new FrameUi(() => this.frames, handle, () => this.natives.ORIGIN_FRAME_GAME_UI, options.screen);
     this.quests = new Quests(handle);
+    this.players = new Players({ slot: options.slot, humans: options.humans, names: options.playerNames });
     const behaviors = this.behaviors(options);
     const local = options.localNatives;
     const log = this.log;
     this.world = {
-      effects: this.effects, beams: this.lightnings, floatingText: this.textTags, sounds: this.sounds, frames: this.frameUi, events: this.timers, quests: this.quests,
+      effects: this.effects, beams: this.lightnings, floatingText: this.textTags, sounds: this.sounds, frames: this.frameUi, events: this.timers, quests: this.quests, players: this.players,
       files: new FileLines((path, lines) => this.preloadText.write(path, lines)),
       display: (player, text) => { if (player === this.slot) this.messages.push(text); },
       log: logUnlessLocal(log, local),
@@ -301,7 +305,7 @@ export class HeadlessClient {
     return this.units.liveHandleCounts();
   }
 
-  private behaviors({ humans, playerNames, network }: ClientOptions): Readonly<Record<string, NativeBehavior>> {
+  private behaviors({ network }: ClientOptions): Readonly<Record<string, NativeBehavior>> {
     const handle = (kind: string): Handle => this.handle(kind);
     const frameContext: FrameContext = {
       ui: this.frameUi, textAreaAutoScroll: this.textAreaAutoScroll,
@@ -319,7 +323,8 @@ export class HeadlessClient {
       ...lightningNatives(this.lightnings),
       ...this.weathers.behaviors({ handle }),
       ...this.inventory.behaviors(),
-      ...this.units.playerBehaviors({ slot: this.slot, humans, playerNames }),
+      ...this.units.playerBehaviors(),
+      ...playerNatives(this.players),
       ...this.units.behaviors(),
       ...this.abilities.targetOrders({
         missing: () => { this.missingNatives.push({ native: "IssueTargetOrder", client: this.slot, frame: this.frame }); },

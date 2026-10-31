@@ -235,6 +235,15 @@ export class TriggersTimers implements EventStore {
     return this.registrations.some(registration => registration.kind === "frame" && registration.trigger === events && registration.frame === frame && registration.event === event);
   }
 
+  registerLeave(events: Handle, slot: number): Handle {
+    this.registrations.push({ kind: "player", trigger: events as Trigger, player: slot, event: "EVENT_PLAYER_LEAVE" });
+    return this.handle("event");
+  }
+
+  triggerPlayer(): unknown {
+    return this.event.player;
+  }
+
   triggerFrame(): unknown {
     return this.event.frame;
   }
@@ -294,7 +303,7 @@ export class TriggersTimers implements EventStore {
 
   private triggerBehaviors(): Readonly<Record<string, NativeBehavior>> {
     return {
-      GetTriggerPlayer: () => this.event.player,
+      GetTriggerPlayer: () => this.triggerPlayer(),
       BlzTriggerRegisterFrameEvent: (trigger: Trigger, frame: unknown, event: unknown) => this.registerFrame(trigger, frame, event),
       BlzGetTriggerFrame: () => this.triggerFrame(),
       BlzGetTriggerFrameEvent: () => this.triggerFrameEvent(),

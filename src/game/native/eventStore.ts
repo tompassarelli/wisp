@@ -7,6 +7,8 @@ export interface EventStore {
   destroy(events: Handle): void;
   registerFrame(events: Handle, frame: unknown, event: unknown): Handle;
   hasFrame(events: Handle, frame: unknown, event: unknown): boolean;
+  registerLeave(events: Handle, slot: number): Handle;
+  triggerPlayer(): unknown;
   triggerFrame(): unknown;
   triggerFrameEvent(): unknown;
   triggerFrameText(): string;

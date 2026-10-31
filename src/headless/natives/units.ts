@@ -18,12 +18,6 @@ export interface Unit extends Handle, UnitPose {
   removed: boolean;
 }
 
-export interface PlayerContext {
-  readonly slot: number;
-  readonly humans: readonly number[];
-  readonly playerNames: Readonly<Record<number, string>> | undefined;
-}
-
 const PLAYER_COLORS = ["RED", "BLUE", "CYAN", "PURPLE", "YELLOW", "ORANGE", "GREEN", "PINK", "LIGHT_GRAY", "LIGHT_BLUE", "AQUA", "BROWN", "MAROON", "NAVY", "TURQUOISE", "VIOLET", "WHEAT", "PEACH", "MINT", "LAVENDER", "COAL", "SNOW", "EMERALD", "PEANUT", "BLACK"].map(name => "PLAYER_COLOR_" + name);
 
 const DEATH_CUTOFF = f32(0.405);
@@ -125,13 +119,8 @@ export class Units {
     return poses;
   }
 
-  playerBehaviors({ slot, humans, playerNames }: PlayerContext): Readonly<Record<string, NativeBehavior>> {
-    const playing = (player: number) => humans.includes(player);
+  playerBehaviors(): Readonly<Record<string, NativeBehavior>> {
     return {
-      GetLocalPlayer: () => slot,
-      Player: (n: number) => n,
-      GetPlayerId: (player: number) => player,
-      GetPlayerName: (player: number) => playerNames?.[player] ?? `Player ${player + 1}`,
       GetHandleId: (handle: unknown) => (isHandle(handle) ? handle.id : handle),
       Location: (x: number, y: number) => this.location(x, y),
       RemoveLocation: (handle: Handle) => { this.locations.delete(handle); },
@@ -147,8 +136,6 @@ export class Units {
         return handle;
       },
       DestroyGroup: (handle: Handle) => { this.groups.delete(handle); },
-      GetPlayerController: (player: number) => (playing(player) ? "MAP_CONTROL_USER" : "MAP_CONTROL_NONE"),
-      GetPlayerSlotState: (player: number) => (playing(player) ? "PLAYER_SLOT_STATE_PLAYING" : "PLAYER_SLOT_STATE_EMPTY"),
       GetPlayersAll: () => {
         if (this.allPlayers === undefined) this.allPlayers = this.handle("force");
         return this.allPlayers;

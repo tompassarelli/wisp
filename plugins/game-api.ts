@@ -7,7 +7,7 @@ import { join } from "node:path";
 import * as ts from "typescript";
 import * as tstl from "typescript-to-lua";
 import { transformArguments } from "typescript-to-lua/dist/transformation/visitors/call";
-import { type Lowering, parseTemplate, type Template } from "../src/game/warcraft/lowering";
+import { type Lowering, parseTemplate, type Template, type TemplateArgument } from "../src/game/warcraft/lowering";
 
 export const GAME_API_VALUE_CODE = 9310;
 
@@ -70,11 +70,14 @@ const plugin: tstl.Plugin = {
       if (template === undefined) throw new Error(`wisp/game/${symbol.family} declares ${symbol.name}, which src/game/warcraft/${symbol.family}.ts does not lower`);
       if (node.arguments.some(ts.isSpreadElement)) throw new Error(`${symbol.name} is lowered at its call and takes no spread arguments`);
       const given = transformArguments(context, node.arguments, context.checker.getResolvedSignature(node));
-      const args = template.args.map(part => {
+      const lower = (part: Template, at: ts.Node): tstl.CallExpression => tstl.createCallExpression(tstl.createIdentifier(part.native, at), part.args.map(argument), at);
+      const argument = (part: TemplateArgument): tstl.Expression => {
         if ("arg" in part) return given[part.arg - 1] ?? tstl.createNilLiteral();
+        if ("global" in part) return tstl.createIdentifier(part.global, node.expression);
+        if ("call" in part) return lower(part.call, node.expression);
         return part.literal === "true" ? tstl.createBooleanLiteral(true) : part.literal === "false" ? tstl.createBooleanLiteral(false) : tstl.createNumericLiteral(Number(part.literal));
-      });
-      return tstl.createCallExpression(tstl.createIdentifier(template.native, node.expression), args, node);
+      };
+      return lower(template, node);
     },
   },
 };

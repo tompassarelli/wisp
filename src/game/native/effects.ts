@@ -1,4 +1,5 @@
-import type { Beam, Effect, EffectAnimation, FloatingText, Player } from "../effects";
+import type { Beam, Effect, EffectAnimation, FloatingText } from "../effects";
+import type { Player } from "../players";
 import { asAnimation, asHandle, asNumber, fromHandle } from "./types";
 import { boundWorld } from "./world";
 

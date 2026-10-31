@@ -1,7 +1,8 @@
+import type { Player } from "./players";
+
 export type Effect = effect;
 export type Beam = lightning;
 export type FloatingText = texttag;
-export type Player = player;
 export type EffectAnimation = animtype;
 
 export declare function createEffect(model: string, x: number, y: number): Effect;

@@ -1,6 +1,7 @@
+import type { Player } from "./players";
+
 export type Frame = framehandle;
 export type Events = trigger;
-export type Player = player;
 export type Quest = quest;
 export type FramePoint = framepointtype;
 export type FrameEvent = frameeventtype;
