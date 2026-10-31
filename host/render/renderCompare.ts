@@ -63,12 +63,19 @@ export const boundOf = (measured: Measures): Measures => ({
   differingFraction: rounded(measured.differingFraction * HEADROOM, 0.001, 1),
 });
 
-export const compareScene = (scene: string, referencePng: Uint8Array, candidatePng: Uint8Array): RegionReport[] => {
+/** A recorded bound per region name; a run that has one is judged against it, and a run that has none writes its own (headroom over what it measured). */
+export type RecordedBounds = Readonly<Record<string, Measures>>;
+
+/** The metrics of a region that measured past its bound. */
+export const exceeded = (region: RegionReport): Metric[] => METRICS.filter((metric) => region.measured[metric] > region.bound[metric]);
+
+export const compareScene = (scene: string, referencePng: Uint8Array, candidatePng: Uint8Array, recorded: RecordedBounds = {}): RegionReport[] => {
   const reference = decodePng(referencePng), candidate = decodePng(candidatePng);
   if (reference.width !== candidate.width || reference.height !== candidate.height) throw new Error(`${scene}: reference is ${reference.width}x${reference.height} and candidate ${candidate.width}x${candidate.height}`);
   const deltas = deltasByArea(reference, candidate);
   return AREAS.map((area) => {
     const measured = measure(deltas[area]);
-    return { name: `${scene}/${area}`, scene, area, pixels: deltas[area].length, measured, bound: boundOf(measured) };
+    const name = `${scene}/${area}`;
+    return { name, scene, area, pixels: deltas[area].length, measured, bound: recorded[name] ?? boundOf(measured) };
   });
 };

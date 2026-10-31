@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { checkerPng } from "../host/render/compareScenes";
-import { boundOf, compareScene, HEADROOM, measure } from "../host/render/renderCompare";
+import { boundOf, compareScene, exceeded, HEADROOM, measure } from "../host/render/renderCompare";
 
 test("[spec #121] a region's measures are its largest, 99th-percentile and mean channel delta and the fraction of pixels past two levels, and its bound is the measure times the headroom, rounded up and capped at the scale", () => {
   const deltas = [...Array.from({ length: 98 }, () => 0), 2, 40];
@@ -20,4 +20,14 @@ test("[spec #121] identical renders measure zero in every region, a different re
   const shifted = compareScene("checker", checkerPng(64, 8), checkerPng(64, 4));
   expect(shifted.find((region) => region.area === "edge")?.measured.maxDelta).toBeGreaterThan(100);
   expect(() => compareScene("checker", checkerPng(64, 8), checkerPng(32, 8))).toThrow("64x64");
+});
+
+test("[spec #108] a region with a recorded bound is judged against it and a region without one gets headroom over its own measure", () => {
+  const zero = { maxDelta: 0, p99Delta: 0, meanDelta: 0, differingFraction: 0 };
+  const judged = compareScene("checker", checkerPng(64, 8), checkerPng(64, 4), { "checker/edge": zero });
+  const edge = judged.find((region) => region.area === "edge")!, flat = judged.find((region) => region.area === "flat")!;
+  expect(edge.bound).toEqual(zero);
+  expect(exceeded(edge)).toEqual(["maxDelta", "p99Delta", "meanDelta", "differingFraction"]);
+  expect(exceeded(flat)).toEqual([]);
+  expect(flat.bound).toEqual(boundOf(flat.measured));
 });

@@ -1,10 +1,10 @@
 import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { Console, Effect, Schema } from "effect";
 import { type Command, describeCause, flagValues, UsageFailure } from "../cli/command";
 import { type ChromeAngle, renderScenes } from "../render/headlessRender";
-import { compareScene, type RegionReport } from "../render/renderCompare";
+import { compareScene, exceeded, type RecordedBounds, type RegionReport } from "../render/renderCompare";
 import { modelPath, readSceneList, sceneOf } from "../render/compareScenes";
 import { rerunInGpuLease } from "../render/gpuLease";
 import { renderNativeScenes } from "../window/nativeRender";
@@ -12,6 +12,12 @@ import { renderNativeScenes } from "../window/nativeRender";
 class RenderCompareFailure extends Schema.TaggedError<RenderCompareFailure, { readonly brand: unique symbol }>()("RenderCompareFailure", { problem: Schema.String }) {
   override get message() { return this.problem; }
 }
+
+/** The recorded bounds beside the scene list: `bounds.json` maps "REFERENCE-CANDIDATE" to a bound per region name. */
+const readRecorded = async (scenes: string, pair: string): Promise<RecordedBounds> => {
+  const file = Bun.file(join(dirname(scenes), "bounds.json"));
+  return (await file.exists()) ? ((await file.json()) as Record<string, RecordedBounds>)[pair] ?? {} : {};
+};
 
 const NVIDIA_EGL = "/run/opengl-driver/share/glvnd/egl_vendor.d/10_nvidia.json";
 
@@ -42,12 +48,15 @@ export const renderCommand: Command = (args) => Effect.gen(function*() {
   yield* attempt(() => mkdir(root, { recursive: true }));
   const referenceImages = yield* render(reference, referenceDirectory);
   const candidateImages = yield* render(candidate, candidateDirectory);
+  const recorded = yield* attempt(() => readRecorded(resolve(scenes), `${reference}-${candidate}`));
   const regions: RegionReport[] = yield* attempt(async () => (await Promise.all(list.scenes.map(async (spec, index) => {
     const read = (directory: string, image: string | undefined) => Bun.file(join(directory, image ?? "")).bytes();
-    return compareScene(spec.name, await read(referenceDirectory, referenceImages[index]?.image), await read(candidateDirectory, candidateImages[index]?.image));
+    return compareScene(spec.name, await read(referenceDirectory, referenceImages[index]?.image), await read(candidateDirectory, candidateImages[index]?.image), recorded);
   }))).flat());
   const gpu = async (directory: string) => (JSON.parse(await Bun.file(join(directory, "render.json")).text()) as { gpu: string }).gpu;
   const report = { reference, candidate, gpu: yield* attempt(async () => ({ reference: await gpu(referenceDirectory), candidate: await gpu(candidateDirectory) })), width: list.width, height: list.height, scenes: list.scenes.map(modelPath), regions };
   yield* attempt(() => writeFile(join(root, "bound.json"), JSON.stringify(report, null, 2) + "\n"));
-  yield* Console.log(JSON.stringify({ regions: regions.length, out: join(root, "bound.json") }));
+  const failed = regions.map((region) => ({ region: region.name, metrics: exceeded(region) })).filter((region) => region.metrics.length > 0);
+  yield* Console.log(JSON.stringify({ regions: regions.length, judged: Object.keys(recorded).length > 0, out: join(root, "bound.json"), ...(failed.length > 0 ? { exceeded: failed } : {}) }));
+  if (failed.length > 0) return yield* new RenderCompareFailure({ problem: `${failed.length} of ${regions.length} regions measured past their recorded bound: ${failed.map((region) => region.region).join(", ")}` });
 });
