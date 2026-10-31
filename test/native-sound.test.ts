@@ -46,9 +46,10 @@ test("[spec docs/native-window-plan.md] changing the music, from menu to stage t
   let id = 0;
   const sounds = new Sounds((kind) => ({ kind, id: id++ }), 1, () => 0);
   const player = createSoundPlayer(async (cue) => ({ path: cue.source ?? "", bytes: new Uint8Array(4) }), audio);
+  let figures: Awaited<ReturnType<typeof player.settle>> | undefined;
   const music = async () => {
     player.cues(sounds.log.splice(0));
-    await player.settle();
+    figures = await player.settle();
     return voices().map((voice) => `${voice.key}${voice.looping ? " (looping)" : ""}`);
   };
   sounds.playMusic("Menu.mp3");
@@ -64,6 +65,9 @@ test("[spec docs/native-window-plan.md] changing the music, from menu to stage t
   expect(await music()).toEqual(["menu.mp3 (looping)"]);
   sounds.stopMusic();
   expect(await music()).toEqual([]);
+  expect(figures?.musicLog.map(({ event, track, held }) => [event, track, held.length])).toEqual([
+    ["start", "menu.mp3", 1], ["stop", undefined, 0], ["start", "menu.mp3", 1], ["stop", undefined, 0], ["start", "stage.mp3", 1], ["stop", undefined, 0], ["start", "victory.mp3", 1], ["stop", undefined, 0], ["start", "menu.mp3", 1], ["stop", undefined, 0],
+  ]);
 });
 
 test.skipIf(!existsSync(windowLibraryPath()))("[spec docs/native-window-plan.md] the library decodes Vorbis, plays it and reports the output it used", () => {

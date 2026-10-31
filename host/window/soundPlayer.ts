@@ -9,6 +9,15 @@ export interface SoundFigures {
   readonly audioDecodedAssets: number;
   readonly missingSounds: readonly string[];
   readonly audioOutput: string;
+  readonly musicLog: readonly MusicRow[];
+}
+
+/** One change of the music: the cue's frame, whether a track started or the music stopped, the resolved file, and the music files held after it (started and not yet stopped, so a track that is not looping still counts until its stop). */
+export interface MusicRow {
+  readonly frame: number;
+  readonly event: "start" | "stop";
+  readonly track: string | undefined;
+  readonly held: readonly string[];
 }
 
 export interface SoundPlayer {
@@ -24,6 +33,8 @@ export function createSoundPlayer(resolve: (cue: SoundCue) => Promise<SoundAsset
   const pending = new Set<Promise<void>>();
   const missing = new Set<string>();
   const owners = new Map<string, Promise<void>>();
+  const musicLog: MusicRow[] = [];
+  const held = new Map<string, string>();
   let events = 0, ready = 0, played = 0;
   const assetOf = (cue: SoundCue) => {
     const key = `${cue.source ?? cue.label}:${cue.handle.id}`;
@@ -39,6 +50,11 @@ export function createSoundPlayer(resolve: (cue: SoundCue) => Promise<SoundAsset
     }
     return asset;
   };
+  const logMusic = (cue: SoundCue, event: MusicRow["event"], owner: string, track: string | undefined) => {
+    if (track === undefined) held.delete(owner);
+    else held.set(owner, track);
+    musicLog.push({ frame: cue.frame, event, track, held: [...held.values()] });
+  };
   return {
     cues(cues) {
       for (const cue of cues) {
@@ -50,12 +66,16 @@ export function createSoundPlayer(resolve: (cue: SoundCue) => Promise<SoundAsset
           if (asset === undefined) {
             ready++;
             audio.stop(owner);
+            if (cue.kind === "music") logMusic(cue, "stop", owner, undefined);
             return;
           }
           const path = await asset;
           ready++;
           if (cue.event !== "start") return;
-          if (audio.play(path, owner, cue.volume, Math.max(0.01, cue.pitch), cue.looping)) played++;
+          if (audio.play(path, owner, cue.volume, Math.max(0.01, cue.pitch), cue.looping)) {
+            played++;
+            if (cue.kind === "music") logMusic(cue, "start", owner, path);
+          }
         }).catch((cause: unknown) => { missing.add(cause instanceof Error ? cause.message : String(cause)); });
         owners.set(owner, task);
         pending.add(task);
@@ -68,7 +88,7 @@ export function createSoundPlayer(resolve: (cue: SoundCue) => Promise<SoundAsset
     async settle() {
       while (pending.size > 0) await Promise.all([...pending]);
       const info = audio.info();
-      return { audioEvents: events, audioReadyEvents: ready, audioPlayed: played, audioDecodedAssets: info.decoded, missingSounds: [...missing], audioOutput: info.output };
+      return { audioEvents: events, audioReadyEvents: ready, audioPlayed: played, audioDecodedAssets: info.decoded, missingSounds: [...missing], audioOutput: info.output, musicLog };
     },
   };
 }
