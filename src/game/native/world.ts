@@ -31,3 +31,8 @@ export function boundWorld(): World {
   if (bound === undefined) throw new Error("Wisp's game API was used with no world bound");
   return bound;
 }
+
+/** Records a call of a family that keeps no store and so needs no bound world: text and math run with none, and log only when a headless client is bound. */
+export function logNativeCall(native: string, args: readonly unknown[]): void {
+  bound?.log?.(native, args);
+}

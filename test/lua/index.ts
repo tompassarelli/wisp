@@ -5,6 +5,7 @@ import "../../src/runtime/modules.tests";
 import "../../src/runtime/recordText.tests";
 import "../../src/ui/chat.tests";
 import "../../src/game/native/animation.tests";
+import "../../src/game/native/text.tests";
 import "../../src/headless/natives/preloadText.tests";
 import "../../src/netcode/rowCodec.tests";
 import "../../src/netcode/schedule.tests";

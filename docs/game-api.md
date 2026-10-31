@@ -38,3 +38,14 @@ A host binds the world it is about to run with `bindWorld(world)`: `host/headles
 ## Sound
 
 `wisp/game/sound`: sounds (`createSound`, `soundFromLabel`, `playSound`, `stopSound`, `setSoundVolume`/`Pitch`/`Position`/`Distances`/`Cutoff`/`Duration`, `releaseWhenDone`, `soundFileDuration`), music (`playMusic`, `stopMusic`, `clearMusic`, `playTheme`, `endTheme`) and volume groups (`setVolumeGroup`, `resetVolumeGroups`). The store is `src/game/native/soundStore.ts`; its cue log reaches `host/window/soundPlayer.ts` through the client's `soundLog`. The native backend keeps the attenuation range, the cutoff, the volume groups and `clearMusic`/`endTheme` only in the call log, because the window mixes with rules of its own, and `soundFileDuration` reads 0 because headless decodes no file. `Sound` and `VolumeGroup` alias Warcraft's `sound` and `volumegroup` until the families that own them become opaque; the `SOUND_VOLUMEGROUP_*` constants stay raw globals until the constants box.
+
+## Text
+
+`wisp/game/text`: `formatInt`, `formatReal`, `formatRealWidth`, `parseInt`, `parseReal`, `toReal`, `truncate` and `textLength`, which lower to `I2S`, `R2S`, `R2SW`, `S2I`, `S2R`, `I2R`, `R2I` and `StringLength`. They are pure, so the native backend (`src/game/native/text.ts`) needs no world: it logs its row's native only when a headless client is bound. The formatting rules are in `src/game/native/textFormat.ts`, and `src/game/native/text.tests.ts` runs the same table of values in Bun and in 32-bit Lua.
+
+The rules, which both backends keep:
+
+- `formatReal` prints the value as binary32 with three decimals and rounds an exact tie away from zero (0.0625 prints `0.063`, -0.0625 prints `-0.063`), keeping negative zero. Replays and records are text, and a replay recorded on one backend must read alike on the other, so the native backend does not use the host's own number formatting.
+- `formatRealWidth` pads on the left to `width + 1` characters and keeps at least one decimal, so a precision of 0 prints `1.0` for 0.5.
+- `parseInt` skips leading spaces, reads a sign and digits and stops at the first other character, and truncates toward zero; `parseReal` does not skip spaces, reads one fraction point and returns the binary32 value.
+- `truncate` rounds toward zero.

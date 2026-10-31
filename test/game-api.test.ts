@@ -7,6 +7,7 @@ import * as native from "../src/game/native/effects";
 import * as nativeEvents from "../src/game/native/events";
 import * as nativeFrames from "../src/game/native/frames";
 import * as nativeSound from "../src/game/native/sound";
+import * as nativeText from "../src/game/native/text";
 import { bindWorld } from "../src/game/native/world";
 import { HeadlessClient } from "../src/headless/client";
 import { readNativeDeclarations } from "../host/headless/headless";
@@ -16,6 +17,7 @@ import { events } from "../src/game/warcraft/events";
 import { frames } from "../src/game/warcraft/frames";
 import { sound } from "../src/game/warcraft/sound";
 import type { VolumeGroup } from "../src/game/sound";
+import { text } from "../src/game/warcraft/text";
 
 const root = join(import.meta.dir, "..");
 
@@ -72,6 +74,7 @@ const families = [
   { name: "frames", table: frames, backend: nativeFrames },
   { name: "events", table: events, backend: nativeEvents },
   { name: "sound", table: sound, backend: nativeSound },
+  { name: "text", table: text, backend: nativeText },
 ] as const;
 
 test.each(families)("every $name lowering row names a declared native with the arity of its Wisp function and an implemented backend call", ({ name, table, backend }) => {
@@ -85,6 +88,34 @@ test.each(families)("every $name lowering row names a declared native with the a
     expect(declared.get(template.native)).toBe(template.args.length);
     expect(template.args.filter(part => "arg" in part).length).toBe(parameters);
   }
+});
+
+test("the text family lowers to the native calls it replaced, byte for byte", () => {
+  const lowered = compile(`import { formatInt, formatReal, formatRealWidth, parseInt, parseReal, textLength, toReal, truncate } from "../../src/game/text";\n` + wrap(`
+  const total = truncate(toReal(parseInt(model)) * parseReal("1.5"));
+  const label = formatInt(total) + formatReal(1.25) + formatRealWidth(2.5, 6, 2);
+  const size = textLength(label);`));
+  const raw = compile(wrap(`
+  const total = R2I(I2R(S2I(model)) * S2R("1.5"));
+  const label = I2S(total) + R2S(1.25) + R2SW(2.5, 6, 2);
+  const size = StringLength(label);`));
+  expect(lowered.diagnostics).toBe("");
+  expect(raw.diagnostics).toBe("");
+  expect(lowered.lua).toBe(raw.lua);
+  expect(lowered.lua).toContain("R2SW(0x5p-1, 6, 2)");
+});
+
+test("the text native backend logs its row's native in a headless client and works with no world bound", () => {
+  expect(nativeText.formatReal(0.0625)).toBe("0.063");
+  const client = new HeadlessClient({ slot: 0, humans: [0], declarations: readNativeDeclarations(), filePrefix: "game-api", localNatives: {}, network: [] });
+  bindWorld(client.world);
+  nativeText.formatInt(7);
+  nativeText.formatRealWidth(2.5, 6, 2);
+  nativeText.parseInt("12");
+  nativeText.textLength("ab");
+  bindWorld(undefined);
+  expect(client.log.map(call => call.name)).toEqual(["I2S", "R2SW", "S2I", "StringLength"]);
+  expect([...client.emulatedCalls.keys()]).toEqual([]);
 });
 
 test("the native backend logs the native call of its lowering row and keeps each client's effects apart", () => {

@@ -1,5 +1,6 @@
 import type { NativeCall } from "./clientTypes";
-import { describeNumber, isHandle } from "./jassFormat";
+import { describeNumber } from "../game/native/textFormat";
+import { isHandle } from "./jassFormat";
 
 // Products below 2^53 and | 0 preserve Lua32 wrapping hash arithmetic in JavaScript.
 

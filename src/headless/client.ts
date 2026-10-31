@@ -8,7 +8,7 @@ import { FrameUi } from "../game/native/frameUi";
 import { Quests } from "../game/native/quests";
 import { enforceStandaloneProfile } from "./standaloneProfile";
 import { FRAMES_PER_SECOND, steppedFrames } from "../game/native/frameRate";
-import { describeNumber } from "./jassFormat";
+import { describeNumber } from "../game/native/textFormat";
 import { EmulatedCalls, logUnlessLocal } from "./nativeCalls";
 import { Lightnings } from "../game/native/lightnings";
 import { Weathers } from "./weather";
@@ -31,7 +31,8 @@ import { WARCRAFT3_ENUM_VALUES } from "./warcraft3Natives";
 import { Scenery, type SceneryFixtures } from "./warcraft3Scenery";
 
 export type { CameraPose, CineFilterPose, ClientFiles, IntentionalNoops, LocalNatives, MapEntry, MissingNative, NativeBehavior, NativeBehaviors, NativeCall, SoundCue, StandaloneProfile, SyncMessage, UnitPose, UnitStateFixture, UnitStateFixtures } from "./clientTypes";
-export { describeCall, describeNumber, describeValue, sameCall } from "./jassFormat";
+export { describeNumber } from "../game/native/textFormat";
+export { describeCall, describeValue, sameCall } from "./jassFormat";
 export { assertSoundCue } from "../game/native/soundStore";
 export { FRAMES_PER_SECOND };
 
