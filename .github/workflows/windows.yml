@@ -118,7 +118,14 @@ jobs:
         working-directory: window
       - name: Headless probe on WARP
         if: steps.crate.outputs.present == 'true'
+        timeout-minutes: 4
         run: bun wisp window probe --frames 60 --out "$RUNNER_TEMP/window-probe"
+      - name: Keep the probe's collector log and samples when it fails
+        if: failure() && steps.crate.outputs.present == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: wisp-window-probe-failure
+          path: ${{ runner.temp }}/window-probe
       - name: Can bun build --compile embed the library
         if: steps.crate.outputs.present == 'true'
         run: |
