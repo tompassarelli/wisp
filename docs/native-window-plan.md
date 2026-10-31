@@ -493,7 +493,7 @@ The native window takes over the page's whole job, not only its drawing
   takes clicks is `FRAMEEVENT_CONTROL_CLICK` for the player, sent through the
   lockstep like a key; the frame is the topmost one that takes clicks (frame
   level, then creation order). A session reads the mouse from the
-  `StandaloneInput.pointer` of its `step` with `createPointerFeed`. Not yet:
+  `StandaloneInput.pointer` of its `step` with `createPointerFeed`. A scripted pad has no window, so `src/headless/pointerScript.ts` plays its `FRAME CLIENT pointer X Y` and `FRAME CLIENT click X Y [FRAMES]` lines (X and Y on the UI screen, Y up) as the same readings: `pointerStep` reads a line, `scriptedPointer` gives each frame's reading to put in `StandaloneInput.pointer`. Not yet:
   `FRAMEEVENT_MOUSE_ENTER`, `MOUSE_LEAVE`, `MOUSE_DOWN`, `MOUSE_UP`, wheel and
   drag, and the world-coordinate `EVENT_PLAYER_MOUSE_*` events (hover and drag
   are the second box of this work).
