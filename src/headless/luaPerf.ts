@@ -205,15 +205,24 @@ export function runLuaPerfWith(
   const moduleOfLine = bundleModules(readFile(bundlePath));
   let active: ClientCost | undefined;
   let lastBytes = 0;
-  let lastNativeBytes = 0;
+  let wrapperFirst = 0;
+  let wrapperLast = 0;
   // Level 1 is this hook, level 2 the Lua function the count interrupted.
   const count = () => {
     const bytesNow = requested();
     const info = debug.getinfo(2, "Sl");
     const cost = active;
+    const line = info?.currentline ?? 0;
+    if (cost !== undefined && info !== undefined && info.source === runtimeSource && line >= wrapperFirst && line <= wrapperLast) {
+      // A native's bytes leave the count where the wrapper ends, so a sample inside the wrapper waits for the next one.
+      add(cost.runtimeInstructions, clients?.frame ?? 0, HOOK_STEP);
+      lastBytes += requested() - bytesNow;
+      debug.sethook(count, "", HOOK_STEP);
+      return;
+    }
     if (cost !== undefined && info !== undefined) {
       const frame = clients?.frame ?? 0;
-      const bytes = bytesNow - lastBytes - (cost.nativeBytes - lastNativeBytes);
+      const bytes = bytesNow - lastBytes;
       const source = info.source ?? "";
       if (source === runtimeSource) {
         add(cost.runtimeInstructions, frame, HOOK_STEP);
@@ -229,7 +238,6 @@ export function runLuaPerfWith(
         }
         add(series, frame, bytes);
       }
-      lastNativeBytes = cost.nativeBytes;
     }
     lastBytes = requested();
     // Instructions run inside the hook use up the count; setting it again restarts the full step.
@@ -249,7 +257,6 @@ export function runLuaPerfWith(
         const cost = costs.get(client);
         active = cost;
         lastBytes = requested();
-        lastNativeBytes = cost?.nativeBytes ?? 0;
         entered = { seconds: os.clock(), natives: nativeSeconds, calls: cost?.calls ?? 0 };
         return;
       }
@@ -265,7 +272,6 @@ export function runLuaPerfWith(
       const cost = costs.get(client);
       active = cost;
       lastBytes = requested();
-      lastNativeBytes = cost?.nativeBytes ?? 0;
       debug.sethook(count, "", HOOK_STEP);
       entered = { seconds: os.clock(), natives: nativeSeconds, calls: cost?.calls ?? 0 };
     },
@@ -280,12 +286,12 @@ export function runLuaPerfWith(
       add(cost.microseconds, frame, (seconds - entered.seconds - (nativeSeconds - entered.natives)) * 1000000);
       if (incremental) {
         cost.callbacks.push((seconds - entered.seconds) * 1000000);
-        add(cost.allocatedBytes, frame, bytes - lastBytes - (cost.nativeBytes - lastNativeBytes));
+        add(cost.allocatedBytes, frame, bytes - lastBytes);
         add(cost.natives, frame, cost.calls - entered.calls);
         return;
       }
       add(cost.natives, frame, cost.calls - entered.calls);
-      add(cost.runtimeBytes, frame, bytes - lastBytes - (cost.nativeBytes - lastNativeBytes));
+      add(cost.runtimeBytes, frame, bytes - lastBytes);
     },
   };
   const counted = (cost: ClientCost, native: Native): Native => (...args: unknown[]) => {
@@ -294,9 +300,11 @@ export function runLuaPerfWith(
     if (depth > 0) return native(...args);
     depth++;
     const started = os.clock();
-    const bytes = requested();
+    const bytes = collectgarbage("requested");
     const [ran, result] = coroutine.resume(thread, native, ...args);
-    cost.nativeBytes += requested() - bytes;
+    const used = collectgarbage("requested") - bytes;
+    cost.nativeBytes += used;
+    if (active === cost) lastBytes += used;
     nativeSeconds += os.clock() - started;
     depth--;
     if (!ran) {
@@ -314,7 +322,12 @@ export function runLuaPerfWith(
     bySlot.set(client.slot, cost);
     for (const name of names) {
       const native = client.natives[name];
-      if (typeof native === "function") client.natives[name] = counted(cost, native as Native);
+      if (typeof native !== "function") continue;
+      const wrapper = counted(cost, native as Native);
+      client.natives[name] = wrapper;
+      const lines = debug.getinfo(wrapper, "S");
+      wrapperFirst = lines?.linedefined ?? 0;
+      wrapperLast = lines?.lastlinedefined ?? 0;
     }
   }
 
