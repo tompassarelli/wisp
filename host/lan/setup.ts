@@ -8,7 +8,7 @@ import { collect } from "../process/hostProcess";
 import { installMenuPage } from "./menus";
 import { buildOf, linkPrefix, linkStorage } from "../os/warcraft/sharedStorage";
 import { LanFailure } from "./join";
-import { clientRoot, dataRoot, installOf, prefixOf, retailOf } from "./pool";
+import { PAIR_SIDES, clientName, clientRoot, dataRoot, installOf, prefixOf, retailOf } from "./pool";
 
 const run = (what: string, command: readonly string[], env: Readonly<Record<string, string>> = {}) =>
   collect(ChildProcess.make(command[0]!, command.slice(1), { env, extendEnv: true, stdin: "ignore" })).pipe(
@@ -109,3 +109,12 @@ export const setupClient = (name: string, from: string, poolBuild: string, port:
   yield* installMenuPage(retailOf(name), port).pipe(Effect.mapError((failure) => new LanFailure({ problem: failure.message })));
   log(`${name}: menu page reports to 127.0.0.1:${port}`);
 });
+
+// Proton rewrites its DXVK and NVIDIA DLLs in a client's prefix on every launch, which breaks their links, so a pair's pool links them again once the pair's games are gone.
+export const relinkPairPrefixes = (pair: number) => Effect.forEach(PAIR_SIDES, (side) => {
+  const name = clientName(pair, side);
+  const base = prefixBase(name);
+  return base === undefined || !existsSync(installOf(name))
+    ? Effect.void
+    : linkPrefix(installOf(base), installOf(name)).pipe(Effect.ignore);
+}, { discard: true });

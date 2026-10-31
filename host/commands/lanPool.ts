@@ -19,6 +19,7 @@ import {
 } from "../lan/pool";
 import { PROFILES } from "../contract/clientProfiles";
 import { deferredExit, lastQueued, unadmitted } from "../lan/admission";
+import { relinkPairPrefixes } from "../lan/setup";
 import { AgentStatus, clearLastStart, clientsRunning, outlivedStop, pairFault } from "../lan/pairStart";
 import { agent, number, readJson } from "./lanAgent";
 
@@ -59,7 +60,7 @@ const startPair = (pair: number, custody: { readonly custodian: Custodian; reado
         stdout: join(directory, "session.out"),
         stderr: sessionErr,
       });
-      yield* Effect.addFinalizer(() => stopAgent(pair).pipe(Effect.andThen(stopPairScopes(pair, outlivedStop))));
+      yield* Effect.addFinalizer(() => stopAgent(pair).pipe(Effect.andThen(stopPairScopes(pair, outlivedStop)), Effect.andThen(relinkPairPrefixes(pair))));
       const ended = Effect.gen(function*() {
         if (yield* session.handle.isRunning.pipe(Effect.orElseSucceed(() => false))) return;
         const code = yield* session.handle.exitCode.pipe(Effect.map(Number), Effect.orElseSucceed(() => -1));
