@@ -16,7 +16,8 @@ use winit::window::{Fullscreen, Window, WindowId};
 use crate::clock::now_ns;
 use crate::draw::Gpu;
 use crate::frame::{Clock, End, Event, FrameLoop, Mailbox, Mode, Seam, Submission, Surface};
-use crate::input::{Held, Input};
+use crate::input::Input;
+use crate::keys::{KeyEvent, Keys};
 use crate::menu;
 use crate::metrics::Metrics;
 use crate::pad::Pads;
@@ -33,7 +34,7 @@ enum Command {
 }
 
 struct Shared {
-    held: Held,
+    keys: Keys,
     pointer: Pointer,
     focused: AtomicBool,
     pad_slot: AtomicI32,
@@ -115,7 +116,7 @@ impl ApplicationHandler<Command> for App {
             WindowEvent::Focused(focused) => {
                 self.shared.focused.store(focused, Ordering::Release);
                 if !focused {
-                    self.shared.held.clear();
+                    self.shared.keys.release_all();
                     self.shared.pointer.clear();
                 }
             }
@@ -125,7 +126,7 @@ impl ApplicationHandler<Command> for App {
             WindowEvent::MouseInput { state, button, .. } => self.shared.pointer.button(button, state == ElementState::Pressed),
             WindowEvent::KeyboardInput { event, .. } if !event.repeat => {
                 if let PhysicalKey::Code(code) = event.physical_key {
-                    self.shared.menu.key(&self.shared.held, code, event.state == ElementState::Pressed);
+                    self.shared.menu.key(&self.shared.keys, code, event.state == ElementState::Pressed);
                 }
             }
             _ => {}
@@ -200,7 +201,7 @@ fn guarded(shared: &Arc<Shared>, body: impl FnOnce() + Send + 'static) -> JoinHa
 impl Host {
     pub fn open(title: &str, width: u32, height: u32) -> Result<Self, String> {
         let shared = Arc::new(Shared {
-            held: Held::default(),
+            keys: Keys::default(),
             pointer: Pointer::default(),
             focused: AtomicBool::new(true),
             pad_slot: AtomicI32::new(-1),
@@ -297,6 +298,10 @@ impl Host {
 
     pub fn next_event(&self, timeout: Duration) -> Event {
         self.shared.mailbox.next_event(timeout)
+    }
+
+    pub fn take_keys(&self, limit: usize) -> Vec<KeyEvent> {
+        self.shared.keys.take(limit)
     }
 
     pub fn metric(&self, which: u32) -> Vec<f64> {
@@ -412,7 +417,7 @@ impl Seam for InputSeam {
     fn input(&self) -> Input {
         let slot = usize::try_from(self.shared.pad_slot.load(Ordering::Acquire)).ok();
         let size = self.shared.size.load(Ordering::Acquire);
-        let input = self.pads.borrow_mut().sample(slot, self.shared.focused.load(Ordering::Acquire), self.shared.held.sample());
+        let input = self.pads.borrow_mut().sample(slot, self.shared.focused.load(Ordering::Acquire));
         Input { pointer: self.shared.pointer.sample((size >> 32) as u32, size as u32), ..input }
     }
 }

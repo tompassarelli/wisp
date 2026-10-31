@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { type Pointer, dlopen } from "bun:ffi";
 import { Effect } from "effect";
 import type { PointerReading } from "../../src/headless/pointer";
+import { type KeyTransition, unpackKey } from "../../src/headless/keyInput";
 import { buildWindowLibrary, cachedWindowLibrary } from "./library";
 
 const root = join(import.meta.dir, "../..");
@@ -30,6 +31,7 @@ const symbols = {
   wisp_window_asset: { args: ["ptr", "ptr", "usize", "ptr", "usize"], returns: "void" },
   wisp_window_submit: { args: ["ptr", "ptr", "usize", "f64", "u32"], returns: "void" },
   wisp_window_next_event: { args: ["ptr", "ptr", "u32"], returns: "u32" },
+  wisp_window_take_keys: { args: ["ptr", "ptr", "usize"], returns: "usize" },
   wisp_window_select_pad: { args: ["ptr", "i32"], returns: "void" },
   wisp_window_set_present: { args: ["ptr", "u32"], returns: "void" },
   wisp_window_set_fullscreen: { args: ["ptr", "u32"], returns: "void" },
@@ -63,13 +65,15 @@ export interface NativeWindowOptions {
 /** The next thing a thread that steps the game hears from the window. */
 export type WindowEvent = { readonly kind: "frame"; readonly sample: InputSample } | { readonly kind: "timeout" | "closed" | "failed" | "stopped" };
 
-/** One input sample the render thread took at a display frame: its number, when it was taken on the library's clock and the held buttons as a bit mask and the left stick. */
+/** One input sample the render thread took at a display frame: its number, when it was taken on the library's clock and the pad's buttons as a bit mask and the left stick. */
 export interface InputSample {
   readonly frame: number;
   readonly sampleNs: number;
   readonly mask: number;
   /** The mouse over the window at the sample. */
   readonly pointer: PointerReading;
+  /** The keys pressed and released since the sample before, oldest first, as Warcraft names them. */
+  readonly keys: readonly KeyTransition[];
   /** The left stick, Y up, as the pad reports it. */
   readonly axisX: number;
   readonly axisY: number;
@@ -142,12 +146,26 @@ const pointerOf = (sample: Float64Array): PointerReading => {
   return { x: sample[5]!, y: sample[6]!, width: sample[7]!, height: sample[8]!, inside: (bits & 1 << 12) !== 0, held: bits & 7, pressed: bits >> 4 & 7, released: bits >> 8 & 7 };
 };
 
+const KEY_BATCH = 64;
+const NO_KEYS: readonly KeyTransition[] = [];
+
 const viewOf = (library: Library, handle: Pointer, vocabulary: { buttons: string[]; metrics: string[] }): WindowView => {
   const call = library.symbols;
   const encoder = new TextEncoder();
   // A fresh array per frame reports external memory to the collector, which then collects every frame; one reused buffer keeps the pause count to what the frame allocates.
   let sceneBuffer = new Uint8Array(64 * 1024);
   const sample = new Float64Array(10);
+  const keyBuffer = new Uint32Array(KEY_BATCH);
+  const takeKeys = () => {
+    let count = Number(call.wisp_window_take_keys(handle, keyBuffer, KEY_BATCH));
+    if (count === 0) return NO_KEYS;
+    const keys: KeyTransition[] = [];
+    for (;;) {
+      for (let index = 0; index < count; index++) keys.push(unpackKey(keyBuffer[index]!));
+      if (count < KEY_BATCH) return keys;
+      count = Number(call.wisp_window_take_keys(handle, keyBuffer, KEY_BATCH));
+    }
+  };
   return {
     handle: handle as number,
     start: () => call.wisp_window_start(handle),
@@ -156,7 +174,7 @@ const viewOf = (library: Library, handle: Pointer, vocabulary: { buttons: string
     selectPad: (slot) => call.wisp_window_select_pad(handle, slot ?? -1),
     nextEvent: (timeoutMs) => {
       const kind = EVENT_KINDS[call.wisp_window_next_event(handle, sample, timeoutMs)] ?? "failed";
-      return kind === "frame" ? { kind, sample: { frame: sample[0]!, sampleNs: sample[1]!, mask: sample[2]!, axisX: sample[3]!, axisY: sample[4]!, pointer: pointerOf(sample) } } : { kind };
+      return kind === "frame" ? { kind, sample: { frame: sample[0]!, sampleNs: sample[1]!, mask: sample[2]!, axisX: sample[3]!, axisY: sample[4]!, pointer: pointerOf(sample), keys: takeKeys() } } : { kind };
     },
     asset: (path, bytes) => { const name = Buffer.from(path); call.wisp_window_asset(handle, name, name.length, bytes, bytes.length); },
     assetsPending: () => Number(call.wisp_window_assets_pending(handle)),

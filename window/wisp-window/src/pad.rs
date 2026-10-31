@@ -109,10 +109,10 @@ impl Pads {
         Self { backend, layout: Layout::new() }
     }
 
-    /// The pad's input at this sample point, merged over `keys`. The pad is always read, so events do not pile up while the window is unfocused, but an unfocused window gets no pad input.
-    pub fn sample(&mut self, index: Option<usize>, focused: bool, keys: u32) -> Input {
+    /// The pad's input at this sample point. The pad is always read, so events do not pile up while the window is unfocused, but an unfocused window gets no pad input.
+    pub fn sample(&mut self, index: Option<usize>, focused: bool) -> Input {
         let pad = self.backend.read(index).filter(|_| focused).unwrap_or_default();
-        Input { buttons: keys | self.layout.page_mask(pad), axis_x: pad.axis_x, axis_y: pad.axis_y, pointer: PointerSample::default() }
+        Input { buttons: self.layout.page_mask(pad), axis_x: pad.axis_x, axis_y: pad.axis_y, pointer: PointerSample::default() }
     }
 }
 
@@ -144,7 +144,7 @@ mod tests {
     }
 
     fn press(kind: PadKind, index: usize) -> Vec<&'static str> {
-        names(pads(&[(0, PadState::default().with_button(index, true).of_kind(kind))]).sample(None, true, 0).buttons)
+        names(pads(&[(0, PadState::default().with_button(index, true).of_kind(kind))]).sample(None, true).buttons)
     }
 
     #[test]
@@ -184,28 +184,22 @@ mod tests {
     #[test]
     fn pad_input_axes_pass_through_raw_with_y_up() {
         let state = PadState { axis_x: -0.1, axis_y: 0.9, ..PadState::default() };
-        let input = pads(&[(0, state)]).sample(None, true, 0);
+        let input = pads(&[(0, state)]).sample(None, true);
         assert_eq!((input.axis_x, input.axis_y), (-0.1, 0.9));
-    }
-
-    #[test]
-    fn pad_input_adds_to_the_keys_held() {
-        let input = pads(&[(0, PadState::default().with_button(0, true))]).sample(None, true, 1 << 1);
-        assert_eq!(names(input.buttons), ["right", "attack"]);
     }
 
     #[test]
     fn pad_input_gamepad_index_selects_one_pad_and_the_default_takes_the_first() {
         let slots = [(1, PadState::default().with_button(0, true)), (3, PadState::default().with_button(2, true))];
-        assert_eq!(names(pads(&slots).sample(None, true, 0).buttons), ["attack"]);
-        assert_eq!(names(pads(&slots).sample(Some(3), true, 0).buttons), ["jump"]);
-        assert_eq!(pads(&slots).sample(Some(2), true, 0).buttons, 0);
+        assert_eq!(names(pads(&slots).sample(None, true).buttons), ["attack"]);
+        assert_eq!(names(pads(&slots).sample(Some(3), true).buttons), ["jump"]);
+        assert_eq!(pads(&slots).sample(Some(2), true).buttons, 0);
     }
 
     #[test]
     fn pad_input_is_cleared_while_the_window_is_unfocused() {
         let state = PadState { buttons: 1, axis_x: 1.0, axis_y: 1.0, ..PadState::default() };
-        let input = pads(&[(0, state)]).sample(None, false, 0);
+        let input = pads(&[(0, state)]).sample(None, false);
         assert_eq!((input.buttons, input.axis_x, input.axis_y), (0, 0.0, 0.0));
     }
 }

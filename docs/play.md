@@ -287,8 +287,7 @@ extrapolated from the phase a `Fifo` acquire learned. Box W1 draws only a clear 
 shows the loading and ready text in the window's title. The scene is parsed in
 the library on every frame, so the cost of encoding and parsing it is measured
 before the renderer is ported. Keyboard and pads (box W5: the left stick and the standard-layout buttons of the
-first connected pad, or `gamepadIndex`, read at the sample point and cleared with
-the keys when the window loses focus); captures and
+first connected pad, or `gamepadIndex`, read at the sample point; the keyboard is not buttons but Warcraft's key events, every press and release with its oskey and meta mask, released when the window loses focus); captures and
 `--headless` stay with Chrome (`--capture-frames` with the native window is
 refused). Sound plays through cpal: the game's cues resolve as the page's do, decode once per resolved file (Vorbis, MP3, FLAC and PCM WAV) and play at `volume / 127` and the cue's pitch as a playback rate; `standalone.json` carries the page's `audioEvents`, `audioReadyEvents`, `audioPlayed`, `audioDecodedAssets` and `missingSounds`, with `audioOutput` naming the device (or `none`). `standalone.json` keeps the page's fields and adds `adapter`,
 `backend`, `presentMode`, `desiredMaximumFrameLatency`, `wakeMs`, `encodeMs`,
@@ -380,7 +379,7 @@ jumps, L grabs, Shift shields, Ctrl walks, Enter starts or pauses and V
 selects view. A standard gamepad uses its left stick and directional pad,
 A attack, X special, B/Y jump, left shoulder walk, right shoulder grab,
 triggers shield and the menu buttons. Input is cleared when the window loses
-focus; browser input stays in the window.
+focus; browser input stays in the window. The native window sends no such key table: it raises every key as the OS key event Warcraft does (wisp:docs/native-window-plan.md, "Pads, keyboard and platforms"), so the map's own key bindings apply.
 `gamepadIndex` optionally selects one browser gamepad index; the default uses
 the first connected pad.
 

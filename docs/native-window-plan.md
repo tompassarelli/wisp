@@ -463,9 +463,21 @@ The native window takes over the page's whole job, not only its drawing
 
 ### Pads, keyboard and platforms
 
-- **Keyboard.** Use winit's physical `KeyCode`, which matches the browser's
-  `event.code`. The key table and button names stay as in play.md. Held keys
-  clear when the window loses focus.
+- **Keyboard.** Every key is a Warcraft OS key event. winit's physical
+  `KeyCode` maps to the `oskeytype` (the Windows virtual-key code: letters
+  0x41 to 0x5A, digits 0x30 to 0x39, F-keys 0x70 to 0x87, the OEM punctuation keys
+  186 to 192 and 219 to 222, arrows, the numpad, and left and right Shift, Ctrl,
+  Alt and Super told apart; `keys.rs`), and each press and release is queued with
+  the `METAKEY_*` mask (Shift 1, Ctrl 2, Alt 4, Super 8) of the other modifiers
+  then held. `wisp_window_take_keys` hands the queue to the game's thread with
+  each sample (`InputSample.keys`, `StandaloneInput.keys`), and a session feeds
+  it with `createKeyFeed` (`src/headless/keyInput.ts`) through the lockstep's
+  `key`, which is `client.keyEvent` and so every `BlzTriggerRegisterPlayerKeyEvent`
+  trigger; the map's own bindings (Smashcraft's profile) decide what a key does,
+  as in Warcraft. A key already down is not pressed again, the queue keeps every
+  event even when samples are dropped, and every held key is released when the
+  window loses focus or the options screen opens. The pad mask is the pad's alone,
+  so a key never also presses a button.
 - **Mouse.** winit's cursor and button events reach the window thread, which
   keeps the cursor in physical pixels, the buttons held and the presses and
   releases since the last sample (`pointer.rs`); the render thread reads them

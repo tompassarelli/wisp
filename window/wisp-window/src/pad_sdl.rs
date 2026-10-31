@@ -255,7 +255,7 @@ mod tests {
         let mut window_pads = Pads::with(Box::new(pads));
         let mut layout = |button: SDL_GamepadButton| {
             pad.button(button, true);
-            let input = window_pads.sample(Some(slot), true, 0);
+            let input = window_pads.sample(Some(slot), true);
             pad.button(button, false);
             names(input.buttons)
         };
@@ -275,10 +275,10 @@ mod tests {
         assert_eq!(pads.read(Some(slot)).expect("the pad is open").kind, PadKind::Xbox);
         let mut window_pads = Pads::with(Box::new(pads));
         pad.button(SDL_GamepadButton::EAST, true);
-        assert_eq!(names(window_pads.sample(Some(slot), true, 0).buttons), ["special"], "Xbox B specials");
+        assert_eq!(names(window_pads.sample(Some(slot), true).buttons), ["special"], "Xbox B specials");
         pad.button(SDL_GamepadButton::EAST, false);
         pad.axis(SDL_GAMEPAD_AXIS_LEFT_TRIGGER, i16::MAX);
-        assert_eq!(names(window_pads.sample(Some(slot), true, 0).buttons), ["shield"], "a full trigger shields");
+        assert_eq!(names(window_pads.sample(Some(slot), true).buttons), ["shield"], "a full trigger shields");
     }
 
     #[cfg(feature = "uinput")]

@@ -13,6 +13,7 @@ mod draw;
 mod frame;
 mod host;
 mod input;
+mod keys;
 pub mod menu;
 mod metrics;
 pub mod model;
@@ -244,6 +245,25 @@ pub unsafe extern "C" fn wisp_window_select_pad(handle: *mut c_void, slot: i32) 
         if let Some(host) = host(handle) {
             host.select_pad(slot);
         }
+    })
+}
+
+/// Moves the key events heard since the last call, oldest first, into `out` as `KeyEvent::packed` numbers (the key in bits 0 to 7, the `METAKEY_*` mask in 8 to 11, down in bit 12) and returns how many; fewer than `capacity` means none are left.
+///
+/// # Safety
+/// `handle` is live and `out` has room for `capacity` u32s.
+#[no_mangle]
+pub unsafe extern "C" fn wisp_window_take_keys(handle: *mut c_void, out: *mut u32, capacity: usize) -> usize {
+    guard(0, || {
+        let Some(host) = host(handle) else { return 0 };
+        if out.is_null() {
+            return 0;
+        }
+        let events = host.take_keys(capacity);
+        for (index, event) in events.iter().enumerate() {
+            ptr::write(out.add(index), event.packed());
+        }
+        events.len()
     })
 }
 

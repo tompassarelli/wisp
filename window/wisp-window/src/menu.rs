@@ -5,7 +5,7 @@ use std::sync::Mutex;
 
 use winit::keyboard::KeyCode;
 
-use crate::input::Held;
+use crate::keys::Keys;
 use crate::remaster::Progress;
 use crate::settings::Settings;
 use crate::sync::lock;
@@ -47,7 +47,7 @@ pub struct Input {
 }
 
 impl Input {
-    pub fn key(&self, held: &Held, code: KeyCode, pressed: bool) {
+    pub fn key(&self, keys: &Keys, code: KeyCode, pressed: bool) {
         let open = self.open.load(Ordering::Acquire);
         let sent = if pressed && code == TOGGLE {
             Some(if open { Event::Close } else { Event::Open })
@@ -61,14 +61,14 @@ impl Input {
                 match event {
                     Event::Open => {
                         self.open.store(true, Ordering::Release);
-                        held.clear();
+                        keys.release_all();
                     }
                     Event::Close => self.open.store(false, Ordering::Release),
                     _ => {}
                 }
                 lock(&self.events).push(event);
             }
-            None if !open || !pressed => held.press(code, pressed),
+            None if !open || !pressed => keys.press(code, pressed),
             None => {}
         }
     }
