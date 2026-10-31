@@ -126,7 +126,7 @@ impl Rig {
         let mut labels: Vec<String> = Vec::new();
         timed.write_timestamp(&stamps, 0);
         for _ in 0..frames {
-            post.draw_clouds(&mut timed);
+            post.draw_clouds(&mut timed, &mut wisp_window::gpu_time::PassTimer::off());
             labels.push("clouds".to_string());
             timed.write_timestamp(&stamps, labels.len() as u32);
             post.encode_marked(&mut timed, &self.target, &mut |encoder, label| {
