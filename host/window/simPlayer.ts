@@ -17,7 +17,7 @@ export interface SimPlayerOptions {
 const WORKER_EXIT_MS = 2000;
 
 /** Ends the worker once it has ended its own run, which it does as soon as the window stops (`wisp_window_stop` wakes it), so it is never stopped inside a window or sound library call; one still running after 2 s is ended outright. */
-const endWorker = (thread: Worker, exited: Promise<void>) => Promise.race([exited, Bun.sleep(WORKER_EXIT_MS)]).then(() => thread.terminate());
+const endWorker = (thread: Worker, exited: Promise<void>) => Effect.promise(() => exited).pipe(Effect.timeoutOption(WORKER_EXIT_MS), Effect.andThen(Effect.sync(() => thread.terminate())));
 
 const NATIVE_HELP = "Arrows / WASD move · J attack · K special · Space jump · L grab · Shift shield · Enter pause";
 
@@ -36,7 +36,7 @@ export const openSimPlayer = (options: SimPlayerOptions) => Effect.gen(function*
     const thread = new Worker(new URL("./simWorker.ts", import.meta.url).href);
     thread.addEventListener("close", () => exited.resolve(), { once: true });
     return thread;
-  }), (thread) => Effect.promise(() => endWorker(thread, exited.promise)));
+  }), (thread) => endWorker(thread, exited.promise));
   worker.onmessage = (event: MessageEvent<SimWorkerMessage>) => {
     const message = event.data;
     if (message.type === "ready") ready.resolve();
