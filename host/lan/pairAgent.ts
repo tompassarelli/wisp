@@ -352,71 +352,70 @@ const agent = Effect.gen(function*() {
       Effect.flatMap(Schema.decodeUnknownEffect(schema)),
       Effect.mapError((failure) => new LanFailure({ problem: `bad request: ${failure.message}` })),
     );
-  const handle = (request: Request) => Effect.gen(function*() {
-    const url = new URL(request.url);
-    if (url.pathname === "/status") {
-      const running = yield* Effect.forEach(clients, ({ name }) => gameRun(name).pipe(Effect.map((run) => ({ name, ...run, documents: documentsOf(name) }))));
-      const current = game === undefined ? relayedGame() : { id: game.id, log: game.log, map: game.map, ...game.host.status() };
-      const playing = current !== undefined && current.phase !== "lobby" && current.phase !== "over";
-      return Response.json({
-        pair,
-        profile: profile.name,
-        fps: profile.maxFps,
-        network,
-        clients: running,
-        game: current,
-        driver,
-        idle: driverVerdict(driver, Date.now()).idle,
-        ...idleness(started, ended, driver, playing, running.filter(({ pid }) => pid === undefined).map(({ name }) => name), Date.now()),
-      });
-    }
-    if (url.pathname === "/fresh" && request.method === "POST") {
-      const refusal = lanPlayRefusal(pair, network, "fresh");
-      if (refusal !== undefined) return Response.json({ error: refusal }, { status: 400 });
-      const body = yield* decode(FreshRequest, request);
-      if (!existsSync(body.map)) return Response.json({ error: `no map at ${body.map}` }, { status: 400 });
-      yield* drive(body.driver);
-      const exit = yield* judged(fresh(body.map, body.turnSteps, body.computers));
-      if (Exit.isSuccess(exit)) return Response.json(exit.value);
-      say(`fresh failed: ${String(exit.cause)}`);
-      return Response.json({ error: String(exit.cause) }, { status: 500 });
-    }
-    if (url.pathname === "/relayed" && request.method === "POST") {
-      const refusal = lanPlayRefusal(pair, network, "relayed");
-      if (refusal !== undefined) return Response.json({ error: refusal }, { status: 400 });
-      const body = yield* decode(RelayedRequest, request);
-      const missing = [body.map, body.relay, body.agent].find((path) => !existsSync(path));
-      if (missing !== undefined) return Response.json({ error: `no file at ${missing}` }, { status: 400 });
-      yield* drive(body.driver);
-      const exit = yield* judged(relayedMatch(body.map, body.relay, body.agent, body.turnMs, body.raiseHeadroomMs));
-      if (Exit.isSuccess(exit)) return Response.json(exit.value);
-      say(`relayed failed: ${String(exit.cause)}`);
-      return Response.json({ error: String(exit.cause) }, { status: 500 });
-    }
-    if (url.pathname === "/solo" && request.method === "POST") {
-      const body = yield* decode(SoloRequest, request);
-      if (!existsSync(body.map)) return Response.json({ error: `no map at ${body.map}` }, { status: 400 });
-      yield* drive(body.driver);
-      const exit = yield* judged(solo(body.map));
-      if (Exit.isSuccess(exit)) return Response.json({ clients: exit.value });
-      say(`solo failed: ${String(exit.cause)}`);
-      return Response.json({ error: String(exit.cause) }, { status: 500 });
-    }
-    if (url.pathname === "/end" && request.method === "POST") {
-      yield* release;
-      yield* endGame;
-      yield* endRelayed;
-      return Response.json({ ended: true });
-    }
-    if (url.pathname === "/speed" && request.method === "POST") {
-      const body = yield* decode(SpeedRequest, request);
-      if (game === undefined || game.host.status().phase !== "playing") return Response.json({ error: "no match is playing" }, { status: 400 });
-      if (!Number.isFinite(body.speed) || body.speed < 1 || body.speed > 16) return Response.json({ error: "speed must be between 1 and 16" }, { status: 400 });
-      yield* game.host.setSpeed(body.speed);
-      return Response.json(game.host.status());
-    }
-    return new Response("not found", { status: 404 });
-  }).pipe(Effect.catchTag("LanFailure", (failure) => Effect.succeed(Response.json({ error: failure.problem }, { status: 400 }))));
+  const refused = (error: string) => Response.json({ error }, { status: 400 });
+  const answered = <A, E, R>(kind: string, pid: number | undefined, start: () => Effect.Effect<A, E, R>, answer: (value: A) => unknown) => Effect.gen(function*() {
+    yield* drive(pid);
+    const exit = yield* judged(start());
+    if (Exit.isSuccess(exit)) return Response.json(answer(exit.value));
+    say(`${kind} failed: ${String(exit.cause)}`);
+    return Response.json({ error: String(exit.cause) }, { status: 500 });
+  });
+  const status = () => Effect.gen(function*() {
+    const running = yield* Effect.forEach(clients, ({ name }) => gameRun(name).pipe(Effect.map((run) => ({ name, ...run, documents: documentsOf(name) }))));
+    const current = game === undefined ? relayedGame() : { id: game.id, log: game.log, map: game.map, ...game.host.status() };
+    const playing = current !== undefined && current.phase !== "lobby" && current.phase !== "over";
+    return Response.json({
+      pair,
+      profile: profile.name,
+      fps: profile.maxFps,
+      network,
+      clients: running,
+      game: current,
+      driver,
+      idle: driverVerdict(driver, Date.now()).idle,
+      ...idleness(started, ended, driver, playing, running.filter(({ pid }) => pid === undefined).map(({ name }) => name), Date.now()),
+    });
+  });
+  const freshRoute = (request: Request) => Effect.gen(function*() {
+    const refusal = lanPlayRefusal(pair, network, "fresh");
+    if (refusal !== undefined) return refused(refusal);
+    const body = yield* decode(FreshRequest, request);
+    if (!existsSync(body.map)) return refused(`no map at ${body.map}`);
+    return yield* answered("fresh", body.driver, () => fresh(body.map, body.turnSteps, body.computers), (value) => value);
+  });
+  const relayedRoute = (request: Request) => Effect.gen(function*() {
+    const refusal = lanPlayRefusal(pair, network, "relayed");
+    if (refusal !== undefined) return refused(refusal);
+    const body = yield* decode(RelayedRequest, request);
+    const missing = [body.map, body.relay, body.agent].find((path) => !existsSync(path));
+    if (missing !== undefined) return refused(`no file at ${missing}`);
+    return yield* answered("relayed", body.driver, () => relayedMatch(body.map, body.relay, body.agent, body.turnMs, body.raiseHeadroomMs), (value) => value);
+  });
+  const soloRoute = (request: Request) => Effect.gen(function*() {
+    const body = yield* decode(SoloRequest, request);
+    if (!existsSync(body.map)) return refused(`no map at ${body.map}`);
+    return yield* answered("solo", body.driver, () => solo(body.map), (value) => ({ clients: value }));
+  });
+  const endRoute = () => Effect.gen(function*() {
+    yield* release;
+    yield* endGame;
+    yield* endRelayed;
+    return Response.json({ ended: true });
+  });
+  const speedRoute = (request: Request) => Effect.gen(function*() {
+    const body = yield* decode(SpeedRequest, request);
+    if (game === undefined || game.host.status().phase !== "playing") return refused("no match is playing");
+    if (!Number.isFinite(body.speed) || body.speed < 1 || body.speed > 16) return refused("speed must be between 1 and 16");
+    yield* game.host.setSpeed(body.speed);
+    return Response.json(game.host.status());
+  });
+  const posts = { "/fresh": freshRoute, "/relayed": relayedRoute, "/solo": soloRoute, "/end": endRoute, "/speed": speedRoute };
+  const route = (request: Request, path: string) => Effect.gen(function*() {
+    if (path === "/status") return yield* status();
+    if (request.method !== "POST" || !Object.hasOwn(posts, path)) return new Response("not found", { status: 404 });
+    return yield* posts[path as keyof typeof posts](request);
+  });
+  const handle = (request: Request) => route(request, new URL(request.url).pathname).pipe(Effect.catchTag("LanFailure", (failure) => Effect.succeed(Response.json({ error: failure.problem }, { status: 400 }))));
 
   rmSync(agentSocket(pair), { force: true });
   yield* Effect.acquireRelease(
