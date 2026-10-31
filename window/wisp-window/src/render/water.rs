@@ -182,7 +182,7 @@ impl WaterSettings {
                 absorption: 0.03,
                 depth_rate: 0.006,
                 foam_width: 55.0,
-                normal_strength: 0.3,
+                normal_strength: 0.15,
                 fps: 4.0,
                 specular_power: 60.0,
                 specular: 0.0,
@@ -198,7 +198,7 @@ impl WaterSettings {
                 opacity: 0.92,
                 bubbles: 0.0,
                 swell: 0.0,
-                swirl: 0.3,
+                swirl: 0.12,
                 ..Self::default()
             },
             // Molten rock: a slow dark crust drifting over a bright core, lighting what is near it, with heat shimmer, bubbles and embers.
