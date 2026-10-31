@@ -5,7 +5,7 @@ use crate::post::Look;
 
 use super::ripples::Placement;
 use super::scene::Scene;
-use super::water::WaterSettings;
+use super::liquid::WaterSettings;
 use super::{fitted, linear_of, pipelines, Draw, Group, Renderer};
 
 /// What a draw binds: a layer's texture and slots, or the water pass's own images, drawn as the sea or as falling water (water/falls.rs).

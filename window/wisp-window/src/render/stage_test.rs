@@ -7,7 +7,7 @@ use std::time::Instant;
 use super::math::{Mat4, IDENTITY};
 use super::model::{EmitterSample, Filter, Layer, ModelData, Paint, Part, Rig, Vertex};
 use super::scene::{Camera, Fog, Light, Pose, Scene};
-use super::water::Preset;
+use super::liquid::Preset;
 use super::Renderer;
 use crate::capture;
 use crate::remaster::Quality;

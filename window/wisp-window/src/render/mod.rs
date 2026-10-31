@@ -25,6 +25,7 @@ mod sprite;
 mod surface;
 pub mod tessellate;
 mod uniforms;
+mod liquid;
 mod water;
 #[cfg(test)]
 mod stage_test;
@@ -47,7 +48,8 @@ use model::{Filter, ModelData, ModelEmitter, Paint, Vertex};
 use groups::Group;
 use shadow::Shadow;
 use uniforms::{lighting_of, FrameUniform, Instance, LayerUniform, Lit, SceneFrame};
-use water::{Glow, Water, WaterSettings};
+use liquid::{Glow, WaterSettings};
+use water::Water;
 use particles::{ParticleFrame, Particles, Slot};
 use scene::{Pose, Scene};
 use targets::Targets;
@@ -88,7 +90,7 @@ struct GpuModel {
     skin: sprite::Skin,
     emitters: Vec<(ModelEmitter, Option<Slot>)>,
     /// The liquid its water layers are drawn as and where their surface lies, for a model that has them.
-    liquid: Option<(water::Preset, surface::Surface)>,
+    liquid: Option<(liquid::Preset, surface::Surface)>,
     /// The model's box when it has a layer that writes depth, which is what makes it a body that disturbs water.
     body: Option<ripples::Extent>,
 }
@@ -271,7 +273,7 @@ impl Renderer {
                 draws.push(self.layer_draw(path, part, layer, falling));
             }
         }
-        let liquid = surface::Surface::of_water(&data, &falling_parts).map(|surface| (water::Preset::of_model(path), surface));
+        let liquid = surface::Surface::of_water(&data, &falling_parts).map(|surface| (liquid::Preset::of_model(path), surface));
         let body = if solid { ripples::extent_of(data.vertices.iter().map(|vertex| vertex.position)) } else { None };
         let emitters = self.register_emitters(path, data.emitters);
         let bones = data.rig.bone_count().max(1);

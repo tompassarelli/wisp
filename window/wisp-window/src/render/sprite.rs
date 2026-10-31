@@ -10,7 +10,7 @@ use super::gpu::{bone_storage, frame_group, frame_uniform_buffer, instance_stora
 use super::math::{Mat4, IDENTITY};
 use super::model::{Part, Vertex};
 use super::scene::{Camera, Light, Scene};
-use super::water::Glow;
+use super::liquid::Glow;
 use crate::model::Facing;
 use super::{Instance, Renderer, DEPTH, HDR, SAMPLES};
 
