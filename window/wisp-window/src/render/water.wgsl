@@ -333,7 +333,7 @@ fn fragment_main(in: Surface) -> @location(0) vec4<f32> {
     let cover = water.calm.z;
     let clump = mix(1.0, smoothstep(1.0 - cover, min(1.0 - cover + 0.22, 1.0), field), breakup);
     var normal = vec3<f32>(0.0, 0.0, 1.0);
-    var disturbed = vec3<f32>(0.0);
+    var disturbed = vec4<f32>(0.0);
     if (!FLAT) {
         let turn = breakup * 0.61;
         let fine = slope(rotated(uv, turn) * mix(1.0, 0.83, breakup) + vec2<f32>(time * 0.011, time * 0.006), time, 0.004, spread) * mix(1.0, (0.2 + 0.8 * clump) * close, breakup);
