@@ -13,13 +13,15 @@ pub enum Pass {
     Clouds,
     Sky,
     Scene,
+    /// On a stage with water, the pass over the solid scene: the water and the layers, particles and weather that blend over it.
+    Water,
     Post,
     Sprites,
     Ui,
     Counter,
 }
 
-pub const PASSES: [Pass; 9] = [Pass::Shadow, Pass::Reflection, Pass::Clouds, Pass::Sky, Pass::Scene, Pass::Post, Pass::Sprites, Pass::Ui, Pass::Counter];
+pub const PASSES: [Pass; 10] = [Pass::Shadow, Pass::Reflection, Pass::Clouds, Pass::Sky, Pass::Scene, Pass::Water, Pass::Post, Pass::Sprites, Pass::Ui, Pass::Counter];
 
 const SLOTS: usize = 4;
 const QUERIES: u32 = 256;

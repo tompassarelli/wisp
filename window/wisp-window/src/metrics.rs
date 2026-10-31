@@ -48,6 +48,7 @@ pub const SERIES: [&str; FIXED + PASSES.len()] = [
     "gpuCloudsMs",
     "gpuSkyMs",
     "gpuSceneMs",
+    "gpuWaterMs",
     "gpuPostMs",
     "gpuSpritesMs",
     "gpuUiMs",

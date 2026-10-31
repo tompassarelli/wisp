@@ -184,7 +184,7 @@ impl Renderer {
                 pass.set_bind_group(0, &self.main.group, &[]);
                 self.draw_both(&mut pass, &self.groups, Stage::Solid, None);
             }
-            let mut pass = Attachments { label: "water", color: &targets.color, depth: &targets.depth, load: wgpu::LoadOp::Load, resolve: Some(&targets.resolved), depth_ops: None, size, timestamps: timer.writes(Pass::Scene) }.begin(encoder);
+            let mut pass = Attachments { label: "water", color: &targets.color, depth: &targets.depth, load: wgpu::LoadOp::Load, resolve: Some(&targets.resolved), depth_ops: None, size, timestamps: timer.writes(Pass::Water) }.begin(encoder);
             pass.set_bind_group(0, &self.main.group, &[]);
             self.draw_both(&mut pass, &self.groups, Stage::Water, Some(images));
             self.draw_both(&mut pass, &self.groups, Stage::Soft, None);
