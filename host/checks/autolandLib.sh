@@ -7,5 +7,11 @@ refuse_member() {
   echo "::error title=Autoland didn't land::$1 (${2:0:10}): $3"
 }
 dispatch() { gh workflow run autoland.yml --ref "$WORKFLOW_REF" -f branch="$1" -f split="$([ "$1" = queue ] || echo yes)"; }
-queue_pending() { [[ "$(for status in pending queued waiting; do gh run list --workflow autoland.yml --status "$status" --limit 100 --json displayTitle --jq 'any(.[]; .displayTitle == "Autoland queue")'; done)" == *true* ]]; }
-requeue_queue() { queue_pending || dispatch queue; }
+sweep_scratch() {
+  git ls-remote origin 'refs/heads/farm/autoland-*' | while read -r _ ref; do
+    branch=${ref#refs/heads/}
+    run=${branch#farm/autoland-}
+    [[ $run =~ ^[0-9]+$ ]] && [ "$(gh run view "$run" --json status --jq .status 2>/dev/null)" = completed ] || continue
+    git push -q origin --delete "$branch" && echo "deleted $branch, which finished run $run left behind" >> "$GITHUB_STEP_SUMMARY"
+  done
+}

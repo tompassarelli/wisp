@@ -284,7 +284,8 @@ it locally.
 1. **Rebase.** The branch's commits are rebased onto main. A conflict stops
    the run and names the conflicting files.
 2. **Checks.** `bun run check` on the rebased commit, which is then pushed
-   to a scratch `farm/autoland-SHA` branch (CI ignores `farm/**`).
+   to a scratch `farm/autoland-RUN_ID` branch (CI ignores `farm/**`); each
+   `queue` run deletes the scratch branches of finished runs.
 3. **Suites.** The [farm](farm.md) test workflow runs the full suite for the
    rebased commit inside the autoland run (wisp:.github/workflows/farm-test.yml
    is also a reusable workflow for this).
@@ -311,19 +312,20 @@ it locally.
    summary links each failed job with the cargo or Bun tests it names.
 5. **Land.** Steps 1 to 4 end in the `judge` job, which refuses or passes a
    tip. A passing tip goes to the `land` job, the only job the runs queue
-   on (group `autoland`, held for about a minute). If main is still the
-   tested base, the tested commits are pushed to it as a fast-forward. If
-   main moved while the suite ran, the job lands the tip rebased onto it
-   without another suite only when main's new commits touch none of the
-   paths the tip changed and none of the shared inputs (lockfiles,
-   `package.json`, tsconfigs, `Cargo.toml`, `knip.json`,
-   `structure.toml`, the clean-room allowlist, `.github/`;
-   `landing` in wisp:host/checks/autolandLanding.ts). Otherwise, or when
-   the rebase conflicts, it dispatches the **train** (below) and the tip is
-   tested on the new main with every other waiting branch, so a tip that
-   touches shared inputs is never starved by a stream of other landings and
-   nothing lands untested. The branches are deleted on landing (each only
-   if it still holds the tested tip). Pushes made with the workflow token
+   on (group `autoland-land`, held for about a minute). It lands the
+   train's lanes in stack order up to the first one whose branch moved on
+   from the tested tip (or lost its deny-list success) or whose paths main
+   changed since the base; none lands when main changed a shared input
+   (lockfiles, `package.json`, tsconfigs, `Cargo.toml`,
+   `knip.json`, `structure.toml`, the clean-room allowlist, `.github/`;
+   `landedPrefix` in wisp:host/checks/autolandLanding.ts). If main is still
+   the tested base, those lanes' tested commits are pushed as a
+   fast-forward; otherwise they are rebased onto main without another suite.
+   The lanes after the cut, and the whole train when the rebase conflicts,
+   are dispatched as a **train** (below) tested on the new main, so one
+   lane's new push or one overlapping landing costs only the lanes stacked
+   after it a second suite and nothing lands untested. The landed branches
+   are deleted (each only if it still holds the tested tip). Pushes made with the workflow token
    start no workflows, so the run dispatches main's CI for the landed commit.
    A dispatched run starts no `workflow_run` either, so that CI run's last job
    dispatches "Main is red" with its own run ID.
@@ -352,7 +354,7 @@ half of the stack as two trains (`halves`), each running the same steps, until
 a train of one tip fails and is refused with the usual `autoland` failure
 status. The halves test side by side, so a planted failure among N tips costs
 about log2(N) suite lengths while the passing halves land on the way. Dispatches
-of `queue` collapse into one pending run: a push, the land job and every
+of `queue` collapse into one pending run: a push and every
 dispatch of a branch skip the dispatch when one is pending or queued. A
 `queue` run leaves out the branches a `split` run (titled `Autoland train
 ...`) is testing.

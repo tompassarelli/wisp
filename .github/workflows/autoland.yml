@@ -2,12 +2,12 @@ name: Autoland
 
 # A claude/** branch (a cloud worker's) lands on main by itself: rebased onto main,
 # checked, and run through the full suites (farm-test.yml); it lands when it fails
-# no test main's farm run doesn't also fail. Every waiting branch is tested at
-# once in its own run; only the push to main is serialized. A tip tested on a main
-# that moved on its paths is not tested alone again: the queue (every waiting
-# branch) is stacked on the new main and tested as one train, which lands whole
-# when green and splits in halves when not, down to the tip at fault. Otherwise
-# the branch stays and the run's summary names the conflicting files or the new
+# no test main's farm run doesn't also fail. The queue (every waiting branch) is
+# stacked on main and tested as one train, which lands when green and splits in
+# halves when not, down to the tip at fault; only the push to main is serialized.
+# A passing train lands its lanes up to the first whose tip moved or whose paths
+# main moved on, and the rest are tested again on the new main. Otherwise the
+# branch stays and the run's summary names the conflicting files or the new
 # failures (wisp:docs/ci.md).
 on:
   push:
@@ -98,6 +98,7 @@ jobs:
           base=$(git rev-parse origin/main)
           out base "$base"
           if [ "$BRANCH" = queue ]; then
+            sweep_scratch
             git fetch -q --prune origin '+refs/heads/claude/*:refs/remotes/origin/claude/*'
             entries=$(git for-each-ref --format='%(refname:strip=3) %(committerdate:unix)' refs/remotes/origin/claude | while read -r name age; do
               states=$(gh api "repos/$GH_REPO/commits/$(git rev-parse "origin/$name")/status" --jq '[.statuses[] | {(.context): .state}] | add // {}')
@@ -148,14 +149,14 @@ jobs:
             fi
             git checkout -q autoland
             git merge -q --ff-only member
-            kept+=("$name"$'\t'"$tip")
+            kept+=("$name"$'\t'"$tip"$'\t'"$(git rev-parse HEAD)")
           done
           out refused "$refused"
           out deferred "$deferred"
           if [ ${#kept[@]} -eq 0 ]; then out verdict none; exit 0; fi
           multi members "$(printf '%s\n' "${kept[@]}")"
           sha=$(git rev-parse HEAD)
-          scratch="farm/autoland-${sha:0:12}"
+          scratch="farm/autoland-$GITHUB_RUN_ID"
           out sha "$sha"
           if ! bun run check > check.log 2>&1; then
             cat check.log
@@ -330,7 +331,7 @@ jobs:
           mapfile -t members <<< "$MEMBERS"
           names=("${members[@]%%$'\t'*}")
           refuse() {
-            for member in "${members[@]}"; do refuse_member "${member%%$'\t'*}" "${member##*$'\t'}" "$1" "$2"; done
+            for member in "${members[@]}"; do IFS=$'\t' read -r name tip _ <<< "$member"; refuse_member "$name" "$tip" "$1" "$2"; done
             exit 1
           }
           # A failing train of several tips is not refused as a whole: each half is tested on its own, down to the tip at fault.
@@ -390,9 +391,9 @@ jobs:
           esac
           echo "go=true" >> "$GITHUB_OUTPUT"
 
-  # The only serialized job: a short push of an already-judged candidate. A tip tested on a main that has since
-  # moved lands only if the moved commits miss every path the tip changes (wisp:host/checks/autolandLanding.ts);
-  # otherwise it is tested again on the new main, as a train of one. Nothing lands untested.
+  # The only serialized job: a short push of an already-judged train. It lands the lanes stacked before the first one
+  # whose tip moved or whose paths main moved on since (landedPrefix in wisp:host/checks/autolandLanding.ts), rebased
+  # onto main when main moved, and dispatches the rest as a train tested again on the new main. Nothing lands untested.
   land:
     needs: [rebase, judge]
     if: ${{ !cancelled() && needs.judge.outputs.go == 'true' }}
@@ -430,53 +431,66 @@ jobs:
           . "$checks/autolandLib.sh"
           mapfile -t members <<< "$MEMBERS"
           names=("${members[@]%%$'\t'*}")
-          lanes=$(printf '%s\n' "${names[@]}" | paste -sd, - | sed 's/,/, /g')
+          retest() {
+            echo "$1: ${*:2} are tested again on the new main" >> "$GITHUB_STEP_SUMMARY"
+            dispatch "${*:2}"
+          }
           requeue() {
-            requeue_queue
-            echo "$1: the queue is tested again on the new main" >> "$GITHUB_STEP_SUMMARY"
+            retest "$1" "${names[@]}"
             [ -z "$DEFERRED" ] || dispatch "$DEFERRED"
             exit 0
           }
-          refspecs=()
+          git fetch -q origin "$SCRATCH" || requeue "the scratch branch $SCRATCH is gone"
+          tips=()
+          stacks=()
+          plan=()
+          below=$BASE
           for member in "${members[@]}"; do
-            name=${member%%$'\t'*}
-            tip=${member##*$'\t'}
-            if [ "$(bun "$checks/denylist.ts" "$(gh api "repos/$GH_REPO/commits/$tip/status")")" != test ]; then
+            IFS=$'\t' read -r name tip stack <<< "$member"
+            moved=false
+            if ! git fetch -q origin "+refs/heads/$name:refs/remotes/origin/$name" || [ "$(git rev-parse "origin/$name")" != "$tip" ]; then
+              moved=true
+              echo "$name moved on from ${tip:0:10}" >> "$GITHUB_STEP_SUMMARY"
+            elif [ "$(bun "$checks/denylist.ts" "$(gh api "repos/$GH_REPO/commits/$tip/status")")" != test ]; then
+              moved=true
               refuse_member "$name" "$tip" "${tip:0:10} no longer carries a denylist success." ""
-              [ "${#names[@]}" -eq 1 ] || requeue_queue
-              exit 1
             fi
-            refspecs+=("+refs/heads/$name:refs/remotes/origin/$name")
+            tips+=("$tip")
+            stacks+=("$stack")
+            plan+=("$(jq -nc --arg paths "$(git diff --name-only "$below" "$stack")" --argjson moved "$moved" '{$paths, $moved}')")
+            below=$stack
           done
-          git fetch -q origin "$SCRATCH" "${refspecs[@]}" || requeue "a branch vanished or the scratch branch is gone"
-          for member in "${members[@]}"; do
-            [ "$(git rev-parse "origin/${member%%$'\t'*}")" = "${member##*$'\t'}" ] || requeue "${member%%$'\t'*} moved on from ${member##*$'\t'}"
-          done
-          candidate=$(git diff --name-only "$BASE" "$SHA")
+          plan=$(printf '%s\n' "${plan[@]}" | jq -sc .)
           landed=
           pushed=
           for _ in 1 2 3; do
             git fetch -q origin main
-            if [ "$(git rev-parse origin/main)" = "$BASE" ]; then
-              landed=$SHA
+            main=$(git rev-parse origin/main)
+            moved_paths=
+            [ "$main" = "$BASE" ] || moved_paths=$(git diff --name-only "$BASE" "$main")
+            count=$(bun "$checks/autolandLanding.ts" "$moved_paths" "$plan")
+            [ "${count:-0}" -gt 0 ] || requeue "no lane lands: the first moved on or main moved on its paths or a shared input"
+            if [ "$main" = "$BASE" ]; then
+              landed=${stacks[count - 1]}
             else
-              [ "$(bun "$checks/autolandLanding.ts" "$candidate" "$(git diff --name-only "$BASE" origin/main)")" = land ] || requeue "main moved on paths $lanes changes"
-              git checkout -q -B land "$SHA"
-              git rebase -q origin/main || { git rebase --abort; requeue "main moved and $lanes now conflicts with it"; }
+              git checkout -q -B land "${stacks[count - 1]}"
+              git rebase -q --onto "$main" "$BASE" || { git rebase --abort; requeue "main moved and the train now conflicts with it"; }
               landed=$(git rev-parse HEAD)
             fi
-            listing=$(git log --format='- %h %s' "origin/main..$landed" | cut -c1-120)
+            listing=$(git log --format='- %h %s' "$main..$landed" | cut -c1-120)
             if git push origin "$landed:refs/heads/main" 2> push.log; then pushed=1; break; fi
           done
+          lanes=$(printf '%s\n' "${names[@]:0:count}" | paste -sd, - | sed 's/,/, /g')
           if [ -z "$pushed" ]; then
-            for member in "${members[@]}"; do refuse_member "${member%%$'\t'*}" "${member##*$'\t'}" "pushing to main failed:" "$(cat push.log)"; done
+            for i in $(seq 0 $((count - 1))); do refuse_member "${names[i]}" "${tips[i]}" "pushing to main failed:" "$(cat push.log)"; done
             exit 1
           fi
-          for member in "${members[@]}"; do
-            git push origin --force-with-lease="refs/heads/${member%%$'\t'*}:${member##*$'\t'}" --delete "${member%%$'\t'*}" || echo "::warning::couldn't delete ${member%%$'\t'*}"
+          for i in $(seq 0 $((count - 1))); do
+            git push origin --force-with-lease="refs/heads/${names[i]}:${tips[i]}" --delete "${names[i]}" || echo "::warning::couldn't delete ${names[i]}"
           done
+          { echo "Landed $count of ${#names[@]} branch(es) ($lanes) on main as ${landed:0:10} and deleted them:"; echo; printf '%s\n' "$listing"; } >> "$GITHUB_STEP_SUMMARY"
+          [ "$count" -eq "${#names[@]}" ] || retest "${names[count]} moved on, or main moved on its paths" "${names[@]:count}"
           [ -z "$DEFERRED" ] || dispatch "$DEFERRED"
-          { echo "Landed ${#names[@]} branch(es) ($lanes) on main as ${landed:0:10} and deleted them:"; echo; printf '%s\n' "$listing"; } >> "$GITHUB_STEP_SUMMARY"
           echo "pushed=true" >> "$GITHUB_OUTPUT"
           echo "sha=$landed" >> "$GITHUB_OUTPUT"
           echo "lanes=$lanes" >> "$GITHUB_OUTPUT"
