@@ -21,6 +21,7 @@ mod shadow;
 mod targets;
 pub mod source;
 mod sprite;
+mod surface;
 pub mod tessellate;
 mod uniforms;
 mod water;
@@ -83,8 +84,8 @@ struct GpuModel {
     bones: usize,
     skin: sprite::Skin,
     emitters: Vec<(ModelEmitter, Option<Slot>)>,
-    /// The liquid its water layer is drawn as, for a model that has one.
-    liquid: Option<water::Preset>,
+    /// The liquid its water layers are drawn as and where their surface lies, for a model that has them.
+    liquid: Option<(water::Preset, surface::Surface)>,
     /// The model's box when it has a layer that writes depth, which is what makes it a body that disturbs water.
     body: Option<ripples::Extent>,
 }
@@ -264,21 +265,20 @@ impl Renderer {
         let indices = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor { label: Some(path), contents: index_bytes, usage: wgpu::BufferUsages::INDEX });
         let mut draws = Vec::new();
         let mut opaque_first = false;
-        let mut water = false;
         let mut solid = false;
         for part in data.parts.iter().filter(|_| drawable) {
             for layer in &part.layers {
                 opaque_first |= layer.filter.index() < Filter::Blend.index();
-                water |= layer.paint == Paint::Water;
                 solid |= layer.paint != Paint::Water && layer.filter.writes_depth();
                 draws.push(self.layer_draw(path, part, layer));
             }
         }
+        let liquid = surface::Surface::of_water(&data).map(|surface| (water::Preset::of_model(path), surface));
         let body = if solid { ripples::extent_of(data.vertices.iter().map(|vertex| vertex.position)) } else { None };
         let emitters = self.register_emitters(path, data.emitters);
         let bones = data.rig.bone_count().max(1);
         self.model_ids.insert(path.to_string(), self.models.len());
-        self.models.push(GpuModel { vertices, indices, draws, opaque_first, skin: sprite::Skin::new(data.vertices, data.indices, &data.parts), rig: data.rig, bones, emitters, liquid: water.then(|| water::Preset::of_model(path)), body });
+        self.models.push(GpuModel { vertices, indices, draws, opaque_first, skin: sprite::Skin::new(data.vertices, data.indices, &data.parts), rig: data.rig, bones, emitters, liquid, body });
         self.counts.push(0);
     }
 
@@ -363,11 +363,14 @@ impl Renderer {
         self.counts.iter_mut().for_each(|count| *count = 0);
         self.order.clear();
         self.water_level = None;
+        let mut widest = 0.0;
         for pose in poses {
             if let Some(&id) = self.model_ids.get(pose.model.as_str()) {
-                if let (Some(liquid), None) = (self.models[id].liquid, self.water_level) {
-                    self.water_level = Some(pose.matrix[14]);
-                    self.water.liquid = liquid;
+                if let Some((liquid, surface)) = self.models[id].liquid {
+                    let (height, area) = surface.placed(&pose.matrix);
+                    if self.water_level.is_none() || area > widest {
+                        (self.water_level, widest, self.water.liquid) = (Some(height), area, liquid);
+                    }
                 }
                 if self.counts[id] == 0 {
                     self.order.push(id);

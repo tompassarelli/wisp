@@ -74,6 +74,14 @@ pub struct WaterSettings {
     /// How strongly long swells streak the surface, and how bright the spiral whirlpools and veins lit from within shine, 0 for none.
     pub swell: f32,
     pub swirl: f32,
+    /// How strongly a slow field of large drifting patches breaks the surface up, 0 to 1: it gathers the caustics, glints and fine ripples into loose clumps and shades the body in broad shapes, so no tile repeat shows.
+    pub breakup: f32,
+    /// View distance in world units past which the fine ripples, caustics and glints have faded out, 0 to leave them at every distance.
+    pub detail_reach: f32,
+    /// Share of the surface the clumps of caustics and glints cover, 0 to 1.
+    pub sparkle_cover: f32,
+    /// How far the horizon haze lifts from the deep colour toward the fog or sky, 0 to 1.
+    pub haze_lift: f32,
 }
 
 impl Default for WaterSettings {
@@ -107,6 +115,10 @@ impl Default for WaterSettings {
             embers: 0.0,
             swell: 1.0,
             swirl: 0.0,
+            breakup: 0.0,
+            detail_reach: 0.0,
+            sparkle_cover: 1.0,
+            haze_lift: 0.6,
         }
     }
 }
@@ -129,7 +141,8 @@ impl Preset {
 impl WaterSettings {
     pub fn of(preset: Preset) -> Self {
         match preset {
-            Preset::Water => Self::default(),
+            // A deep sea: dark teal from depth rather than texture, calm, with caustics and glints gathered into slow clumps and fine ripples only near the camera.
+            Preset::Water => Self { shallow: [0.10, 0.40, 0.38], deep: [0.012, 0.085, 0.10], absorption: 0.02, depth_rate: 0.004, normal_strength: 0.6, specular_power: 220.0, specular: 1.4, caustics: 0.8, reflection: 0.45, wave_height: 10.0, swell: 0.7, breakup: 1.0, detail_reach: 4500.0, sparkle_cover: 0.3, haze_lift: 0.35, ..Self::default() },
             // Naxxramas ooze: thick, green and slow, bright from within where it is deep, with lazy bubbles.
             Preset::Poison => Self {
                 shallow: [0.36, 0.48, 0.14],
@@ -221,6 +234,7 @@ pub(super) struct WaterUniform {
     glow: [f32; 4],
     look: [f32; 4],
     sparks: [f32; 4],
+    calm: [f32; 4],
     ripples: [[f32; 4]; 2 * SOURCES],
 }
 
@@ -243,6 +257,7 @@ impl WaterUniform {
             glow: [glow[0], glow[1], glow[2], settings.emissive],
             look: [settings.crust, settings.shimmer, settings.opacity, settings.bubbles],
             sparks: [settings.embers, settings.swirl, settings.swell, sources.len().min(SOURCES) as f32],
+            calm: [settings.breakup, settings.detail_reach, settings.sparkle_cover, settings.haze_lift],
             ripples,
         }
     }
@@ -441,6 +456,9 @@ mod tests {
         assert!(lava.fps < poison.fps && lava.crust > 0.0 && lava.shimmer > 0.0 && lava.bubbles > 0.0 && lava.embers > 0.0);
         assert!(lava.glow_light > poison.glow_light, "lava lights its surroundings most");
         assert_eq!(water.glow(0.0, 0.0).light, [0.0, 0.0, 0.0, 1.0]);
+        assert!(water.breakup > 0.0 && water.detail_reach > 0.0 && water.sparkle_cover < 1.0, "the sea breaks its texture up and keeps fine detail near the camera");
+        assert!(water.deep.iter().all(|&channel| channel < 0.15), "the deep sea is dark");
+        assert_eq!((poison.breakup, lava.breakup), (0.0, 0.0), "the thick liquids keep their own surface");
     }
 
     #[test]

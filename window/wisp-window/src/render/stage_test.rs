@@ -454,3 +454,19 @@ fn the_far_sea_mirrors_the_sky_and_not_the_clear_colour() {
     let darkest = (300..340).flat_map(|y| (0..280).map(move |x| (x, y))).map(|(x, y)| pixel(&rgba, size.0, x, y).iter().map(|&channel| u32::from(channel)).sum::<u32>()).min().unwrap();
     assert!(darkest > 150, "the far sea shows the dark clear colour, its darkest pixel sums to {darkest}");
 }
+
+/// Tomb of Sargeras lays a narrow water strip at the deck before a wide sea far below it; the scene is mirrored in the sea's plane, so a reflection sits under what it reflects.
+#[test]
+fn the_scene_is_mirrored_in_the_widest_liquid_surface_at_its_own_height() {
+    let Some(mut stage) = Stage::new((320, 200)) else { return };
+    stage.renderer.add_model("strip", model(block([-50.0, -60.0, 0.0], [50.0, 60.0, 0.0]), Paint::Water, Filter::Blend));
+    let mut scene = Stage::scene(1.0, Preset::Water);
+    let mut strip = placed("strip", 0.0, 0.0, 1.0, [1.0; 3]);
+    strip.matrix[0] = 12.0;
+    scene.poses.insert(0, strip);
+    for pose in scene.poses.iter_mut().filter(|pose| pose.model == sea(Preset::Water)) {
+        pose.matrix[14] = -360.0;
+    }
+    stage.draw(&scene);
+    assert_eq!(stage.renderer.water_level, Some(-360.0));
+}
