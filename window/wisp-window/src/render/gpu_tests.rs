@@ -20,9 +20,13 @@ fn translation(x: f32, y: f32, z: f32) -> Mat4 {
 }
 
 fn render(renderer: &mut Renderer, device: &wgpu::Device, queue: &wgpu::Queue, scene: &Scene) -> Vec<u8> {
+    render_at(renderer, device, queue, scene, SIDE)
+}
+
+fn render_at(renderer: &mut Renderer, device: &wgpu::Device, queue: &wgpu::Queue, scene: &Scene, side: u32) -> Vec<u8> {
     let target = device.create_texture(&wgpu::TextureDescriptor {
         label: Some("target"),
-        size: wgpu::Extent3d { width: SIDE, height: SIDE, depth_or_array_layers: 1 },
+        size: wgpu::Extent3d { width: side, height: side, depth_or_array_layers: 1 },
         mip_level_count: 1,
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
@@ -31,12 +35,12 @@ fn render(renderer: &mut Renderer, device: &wgpu::Device, queue: &wgpu::Queue, s
         view_formats: &[],
     });
     let mut encoder = device.create_command_encoder(&Default::default());
-    renderer.draw(&mut encoder, &target.create_view(&Default::default()), (SIDE, SIDE), 1.0, scene);
-    let buffer = device.create_buffer(&wgpu::BufferDescriptor { label: Some("read"), size: (SIDE * SIDE * 4) as u64, usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ, mapped_at_creation: false });
+    renderer.draw(&mut encoder, &target.create_view(&Default::default()), (side, side), 1.0, scene);
+    let buffer = device.create_buffer(&wgpu::BufferDescriptor { label: Some("read"), size: (side * side * 4) as u64, usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ, mapped_at_creation: false });
     encoder.copy_texture_to_buffer(
         target.as_image_copy(),
-        wgpu::TexelCopyBufferInfo { buffer: &buffer, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(SIDE * 4), rows_per_image: Some(SIDE) } },
-        wgpu::Extent3d { width: SIDE, height: SIDE, depth_or_array_layers: 1 },
+        wgpu::TexelCopyBufferInfo { buffer: &buffer, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(side * 4), rows_per_image: Some(side) } },
+        wgpu::Extent3d { width: side, height: side, depth_or_array_layers: 1 },
     );
     queue.submit([encoder.finish()]);
     buffer.slice(..).map_async(wgpu::MapMode::Read, |_| ());

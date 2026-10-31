@@ -99,7 +99,31 @@ fn shadow_fragment(in: Varying) {
     }
 }
 
-fn sun_visibility(world: vec3<f32>, normal: vec3<f32>, facing: f32) -> f32 {
+const TURN = 6.2831853;
+const GOLDEN_ANGLE = 2.3999632;
+const MIN_RADIUS = 1.0;
+const MAX_RADIUS = 8.0;
+
+fn interleaved_noise(pixel: vec2<f32>) -> f32 {
+    return fract(52.9829189 * fract(dot(pixel, vec2<f32>(0.06711056, 0.00583715))));
+}
+
+fn disk_tap(index: u32, count: u32, turn: f32) -> vec2<f32> {
+    let angle = f32(index) * GOLDEN_ANGLE + turn;
+    return sqrt((f32(index) + 0.5) / f32(count)) * vec2<f32>(cos(angle), sin(angle));
+}
+
+fn receiver_slope(normal: vec3<f32>) -> vec2<f32> {
+    let m = frame.sun_projection;
+    let row_x = vec3<f32>(m[0][0], m[1][0], m[2][0]);
+    let row_y = vec3<f32>(m[0][1], m[1][1], m[2][1]);
+    let row_z = vec3<f32>(m[0][2], m[1][2], m[2][2]);
+    let q = vec3<f32>(dot(row_x, normal) / dot(row_x, row_x), dot(row_y, normal) / dot(row_y, row_y), dot(row_z, normal) / dot(row_z, row_z));
+    let along = max(abs(q.z), 0.25 * length(q)) * select(-1.0, 1.0, q.z >= 0.0);
+    return vec2<f32>(-2.0 * q.x, 2.0 * q.y) / along;
+}
+
+fn sun_visibility(world: vec3<f32>, normal: vec3<f32>, facing: f32, pixel: vec2<f32>) -> f32 {
     let shifted = world + normal * frame.shadow.y * (1.0 - 0.5 * clamp(facing, 0.0, 1.0));
     let at = frame.sun_projection * vec4<f32>(shifted, 1.0);
     let uv = vec2<f32>(at.x * 0.5 + 0.5, 0.5 - at.y * 0.5);
@@ -107,13 +131,38 @@ fn sun_visibility(world: vec3<f32>, normal: vec3<f32>, facing: f32) -> f32 {
         return 1.0;
     }
     let texel = frame.shadow.x;
-    var lit = 0.0;
-    for (var dy = -1; dy <= 1; dy++) {
-        for (var dx = -1; dx <= 1; dx++) {
-            lit += textureSampleCompareLevel(shadow_map, shadow_sampler, uv + vec2<f32>(f32(dx), f32(dy)) * texel, at.z);
+    let depth_range = frame.shadow_filter.x;
+    let light_tan = frame.shadow_filter.y;
+    let texel_world = frame.shadow_filter.z;
+    let taps = u32(frame.shadow_filter.w);
+    let searching = max(taps / 2u, 4u);
+    let slope = receiver_slope(normal);
+    let flat_bias = 0.5 * texel_world / depth_range;
+    let tilt_bias = texel * (abs(slope.x) + abs(slope.y));
+    let size = vec2<f32>(textureDimensions(shadow_map));
+    let turn = interleaved_noise(pixel) * TURN;
+
+    var gap = 0.0;
+    var blockers = 0.0;
+    for (var i = 0u; i < searching; i++) {
+        let offset = disk_tap(i, searching, turn) * MAX_RADIUS * texel;
+        let expected = at.z + dot(slope, offset);
+        let stored = textureLoad(shadow_map, clamp(vec2<i32>((uv + offset) * size), vec2<i32>(0), vec2<i32>(size) - vec2<i32>(1)), 0);
+        if (stored < expected - flat_bias - tilt_bias) {
+            gap += expected - stored;
+            blockers += 1.0;
         }
     }
-    return lit / 9.0;
+    if (blockers == 0.0) {
+        return 1.0;
+    }
+    let radius = clamp(0.5 * gap / blockers * depth_range * light_tan / texel_world, MIN_RADIUS, MAX_RADIUS);
+    var lit = 0.0;
+    for (var i = 0u; i < taps; i++) {
+        let offset = disk_tap(i, taps, turn) * radius * texel;
+        lit += textureSampleCompareLevel(shadow_map, shadow_sampler, uv + offset, at.z + dot(slope, offset) - flat_bias - tilt_bias);
+    }
+    return lit / f32(taps);
 }
 
 fn light_of(in: Varying) -> vec3<f32> {
@@ -127,7 +176,7 @@ fn light_of(in: Varying) -> vec3<f32> {
     let diffuse = clamp((facing + WRAP) / (1.0 + WRAP), 0.0, 1.0);
     var visibility = 1.0;
     if (layer.lighting == LIT_AND_SHADOWED && frame.shadow.z > 0.5) {
-        visibility = sun_visibility(in.world, normal, facing);
+        visibility = sun_visibility(in.world, normal, facing, in.clip.xy);
     }
     let sky = 0.85 + 0.3 * (normal.z * 0.5 + 0.5);
     var light = min(frame.light_ambient.xyz * sky + frame.light_key.xyz * diffuse * visibility, vec3<f32>(MAX_LIGHT));

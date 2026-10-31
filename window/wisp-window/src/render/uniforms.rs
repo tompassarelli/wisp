@@ -28,14 +28,23 @@ pub struct SceneFrame {
     pub glow_at: [f32; 4],
     pub sun_projection: Mat4,
     pub shadow: [f32; 4],
+    pub shadow_filter: [f32; 4],
 }
 
 /// What the shader needs to look a world position up in the sun's map.
 pub struct Sun {
     pub view_projection: Mat4,
     pub texel: f32,
-    /// World units a receiver is pushed along its normal before the lookup, one and a half texels.
+    /// World units a receiver is pushed along its normal before the lookup, half a texel.
     pub offset: f32,
+    /// World units a texel spans.
+    pub texel_world: f32,
+    /// World units from the nearest to the farthest depth the map holds.
+    pub depth_range: f32,
+    /// How wide the light is: world units of penumbra per world unit between a caster and what it shades.
+    pub light_tan: f32,
+    /// Taps the shadow edge is filtered with.
+    pub taps: f32,
 }
 
 /// How a frame lights what it draws: the sky is drawn as its textures are, and only a sunlit frame holds a shadow map to look up.

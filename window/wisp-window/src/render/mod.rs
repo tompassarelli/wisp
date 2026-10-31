@@ -340,9 +340,9 @@ impl Renderer {
             Some(fog) => ([fog.color[0], fog.color[1], fog.color[2], 1.0], [fog.start, fog.end, fog.max, 0.0]),
             None => ([0.0; 4], [0.0, 1.0, 1.0, 0.0]),
         };
-        let (sun_projection, shadow) = match lit {
-            Lit::Sunlit(sun) => (sun.view_projection, [sun.texel, sun.offset, 1.0, 0.0]),
-            Lit::Unlit | Lit::Ambient => (IDENTITY, [0.0; 4]),
+        let (sun_projection, shadow, shadow_filter) = match lit {
+            Lit::Sunlit(sun) => (sun.view_projection, [sun.texel, sun.offset, 1.0, 0.0], [sun.depth_range, sun.light_tan, sun.texel_world, sun.taps]),
+            Lit::Unlit | Lit::Ambient => (IDENTITY, [0.0; 4], [0.0; 4]),
         };
         let flat = multiply(&projection(camera.tangent, camera.near, far, aspect, window, camera.rise), &view);
         let view_projection = if mirror { multiply(&flat, &mirrored(plane)) } else { flat };
@@ -356,6 +356,7 @@ impl Renderer {
             glow_at: glow.at,
             sun_projection,
             shadow,
+            shadow_filter,
         }
     }
 

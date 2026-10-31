@@ -57,6 +57,18 @@ fn transform(m: &Mat4, p: [f32; 3]) -> [f32; 3] {
     [0, 1, 2].map(|row| m[row] * p[0] + m[4 + row] * p[1] + m[8 + row] * p[2] + m[12 + row])
 }
 
+/// World units of penumbra per world unit between a caster and what it shades: a sun some four degrees wide, broader than the real one so the edge reads at match zoom.
+pub(super) const LIGHT_TAN: f32 = 0.07;
+
+/// How many taps filter the shadow edge: the map's size sets the budget, since a smaller map is the cheaper preset.
+fn taps(map: u32) -> f32 {
+    match map {
+        0..=1024 => 8.0,
+        1025..=2048 => 16.0,
+        _ => 24.0,
+    }
+}
+
 /// The view-projection of the sun looking along `-toward` over the camera's slice, `corners` from `Camera::sun_corners`.
 pub(super) fn sun(corners: [[f32; 3]; 8], toward: [f32; 3], map: u32) -> Sun {
     let view = light_view(toward);
@@ -67,8 +79,9 @@ pub(super) fn sun(corners: [[f32; 3]; 8], toward: [f32; 3], map: u32) -> Sun {
     let texel = side / map as f32;
     let snap = |centre: f32| (centre / texel).round() * texel;
     let (cx, cy) = (snap((x_low + x_high) * 0.5), snap((y_low + y_high) * 0.5));
-    let projection = orthographic(cx - side * 0.5, cx + side * 0.5, cy - side * 0.5, cy + side * 0.5, z_high + CASTER_REACH, z_low);
-    Sun { view_projection: multiply(&projection, &view), texel: 1.0 / map as f32, offset: texel * 1.5 }
+    let (highest, lowest) = (z_high + CASTER_REACH, z_low);
+    let projection = orthographic(cx - side * 0.5, cx + side * 0.5, cy - side * 0.5, cy + side * 0.5, highest, lowest);
+    Sun { view_projection: multiply(&projection, &view), texel: 1.0 / map as f32, offset: texel * 0.5, texel_world: texel, depth_range: highest - lowest, light_tan: LIGHT_TAN, taps: taps(map) }
 }
 
 
