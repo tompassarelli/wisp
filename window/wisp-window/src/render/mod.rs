@@ -15,6 +15,7 @@ mod weather;
 mod particles;
 mod passes;
 mod pipelines;
+mod ripples;
 mod scene;
 mod targets;
 pub mod source;
@@ -81,6 +82,8 @@ struct GpuModel {
     skin: sprite::Skin,
     emitters: Vec<(ModelEmitter, Option<Slot>)>,
     water: bool,
+    /// The model's box when it has a layer that writes depth, which is what makes it a body that disturbs water.
+    body: Option<ripples::Extent>,
 }
 
 struct Group {
@@ -132,6 +135,7 @@ pub struct Renderer {
     water: Water,
     started: Instant,
     water_level: Option<f32>,
+    ripples: ripples::Ripples,
     targets: Option<Targets>,
     post: Post,
     tuning: Tuning,
@@ -217,6 +221,7 @@ impl Renderer {
             water,
             started: Instant::now(),
             water_level: None,
+            ripples: ripples::Ripples::default(),
             targets: None,
             post,
             tuning: assets::tuning_of(features, TUNING),
@@ -255,17 +260,20 @@ impl Renderer {
         let mut draws = Vec::new();
         let mut opaque_first = false;
         let mut water = false;
+        let mut solid = false;
         for part in data.parts.iter().filter(|_| drawable) {
             for layer in &part.layers {
                 opaque_first |= layer.filter.index() < Filter::Blend.index();
                 water |= layer.paint == Paint::Water;
+                solid |= layer.paint != Paint::Water && layer.filter.writes_depth();
                 draws.push(self.layer_draw(path, part, layer));
             }
         }
+        let body = if solid { ripples::extent_of(data.vertices.iter().map(|vertex| vertex.position)) } else { None };
         let emitters = self.register_emitters(path, data.emitters);
         let bones = data.rig.bone_count().max(1);
         self.model_ids.insert(path.to_string(), self.models.len());
-        self.models.push(GpuModel { vertices, indices, draws, opaque_first, skin: sprite::Skin::new(data.vertices, data.indices, &data.parts), rig: data.rig, bones, emitters, water });
+        self.models.push(GpuModel { vertices, indices, draws, opaque_first, skin: sprite::Skin::new(data.vertices, data.indices, &data.parts), rig: data.rig, bones, emitters, water, body });
         self.counts.push(0);
     }
 

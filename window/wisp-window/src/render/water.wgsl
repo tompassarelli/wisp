@@ -8,6 +8,7 @@ struct Water {
     glow: vec4<f32>,
     look: vec4<f32>,
     sparks: vec4<f32>,
+    ripples: array<vec4<f32>, 32>,
 };
 
 @group(1) @binding(0) var frames: texture_2d_array<f32>;
@@ -170,6 +171,85 @@ fn embers(p: vec2<f32>, time: f32, density: f32) -> f32 {
     return min(glow, 1.0);
 }
 
+// One ring of height across x in -1..1, and its slope in x: a crest and a trough under a smooth window.
+fn ring(x: f32) -> vec2<f32> {
+    let inside = 1.0 - x * x;
+    let window = inside * inside;
+    let a = 6.2832 * x;
+    return vec2<f32>(sin(a) * window, 6.2832 * cos(a) * window - 4.0 * x * inside * sin(a));
+}
+
+// What bodies in the water do to the surface: x and y are the slope they add, z the foam. Bodies at rest send rings outward and drag a wake when they move;
+// a body that enters or leaves sends a burst of rings with a crown of foam that fades. Sources come from the renderer (ripples.rs).
+fn disturbance(p: vec2<f32>, time: f32) -> vec3<f32> {
+    var slope = vec2<f32>(0.0);
+    var foam = 0.0;
+    let count = i32(water.sparks.y);
+    for (var i = 0; i < count; i++) {
+        let at = water.ripples[2 * i];
+        let motion = water.ripples[2 * i + 1];
+        let offset = p - at.xy;
+        let d = length(offset);
+        let outward = offset / max(d, 0.001);
+        let r = at.z;
+        if (motion.w < 0.5) {
+            let speed = length(motion.xy);
+            let reach = r * 2.6 + 90.0;
+            if (d > r * 0.6 && d < r + reach) {
+                for (var k = 0; k < 3; k++) {
+                    let phase = fract(time * 0.33 + f32(k) / 3.0 + at.x * 0.0071);
+                    let width = 12.0 + phase * 34.0;
+                    let x = (d - (r * 1.02 + phase * reach)) / width;
+                    if (abs(x) < 1.0) {
+                        let amp = pow(1.0 - phase, 1.6) * smoothstep(0.0, 0.1, phase) * (0.6 + min(speed / 300.0, 0.8));
+                        let h = ring(x);
+                        slope += outward * (h.y / width * 1.4 * amp);
+                        foam += max(h.x, 0.0) * amp * 0.5;
+                    }
+                }
+                let collar = smoothstep(r * 1.5, r * 1.0, d) * smoothstep(r * 0.6, r * 0.95, d);
+                foam += collar * 0.3 * (0.6 + 0.4 * noise(p * 0.05 + time * 0.4));
+            }
+            let length_of_wake = 160.0 + speed * 1.2;
+            if (speed > 35.0) {
+                let behind = -motion.xy / speed;
+                let along = dot(offset, behind);
+                if (along > 0.0 && along < length_of_wake) {
+                    let across = abs(dot(offset, vec2<f32>(-behind.y, behind.x)));
+                    let arm = 1.0 - smoothstep(0.0, 16.0 + along * 0.08, abs(across - (r * 0.8 + along * 0.3)));
+                    let fade = pow(1.0 - along / length_of_wake, 1.5) * smoothstep(35.0, 250.0, speed);
+                    foam += arm * fade * (0.5 + 0.5 * noise(offset * 0.08 - time * 0.5)) * 1.1;
+                    slope += outward * (arm * fade * 0.12 * sin(along * 0.15 - time * 5.0));
+                }
+            }
+        } else {
+            let age = time - at.w;
+            let strength = motion.z;
+            if (age >= 0.0 && age < 1.9) {
+                let fade = pow(1.0 - age / 1.9, 1.8);
+                for (var k = 0; k < 3; k++) {
+                    let a = age - f32(k) * 0.13;
+                    if (a >= 0.0) {
+                        let front = r * 1.1 + a * (300.0 + 120.0 * strength) / (1.0 + a * 0.6);
+                        let width = 16.0 + a * 52.0;
+                        let x = (d - front) / width;
+                        if (abs(x) < 1.0) {
+                            let amp = strength * fade * (1.0 - f32(k) * 0.25);
+                            let h = ring(x);
+                            slope += outward * (h.y / width * 1.4 * 1.6 * amp);
+                            foam += max(h.x, 0.0) * amp * 0.45;
+                        }
+                    }
+                }
+                let crown = r * 1.25 + age * 110.0;
+                let spray = (1.0 - smoothstep(crown * 0.7, crown, d)) * (1.0 - smoothstep(0.0, 0.75, age)) * strength * step(r * 0.5, d);
+                foam += spray * (0.35 + 0.65 * noise(offset * 0.11 + age * 3.0)) * 0.8;
+            }
+        }
+    }
+    return vec3<f32>(slope, min(foam, 0.7));
+}
+
 @fragment
 fn fragment_main(in: Surface) -> @location(0) vec4<f32> {
     let time = water.flow.w;
@@ -187,10 +267,11 @@ fn fragment_main(in: Surface) -> @location(0) vec4<f32> {
     let fine = slope(uv * 1.0 + vec2<f32>(time * 0.011, time * 0.006), time, 0.004, spread);
     let coarse = slope(uv * 0.37 - vec2<f32>(time * 0.007, -time * 0.004), time * 0.7, 0.01, spread);
     let broad = gerstner(in.world.xy, time);
+    let disturbed = disturbance(in.world.xy, time);
     let strength = water.flow.y * 3.0 * calm * near;
     let n1 = normalize(vec3<f32>(-fine * strength, 1.0));
     let n2 = normalize(vec3<f32>(-coarse * strength, 1.0));
-    let n3 = normalize(vec3<f32>(-broad * calm, 1.0));
+    let n3 = normalize(vec3<f32>(-(broad * calm + disturbed.xy * min(near * 1.5, 1.0)), 1.0));
     let normal = reorient(reorient(n1, n2), n3);
 
     let facing = clamp(dot(normal, view), 0.0, 1.0);
@@ -250,7 +331,7 @@ fn fragment_main(in: Surface) -> @location(0) vec4<f32> {
     let edge = 1.0 - smoothstep(0.0, water.foam.w, thickness);
     let crest = smoothstep(0.55, 0.9, frame_height(uv * 2.3 + vec2<f32>(0.0, time * 0.02), time)) * smoothstep(0.92, 1.0, normal.z) * 0.25 * near;
     let ripple = 0.5 + 0.5 * sin(thickness * 0.08 - time * 2.0 + noise(in.world.xy * 0.15) * 6.0);
-    let foam = clamp(edge * (0.55 + 0.45 * ripple) * (0.4 + noise(in.world.xy * 0.9 + time * 0.3)) + crest, 0.0, 1.0);
+    let foam = clamp(edge * (0.55 + 0.45 * ripple) * (0.4 + noise(in.world.xy * 0.9 + time * 0.3)) + crest + disturbed.z, 0.0, 1.0);
     colour = mix(colour, water.foam.rgb, foam);
 
     if (frame.fog_color.w > 0.5) {

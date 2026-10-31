@@ -149,6 +149,7 @@ impl Stage {
         renderer.add_model("land", model(block([-6000.0, 1500.0, -520.0], [6000.0, 9000.0, 12.0]), Paint::None, Filter::Opaque));
         renderer.add_model("deck", model(block([-700.0, -250.0, -160.0], [700.0, 250.0, 30.0]), Paint::None, Filter::Opaque));
         renderer.add_model("fighter", model(block([-40.0, -30.0, 0.0], [40.0, 30.0, 220.0]), Paint::None, Filter::Opaque));
+        renderer.add_model("pillar", model(block([-34.0, -34.0, -260.0], [34.0, 34.0, 70.0]), Paint::None, Filter::Opaque));
         let target = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("capture"),
             size: wgpu::Extent3d { width: size.0, height: size.1, depth_or_array_layers: 1 },
@@ -238,26 +239,39 @@ fn water_is_drawn_behind_the_fighter_and_the_deck() {
     assert!(fighter[0] > fighter[2], "the red fighter should stay in front of the water, got {fighter:?}");
 }
 
+fn milliseconds_a_frame(stage: &mut Stage, scene: &Scene) -> f64 {
+    for _ in 0..20 {
+        stage.draw(scene);
+    }
+    stage.device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
+    let frames = 200;
+    let began = Instant::now();
+    for _ in 0..frames {
+        stage.draw(scene);
+        stage.device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
+    }
+    began.elapsed().as_secs_f64() * 1000.0 / f64::from(frames)
+}
+
+/// Times a frame of the stage with no body in the water and then with a fighter and seven pillars standing in it; `WISP_WATER_BUDGET_MS` sets the frame budget (8.3 by default, the 120 Hz of the laptop panel).
 #[test]
 fn frame_time_with_water_at_the_laptop_panel() {
     if std::env::var("WISP_WATER_BENCH").is_err() {
         return;
     }
     let Some(mut stage) = Stage::new((2880, 1920)) else { return };
-    let scene = Stage::scene(1.0, Preset::Water);
-    for _ in 0..20 {
-        stage.draw(&scene);
+    let budget: f64 = std::env::var("WISP_WATER_BUDGET_MS").ok().and_then(|value| value.parse().ok()).unwrap_or(8.3);
+    let bare = milliseconds_a_frame(&mut stage, &Stage::scene(1.0, Preset::Water));
+    let mut scene = reacting(-240.0, -70.0, 100);
+    for index in 0..6 {
+        let mut pillar = placed("pillar", -900.0 + index as f32 * 360.0, -430.0 + index as f32 * 30.0, 0.0, [0.5, 0.36, 0.2]);
+        pillar.id = 10 + index;
+        scene.poses.push(pillar);
     }
-    stage.device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
-    let frames = 200;
-    let began = Instant::now();
-    for _ in 0..frames {
-        stage.draw(&scene);
-        stage.device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
-    }
-    let milliseconds = began.elapsed().as_secs_f64() * 1000.0 / f64::from(frames);
-    println!("water frame: {milliseconds:.2} ms over {frames} frames");
-    assert!(milliseconds < 8.3, "water at 2880x1920 took {milliseconds:.2} ms a frame, over the 8.3 ms of 120 Hz");
+    let reacting = milliseconds_a_frame(&mut stage, &scene);
+    println!("water frame: {bare:.2} ms with nothing in the water, {reacting:.2} ms with eight bodies in it");
+    assert!(reacting - bare < 1.5, "eight bodies in the water cost {:.2} ms a frame", reacting - bare);
+    assert!(reacting < budget, "water at 2880x1920 took {reacting:.2} ms a frame, over the {budget} ms budget");
 }
 
 fn mean(rgba: &[u8], width: u32, x: std::ops::Range<u32>, y: std::ops::Range<u32>) -> [f32; 3] {
@@ -303,4 +317,66 @@ fn a_pose_hands_the_rig_its_clock_in_seconds_so_global_sequences_run_at_game_spe
     pose.clock = 2.5;
     renderer.layout(&[pose]);
     assert_eq!(f32::from_bits(seen.load(std::sync::atomic::Ordering::Relaxed)), 2.5);
+}
+
+/// A fighter at `x` and height `z` over a stage with two pillars standing in the sea, as game frame `frame`.
+fn reacting(x: f32, z: f32, frame: u32) -> Scene {
+    let mut scene = Stage::scene(1.0, Preset::Water);
+    scene.poses.truncate(5);
+    let mut fighter = placed("fighter", x, -450.0, z, [0.95, 0.25, 0.2]);
+    fighter.id = 1;
+    let mut left = placed("pillar", -560.0, -420.0, 0.0, [0.5, 0.36, 0.2]);
+    left.id = 2;
+    let mut right = placed("pillar", 470.0, -420.0, 0.0, [0.5, 0.36, 0.2]);
+    right.id = 3;
+    scene.poses.extend([left, right, fighter]);
+    scene.frame = frame;
+    scene
+}
+
+fn panel(stage: &mut Stage, scene: &Scene, wait: f32) -> Vec<u8> {
+    std::thread::sleep(std::time::Duration::from_secs_f32(wait));
+    stage.draw(scene);
+    stage.read()
+}
+
+/// A fighter falls into the sea, wades and is launched out while two pillars stand in it; `WISP_WATER_CAPTURE_DIR` gets the six moments as one strip.
+#[test]
+fn bodies_in_the_water_send_rings_a_splash_and_a_wake() {
+    let Some(mut stage) = Stage::new((960, 640)) else { return };
+    let mut panels = Vec::new();
+    panels.push(panel(&mut stage, &reacting(-240.0, 300.0, 100), 0.0));
+    let kinds = |stage: &Stage| stage.renderer.ripples.sources().iter().map(|source| source.motion[3] as u32).collect::<Vec<_>>();
+    panels.push({
+        stage.draw(&reacting(-240.0, 60.0, 101));
+        panel(&mut stage, &reacting(-240.0, -70.0, 108), 0.0)
+    });
+    assert_eq!(kinds(&stage), vec![1, 0, 0, 0], "falling in sends one entry burst, then the fighter and two pillars keep rings");
+    panels.push(panel(&mut stage, &reacting(-240.0, -70.0, 109), 0.45));
+    let mut x = -240.0;
+    for frame in 110..156 {
+        x += 5.0;
+        stage.draw(&reacting(x, -70.0, frame));
+    }
+    panels.push(panel(&mut stage, &reacting(x + 5.0, -70.0, 156), 0.0));
+    stage.draw(&reacting(x + 10.0, 200.0, 165));
+    panels.push(panel(&mut stage, &reacting(x + 12.0, 330.0, 166), 0.12));
+    let after = kinds(&stage);
+    assert_eq!(after.iter().filter(|kind| **kind == 2).count(), 1, "leaving sends one exit burst: {after:?}");
+    assert_eq!(after.iter().filter(|kind| **kind == 0).count(), 2, "the pillars keep their rings and the fighter above the water has none: {after:?}");
+    panels.push(panel(&mut stage, &reacting(x + 12.0, 330.0, 167), 0.5));
+    assert!(stage.renderer.problems.is_empty(), "{:?}", stage.renderer.problems);
+    if let Ok(dir) = std::env::var("WISP_WATER_CAPTURE_DIR") {
+        std::fs::create_dir_all(&dir).unwrap();
+        let (width, height) = (stage.size.0 as usize, stage.size.1 as usize);
+        let mut strip = vec![0u8; width * 3 * height * 2 * 4];
+        for (index, rgba) in panels.iter().enumerate() {
+            let (column, row) = (index % 3, index / 3);
+            for line in 0..height {
+                let to = ((row * height + line) * width * 3 + column * width) * 4;
+                strip[to..to + width * 4].copy_from_slice(&rgba[line * width * 4..(line + 1) * width * 4]);
+            }
+        }
+        capture::write(&PathBuf::from(dir).join("splash-strip.png"), (width * 3) as u32, (height * 2) as u32, &strip).unwrap();
+    }
 }
