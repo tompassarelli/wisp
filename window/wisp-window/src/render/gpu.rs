@@ -19,8 +19,8 @@ pub(super) fn bone_storage(device: &wgpu::Device, count: usize) -> wgpu::Buffer 
     device.create_buffer(&wgpu::BufferDescriptor { label: Some("bones"), size: (count * size_of::<Mat4>()) as u64, usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false })
 }
 
-pub(super) fn opacity_storage(device: &wgpu::Device, count: usize) -> wgpu::Buffer {
-    device.create_buffer(&wgpu::BufferDescriptor { label: Some("opacities"), size: (count * size_of::<f32>()) as u64, usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false })
+pub(super) fn color_storage(device: &wgpu::Device, count: usize) -> wgpu::Buffer {
+    device.create_buffer(&wgpu::BufferDescriptor { label: Some("slot colors"), size: (count * size_of::<[f32; 4]>()) as u64, usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false })
 }
 
 pub(super) fn uv_storage(device: &wgpu::Device, slots: usize) -> wgpu::Buffer {
@@ -31,11 +31,11 @@ pub(super) fn instance_storage(device: &wgpu::Device, count: usize) -> wgpu::Buf
     device.create_buffer(&wgpu::BufferDescriptor { label: Some("instances"), size: (count * size_of::<Instance>()) as u64, usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false })
 }
 
-pub(super) fn frame_group(device: &wgpu::Device, layout: &wgpu::BindGroupLayout, frame: &wgpu::Buffer, bones: &wgpu::Buffer, opacities: &wgpu::Buffer, uv_rows: &wgpu::Buffer) -> wgpu::BindGroup {
+pub(super) fn frame_group(device: &wgpu::Device, layout: &wgpu::BindGroupLayout, frame: &wgpu::Buffer, bones: &wgpu::Buffer, colors: &wgpu::Buffer, uv_rows: &wgpu::Buffer) -> wgpu::BindGroup {
     device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("frame"),
         layout,
-        entries: &[wgpu::BindGroupEntry { binding: 0, resource: frame.as_entire_binding() }, wgpu::BindGroupEntry { binding: 1, resource: bones.as_entire_binding() }, wgpu::BindGroupEntry { binding: 2, resource: opacities.as_entire_binding() }, wgpu::BindGroupEntry { binding: 3, resource: uv_rows.as_entire_binding() }],
+        entries: &[wgpu::BindGroupEntry { binding: 0, resource: frame.as_entire_binding() }, wgpu::BindGroupEntry { binding: 1, resource: bones.as_entire_binding() }, wgpu::BindGroupEntry { binding: 2, resource: colors.as_entire_binding() }, wgpu::BindGroupEntry { binding: 3, resource: uv_rows.as_entire_binding() }],
     })
 }
 

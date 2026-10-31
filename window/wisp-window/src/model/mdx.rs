@@ -1,6 +1,6 @@
 use super::track::{Key, LineType, Track};
 use super::emitter::{Emitter2, Scalar};
-use super::{Geoset, GeosetAnim, TextureAnim, Model, ModelError, Node, Sequence};
+use super::{Color, Geoset, GeosetAnim, TextureAnim, Model, ModelError, Node, Sequence};
 
 mod materials;
 
@@ -207,20 +207,20 @@ fn parse_geoset_anims(chunk: &mut Reader, model: &mut Model) -> Result<(), Model
         let start = chunk.at;
         let size = chunk.count()?;
         let mut alpha = Scalar::fixed(chunk.f32()?);
-        chunk.take(4 + 12)?;
+        chunk.take(4)?;
+        // Classic draws the stored colour order as red, green, blue, whatever the flags say.
+        let mut color = Color { fixed: chunk.floats::<3>()?, track: None };
         let geoset = chunk.i32()?;
         while chunk.at < start + size {
             match chunk.keyword()? {
                 b"KGAO" => alpha.track = Some(chunk.track::<1>()?),
-                b"KGAC" => {
-                    chunk.track::<3>()?;
-                }
+                b"KGAC" => color.track = Some(chunk.track::<3>()?),
                 _ => return Err(ModelError::Chunk { chunk: "GEOA", reason: "unknown animation keyword" }),
             }
         }
         chunk.at = start + size;
         if let Ok(geoset) = usize::try_from(geoset) {
-            model.geoset_anims.push(GeosetAnim { geoset, alpha });
+            model.geoset_anims.push(GeosetAnim { geoset, alpha, color });
         }
     }
     Ok(())
@@ -433,6 +433,35 @@ mod tests {
         assert!(emitter.squirt);
         assert_eq!(emitter.visibility.track.as_ref().map(|track| track.keys.len()), Some(1));
         assert!(model.nodes[0].is_some());
+    }
+
+    fn geoset_anim(geoset: i32, color: [f32; 3], track: Option<[f32; 3]>) -> Vec<u8> {
+        let mut body = Vec::new();
+        float(&mut body, 1.0);
+        int(&mut body, 2);
+        color.iter().for_each(|&value| float(&mut body, value));
+        int(&mut body, geoset);
+        if let Some(value) = track {
+            body.extend_from_slice(b"KGAC");
+            for word in [1, 0, -1, 0] {
+                int(&mut body, word);
+            }
+            value.iter().for_each(|&value| float(&mut body, value));
+        }
+        let mut anim = Vec::new();
+        int(&mut anim, (4 + body.len()) as i32);
+        anim.extend_from_slice(&body);
+        anim
+    }
+
+    #[test]
+    fn a_geoset_animation_reads_its_fixed_and_animated_colour_in_stored_order() {
+        let chunk = [geoset_anim(4, [0.0, 0.4, 0.4], None), geoset_anim(7, [1.0; 3], Some([0.5, 0.0, 1.0]))].concat();
+        let mut model = Model::default();
+        parse_geoset_anims(&mut Reader { bytes: &chunk, at: 0 }, &mut model).unwrap();
+        let [fixed, animated] = model.geoset_anims.as_slice() else { panic!("two geoset animations") };
+        assert_eq!((fixed.geoset, fixed.color.fixed, fixed.color.track.is_none()), (4, [0.0, 0.4, 0.4], true));
+        assert_eq!((animated.geoset, animated.color.track.as_ref().map(|track| track.keys[0].value)), (7, Some([0.5, 0.0, 1.0])));
     }
 
 }

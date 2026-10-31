@@ -156,7 +156,18 @@ fn each_preset_draws_the_scene_with_its_post_effects_on_or_off() {
 const BACKGROUND: [f32; 3] = [0.5, 0.25, 0.75];
 const TEAM: [f32; 3] = [0.9, 0.1, 0.3];
 
-struct FlatRig;
+/// A still rig whose geoset slot 0 has `geoset` as its colour and opacity, and every other slot white.
+struct FlatRig {
+    colors: [[f32; 4]; 8],
+}
+
+impl FlatRig {
+    fn new(geoset: [f32; 4]) -> Self {
+        let mut colors = [[1.0; 4]; 8];
+        colors[0] = geoset;
+        Self { colors }
+    }
+}
 
 impl model::Rig for FlatRig {
     fn bone_count(&self) -> usize {
@@ -167,8 +178,8 @@ impl model::Rig for FlatRig {
         out[0] = IDENTITY;
     }
 
-    fn opacities(&self) -> &[f32] {
-        &[1.0; 8]
+    fn colors(&self) -> &[[f32; 4]] {
+        &self.colors
     }
 
     fn uv_rows(&self) -> &[[f32; 4]] {
@@ -202,6 +213,11 @@ fn sheet(filter: Filter, depth: f32, texel: [u8; 4]) -> Sheet {
 }
 
 fn centre_of(sheets: &[Sheet]) -> [f32; 3] {
+    centre_of_geoset(sheets, [1.0; 4])
+}
+
+/// Draws `sheets` as the layers of one geoset whose animated colour and opacity are `geoset`.
+fn centre_of_geoset(sheets: &[Sheet], geoset: [f32; 4]) -> [f32; 3] {
     let Some((device, queue)) = device() else { return [f32::NAN; 3] };
     let mut renderer = Renderer::new(device.clone(), queue.clone(), FORMAT, crate::remaster::Quality::Off, crate::settings::Preset::High.features());
     let mut vertices = Vec::new();
@@ -221,9 +237,9 @@ fn centre_of(sheets: &[Sheet]) -> [f32; 3] {
             Paint::Texture(_) => Paint::Texture(name),
             other => other.clone(),
         };
-        parts.push(model::Part { opacity_slot: 0, first_index, index_count: 6, layers: vec![model::Layer { paint, filter: sheet.filter, opacity_slot: 1, unshaded: false }] });
+        parts.push(model::Part { color_slot: 0, first_index, index_count: 6, layers: vec![model::Layer { paint, filter: sheet.filter, color_slot: 1, unshaded: false }] });
     }
-    renderer.add_model("sheets", ModelData { vertices, indices, parts, rig: Box::new(FlatRig), emitters: Vec::new() });
+    renderer.add_model("sheets", ModelData { vertices, indices, parts, rig: Box::new(FlatRig::new(geoset)), emitters: Vec::new() });
     let mut scene = Scene { frame: 0, clear: BACKGROUND, ..Scene::default() };
     scene.camera = scene::Camera { view: IDENTITY, eye: [0.0; 3], tangent: 1.0, near: 1.0, far: 10_000.0, sky_far: 10_000.0, rise: 0.0 };
     scene.poses = vec![scene::Pose { id: 0, model: "sheets".into(), matrix: IDENTITY, sequence: 0, frame: 0.0, clock: 0.0, alpha: 1.0, color: [1.0; 3], team: TEAM }];
@@ -341,6 +357,16 @@ fn replaceable_one_and_two_draw_the_players_team_colour_and_glow() {
     assert_pixel(centre_of(&[glow]), expected, "replaceable 2 is the team glow at its centre");
 }
 
+#[test]
+fn a_geoset_colour_multiplies_every_layer_of_its_geoset() {
+    let teal = [0.0, 0.4, 0.4];
+    let tinted = [0, 1, 2].map(|channel| SOURCE[channel] * teal[channel]);
+    assert_pixel(centre_of_geoset(&[sheet(Filter::Opaque, 100.0, texel(SOURCE, 1.0))], [teal[0], teal[1], teal[2], 1.0]), linear(tinted), "a texture layer is multiplied by the geoset colour");
+    let team = Sheet { filter: Filter::Opaque, depth: 100.0, paint: Paint::TeamColor, texel: [0; 4] };
+    assert_pixel(centre_of_geoset(&[team], [teal[0], teal[1], teal[2], 1.0]), linear([0, 1, 2].map(|channel| TEAM[channel] * teal[channel])), "a team colour layer is multiplied by the geoset colour");
+    assert_pixel(centre_of_geoset(&[sheet(Filter::Blend, 100.0, texel(SOURCE, 1.0))], [1.0, 1.0, 1.0, 0.5]), over(source(), 0.5, background()), "the geoset alpha still fades its layers");
+}
+
 struct ClockRig(std::sync::Arc<std::sync::Mutex<f32>>);
 
 impl model::Rig for ClockRig {
@@ -353,8 +379,8 @@ impl model::Rig for ClockRig {
         out[0] = IDENTITY;
     }
 
-    fn opacities(&self) -> &[f32] {
-        &[1.0; 8]
+    fn colors(&self) -> &[[f32; 4]] {
+        &[[1.0; 4]; 8]
     }
 
     fn uv_rows(&self) -> &[[f32; 4]] {
@@ -371,7 +397,7 @@ fn a_rig_is_posed_with_the_scene_clock_in_seconds() {
     let Some((device, queue)) = device() else { return };
     let mut renderer = Renderer::new(device.clone(), queue.clone(), FORMAT, crate::remaster::Quality::Off, crate::settings::Preset::High.features());
     let seen = std::sync::Arc::new(std::sync::Mutex::new(-1.0));
-    let draw = model::Part { opacity_slot: 0, first_index: 0, index_count: 3, layers: vec![model::Layer { paint: Paint::None, filter: Filter::Opaque, opacity_slot: 1, unshaded: false }] };
+    let draw = model::Part { color_slot: 0, first_index: 0, index_count: 3, layers: vec![model::Layer { paint: Paint::None, filter: Filter::Opaque, color_slot: 1, unshaded: false }] };
     let vertices = vec![Vertex { position: [0.0; 3], normal: [0.0, 0.0, 1.0], uv: [0.0; 2], bones: [0; 4], weights: [1.0, 0.0, 0.0, 0.0] }; 3];
     renderer.add_model("clock", ModelData { vertices, indices: vec![0, 1, 2], parts: vec![draw], rig: Box::new(ClockRig(seen.clone())), emitters: Vec::new() });
     let mut scene = Scene::default();

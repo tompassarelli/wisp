@@ -36,7 +36,7 @@ use crate::decode_pool::Pool;
 use crate::remaster::{self, Cache, Edges, Prepared, Quality, Upscaler};
 use crate::settings::Features;
 use math::{mirrored, multiply, projection, Mat4, IDENTITY};
-use gpu::{bone_storage, frame_group, instance_storage, opacity_storage, repeat_sampler, upload, uv_storage, white};
+use gpu::{bone_storage, frame_group, instance_storage, color_storage, repeat_sampler, upload, uv_storage, white};
 use {lightning::Lightning, weather::Weather};
 use model::{Filter, ModelData, ModelEmitter, Paint, Vertex};
 use uniforms::{FrameUniform, Instance, LayerUniform, SceneFrame};
@@ -54,7 +54,7 @@ const DEPTH: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 const HDR: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
 const SAMPLES: u32 = 4;
 const BONES_AT_START: usize = 16 * 1024;
-const OPACITIES_AT_START: usize = 16 * 1024;
+const SLOTS_AT_START: usize = 16 * 1024;
 const INSTANCES_AT_START: usize = 4 * 1024;
 const DECODERS: usize = 2;
 const CLEAR: [f64; 3] = [0.04, 0.06, 0.09];
@@ -113,9 +113,9 @@ pub struct Renderer {
     model_ids: HashMap<String, usize>,
     bone_buffer: wgpu::Buffer,
     bone_capacity: usize,
-    opacity_buffer: wgpu::Buffer,
-    opacity_capacity: usize,
-    opacity_scratch: Vec<f32>,
+    color_buffer: wgpu::Buffer,
+    color_capacity: usize,
+    color_scratch: Vec<[f32; 4]>,
     uv_buffer: wgpu::Buffer,
     uv_scratch: Vec<[f32; 4]>,
     instance_buffer: wgpu::Buffer,
@@ -162,12 +162,12 @@ impl Renderer {
         let sampler = repeat_sampler(&device);
         let uniform = |label| device.create_buffer(&wgpu::BufferDescriptor { label: Some(label), size: size_of::<SceneFrame>() as u64, usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
         let bone_buffer = bone_storage(&device, BONES_AT_START);
-        let opacity_buffer = opacity_storage(&device, OPACITIES_AT_START);
-        let uv_buffer = uv_storage(&device, OPACITIES_AT_START);
+        let color_buffer = color_storage(&device, SLOTS_AT_START);
+        let uv_buffer = uv_storage(&device, SLOTS_AT_START);
         let instance_buffer = instance_storage(&device, INSTANCES_AT_START);
         let set = |label| {
             let buffer = uniform(label);
-            let group = frame_group(&device, &frame_layout, &buffer, &bone_buffer, &opacity_buffer, &uv_buffer);
+            let group = frame_group(&device, &frame_layout, &buffer, &bone_buffer, &color_buffer, &uv_buffer);
             FrameSet { buffer, group }
         };
         let (main, sky, mirror, mirror_sky) = (set("main frame"), set("sky frame"), set("mirrored frame"), set("mirrored sky frame"));
@@ -194,9 +194,9 @@ impl Renderer {
             model_ids: HashMap::new(),
             bone_buffer,
             bone_capacity: BONES_AT_START,
-            opacity_buffer,
-            opacity_capacity: OPACITIES_AT_START,
-            opacity_scratch: Vec::new(),
+            color_buffer,
+            color_capacity: SLOTS_AT_START,
+            color_scratch: Vec::new(),
             uv_buffer,
             uv_scratch: Vec::new(),
             instance_buffer,
@@ -278,7 +278,7 @@ impl Renderer {
         };
         let uniform = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("layer"),
-            contents: bytemuck::bytes_of(&LayerUniform { kind, cutoff: if layer.filter == Filter::Cutout { 0.75 } else { 0.0 }, geoset_slot: part.opacity_slot, layer_slot: layer.opacity_slot, ignores_texture_alpha: u32::from(layer.filter == Filter::Additive), unshaded: u32::from(layer.unshaded), pad: [0; 2] }),
+            contents: bytemuck::bytes_of(&LayerUniform { kind, cutoff: if layer.filter == Filter::Cutout { 0.75 } else { 0.0 }, geoset_slot: part.color_slot, layer_slot: layer.color_slot, ignores_texture_alpha: u32::from(layer.filter == Filter::Additive), unshaded: u32::from(layer.unshaded), pad: [0; 2] }),
             usage: wgpu::BufferUsages::UNIFORM,
         });
         draw(Some(self.device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -363,7 +363,7 @@ impl Renderer {
         self.instance_scratch.clear();
         self.instance_scratch.resize(cursor as usize, Instance::zeroed());
         self.bone_scratch.clear();
-        self.opacity_scratch.clear();
+        self.color_scratch.clear();
         self.uv_scratch.clear();
         for pose in poses {
             let Some(&id) = self.model_ids.get(pose.model.as_str()) else { continue };
@@ -372,12 +372,12 @@ impl Renderer {
             let base = self.bone_scratch.len();
             self.bone_scratch.resize(base + model.bones, IDENTITY);
             model.rig.pose(pose.sequence, pose.frame, pose.clock, &mut self.bone_scratch[base..]);
-            let opacity_base = self.opacity_scratch.len();
-            self.opacity_scratch.extend_from_slice(model.rig.opacities());
+            let color_base = self.color_scratch.len();
+            self.color_scratch.extend_from_slice(model.rig.colors());
             self.uv_scratch.extend_from_slice(model.rig.uv_rows());
             let slot = (group + self.counts[id]) as usize;
             self.counts[id] += 1;
-            self.instance_scratch[slot] = Instance { model: pose.matrix, tint: [pose.color[0], pose.color[1], pose.color[2], pose.alpha], team: [pose.team[0], pose.team[1], pose.team[2], 1.0], base: [base as u32, opacity_base as u32] };
+            self.instance_scratch[slot] = Instance { model: pose.matrix, tint: [pose.color[0], pose.color[1], pose.color[2], pose.alpha], team: [pose.team[0], pose.team[1], pose.team[2], 1.0], base: [base as u32, color_base as u32] };
             if pose.sequence >= 0 && pose.alpha > 0.0 {
                 for (index, ((emitter, slot), sample)) in model.emitters.iter().zip(model.rig.emitters()).enumerate() {
                     let Some(slot) = *slot else { continue };
@@ -393,19 +393,19 @@ impl Renderer {
         self.layout(&scene.poses);
         let sky = scene.sky.as_ref().and_then(|pose| self.model_ids.get(pose.model.as_str()).map(|&id| (id, pose)));
         let sky_base = self.bone_scratch.len();
-        let sky_opacity_base = self.opacity_scratch.len();
+        let sky_color_base = self.color_scratch.len();
         if let Some((id, pose)) = sky {
             self.bone_scratch.resize(sky_base + self.models[id].bones, IDENTITY);
             self.models[id].rig.pose(pose.sequence, pose.frame, pose.clock, &mut self.bone_scratch[sky_base..]);
-            self.opacity_scratch.extend_from_slice(self.models[id].rig.opacities());
+            self.color_scratch.extend_from_slice(self.models[id].rig.colors());
             self.uv_scratch.extend_from_slice(self.models[id].rig.uv_rows());
         }
-        if self.bone_scratch.len() > self.bone_capacity || self.opacity_scratch.len() > self.opacity_capacity {
+        if self.bone_scratch.len() > self.bone_capacity || self.color_scratch.len() > self.color_capacity {
             self.bone_capacity = self.bone_scratch.len().next_power_of_two().max(self.bone_capacity);
-            self.opacity_capacity = self.opacity_scratch.len().next_power_of_two().max(self.opacity_capacity);
+            self.color_capacity = self.color_scratch.len().next_power_of_two().max(self.color_capacity);
             self.bone_buffer = bone_storage(&self.device, self.bone_capacity);
-            self.opacity_buffer = opacity_storage(&self.device, self.opacity_capacity);
-            self.uv_buffer = uv_storage(&self.device, self.opacity_capacity);
+            self.color_buffer = color_storage(&self.device, self.color_capacity);
+            self.uv_buffer = uv_storage(&self.device, self.color_capacity);
             self.bind_frames();
         }
         let sky_instance = self.instance_scratch.len();
@@ -414,14 +414,14 @@ impl Renderer {
             placed[12] = scene.camera.eye[0];
             placed[13] = scene.camera.eye[1];
             placed[14] = scene.camera.eye[2];
-            self.instance_scratch.push(Instance { model: placed, tint: [1.0, 1.0, 1.0, 1.0], team: [1.0; 4], base: [sky_base as u32, sky_opacity_base as u32] });
+            self.instance_scratch.push(Instance { model: placed, tint: [1.0, 1.0, 1.0, 1.0], team: [1.0; 4], base: [sky_base as u32, sky_color_base as u32] });
         }
         if self.instance_scratch.len() > self.instance_capacity {
             self.instance_capacity = self.instance_scratch.len().next_power_of_two();
             self.instance_buffer = instance_storage(&self.device, self.instance_capacity);
         }
         self.queue.write_buffer(&self.bone_buffer, 0, bytemuck::cast_slice(&self.bone_scratch));
-        self.queue.write_buffer(&self.opacity_buffer, 0, bytemuck::cast_slice(&self.opacity_scratch));
+        self.queue.write_buffer(&self.color_buffer, 0, bytemuck::cast_slice(&self.color_scratch));
         self.queue.write_buffer(&self.uv_buffer, 0, bytemuck::cast_slice(&self.uv_scratch));
         self.queue.write_buffer(&self.instance_buffer, 0, bytemuck::cast_slice(&self.instance_scratch));
         let plane = self.water_level.filter(|_| self.water.ready()).unwrap_or(0.0);

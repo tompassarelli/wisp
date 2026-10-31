@@ -74,11 +74,34 @@ pub struct TextureAnim {
     pub scaling: Option<Track<3>>,
 }
 
-/// How a geoset's opacity changes: a geoset with no animation is fully opaque.
+/// How a geoset's opacity and colour change: a geoset with no animation is fully opaque and white.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct GeosetAnim {
     pub geoset: usize,
     pub alpha: Scalar,
+    pub color: Color,
+}
+
+/// A colour the file stores fixed or as a track, multiplied into its geoset's layers; a track with no key in the shown sequence reads as white.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Color {
+    pub fixed: [f32; 3],
+    pub track: Option<Track<3>>,
+}
+
+impl Default for Color {
+    fn default() -> Self {
+        Self { fixed: [1.0; 3], track: None }
+    }
+}
+
+impl Color {
+    pub fn at(&self, playhead: &Playhead) -> [f32; 3] {
+        match &self.track {
+            Some(track) => track.vector(playhead).unwrap_or([1.0; 3]),
+            None => self.fixed,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]

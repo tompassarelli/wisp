@@ -55,16 +55,16 @@ pub enum Paint {
 pub struct Layer {
     pub paint: Paint,
     pub filter: Filter,
-    /// Where this layer's opacity sits in a pose's opacities (`Rig::opacities`).
-    pub opacity_slot: u32,
+    /// Where this layer's colour and opacity sit in a pose's `Rig::colors`.
+    pub color_slot: u32,
     /// Drawn without the scene light, as a liquid or a glow is.
     pub unshaded: bool,
 }
 
 /// A run of indices drawn with one material's layers, one draw per layer.
 pub struct Part {
-    /// Where this geoset's opacity sits in a pose's opacities.
-    pub opacity_slot: u32,
+    /// Where this geoset's colour and opacity sit in a pose's `Rig::colors`.
+    pub color_slot: u32,
     pub first_index: u32,
     pub index_count: u32,
     pub layers: Vec<Layer>,
@@ -74,9 +74,9 @@ pub struct Part {
 pub trait Rig: Send {
     fn bone_count(&self) -> usize;
     fn pose(&mut self, sequence: i32, frame: f32, clock_seconds: f32, out: &mut [Mat4]);
-    /// How opaque each geoset (first) and each material layer (after) is at the pose the last `pose` call wrote: the geoset animations and layer alphas.
-    fn opacities(&self) -> &[f32];
-    /// How each geoset's and layer's texture coordinates are moved at that pose: two rows of `[xx, xy, 0, shift]` per slot, in the order of `opacities`.
+    /// The colour and opacity (RGBA) of each geoset (first) and each material layer (after) at the pose the last `pose` call wrote: a geoset's animated colour and alpha, and a layer's alpha under white.
+    fn colors(&self) -> &[[f32; 4]];
+    /// How each geoset's and layer's texture coordinates are moved at that pose: two rows of `[xx, xy, 0, shift]` per slot, in the order of `colors`.
     fn uv_rows(&self) -> &[[f32; 4]];
     /// What each of the model's particle emitters is doing at the pose the last `pose` call wrote.
     fn emitters(&self) -> &[EmitterSample];

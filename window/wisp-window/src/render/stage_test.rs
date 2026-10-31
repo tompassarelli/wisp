@@ -23,8 +23,8 @@ impl Rig for Clocked {
         self.0.store(clock_seconds.to_bits(), std::sync::atomic::Ordering::Relaxed);
         out[0] = IDENTITY;
     }
-    fn opacities(&self) -> &[f32] {
-        &[1.0, 1.0]
+    fn colors(&self) -> &[[f32; 4]] {
+        &[[1.0; 4]; 2]
     }
     fn uv_rows(&self) -> &[[f32; 4]] {
         &[]
@@ -43,8 +43,8 @@ impl Rig for Still {
     fn pose(&mut self, _: i32, _: f32, _: f32, out: &mut [Mat4]) {
         out[0] = IDENTITY;
     }
-    fn opacities(&self) -> &[f32] {
-        &[1.0, 1.0]
+    fn colors(&self) -> &[[f32; 4]] {
+        &[[1.0; 4]; 2]
     }
     fn uv_rows(&self) -> &[[f32; 4]] {
         &[[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0]]
@@ -73,7 +73,7 @@ fn block(low: [f32; 3], high: [f32; 3]) -> (Vec<Vertex>, Vec<u32>) {
 
 fn model((vertices, indices): (Vec<Vertex>, Vec<u32>), paint: Paint, filter: Filter) -> ModelData {
     let count = indices.len() as u32;
-    ModelData { vertices, indices, parts: vec![Part { opacity_slot: 0, first_index: 0, index_count: count, layers: vec![Layer { paint, filter, opacity_slot: 1, unshaded: false }] }], emitters: Vec::new(), rig: Box::new(Still) }
+    ModelData { vertices, indices, parts: vec![Part { color_slot: 0, first_index: 0, index_count: count, layers: vec![Layer { paint, filter, color_slot: 1, unshaded: false }] }], emitters: Vec::new(), rig: Box::new(Still) }
 }
 
 /// A bed that rises from deep water in front to the shore at the back, so the water has a shallow end to read against.

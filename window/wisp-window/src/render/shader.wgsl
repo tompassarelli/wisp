@@ -7,7 +7,7 @@ struct Layer {
     unshaded: u32,
 };
 
-@group(0) @binding(2) var<storage, read> opacities: array<f32>;
+@group(0) @binding(2) var<storage, read> slot_colors: array<vec4<f32>>;
 @group(0) @binding(3) var<storage, read> uv_rows: array<vec4<f32>>;
 @group(1) @binding(0) var layer_texture: texture_2d<f32>;
 @group(1) @binding(1) var layer_sampler: sampler;
@@ -50,9 +50,11 @@ fn vertex_main(vertex: Vertex, instance: Instance) -> Varying {
         let flicker = 0.88 + 0.12 * sin(frame.glow_at.y * 2.7 + world.x * 0.021) * sin(frame.glow_at.y * 1.3 + world.y * 0.017);
         out.light += frame.glow.rgb * near * flicker * (0.55 + 0.45 * max(-normal.z, 0.0));
     }
-    out.tint = instance.tint;
+    let geoset = slot_colors[instance.base.y + layer.geoset_slot];
+    let own = slot_colors[instance.base.y + layer.layer_slot];
+    out.tint = vec4<f32>(instance.tint.rgb * geoset.rgb * own.rgb, instance.tint.a);
     out.team = instance.team.xyz;
-    out.fade = opacities[instance.base.y + layer.geoset_slot] * opacities[instance.base.y + layer.layer_slot];
+    out.fade = geoset.a * own.a;
     return out;
 }
 

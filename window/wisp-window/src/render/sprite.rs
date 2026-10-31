@@ -6,7 +6,7 @@
 
 use serde::Deserialize;
 
-use super::gpu::{bone_storage, frame_group, instance_storage, opacity_storage, uv_storage};
+use super::gpu::{bone_storage, frame_group, instance_storage, color_storage, uv_storage};
 use super::math::{Mat4, IDENTITY};
 use super::model::{Part, Vertex};
 use super::scene::{Camera, Light, Scene};
@@ -48,9 +48,9 @@ pub(super) struct Slot {
     frame: wgpu::Buffer,
     bones: wgpu::Buffer,
     bone_capacity: usize,
-    opacities: wgpu::Buffer,
+    colors: wgpu::Buffer,
     uv_rows: wgpu::Buffer,
-    opacity_capacity: usize,
+    color_capacity: usize,
     instance: wgpu::Buffer,
     group: wgpu::BindGroup,
     drawn: Option<Drawn>,
@@ -66,14 +66,14 @@ pub(super) struct Skin {
 
 impl Skin {
     pub(super) fn new(vertices: Vec<Vertex>, indices: Vec<u32>, parts: &[Part]) -> Self {
-        Self { vertices, indices, parts: parts.iter().map(|part| (part.opacity_slot, part.first_index, part.index_count)).collect() }
+        Self { vertices, indices, parts: parts.iter().map(|part| (part.color_slot, part.first_index, part.index_count)).collect() }
     }
 
-    /// The box of the skinned vertices of every geoset whose opacity in `opacities` is above a tenth; none when no geoset shows.
-    fn posed_bounds(&self, bones: &[Mat4], opacities: &[f32]) -> Option<[f32; 6]> {
+    /// The box of the skinned vertices of every geoset whose opacity (alpha in `colors`) is above a tenth; none when no geoset shows.
+    fn posed_bounds(&self, bones: &[Mat4], colors: &[[f32; 4]]) -> Option<[f32; 6]> {
         let mut bounds = [f32::MAX, f32::MAX, f32::MAX, f32::MIN, f32::MIN, f32::MIN];
         for &(slot, first, count) in &self.parts {
-            if opacities.get(slot as usize).is_some_and(|opacity| *opacity <= 0.1) {
+            if colors.get(slot as usize).is_some_and(|color| color[3] <= 0.1) {
                 continue;
             }
             let range = first as usize..(first + count) as usize;
@@ -178,10 +178,10 @@ impl Renderer {
         let frame = self.device.create_buffer(&wgpu::BufferDescriptor { label: Some("sprite frame"), size: size_of::<super::FrameUniform>() as u64, usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
         let bone_capacity = 256;
         let bones = bone_storage(&self.device, bone_capacity);
-        let opacity_capacity = 64;
-        let opacities = opacity_storage(&self.device, opacity_capacity);
-        let uv_rows = uv_storage(&self.device, opacity_capacity);
-        let group = frame_group(&self.device, &self.frame_layout, &frame, &bones, &opacities, &uv_rows);
+        let color_capacity = 64;
+        let colors = color_storage(&self.device, color_capacity);
+        let uv_rows = uv_storage(&self.device, color_capacity);
+        let group = frame_group(&self.device, &self.frame_layout, &frame, &bones, &colors, &uv_rows);
         Slot {
             size,
             msaa: make(HDR, SAMPLES, wgpu::TextureUsages::RENDER_ATTACHMENT, "sprite colour"),
@@ -190,9 +190,9 @@ impl Renderer {
             frame,
             bones,
             bone_capacity,
-            opacities,
+            colors,
             uv_rows,
-            opacity_capacity,
+            color_capacity,
             instance: instance_storage(&self.device, 1),
             group,
             drawn: None,
@@ -212,9 +212,9 @@ impl Renderer {
         let bones = model.bones;
         let mut posed = vec![IDENTITY; bones];
         model.rig.pose(shot.sequence, shot.frame, shot.clock * 1000.0, &mut posed);
-        let opacities = model.rig.opacities().to_vec();
+        let colors = model.rig.colors().to_vec();
         let uv_rows = model.rig.uv_rows().to_vec();
-        let measured = model.skin.posed_bounds(&posed, &opacities);
+        let measured = model.skin.posed_bounds(&posed, &colors);
         self.ensure_slot(index, size);
         let slot = &mut self.sprites[index];
         let bounds = match (&slot.fit, measured) {
@@ -237,18 +237,18 @@ impl Renderer {
         if bones > slot.bone_capacity {
             slot.bone_capacity = bones.next_power_of_two();
             slot.bones = bone_storage(&self.device, slot.bone_capacity);
-            slot.group = frame_group(&self.device, &self.frame_layout, &slot.frame, &slot.bones, &slot.opacities, &slot.uv_rows);
+            slot.group = frame_group(&self.device, &self.frame_layout, &slot.frame, &slot.bones, &slot.colors, &slot.uv_rows);
         }
-        if opacities.len() > slot.opacity_capacity {
-            slot.opacity_capacity = opacities.len().next_power_of_two();
-            slot.opacities = opacity_storage(&self.device, slot.opacity_capacity);
-            slot.uv_rows = uv_storage(&self.device, slot.opacity_capacity);
-            slot.group = frame_group(&self.device, &self.frame_layout, &slot.frame, &slot.bones, &slot.opacities, &slot.uv_rows);
+        if colors.len() > slot.color_capacity {
+            slot.color_capacity = colors.len().next_power_of_two();
+            slot.colors = color_storage(&self.device, slot.color_capacity);
+            slot.uv_rows = uv_storage(&self.device, slot.color_capacity);
+            slot.group = frame_group(&self.device, &self.frame_layout, &slot.frame, &slot.bones, &slot.colors, &slot.uv_rows);
         }
         let queue = &self.queue;
         let team = [shot.team[0], shot.team[1], shot.team[2], 1.0];
         queue.write_buffer(&slot.bones, 0, bytemuck::cast_slice(&posed));
-        queue.write_buffer(&slot.opacities, 0, bytemuck::cast_slice(&opacities));
+        queue.write_buffer(&slot.colors, 0, bytemuck::cast_slice(&colors));
         queue.write_buffer(&slot.uv_rows, 0, bytemuck::cast_slice(&uv_rows));
         queue.write_buffer(&slot.instance, 0, bytemuck::bytes_of(&Instance { model: IDENTITY, tint: [1.0; 4], team, base: [0, 0] }));
         queue.write_buffer(&slot.frame, 0, bytemuck::bytes_of(&uniform));
@@ -315,12 +315,12 @@ mod tests {
     #[test]
     fn the_posed_box_holds_only_the_visible_geosets_vertices_after_skinning() {
         let vertex = |position: [f32; 3]| Vertex { position, normal: [0.0; 3], uv: [0.0; 2], bones: [0, 0, 0, 0], weights: [1.0, 0.0, 0.0, 0.0] };
-        let parts = [Part { opacity_slot: 0, first_index: 0, index_count: 3, layers: Vec::new() }, Part { opacity_slot: 1, first_index: 3, index_count: 3, layers: Vec::new() }];
+        let parts = [Part { color_slot: 0, first_index: 0, index_count: 3, layers: Vec::new() }, Part { color_slot: 1, first_index: 3, index_count: 3, layers: Vec::new() }];
         let vertices = vec![vertex([0.0, 0.0, 0.0]), vertex([10.0, 0.0, 0.0]), vertex([0.0, 10.0, 20.0]), vertex([500.0, 500.0, 500.0]), vertex([501.0, 500.0, 500.0]), vertex([500.0, 501.0, 500.0])];
         let skin = Skin::new(vertices, vec![0, 1, 2, 3, 4, 5], &parts);
         let mut lifted = IDENTITY;
         lifted[14] = 5.0;
-        assert_eq!(skin.posed_bounds(&[lifted], &[1.0, 0.0]), Some([0.0, 0.0, 5.0, 10.0, 10.0, 25.0]));
-        assert_eq!(skin.posed_bounds(&[lifted], &[0.0, 0.0]), None);
+        assert_eq!(skin.posed_bounds(&[lifted], &[[1.0; 4], [1.0, 1.0, 1.0, 0.0]]), Some([0.0, 0.0, 5.0, 10.0, 10.0, 25.0]));
+        assert_eq!(skin.posed_bounds(&[lifted], &[[1.0, 1.0, 1.0, 0.0]; 2]), None);
     }
 }

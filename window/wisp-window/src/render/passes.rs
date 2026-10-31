@@ -91,7 +91,7 @@ impl Renderer {
 
     pub(super) fn bind_frames(&mut self) {
         for set in [&mut self.main, &mut self.sky, &mut self.mirror, &mut self.mirror_sky] {
-            set.group = super::frame_group(&self.device, &self.frame_layout, &set.buffer, &self.bone_buffer, &self.opacity_buffer, &self.uv_buffer);
+            set.group = super::frame_group(&self.device, &self.frame_layout, &set.buffer, &self.bone_buffer, &self.color_buffer, &self.uv_buffer);
         }
     }
 

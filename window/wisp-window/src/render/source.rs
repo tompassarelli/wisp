@@ -23,7 +23,7 @@ struct MdxRig {
     playhead: Playhead,
     pose: Pose<'static>,
     samples: Vec<EmitterSample>,
-    opacities: Vec<f32>,
+    colors: Vec<[f32; 4]>,
     slots: Vec<LayerSlot>,
     uv_rows: Vec<[f32; 4]>,
 }
@@ -45,13 +45,16 @@ impl Rig for MdxRig {
         out[..count].copy_from_slice(&palette[..count]);
         let head = &self.playhead;
         let geosets = self.model.geosets.len();
-        for (index, opacity) in self.opacities[..geosets].iter_mut().enumerate() {
-            *opacity = self.model.geoset_anims.iter().rev().find(|anim| anim.geoset == index).map_or(1.0, |anim| anim.alpha.at(head, 1.0));
+        for (index, color) in self.colors[..geosets].iter_mut().enumerate() {
+            *color = self.model.geoset_anims.iter().rev().find(|anim| anim.geoset == index).map_or([1.0; 4], |anim| {
+                let [red, green, blue] = anim.color.at(head);
+                [red, green, blue, anim.alpha.at(head, 1.0)]
+            });
         }
-        for (slot, opacity) in self.slots.iter().zip(&mut self.opacities[geosets..]) {
+        for (slot, color) in self.slots.iter().zip(&mut self.colors[geosets..]) {
             let layer = &self.model.materials[slot.material].layers[slot.layer];
             let shown = layer.texture_track.as_ref().and_then(|track| track.vector(head)).map_or(layer.texture_id, |value| value[0].round() as i32);
-            *opacity = if slot.variant.is_none_or(|variant| variant == shown) { layer.alpha.at(head, 1.0) } else { 0.0 };
+            color[3] = if slot.variant.is_none_or(|variant| variant == shown) { layer.alpha.at(head, 1.0) } else { 0.0 };
         }
         for (at, slot) in self.slots.iter().enumerate() {
             let layer = &self.model.materials[slot.material].layers[slot.layer];
@@ -82,8 +85,8 @@ impl Rig for MdxRig {
         }
     }
 
-    fn opacities(&self) -> &[f32] {
-        &self.opacities
+    fn colors(&self) -> &[[f32; 4]] {
+        &self.colors
     }
 
     fn uv_rows(&self) -> &[[f32; 4]] {
@@ -109,18 +112,18 @@ fn paint(model: &model::Model, texture_id: i32) -> Paint {
 /// The layers a geoset draws, a layer that cycles through water frames counting as one water draw.
 fn layers_of(model: &model::Model, material: usize, layer_draws: &[Vec<Vec<(Option<i32>, u32)>>], geoset_index: usize) -> Vec<Layer> {
     let Some(found) = model.materials.get(material) else {
-        return vec![Layer { paint: Paint::None, filter: Filter::Opaque, opacity_slot: geoset_index as u32, unshaded: false }];
+        return vec![Layer { paint: Paint::None, filter: Filter::Opaque, color_slot: geoset_index as u32, unshaded: false }];
     };
     let mut layers = Vec::new();
     for (layer, draws) in found.layers.iter().zip(&layer_draws[material]) {
         let unshaded = layer.shading_flags & model::shading::UNSHADED != 0;
         let mut water_drawn = false;
-        for &(variant, opacity_slot) in draws {
+        for &(variant, color_slot) in draws {
             let paint = paint(model, variant.unwrap_or(layer.texture_id));
             if paint == Paint::Water && std::mem::replace(&mut water_drawn, true) {
                 continue;
             }
-            layers.push(Layer { paint, filter: Filter::from_index(layer.filter_mode), opacity_slot, unshaded });
+            layers.push(Layer { paint, filter: Filter::from_index(layer.filter_mode), color_slot, unshaded });
         }
     }
     layers
@@ -171,7 +174,7 @@ pub fn model(bytes: &[u8], quality: Quality) -> Result<ModelData, String> {
         }
         indices.extend(geoset.indices.iter().map(|&index| base + index));
         let layers = layers_of(model, geoset.material_id as usize, &layer_draws, geoset_index);
-        parts.push(Part { opacity_slot: geoset_index as u32, first_index, index_count: indices.len() as u32 - first_index, layers });
+        parts.push(Part { color_slot: geoset_index as u32, first_index, index_count: indices.len() as u32 - first_index, layers });
     }
     let emitters = model.emitters.iter().map(|emitter| ModelEmitter { spec: emitter.clone(), paint: paint(model, emitter.texture_id) }).collect();
     let placed: Vec<usize> = model.emitters.iter().map(|emitter| emitter.node).collect();
@@ -181,7 +184,7 @@ pub fn model(bytes: &[u8], quality: Quality) -> Result<ModelData, String> {
         playhead: Playhead::new(model),
         pose,
         samples: vec![EmitterSample::default(); model.emitters.len()],
-        opacities: vec![1.0; next_slot as usize],
+        colors: vec![[1.0; 4]; next_slot as usize],
         slots,
         uv_rows: vec![[[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0]]; next_slot as usize].into_iter().flatten().collect(),
     };

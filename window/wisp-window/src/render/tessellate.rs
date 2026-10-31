@@ -148,7 +148,7 @@ pub fn tessellate(data: &mut ModelData, levels: u32) {
         for _ in 0..levels {
             triangles = subdivide(&mut data.vertices, &triangles);
         }
-        parts.push(Part { opacity_slot: part.opacity_slot, first_index: indices.len() as u32, index_count: triangles.len() as u32, layers: part.layers });
+        parts.push(Part { color_slot: part.color_slot, first_index: indices.len() as u32, index_count: triangles.len() as u32, layers: part.layers });
         indices.extend(triangles);
     }
     data.indices = indices;
@@ -167,7 +167,7 @@ mod tests {
             1
         }
         fn pose(&mut self, _: i32, _: f32, _: f32, _: &mut [Mat4]) {}
-        fn opacities(&self) -> &[f32] {
+        fn colors(&self) -> &[[f32; 4]] {
             &[]
         }
         fn uv_rows(&self) -> &[[f32; 4]] {
@@ -183,7 +183,7 @@ mod tests {
     }
 
     fn model(vertices: Vec<Vertex>, indices: Vec<u32>) -> ModelData {
-        let parts = vec![Part { opacity_slot: 0, first_index: 0, index_count: indices.len() as u32, layers: vec![Layer { paint: Paint::None, filter: Filter::Opaque, opacity_slot: 0, unshaded: false }] }];
+        let parts = vec![Part { color_slot: 0, first_index: 0, index_count: indices.len() as u32, layers: vec![Layer { paint: Paint::None, filter: Filter::Opaque, color_slot: 0, unshaded: false }] }];
         ModelData { vertices, indices, parts, rig: Box::new(NoRig), emitters: Vec::new() }
     }
 
