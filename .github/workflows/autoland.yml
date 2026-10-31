@@ -15,10 +15,14 @@ on:
   workflow_dispatch:
     inputs:
       branch:
-        description: claude/ branch to land, several separated by spaces (a train stacked on main), or queue for every waiting branch
+        description: queue (every waiting claude/ branch, as one train); any other value joins the queue unless split is set
         required: true
+      split:
+        description: set by Autoland for a failing train's halves and deferred tips, which are tested as given (one branch or several separated by spaces)
+        required: false
+        default: ""
 
-run-name: Autoland ${{ inputs.branch || format('{0} (push)', github.ref_name) }}
+run-name: Autoland ${{ inputs.split && 'train ' || '' }}${{ inputs.branch || format('{0} (push)', github.ref_name) }}
 
 permissions:
   contents: write
@@ -40,16 +44,25 @@ env:
   RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
 jobs:
-  # A push runs the branch's copy of this file; the landing runs main's.
+  # A push, or a dispatch of one branch (a branch made from an older main dispatches itself), only makes sure one
+  # queue run is waiting: that run takes every waiting branch as one train, so the pushes share one suite.
   queue:
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || (inputs.branch != 'queue' && inputs.split == '')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - run: gh workflow run autoland.yml --ref main -f branch="$BRANCH"
+      - run: |
+          for status in pending queued waiting; do
+            if [ "$(gh run list --workflow autoland.yml --status "$status" --limit 100 --json displayTitle --jq 'any(.[]; .displayTitle == "Autoland queue")')" = true ]; then
+              echo "$BRANCH joins the waiting queue run" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+          done
+          gh workflow run autoland.yml --ref main -f branch=queue
+          echo "$BRANCH dispatched a queue run" >> "$GITHUB_STEP_SUMMARY"
 
   rebase:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && (inputs.branch == 'queue' || inputs.split != '')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     outputs:
@@ -90,7 +103,8 @@ jobs:
               states=$(gh api "repos/$GH_REPO/commits/$(git rev-parse "origin/$name")/status" --jq '[.statuses[] | {(.context): .state}] | add // {}')
               jq -nc --arg name "$name" --argjson age "$age" --argjson ahead "$(git rev-list --count "origin/main..origin/$name")" --argjson states "$states" '{$name, $age, $ahead, $states}'
             done | jq -sc .)
-            names=$(bun "$trusted/autolandTrain.ts" queue "$entries")
+            inflight=$(for status in in_progress queued pending waiting; do gh run list --workflow autoland.yml --status "$status" --limit 100 --json displayTitle --jq '.[].displayTitle | select(startswith("Autoland train ")) | ltrimstr("Autoland train ")'; done | tr ' ' '\n' | jq -Rsc 'split("\n") | map(select(. != ""))')
+            names=$(bun "$trusted/autolandTrain.ts" queue "$entries" "$inflight")
           else
             names=$BRANCH
           fi
@@ -479,9 +493,12 @@ jobs:
           LANDED: ${{ steps.land.outputs.sha }}
           LANES: ${{ steps.land.outputs.lanes }}
         run: gh api -X POST "repos/$GH_REPO/statuses/$LANDED" -f state=success -f context=autoland/branch -f description="${LANES:0:139}" > /dev/null || echo "::warning::couldn't record the landing branch on ${LANDED:0:10}"
-      # Pushes made with this token start no workflows: start main's CI (main-red follows it).
+      # Pushes made with this token start no workflows: start main's CI (main-red follows it) and its Windows run,
+      # once per landed train, since a claude/ branch's own push starts neither.
       - if: steps.land.outputs.pushed == 'true'
-        run: gh workflow run ci.yml --ref main || echo "::warning::couldn't start main's CI"
+        run: |
+          gh workflow run ci.yml --ref main || echo "::warning::couldn't start main's CI"
+          gh workflow run windows.yml --ref main || echo "::warning::couldn't start main's Windows run"
 
   cleanup:
     needs: [rebase, land]

@@ -5,7 +5,7 @@ name: Windows
 on:
   pull_request:
   push:
-    branches-ignore: ["farm/**"]
+    branches-ignore: ["farm/**", "claude/**"]
   workflow_dispatch:
 
 permissions:

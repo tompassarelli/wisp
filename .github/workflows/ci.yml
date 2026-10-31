@@ -3,8 +3,8 @@ name: CI
 on:
   pull_request:
   push:
-    # `bun wisp farm`'s scratch branches run only the workflow it dispatches.
-    branches-ignore: ["farm/**"]
+    # `bun wisp farm`'s scratch branches run only the workflow it dispatches; Autoland runs this on a claude/ branch's train.
+    branches-ignore: ["farm/**", "claude/**"]
   # Autoland's pushes to main start no workflows, so it dispatches this one.
   workflow_dispatch:
   # Autoland (autoland.yml) runs this on the rebased candidate before it lands: `ref` is the

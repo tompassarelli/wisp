@@ -337,29 +337,35 @@ it locally.
    autoland.yml --branch claude/NAME` and `gh run view RUN_ID`. Push a fix to
    the same branch and it tries again.
 
-**Train.** A run's `branch` input is one branch, several separated by
-spaces, or `queue`. `queue` is every `claude/` branch ahead of main whose tip
+**Train.** A run's `branch` input is `queue`, or with `split` set (Autoland's
+own dispatches of halves and deferred tips) one branch or several separated by
+spaces; any other dispatch only makes sure a `queue` run is waiting. `queue` is every `claude/` branch ahead of main whose tip
 has a deny-list success and no Autoland refusal, oldest first
 (`queued` in wisp:host/checks/autolandTrain.ts). The run rebases them one
 after another onto main (each onto the stack so far), then checks, tests,
 judges and lands the stack as one candidate, exactly as for one branch. A branch
 that conflicts with main alone is refused with the files named; one that
 conflicts only with the branches stacked before it is left out and dispatched on
-its own after the train. When the stack fails its checks, the suites, the CI
+its own after the train (a `split` run). When the stack fails its checks, the suites, the CI
 jobs or the gate, the judge refuses no one: it dispatches the first and second
 half of the stack as two trains (`halves`), each running the same steps, until
 a train of one tip fails and is refused with the usual `autoland` failure
 status. The halves test side by side, so a planted failure among N tips costs
 about log2(N) suite lengths while the passing halves land on the way. Dispatches
-of `queue` collapse into one pending run (the land job skips the dispatch when
-one is waiting).
+of `queue` collapse into one pending run: a push, the land job and every
+dispatch of a branch skip the dispatch when one is pending or queued. A
+`queue` run leaves out the branches a `split` run (titled `Autoland train
+...`) is testing.
 
-The push itself only queues a run of main's copy of the workflow, so a
-branch made from an older main still lands with the current rules. Each
-branch tests in its own run (group `autoland-test-BRANCH`), so every waiting
-branch is tested at once, as in smashcraft's Autoland, and a failing branch
-blocks no other; only the `land` job queues, one landing at a time, so
-landings never race main. The hosted-job limit below still applies: when
+The push itself only makes sure a `queue` run of main's copy of the workflow
+is waiting, so a branch made from an older main still lands with the current
+rules, and an older branch's push, which dispatches its own name, is turned
+into the same wait. Every branch pushed while a train runs joins the next
+one (group `autoland-test-queue`), so ten pushes cost one suite, one CI
+run and one Windows run, not ten; only the `land` job queues, one landing at
+a time, so landings never race main. A `claude/` branch's push starts no CI
+or Windows workflow of its own: Autoland runs ci.yml on each train's rebased
+commit, and after each landing dispatches CI and Windows on main. The hosted-job limit below still applies: when
 several runs' shards exceed it, the shards wait in GitHub's queue. The run's own status is red
 whenever a suite shard fails, main's known failures included; its `land`
 job and summary say whether it landed. To retry a branch without a new
@@ -396,7 +402,7 @@ unrelated workflow can still consume free account capacity. Other workflows keep
 their share bounded so a new run's first job starts within a minute: a large
 matrix sets `max-parallel` and packs enough work in each job that setup stays
 a small part of it, and CI runs once per ref (a newer push replaces the queued
-run). Autoland's test runs hold one group per branch and its land job the one
+run). Autoland's train runs hold one group per train and its land job the one
 landing group; farm runs have no group, so landings never hold them back.
 
 `bun wisp farm ... --wait` (`waitFor` in wisp:host/farm/farm.ts) polls the

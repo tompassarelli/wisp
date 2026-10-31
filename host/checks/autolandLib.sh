@@ -6,6 +6,6 @@ refuse_member() {
   fail_tip "$2" "$3"
   echo "::error title=Autoland didn't land::$1 (${2:0:10}): $3"
 }
-dispatch() { gh workflow run autoland.yml --ref "$WORKFLOW_REF" -f branch="$1"; }
-queue_pending() { gh run list --workflow autoland.yml --json displayTitle,status --limit 60 --jq 'any(.[]; .displayTitle == "Autoland queue" and (.status | IN("pending", "queued", "waiting")))'; }
-requeue_queue() { [ "$(queue_pending)" = true ] || dispatch queue; }
+dispatch() { gh workflow run autoland.yml --ref "$WORKFLOW_REF" -f branch="$1" -f split="$([ "$1" = queue ] || echo yes)"; }
+queue_pending() { for status in pending queued waiting; do gh run list --workflow autoland.yml --status "$status" --limit 100 --json displayTitle --jq 'any(.[]; .displayTitle == "Autoland queue")'; done | grep -q true; }
+requeue_queue() { queue_pending || dispatch queue; }

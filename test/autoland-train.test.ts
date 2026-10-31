@@ -16,6 +16,10 @@ test("[spec wisp autoland-train] a train takes every tip with a deny-list succes
   ).toEqual(["claude/old", "claude/new"]);
 });
 
+test("[spec wisp autoland-train] a tip already in a split train's run is left to that run", () => {
+  expect(queued([entry("claude/a", 1, { denylist: "success" }), entry("claude/b", 2, { denylist: "success" })], ["claude/a"])).toEqual(["claude/b"]);
+});
+
 test("[spec wisp autoland-train] a failing train splits into two halves that together hold every branch once", () => {
   expect(halves(["a", "b", "c", "d", "e"])).toEqual([["a", "b", "c"], ["d", "e"]]);
   expect(halves(["a", "b"])).toEqual([["a"], ["b"]]);
