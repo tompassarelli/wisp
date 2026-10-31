@@ -3,6 +3,7 @@ use super::emitter::{Emitter2, Scalar};
 use super::{Color, Geoset, GeosetAnim, TextureAnim, Model, ModelError, Node, Sequence};
 
 mod materials;
+mod lights;
 
 use materials::{parse_materials, parse_textures};
 
@@ -142,7 +143,8 @@ pub(super) fn parse(bytes: &[u8]) -> Result<Model, ModelError> {
             b"BONE" => parse_each_node(&mut chunk, &mut model, 8)?,
             b"HELP" => parse_each_node(&mut chunk, &mut model, 0)?,
             b"GEOA" | b"TXAN" | b"PRE2" => parse_animated(&keyword, &mut chunk, &mut model)?,
-            b"ATCH" | b"LITE" | b"PREM" | b"RIBB" | b"CORN" => parse_sized_nodes(&mut chunk, &mut model)?,
+            b"LITE" => lights::parse(&mut chunk, &mut model)?,
+            b"ATCH" | b"PREM" | b"RIBB" | b"CORN" => parse_sized_nodes(&mut chunk, &mut model)?,
             b"PIVT" => (0..size / 12).try_for_each(|_| chunk.floats::<3>().map(|point| pivots.push(point)))?,
             _ => {}
         }

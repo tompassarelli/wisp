@@ -110,11 +110,6 @@ impl Shadow {
         device.create_bind_group(&wgpu::BindGroupDescriptor { label: Some("shadow frame"), layout, entries: &[entry(0, frame), entry(1, buffers[0]), entry(2, buffers[1]), entry(3, buffers[2])] })
     }
 
-    /// The map and its comparison sampler, as `frame_group` binds them.
-    pub fn bound(&self) -> (&wgpu::TextureView, &wgpu::Sampler) {
-        (&self.view, &self.compare)
-    }
-
     pub fn rebind(&mut self, device: &wgpu::Device, buffers: [&wgpu::Buffer; 3]) {
         self.group = Self::bind(device, &self.layout, &self.frame, buffers);
     }

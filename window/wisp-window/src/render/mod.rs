@@ -15,6 +15,7 @@ mod weather;
 mod particles;
 mod passes;
 mod pipelines;
+mod point_shadow;
 mod ripples;
 mod scene;
 mod shadow;
@@ -42,6 +43,7 @@ use gpu::{bone_storage, frame_group, frame_uniform_buffer, instance_storage, col
 use {lightning::Lightning, weather::Weather};
 use model::{Filter, ModelData, ModelEmitter, Paint, Vertex};
 use shadow::Shadow;
+use point_shadow::Points;
 use uniforms::{lighting_of, FrameUniform, Instance, LayerUniform, Lit, SceneFrame};
 use water::{Glow, Water, WaterSettings};
 use particles::{ParticleFrame, Particles, Slot};
@@ -142,6 +144,7 @@ pub struct Renderer {
     targets: Option<Targets>,
     post: Post,
     shadow: Shadow,
+    points: Points,
     tuning: Tuning,
     sprites: Vec<sprite::Slot>,
     bone_scratch: Vec<Mat4>,
@@ -172,15 +175,14 @@ impl Renderer {
 
     pub fn new(device: wgpu::Device, queue: wgpu::Queue, format: wgpu::TextureFormat, quality: Quality, features: Features) -> Self {
         let (pipelines, frame_layout, layer_layout) = pipelines::build(&device, HDR);
-        let bone_buffer = bone_storage(&device, BONES_AT_START);
-        let color_buffer = color_storage(&device, SLOTS_AT_START);
+        let (bone_buffer, color_buffer) = (bone_storage(&device, BONES_AT_START), color_storage(&device, SLOTS_AT_START));
         let uv_buffer = uv_storage(&device, SLOTS_AT_START);
         let instance_buffer = instance_storage(&device, INSTANCES_AT_START);
         let shadow = Shadow::new(&device, &layer_layout, [&bone_buffer, &color_buffer, &uv_buffer], match features.shadows { Shadows::Off => 0, Shadows::Map(side) => side });
+        let points = Points::new(&device, &shadow.layout, &layer_layout, [&bone_buffer, &color_buffer, &uv_buffer], usize::from(features.point_shadows));
         let set = |label| {
             let buffer = frame_uniform_buffer(&device, label);
-            let group = frame_group(&device, &frame_layout, &buffer, &bone_buffer, &color_buffer, &uv_buffer, shadow.bound());
-            FrameSet { buffer, group }
+            FrameSet { group: frame_group(&device, &frame_layout, &buffer, &bone_buffer, &color_buffer, &uv_buffer, points.maps(&shadow.view, &shadow.compare)), buffer }
         };
         let (main, sky, mirror, mirror_sky) = (set("main frame"), set("sky frame"), set("mirrored frame"), set("mirrored sky frame"));
         let water = Water::new(&device, HDR, &frame_layout);
@@ -229,6 +231,7 @@ impl Renderer {
             targets: None,
             post,
             shadow,
+            points,
             tuning: assets::tuning_of(features, TUNING),
             sprites: Vec::new(),
             bone_scratch: Vec::new(),
@@ -327,41 +330,12 @@ impl Renderer {
         self.targets = Some(targets);
     }
 
-    /// `mirror` is set when the frame is the mirrored copy drawn for the reflection, whose geometry below `plane` is cut away; `lit` says how the light and the sun's map reach what the frame draws.
-    fn scene_frame(scene: &Scene, aspect: f32, window: f32, far: f32, size: (u32, u32), plane: f32, mirror: bool, glow: Glow, lit: Lit) -> SceneFrame {
-        let camera = &scene.camera;
-        let view = camera.view;
-        let (light_toward, light_key, light_ambient) = match (&scene.light, lit) {
-            (Some(light), Lit::Ambient | Lit::Sunlit(_)) => ([light.toward[0], light.toward[1], light.toward[2], 0.0], [light.key[0], light.key[1], light.key[2], 1.0], [light.ambient[0], light.ambient[1], light.ambient[2], 0.0]),
-            _ => ([0.0, 0.0, 1.0, 0.0], [0.0; 4], [1.0, 1.0, 1.0, 0.0]),
-        };
-        let (fog_color, fog_range) = match &scene.fog {
-            Some(fog) => ([fog.color[0], fog.color[1], fog.color[2], 1.0], [fog.start, fog.end, fog.max, 0.0]),
-            None => ([0.0; 4], [0.0, 1.0, 1.0, 0.0]),
-        };
-        let (sun_projection, shadow) = match lit {
-            Lit::Sunlit(sun) => (sun.view_projection, [sun.texel, sun.offset, 1.0, 0.0]),
-            Lit::Unlit | Lit::Ambient => (IDENTITY, [0.0; 4]),
-        };
-        let flat = multiply(&projection(camera.tangent, camera.near, far, aspect, window, camera.rise), &view);
-        let view_projection = if mirror { multiply(&flat, &mirrored(plane)) } else { flat };
-        let (width, height) = (size.0 as f32, size.1 as f32);
-        SceneFrame {
-            base: FrameUniform { view_projection, light_toward, light_key, light_ambient, fog_color, fog_range },
-            eye: [camera.eye[0], camera.eye[1], camera.eye[2], 0.0],
-            camera: [camera.near, far, plane, f32::from(u8::from(mirror))],
-            screen: [width, height, 1.0 / width.max(1.0), 1.0 / height.max(1.0)],
-            glow: glow.light,
-            glow_at: glow.at,
-            sun_projection,
-            shadow,
-        }
-    }
 
     /// Lays every resident pose out by model: bone matrices into the scratch, instances grouped so each model's are contiguous.
     fn layout(&mut self, poses: &[Pose]) {
         self.counts.iter_mut().for_each(|count| *count = 0);
         self.order.clear();
+        self.points.candidates.clear();
         self.water_level = None;
         for pose in poses {
             if let Some(&id) = self.model_ids.get(pose.model.as_str()) {
@@ -389,7 +363,7 @@ impl Renderer {
         self.bone_scratch.clear();
         self.color_scratch.clear();
         self.uv_scratch.clear();
-        for pose in poses {
+        for (index, pose) in poses.iter().enumerate() {
             let Some(&id) = self.model_ids.get(pose.model.as_str()) else { continue };
             let group = self.groups.iter().find(|group| group.model == id).map(|group| group.first).unwrap_or(0);
             let model = &mut self.models[id];
@@ -402,6 +376,9 @@ impl Renderer {
             let slot = (group + self.counts[id]) as usize;
             self.counts[id] += 1;
             self.instance_scratch[slot] = Instance { model: pose.matrix, tint: [pose.color[0], pose.color[1], pose.color[2], pose.alpha], team: [pose.team[0], pose.team[1], pose.team[2], 1.0], base: [base as u32, color_base as u32] };
+            if pose.alpha > 0.0 {
+                point_shadow::gather(&mut self.points.candidates, model, pose, &self.bone_scratch[base..], index, slot as u32);
+            }
             if pose.sequence >= 0 && pose.alpha > 0.0 {
                 for (index, ((emitter, slot), sample)) in model.emitters.iter().zip(model.rig.emitters()).enumerate() {
                     let Some(slot) = *slot else { continue };
@@ -432,6 +409,7 @@ impl Renderer {
             self.uv_buffer = uv_storage(&self.device, self.color_capacity);
             self.bind_frames();
             self.shadow.rebind(&self.device, [&self.bone_buffer, &self.color_buffer, &self.uv_buffer]);
+            self.points.rebind(&self.device, &self.shadow.layout, [&self.bone_buffer, &self.color_buffer, &self.uv_buffer]);
         }
         let sky_instance = self.instance_scratch.len();
         if let Some((_, pose)) = sky {
@@ -454,10 +432,17 @@ impl Renderer {
         let glow = if self.water_level.is_some() && self.water.ready() { WaterSettings::of(self.water.liquid).glow(plane, seconds) } else { Glow::NONE };
         let sun = scene.light.as_ref().filter(|light| light.key.iter().any(|&channel| channel > 0.0)).filter(|_| self.shadow.side > 0).and_then(|light| scene.camera.sun_corners(aspect).map(|corners| shadow::sun(corners, light.toward, self.shadow.side)));
         let lit = sun.as_ref().map_or(Lit::Ambient, Lit::Sunlit);
-        let main = Self::scene_frame(scene, aspect, window, scene.camera.far, size, plane, false, glow, lit);
+        let points = self.points.stage(&self.queue, scene.camera.eye);
+        let with_points = |mut frame: SceneFrame, lit: Lit| {
+            if !matches!(lit, Lit::Unlit) {
+                frame.points = points;
+            }
+            frame
+        };
+        let main = with_points(Self::scene_frame(scene, aspect, window, scene.camera.far, size, plane, false, glow, lit), lit);
         let frames = [(&self.main, scene.camera.far, false, lit), (&self.sky, scene.camera.sky_far, false, Lit::Unlit), (&self.mirror, scene.camera.far, true, lit), (&self.mirror_sky, scene.camera.sky_far, true, Lit::Unlit)];
         for (set, far, mirror, lit) in frames {
-            self.queue.write_buffer(&set.buffer, 0, bytemuck::bytes_of(&Self::scene_frame(scene, aspect, window, far, size, plane, mirror, glow, lit)));
+            self.queue.write_buffer(&set.buffer, 0, bytemuck::bytes_of(&with_points(Self::scene_frame(scene, aspect, window, far, size, plane, mirror, glow, lit), lit)));
         }
         if let Some(sun) = &sun {
             self.shadow.write(&self.queue, sun);

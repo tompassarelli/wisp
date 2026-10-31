@@ -51,6 +51,7 @@ pub(super) fn build(device: &wgpu::Device, format: wgpu::TextureFormat) -> (Vec<
             entry(3, wgpu::ShaderStages::VERTEX, wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Storage { read_only: true }, has_dynamic_offset: false, min_binding_size: None }),
             entry(4, wgpu::ShaderStages::FRAGMENT, wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Depth, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false }),
             entry(5, wgpu::ShaderStages::FRAGMENT, wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Comparison)),
+            entry(6, wgpu::ShaderStages::FRAGMENT, wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Depth, view_dimension: wgpu::TextureViewDimension::CubeArray, multisampled: false }),
         ],
     });
     let layer_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {

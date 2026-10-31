@@ -93,7 +93,7 @@ impl Renderer {
 
     pub(super) fn bind_frames(&mut self) {
         for set in [&mut self.main, &mut self.sky, &mut self.mirror, &mut self.mirror_sky] {
-            set.group = super::frame_group(&self.device, &self.frame_layout, &set.buffer, &self.bone_buffer, &self.color_buffer, &self.uv_buffer, self.shadow.bound());
+            set.group = super::frame_group(&self.device, &self.frame_layout, &set.buffer, &self.bone_buffer, &self.color_buffer, &self.uv_buffer, self.points.maps(&self.shadow.view, &self.shadow.compare));
         }
     }
 
@@ -123,6 +123,9 @@ impl Renderer {
         let window = size.0 as f32 / size.1.max(1) as f32;
         if self.prepare(scene, aspect, window, size) && !self.groups.is_empty() {
             self.shadow.draw(encoder, &self.models, &self.groups, &self.instance_buffer);
+        }
+        if !self.groups.is_empty() {
+            self.points.draw(encoder, &self.models, &self.groups, &self.instance_buffer);
         }
 
         let clear = (if scene.clear == [0.0; 3] { super::CLEAR } else { scene.clear.map(f64::from) }).map(linear_of);

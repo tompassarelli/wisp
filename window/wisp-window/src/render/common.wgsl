@@ -1,3 +1,9 @@
+struct Points {
+    counts: vec4<f32>,
+    position: array<vec4<f32>, 16>,
+    color: array<vec4<f32>, 16>,
+};
+
 struct Frame {
     view_projection: mat4x4<f32>,
     light_toward: vec4<f32>,
@@ -12,6 +18,7 @@ struct Frame {
     glow_at: vec4<f32>,
     sun_projection: mat4x4<f32>,
     shadow: vec4<f32>,
+    points: Points,
 };
 
 @group(0) @binding(0) var<uniform> frame: Frame;

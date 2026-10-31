@@ -5,7 +5,7 @@ use crate::model::{self, global_sequence_frame, Playhead, Pose};
 use super::math::Mat4;
 use crate::remaster::Quality;
 
-use super::model::{EmitterSample, Filter, Layer, ModelData, ModelEmitter, Paint, Part, Rig, Vertex};
+use super::model::{EmitterSample, Filter, Layer, ModelData, ModelEmitter, ModelLight, Paint, Part, Rig, Vertex};
 use super::tessellate::tessellate;
 
 const TEAM_COLOR: u32 = 1;
@@ -26,6 +26,7 @@ struct MdxRig {
     colors: Vec<[f32; 4]>,
     slots: Vec<LayerSlot>,
     uv_rows: Vec<[f32; 4]>,
+    lights: Vec<ModelLight>,
 }
 
 impl Rig for MdxRig {
@@ -95,6 +96,10 @@ impl Rig for MdxRig {
 
     fn emitters(&self) -> &[EmitterSample] {
         &self.samples
+    }
+
+    fn lights(&self) -> &[ModelLight] {
+        &self.lights
     }
 }
 
@@ -189,7 +194,8 @@ pub(super) fn build(parsed: model::Model, quality: Quality) -> Result<ModelData,
         parts.push(Part { color_slot: geoset_index as u32, first_index, index_count: indices.len() as u32 - first_index, layers });
     }
     let emitters = model.emitters.iter().map(|emitter| ModelEmitter { spec: emitter.clone(), paint: paint(model, emitter.texture_id) }).collect();
-    let placed: Vec<usize> = model.emitters.iter().map(|emitter| emitter.node).collect();
+    let lights: Vec<ModelLight> = model.lights.iter().filter(|light| light.kind == 0 && light.end > 0.0).map(|light| ModelLight { node: light.node, pivot: light.pivot, start: light.start, end: light.end, color: light.color.map(|channel| channel * light.intensity) }).collect();
+    let placed: Vec<usize> = model.emitters.iter().map(|emitter| emitter.node).chain(lights.iter().map(|light| light.node)).collect();
     let pose = Pose::new(model, &placed).map_err(|error| error.to_string())?;
     let rig = MdxRig {
         model,
@@ -199,6 +205,7 @@ pub(super) fn build(parsed: model::Model, quality: Quality) -> Result<ModelData,
         colors: vec![[1.0; 4]; next_slot as usize],
         slots,
         uv_rows: vec![[[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0]]; next_slot as usize].into_iter().flatten().collect(),
+        lights,
     };
     let mut data = ModelData { vertices, indices, parts, rig: Box::new(rig), emitters };
     tessellate(&mut data, quality.tessellation_levels());

@@ -35,11 +35,11 @@ pub(super) fn instance_storage(device: &wgpu::Device, count: usize) -> wgpu::Buf
     device.create_buffer(&wgpu::BufferDescriptor { label: Some("instances"), size: (count * size_of::<Instance>()) as u64, usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false })
 }
 
-pub(super) fn frame_group(device: &wgpu::Device, layout: &wgpu::BindGroupLayout, frame: &wgpu::Buffer, bones: &wgpu::Buffer, colors: &wgpu::Buffer, uv_rows: &wgpu::Buffer, sun: (&wgpu::TextureView, &wgpu::Sampler)) -> wgpu::BindGroup {
+pub(super) fn frame_group(device: &wgpu::Device, layout: &wgpu::BindGroupLayout, frame: &wgpu::Buffer, bones: &wgpu::Buffer, colors: &wgpu::Buffer, uv_rows: &wgpu::Buffer, maps: super::point_shadow::Maps) -> wgpu::BindGroup {
     device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("frame"),
         layout,
-        entries: &[wgpu::BindGroupEntry { binding: 0, resource: frame.as_entire_binding() }, wgpu::BindGroupEntry { binding: 1, resource: bones.as_entire_binding() }, wgpu::BindGroupEntry { binding: 2, resource: colors.as_entire_binding() }, wgpu::BindGroupEntry { binding: 3, resource: uv_rows.as_entire_binding() }, wgpu::BindGroupEntry { binding: 4, resource: wgpu::BindingResource::TextureView(sun.0) }, wgpu::BindGroupEntry { binding: 5, resource: wgpu::BindingResource::Sampler(sun.1) }],
+        entries: &[wgpu::BindGroupEntry { binding: 0, resource: frame.as_entire_binding() }, wgpu::BindGroupEntry { binding: 1, resource: bones.as_entire_binding() }, wgpu::BindGroupEntry { binding: 2, resource: colors.as_entire_binding() }, wgpu::BindGroupEntry { binding: 3, resource: uv_rows.as_entire_binding() }, wgpu::BindGroupEntry { binding: 4, resource: wgpu::BindingResource::TextureView(maps.sun) }, wgpu::BindGroupEntry { binding: 5, resource: wgpu::BindingResource::Sampler(maps.compare) }, wgpu::BindGroupEntry { binding: 6, resource: wgpu::BindingResource::TextureView(maps.points) }],
     })
 }
 

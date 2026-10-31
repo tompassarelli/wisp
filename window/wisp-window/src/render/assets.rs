@@ -188,6 +188,7 @@ impl Renderer {
     pub fn set_features(&mut self, features: Features) {
         self.features = features;
         self.set_shadow_side(match features.shadows { Shadows::Off => 0, Shadows::Map(side) => side });
+        self.set_point_shadows(usize::from(features.point_shadows));
         self.set_post_tuning(tuning_of(features, self.tuning));
         if let Some(incoming) = self.incoming.as_mut() {
             incoming.set_features(features);

@@ -80,6 +80,19 @@ pub trait Rig: Send {
     fn uv_rows(&self) -> &[[f32; 4]];
     /// What each of the model's particle emitters is doing at the pose the last `pose` call wrote.
     fn emitters(&self) -> &[EmitterSample];
+    /// The model's omni lights, whose positions are the nodes' bones at the pose the last `pose` call wrote.
+    fn lights(&self) -> &[ModelLight] {
+        &[]
+    }
+}
+
+/// An omni light of a model: it shines from its node's pivot at full strength out to `start` and fades to nothing at `end`; `color` is the light's colour times its intensity.
+pub struct ModelLight {
+    pub node: usize,
+    pub pivot: [f32; 3],
+    pub start: f32,
+    pub end: f32,
+    pub color: [f32; 3],
 }
 
 /// An emitter's animated values at one pose.

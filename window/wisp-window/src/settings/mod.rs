@@ -38,10 +38,10 @@ impl Preset {
     /// The features this preset runs.
     pub fn features(self) -> Features {
         match self {
-            Preset::Low => Features { shadows: Shadows::Off, msaa: 1, ssao: false, bloom: false, volumetrics: false, cloud_layers: 1, weather_percent: 25, water: Water::Flat, render_scale_percent: 75 },
-            Preset::Medium => Features { shadows: Shadows::Map(1024), msaa: 2, ssao: false, bloom: false, volumetrics: false, cloud_layers: 2, weather_percent: 50, water: Water::Reflective, render_scale_percent: 100 },
-            Preset::High => Features { shadows: Shadows::Map(2048), msaa: 4, ssao: true, bloom: true, volumetrics: false, cloud_layers: 3, weather_percent: 100, water: Water::Reflective, render_scale_percent: 100 },
-            Preset::Ultra => Features { shadows: Shadows::Map(4096), msaa: 8, ssao: true, bloom: true, volumetrics: true, cloud_layers: 3, weather_percent: 100, water: Water::Refractive, render_scale_percent: 100 },
+            Preset::Low => Features { shadows: Shadows::Off, point_shadows: 0, msaa: 1, ssao: false, bloom: false, volumetrics: false, cloud_layers: 1, weather_percent: 25, water: Water::Flat, render_scale_percent: 75 },
+            Preset::Medium => Features { shadows: Shadows::Map(1024), point_shadows: 0, msaa: 2, ssao: false, bloom: false, volumetrics: false, cloud_layers: 2, weather_percent: 50, water: Water::Reflective, render_scale_percent: 100 },
+            Preset::High => Features { shadows: Shadows::Map(2048), point_shadows: 2, msaa: 4, ssao: true, bloom: true, volumetrics: false, cloud_layers: 3, weather_percent: 100, water: Water::Reflective, render_scale_percent: 100 },
+            Preset::Ultra => Features { shadows: Shadows::Map(4096), point_shadows: 4, msaa: 8, ssao: true, bloom: true, volumetrics: true, cloud_layers: 3, weather_percent: 100, water: Water::Refractive, render_scale_percent: 100 },
         }
     }
 
@@ -100,6 +100,8 @@ pub enum Water {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Features {
     pub shadows: Shadows,
+    /// Point lights that cast a shadow, the strongest near the camera: the most the renderer draws a cube depth map for each frame.
+    pub point_shadows: u8,
     /// Samples per pixel: 1, 2, 4 or 8. Unread until the final-image pass can resample its depth.
     pub msaa: u32,
     pub ssao: bool,
@@ -117,12 +119,13 @@ pub struct Features {
 
 impl Features {
     /// Each setting key and its value, for the log and `standalone.json`.
-    pub fn keys(&self) -> [(&'static str, String); 9] {
+    pub fn keys(&self) -> [(&'static str, String); 10] {
         [
             ("shadows", match self.shadows {
                 Shadows::Off => "off".into(),
                 Shadows::Map(side) => side.to_string(),
             }),
+            ("pointShadows", self.point_shadows.to_string()),
             ("msaa", self.msaa.to_string()),
             ("ssao", self.ssao.to_string()),
             ("bloom", self.bloom.to_string()),
@@ -166,11 +169,11 @@ mod tests {
     #[test]
     fn each_preset_costs_no_less_than_the_one_below() {
         let cost = |features: Features| {
-            (matches!(features.shadows, Shadows::Map(_)) as u32 + features.ssao as u32 + features.bloom as u32 + features.volumetrics as u32, features.msaa, features.weather_percent, features.render_scale_percent, features.cloud_layers)
+            (matches!(features.shadows, Shadows::Map(_)) as u32 + features.ssao as u32 + features.bloom as u32 + features.volumetrics as u32, features.msaa, features.weather_percent, features.render_scale_percent, features.cloud_layers, features.point_shadows)
         };
         for pair in PRESETS.windows(2) {
             let (low, high) = (cost(pair[0].features()), cost(pair[1].features()));
-            assert!(low.0 <= high.0 && low.1 <= high.1 && low.2 <= high.2 && low.3 <= high.3 && low.4 <= high.4, "{:?} to {:?}", pair[0], pair[1]);
+            assert!(low.0 <= high.0 && low.1 <= high.1 && low.2 <= high.2 && low.3 <= high.3 && low.4 <= high.4 && low.5 <= high.5, "{:?} to {:?}", pair[0], pair[1]);
         }
     }
 

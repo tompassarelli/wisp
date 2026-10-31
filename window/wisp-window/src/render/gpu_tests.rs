@@ -4,6 +4,7 @@ use model::EmitterSample;
 use scene::Bolt;
 use image::ImageEncoder;
 
+mod point_shadow;
 mod shadow;
 
 const SIDE: u32 = 128;
@@ -154,13 +155,14 @@ const TEAM: [f32; 3] = [0.9, 0.1, 0.3];
 /// A still rig whose geoset slot 0 has `geoset` as its colour and opacity, and every other slot white.
 struct FlatRig {
     colors: [[f32; 4]; 8],
+    lights: Vec<model::ModelLight>,
 }
 
 impl FlatRig {
     fn new(geoset: [f32; 4]) -> Self {
         let mut colors = [[1.0; 4]; 8];
         colors[0] = geoset;
-        Self { colors }
+        Self { colors, lights: Vec::new() }
     }
 }
 
@@ -193,6 +195,10 @@ impl model::Rig for FlatRig {
 
     fn emitters(&self) -> &[EmitterSample] {
         &[]
+    }
+
+    fn lights(&self) -> &[model::ModelLight] {
+        &self.lights
     }
 }
 
