@@ -1,4 +1,4 @@
-import type { Lowering } from "./lowering";
+import type { ConstantLowering, Lowering } from "./lowering";
 
 export const sound: Lowering = {
   createSound: "CreateSound($1, $2, $3, $4, $5, $6, $7)",
@@ -20,4 +20,11 @@ export const sound: Lowering = {
   endTheme: "EndThematicMusic()",
   setVolumeGroup: "VolumeGroupSetVolume($1, $2)",
   resetVolumeGroups: "VolumeGroupReset()",
+};
+
+export const soundConstants: ConstantLowering = {
+  VolumeGroup: {
+    combat: "SOUND_VOLUMEGROUP_COMBAT",
+    spells: "SOUND_VOLUMEGROUP_SPELLS",
+  },
 };

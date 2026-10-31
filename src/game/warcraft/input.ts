@@ -1,4 +1,4 @@
-import type { Lowering } from "./lowering";
+import type { ConstantLowering, Lowering } from "./lowering";
 
 export const input: Lowering = {
   osKey: "ConvertOsKeyType($1)",
@@ -18,4 +18,10 @@ export const input: Lowering = {
   addPointerMoveEvent: "TriggerRegisterPlayerEvent($1, $2, EVENT_PLAYER_MOUSE_MOVE)",
   enableSelections: "BlzEnableSelections($1, $2)",
   enableUserControl: "EnableUserControl($1)",
+};
+
+export const inputConstants: ConstantLowering = {
+  MouseButton: {
+    left: "MOUSE_BUTTON_TYPE_LEFT",
+  },
 };

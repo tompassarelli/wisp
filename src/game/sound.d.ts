@@ -1,5 +1,12 @@
-export type Sound = sound;
-export type VolumeGroup = volumegroup;
+import type { Opaque } from "./opaque";
+
+export type Sound = Opaque<"Sound">;
+export type VolumeGroup = Opaque<"VolumeGroup">;
+
+export declare const VolumeGroup: {
+  readonly combat: VolumeGroup;
+  readonly spells: VolumeGroup;
+};
 
 export declare function createSound(file: string, looping: boolean, positional: boolean, stopOutOfRange: boolean, fadeInRate: number, fadeOutRate: number, environment: string): Sound;
 export declare function soundFromLabel(label: string, looping: boolean, positional: boolean, stopOutOfRange: boolean, fadeInRate: number, fadeOutRate: number): Sound;

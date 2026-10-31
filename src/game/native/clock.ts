@@ -1,4 +1,4 @@
-import type { GameSpeed, Timer } from "../clock";
+import type { GameSpeed as GameSpeedType, Timer } from "../clock";
 import { asHandle, fromHandle, fromValue } from "./types";
 import { boundWorld } from "./world";
 
@@ -42,12 +42,20 @@ export function lockSpeed(): void {
   boundWorld().log?.("SetMapFlag", ["MAP_LOCK_SPEED", true]);
 }
 
-export function gameSpeed(): GameSpeed {
+export function gameSpeed(): GameSpeedType {
   const world = boundWorld();
   world.log?.("GetGameSpeed", []);
-  return fromValue<GameSpeed>(world.clock.speed);
+  return fromValue<GameSpeedType>(world.clock.speed);
 }
 
 export function restartMatch(scoreScreen: boolean): void {
   boundWorld().log?.("RestartGame", [scoreScreen]);
 }
+
+export const GameSpeed = {
+  slowest: fromValue<GameSpeedType>("MAP_SPEED_SLOWEST"),
+  slow: fromValue<GameSpeedType>("MAP_SPEED_SLOW"),
+  normal: fromValue<GameSpeedType>("MAP_SPEED_NORMAL"),
+  fast: fromValue<GameSpeedType>("MAP_SPEED_FAST"),
+  fastest: fromValue<GameSpeedType>("MAP_SPEED_FASTEST"),
+};

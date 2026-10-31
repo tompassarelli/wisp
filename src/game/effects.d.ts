@@ -1,9 +1,19 @@
 import type { Player } from "./players";
+import type { Opaque } from "./opaque";
 
-export type Effect = effect;
-export type Beam = lightning;
-export type FloatingText = texttag;
-export type EffectAnimation = animtype;
+export type Effect = Opaque<"Effect">;
+export type Beam = Opaque<"Beam">;
+export type FloatingText = Opaque<"FloatingText">;
+export type EffectAnimation = Opaque<"EffectAnimation">;
+
+export declare const EffectAnimation: {
+  readonly stand: EffectAnimation;
+  readonly birth: EffectAnimation;
+  readonly death: EffectAnimation;
+  readonly walk: EffectAnimation;
+  readonly spell: EffectAnimation;
+  readonly attack: EffectAnimation;
+};
 
 export declare function createEffect(model: string, x: number, y: number): Effect;
 export declare function destroyEffect(effect: Effect): void;

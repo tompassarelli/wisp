@@ -1,7 +1,7 @@
-import { type Events, type FrameEvent, type FrameKind, type FramePoint, type Frame, type OriginFrame, type Quest, type TextAlignment } from "../frames";
+import { type Events, type FrameEvent as FrameEventType, type FrameKind, type FramePoint as FramePointType, type Frame, type OriginFrame as OriginFrameType, type Quest, type TextAlignment as TextAlignmentType } from "../frames";
 import type { Player } from "../players";
 import type { QuestEntry } from "./quests";
-import { asHandle, fromHandle } from "./types";
+import { asHandle, fromHandle, fromValue } from "./types";
 import { boundWorld, type World } from "./world";
 
 function questEntry(world: World, quest: Quest, change: (entry: QuestEntry) => void): void {
@@ -9,7 +9,7 @@ function questEntry(world: World, quest: Quest, change: (entry: QuestEntry) => v
   if (entry !== undefined) change(entry);
 }
 
-function registerFrameEvent(world: World, events: Events, frame: Frame, event: FrameEvent): void {
+function registerFrameEvent(world: World, events: Events, frame: Frame, event: FrameEventType): void {
   const trigger = asHandle(events);
   if (world.events.hasFrame(trigger, frame, event)) throw new Error("addFrameEvent: this frame already registers this event on these events");
   world.events.registerFrame(trigger, frame, event);
@@ -87,7 +87,7 @@ export function frameVisible(frame: Frame): boolean {
   return world.frames.visible(frame);
 }
 
-export function setFrameAbsPoint(frame: Frame, point: FramePoint, x: number, y: number): void {
+export function setFrameAbsPoint(frame: Frame, point: FramePointType, x: number, y: number): void {
   const world = boundWorld();
   world.log?.("BlzFrameSetAbsPoint", [frame, point, x, y]);
   world.frames.setAbsPoint(frame, point, x, y);
@@ -123,7 +123,7 @@ export function setFrameLevel(frame: Frame, level: number): void {
   world.frames.setLevel(frame, level);
 }
 
-export function setFramePoint(frame: Frame, point: FramePoint, relative: Frame, relativePoint: FramePoint, x: number, y: number): void {
+export function setFramePoint(frame: Frame, point: FramePointType, relative: Frame, relativePoint: FramePointType, x: number, y: number): void {
   const world = boundWorld();
   world.log?.("BlzFrameSetPoint", [frame, point, relative, relativePoint, x, y]);
   world.frames.setPoint(frame, point, relative, relativePoint, x, y);
@@ -147,7 +147,7 @@ export function setFrameText(frame: Frame, text: string): void {
   world.frames.setText(frame, text);
 }
 
-export function setFrameTextAlignment(frame: Frame, vertical: TextAlignment, horizontal: TextAlignment): void {
+export function setFrameTextAlignment(frame: Frame, vertical: TextAlignmentType, horizontal: TextAlignmentType): void {
   const world = boundWorld();
   world.log?.("BlzFrameSetTextAlignment", [frame, vertical, horizontal]);
   world.frames.setTextAlignment(frame, vertical, horizontal);
@@ -213,7 +213,7 @@ export function screenWidth(): number {
   return world.frames.screen.width;
 }
 
-export function originFrame(origin: OriginFrame, index: number): Frame {
+export function originFrame(origin: OriginFrameType, index: number): Frame {
   const world = boundWorld();
   world.log?.("BlzGetOriginFrame", [origin, index]);
   return fromHandle<Frame>(world.frames.originFrame(origin, index));
@@ -225,10 +225,10 @@ export function eventFrame(): Frame {
   return fromHandle<Frame>(asHandle(world.events.triggerFrame()));
 }
 
-export function eventFrameEvent(): FrameEvent {
+export function eventFrameEvent(): FrameEventType {
   const world = boundWorld();
   world.log?.("BlzGetTriggerFrameEvent", []);
-  return world.events.triggerFrameEvent() as FrameEvent;
+  return world.events.triggerFrameEvent() as FrameEventType;
 }
 
 export function eventFrameText(): string {
@@ -252,7 +252,7 @@ export function frameColor(alpha: number, red: number, green: number, blue: numb
   return packColor(alpha, red, green, blue);
 }
 
-export function addFrameEvent(events: Events, frame: Frame, event: FrameEvent): void {
+export function addFrameEvent(events: Events, frame: Frame, event: FrameEventType): void {
   const world = boundWorld();
   world.log?.("BlzTriggerRegisterFrameEvent", [events, frame, event]);
   registerFrameEvent(world, events, frame, event);
@@ -320,3 +320,36 @@ export function setQuestCompleted(quest: Quest, completed: boolean): void {
   questEntry(world, quest, entry => { entry.completed = completed; });
 }
 
+export const FramePoint = {
+  topLeft: fromValue<FramePointType>("FRAMEPOINT_TOPLEFT"),
+  top: fromValue<FramePointType>("FRAMEPOINT_TOP"),
+  topRight: fromValue<FramePointType>("FRAMEPOINT_TOPRIGHT"),
+  left: fromValue<FramePointType>("FRAMEPOINT_LEFT"),
+  center: fromValue<FramePointType>("FRAMEPOINT_CENTER"),
+  right: fromValue<FramePointType>("FRAMEPOINT_RIGHT"),
+  bottomLeft: fromValue<FramePointType>("FRAMEPOINT_BOTTOMLEFT"),
+  bottom: fromValue<FramePointType>("FRAMEPOINT_BOTTOM"),
+  bottomRight: fromValue<FramePointType>("FRAMEPOINT_BOTTOMRIGHT"),
+};
+
+export const FrameEvent = {
+  controlClick: fromValue<FrameEventType>("FRAMEEVENT_CONTROL_CLICK"),
+  editboxEnter: fromValue<FrameEventType>("FRAMEEVENT_EDITBOX_ENTER"),
+  editboxTextChanged: fromValue<FrameEventType>("FRAMEEVENT_EDITBOX_TEXT_CHANGED"),
+  mouseEnter: fromValue<FrameEventType>("FRAMEEVENT_MOUSE_ENTER"),
+  mouseLeave: fromValue<FrameEventType>("FRAMEEVENT_MOUSE_LEAVE"),
+};
+
+export const TextAlignment = {
+  top: fromValue<TextAlignmentType>("TEXT_JUSTIFY_TOP"),
+  middle: fromValue<TextAlignmentType>("TEXT_JUSTIFY_MIDDLE"),
+  bottom: fromValue<TextAlignmentType>("TEXT_JUSTIFY_BOTTOM"),
+  left: fromValue<TextAlignmentType>("TEXT_JUSTIFY_LEFT"),
+  center: fromValue<TextAlignmentType>("TEXT_JUSTIFY_CENTER"),
+  right: fromValue<TextAlignmentType>("TEXT_JUSTIFY_RIGHT"),
+};
+
+export const OriginFrame = {
+  gameUi: fromValue<OriginFrameType>("ORIGIN_FRAME_GAME_UI"),
+  chatMsg: fromValue<OriginFrameType>("ORIGIN_FRAME_CHAT_MSG"),
+};

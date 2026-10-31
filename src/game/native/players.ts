@@ -1,5 +1,5 @@
 import type { Events } from "../events";
-import type { Player, PlayerControl, PlayerSlotState } from "../players";
+import type { Player, PlayerControl as PlayerControlType, PlayerSlotState as PlayerSlotStateType } from "../players";
 import { asHandle, asNumber, fromValue } from "./types";
 import { boundWorld } from "./world";
 
@@ -27,16 +27,16 @@ export function eventPlayer(): Player {
   return fromValue<Player>(world.events.triggerPlayer());
 }
 
-export function playerControl(player: Player): PlayerControl {
+export function playerControl(player: Player): PlayerControlType {
   const world = boundWorld();
   world.log?.("GetPlayerController", [player]);
-  return fromValue<PlayerControl>(world.players.control(slotOf(player)));
+  return fromValue<PlayerControlType>(world.players.control(slotOf(player)));
 }
 
-export function playerSlotState(player: Player): PlayerSlotState {
+export function playerSlotState(player: Player): PlayerSlotStateType {
   const world = boundWorld();
   world.log?.("GetPlayerSlotState", [player]);
-  return fromValue<PlayerSlotState>(world.players.slotState(slotOf(player)));
+  return fromValue<PlayerSlotStateType>(world.players.slotState(slotOf(player)));
 }
 
 export function playerName(player: Player): string {
@@ -57,3 +57,12 @@ export function addLeaveEvent(events: Events, player: Player): void {
   world.log?.("TriggerRegisterPlayerEvent", [events, player, "EVENT_PLAYER_LEAVE"]);
   world.events.registerLeave(asHandle(events), slotOf(player));
 }
+
+export const PlayerControl = {
+  user: fromValue<PlayerControlType>("MAP_CONTROL_USER"),
+  computer: fromValue<PlayerControlType>("MAP_CONTROL_COMPUTER"),
+};
+
+export const PlayerSlotState = {
+  playing: fromValue<PlayerSlotStateType>("PLAYER_SLOT_STATE_PLAYING"),
+};

@@ -1,4 +1,4 @@
-import type { Lowering } from "./lowering";
+import type { ConstantLowering, Lowering } from "./lowering";
 
 export const clock: Lowering = {
   createTimer: "CreateTimer()",
@@ -10,4 +10,14 @@ export const clock: Lowering = {
   lockSpeed: "SetMapFlag(MAP_LOCK_SPEED, true)",
   gameSpeed: "GetGameSpeed()",
   restartMatch: "RestartGame($1)",
+};
+
+export const clockConstants: ConstantLowering = {
+  GameSpeed: {
+    slowest: "MAP_SPEED_SLOWEST",
+    slow: "MAP_SPEED_SLOW",
+    normal: "MAP_SPEED_NORMAL",
+    fast: "MAP_SPEED_FAST",
+    fastest: "MAP_SPEED_FASTEST",
+  },
 };

@@ -1,8 +1,13 @@
 import type { Events } from "./events";
 import type { Player } from "./players";
+import type { Opaque } from "./opaque";
 
-export type OsKey = oskeytype;
-export type MouseButton = mousebuttontype;
+export type OsKey = Opaque<"OsKey">;
+export type MouseButton = Opaque<"MouseButton">;
+
+export declare const MouseButton: {
+  readonly left: MouseButton;
+};
 
 export declare function osKey(code: number): OsKey;
 export declare function addKeyEvent(events: Events, player: Player, key: OsKey, modifiers: number, down: boolean): void;

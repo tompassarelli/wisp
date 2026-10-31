@@ -1,4 +1,4 @@
-import type { Lowering } from "./lowering";
+import type { ConstantLowering, Lowering } from "./lowering";
 
 export const frames: Lowering = {
   createFrame: "BlzCreateFrame($1, $2, $3, $4)",
@@ -52,4 +52,37 @@ export const frames: Lowering = {
   setQuestRequired: "QuestSetRequired($1, $2)",
   setQuestDiscovered: "QuestSetDiscovered($1, $2)",
   setQuestCompleted: "QuestSetCompleted($1, $2)",
+};
+
+export const framesConstants: ConstantLowering = {
+  FramePoint: {
+    topLeft: "FRAMEPOINT_TOPLEFT",
+    top: "FRAMEPOINT_TOP",
+    topRight: "FRAMEPOINT_TOPRIGHT",
+    left: "FRAMEPOINT_LEFT",
+    center: "FRAMEPOINT_CENTER",
+    right: "FRAMEPOINT_RIGHT",
+    bottomLeft: "FRAMEPOINT_BOTTOMLEFT",
+    bottom: "FRAMEPOINT_BOTTOM",
+    bottomRight: "FRAMEPOINT_BOTTOMRIGHT",
+  },
+  FrameEvent: {
+    controlClick: "FRAMEEVENT_CONTROL_CLICK",
+    editboxEnter: "FRAMEEVENT_EDITBOX_ENTER",
+    editboxTextChanged: "FRAMEEVENT_EDITBOX_TEXT_CHANGED",
+    mouseEnter: "FRAMEEVENT_MOUSE_ENTER",
+    mouseLeave: "FRAMEEVENT_MOUSE_LEAVE",
+  },
+  TextAlignment: {
+    top: "TEXT_JUSTIFY_TOP",
+    middle: "TEXT_JUSTIFY_MIDDLE",
+    bottom: "TEXT_JUSTIFY_BOTTOM",
+    left: "TEXT_JUSTIFY_LEFT",
+    center: "TEXT_JUSTIFY_CENTER",
+    right: "TEXT_JUSTIFY_RIGHT",
+  },
+  OriginFrame: {
+    gameUi: "ORIGIN_FRAME_GAME_UI",
+    chatMsg: "ORIGIN_FRAME_CHAT_MSG",
+  },
 };

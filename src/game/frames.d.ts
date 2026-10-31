@@ -1,12 +1,48 @@
 import type { Player } from "./players";
+import type { Opaque } from "./opaque";
 
-export type Frame = framehandle;
-export type Events = trigger;
-export type Quest = quest;
-export type FramePoint = framepointtype;
-export type FrameEvent = frameeventtype;
-export type TextAlignment = textaligntype;
-export type OriginFrame = originframetype;
+export type Frame = Opaque<"Frame">;
+export type { Events } from "./events";
+export type Quest = Opaque<"Quest">;
+export type FramePoint = Opaque<"FramePoint">;
+export type FrameEvent = Opaque<"FrameEvent">;
+export type TextAlignment = Opaque<"TextAlignment">;
+export type OriginFrame = Opaque<"OriginFrame">;
+
+export declare const FramePoint: {
+  readonly topLeft: FramePoint;
+  readonly top: FramePoint;
+  readonly topRight: FramePoint;
+  readonly left: FramePoint;
+  readonly center: FramePoint;
+  readonly right: FramePoint;
+  readonly bottomLeft: FramePoint;
+  readonly bottom: FramePoint;
+  readonly bottomRight: FramePoint;
+};
+
+export declare const FrameEvent: {
+  readonly controlClick: FrameEvent;
+  readonly editboxEnter: FrameEvent;
+  readonly editboxTextChanged: FrameEvent;
+  readonly mouseEnter: FrameEvent;
+  readonly mouseLeave: FrameEvent;
+};
+
+export declare const TextAlignment: {
+  readonly top: TextAlignment;
+  readonly middle: TextAlignment;
+  readonly bottom: TextAlignment;
+  readonly left: TextAlignment;
+  readonly center: TextAlignment;
+  readonly right: TextAlignment;
+};
+
+export declare const OriginFrame: {
+  readonly gameUi: OriginFrame;
+  readonly chatMsg: OriginFrame;
+};
+
 export type FrameKind = "BACKDROP" | "BUTTON" | "CHECKBOX" | "EDITBOX" | "FRAME" | "GLUEBUTTON" | "GLUETEXTBUTTON" | "HIGHLIGHT" | "SCROLLBAR" | "SLIDER" | "SPRITE" | "TEXT" | "TEXTAREA";
 
 export declare function createFrame(template: string, owner: Frame, priority: number, context: number): Frame;

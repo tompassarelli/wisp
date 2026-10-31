@@ -1,4 +1,4 @@
-import type { Lowering } from "./lowering";
+import type { ConstantLowering, Lowering } from "./lowering";
 
 export const view: Lowering = {
   setCameraField: "SetCameraField($1, $2, $3)",
@@ -36,4 +36,24 @@ export const view: Lowering = {
   setFilterEndColor: "SetCineFilterEndColor($1, $2, $3, $4)",
   setFilterDuration: "SetCineFilterDuration($1)",
   showFilter: "DisplayCineFilter($1)",
+};
+
+export const viewConstants: ConstantLowering = {
+  CameraField: {
+    angleOfAttack: "CAMERA_FIELD_ANGLE_OF_ATTACK",
+    depthOfFieldDistance: "CAMERA_FIELD_DEPTH_OF_FIELD_DISTANCE",
+    depthOfFieldScale: "CAMERA_FIELD_DEPTH_OF_FIELD_SCALE",
+    farZ: "CAMERA_FIELD_FARZ",
+    fieldOfView: "CAMERA_FIELD_FIELD_OF_VIEW",
+    roll: "CAMERA_FIELD_ROLL",
+    rotation: "CAMERA_FIELD_ROTATION",
+    targetDistance: "CAMERA_FIELD_TARGET_DISTANCE",
+    zOffset: "CAMERA_FIELD_ZOFFSET",
+  },
+  FilterBlendMode: {
+    blend: "BLEND_MODE_BLEND",
+  },
+  FilterTexMapFlags: {
+    none: "TEXMAP_FLAG_NONE",
+  },
 };

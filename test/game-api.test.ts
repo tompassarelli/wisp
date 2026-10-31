@@ -9,28 +9,28 @@ import * as nativeText from "../src/game/native/text";
 import * as filesApi from "../src/game/native/files";
 import * as nativePlayers from "../src/game/native/players";
 import * as nativeClock from "../src/game/native/clock";
-import { clock } from "../src/game/warcraft/clock";
+import { clock, clockConstants } from "../src/game/warcraft/clock";
 import * as nativeInput from "../src/game/native/input";
-import { input } from "../src/game/warcraft/input";
+import { input, inputConstants } from "../src/game/warcraft/input";
 import * as nativeSync from "../src/game/native/sync";
 import * as nativeView from "../src/game/native/view";
 import { bindWorld } from "../src/game/native/world";
 import { HeadlessClient } from "../src/headless/client";
 import { readNativeDeclarations } from "../host/headless/headless";
 import { parseTemplate, templateParts } from "../src/game/warcraft/lowering";
-import { effects } from "../src/game/warcraft/effects";
+import { effects, effectsConstants } from "../src/game/warcraft/effects";
 import { events } from "../src/game/warcraft/events";
-import { frames } from "../src/game/warcraft/frames";
-import { sound } from "../src/game/warcraft/sound";
+import { frames, framesConstants } from "../src/game/warcraft/frames";
+import { sound, soundConstants } from "../src/game/warcraft/sound";
 import type { VolumeGroup } from "../src/game/sound";
 import { text } from "../src/game/warcraft/text";
 import { files } from "../src/game/warcraft/files";
-import { players } from "../src/game/warcraft/players";
+import { players, playersConstants } from "../src/game/warcraft/players";
 import { sync } from "../src/game/warcraft/sync";
 import { bodies } from "../src/game/warcraft/bodies";
 import * as nativeBodies from "../src/game/native/bodies";
 import { compile, root, wrap } from "./gameApiCompile";
-import { view } from "../src/game/warcraft/view";
+import { view, viewConstants } from "../src/game/warcraft/view";
 import type { CameraField } from "../src/game/view";
 import type { SyncMessage } from "../src/headless/clientTypes";
 
@@ -62,28 +62,28 @@ test("an API function used as a value is rejected, since Lua has no function to 
 });
 
 const families = [
-  { name: "effects", table: effects, backend: native },
-  { name: "frames", table: frames, backend: nativeFrames },
-  { name: "events", table: events, backend: nativeEvents },
-  { name: "sound", table: sound, backend: nativeSound },
-  { name: "text", table: text, backend: nativeText },
-  { name: "files", table: files, backend: filesApi },
-  { name: "players", table: players, backend: nativePlayers },
-  { name: "sync", table: sync, backend: nativeSync },
-  { name: "input", table: input, backend: nativeInput },
-  { name: "clock", table: clock, backend: nativeClock },
-  { name: "bodies", table: bodies, backend: nativeBodies },
-  { name: "view", table: view, backend: nativeView },
+  { name: "effects", table: effects, backend: native, constants: effectsConstants },
+  { name: "frames", table: frames, backend: nativeFrames, constants: framesConstants },
+  { name: "events", table: events, backend: nativeEvents, constants: {} },
+  { name: "sound", table: sound, backend: nativeSound, constants: soundConstants },
+  { name: "text", table: text, backend: nativeText, constants: {} },
+  { name: "files", table: files, backend: filesApi, constants: {} },
+  { name: "players", table: players, backend: nativePlayers, constants: playersConstants },
+  { name: "sync", table: sync, backend: nativeSync, constants: {} },
+  { name: "input", table: input, backend: nativeInput, constants: inputConstants },
+  { name: "clock", table: clock, backend: nativeClock, constants: clockConstants },
+  { name: "bodies", table: bodies, backend: nativeBodies, constants: {} },
+  { name: "view", table: view, backend: nativeView, constants: viewConstants },
 ] as const;
 
-test.each(families)("every $name lowering row names a declared native with the arity of its Wisp function and an implemented backend call", ({ name, table, backend }) => {
+test.each(families)("every $name lowering row names a declared native with the arity of its Wisp function and an implemented backend call", ({ name, table, backend, constants: families }) => {
   const declarations = readNativeDeclarations();
   const declared = new Map(declarations.functions.map(([native, , parameters]) => [native, parameters] as const));
   const constants = new Set(declarations.constants.map(([constant]) => constant));
   const dts = readFileSync(join(root, `src/game/${name}.d.ts`), "utf8");
   const exported = [...dts.matchAll(/export declare function (\w+)\(([^)]*)\)/g)].map(match => [match[1]!, (match[2] ?? "").trim() === "" ? 0 : (match[2] ?? "").split(/,(?![^()]*\))/).length] as const);
   expect(exported.map(([fn]) => fn).sort()).toEqual(Object.keys(table).sort());
-  expect(Object.keys(backend).sort()).toEqual(Object.keys(table).sort());
+  expect(Object.keys(backend).filter(key => !(key in families)).sort()).toEqual(Object.keys(table).sort());
   for (const [fn, parameters] of exported) {
     const template = parseTemplate(table[fn] ?? "");
     const parts = templateParts(template);
@@ -91,6 +91,48 @@ test.each(families)("every $name lowering row names a declared native with the a
     for (const global of parts.globals) expect(constants.has(global)).toBe(true);
     expect(parts.arguments).toBe(parameters);
   }
+});
+
+test.each(families)("every $name constant is declared, implemented and lowered to a Warcraft global holding the value the native backend gives", ({ name, backend, constants: table }) => {
+  const declarations = readNativeDeclarations();
+  const globals = new Set(declarations.constants.map(([constant]) => constant));
+  const client = new HeadlessClient({ slot: 0, humans: [0], declarations, filePrefix: "game-api", localNatives: {}, network: [] });
+  const dts = readFileSync(join(root, `src/game/${name}.d.ts`), "utf8");
+  const declared = [...dts.matchAll(/export declare const (\w+): \{([^}]*)\}/g)].map(match => [match[1]!, [...match[2]!.matchAll(/readonly (\w+):/g)].map(member => member[1]!).sort()] as const);
+  expect(declared.map(([type]) => type).sort()).toEqual(Object.keys(table).sort());
+  for (const [type, members] of declared) {
+    const lowering = table[type] ?? {};
+    const implemented = (backend as Record<string, Record<string, unknown>>)[type] ?? {};
+    expect(Object.keys(lowering).sort()).toEqual(members);
+    expect(Object.keys(implemented).sort()).toEqual(members);
+    for (const [member, global] of Object.entries(lowering)) {
+      expect(globals.has(global)).toBe(true);
+      expect(implemented[member]).toBe((client.natives as Record<string, unknown>)[global]);
+    }
+  }
+});
+
+test("a family constant lowers to the global read it stands for, byte for byte, and its type names the value in annotations", () => {
+  const lowered = compile(`import { createEffect, EffectAnimation, playEffectAnimation } from "../../src/game/effects";\n` + wrap(`
+  const idle: EffectAnimation = EffectAnimation.stand;
+  const effect = createEffect(model, 0, 0);
+  playEffectAnimation(effect, idle);
+  playEffectAnimation(effect, EffectAnimation.attack);`));
+  const raw = compile(wrap(`
+  const idle = ANIM_TYPE_STAND;
+  const effect = AddSpecialEffect(model, 0, 0);
+  BlzPlaySpecialEffect(effect, idle);
+  BlzPlaySpecialEffect(effect, ANIM_TYPE_ATTACK);`));
+  expect(lowered.diagnostics).toBe("");
+  expect(raw.diagnostics).toBe("");
+  expect(lowered.lua).toBe(raw.lua);
+  expect(lowered.lua).toContain("BlzPlaySpecialEffect(effect, ANIM_TYPE_ATTACK)");
+});
+
+test("a family constant object used as a value is rejected, since Lua has no table for it", () => {
+  const { diagnostics } = compile(`import { EffectAnimation } from "../../src/game/effects";\n` + wrap(`  const all = EffectAnimation;\n  void all;`));
+  expect(diagnostics).toContain("EffectAnimation");
+  expect(diagnostics).toContain("9310");
 });
 
 test("the text family lowers to the native calls it replaced, byte for byte", () => {
@@ -150,14 +192,14 @@ test("the native backend refuses to run with no world bound", () => {
 });
 
 test("frame and event calls lower to the natives they replaced, byte for byte", () => {
-  const lowered = compile(`import { createEvents, onEvents } from "../../src/game/events";\nimport { addFrameEvent, createFrameByType, frameColor, originFrame, setFramePoint, setFrameText, setFrameVisible } from "../../src/game/frames";\n` + `export function run(): void {
-  const root = originFrame(ORIGIN_FRAME_GAME_UI, 0);
+  const lowered = compile(`import { createEvents, onEvents } from "../../src/game/events";\nimport { addFrameEvent, createFrameByType, FrameEvent, FramePoint, frameColor, OriginFrame, originFrame, setFramePoint, setFrameText, setFrameVisible } from "../../src/game/frames";\n` + `export function run(): void {
+  const root = originFrame(OriginFrame.gameUi, 0);
   const box = createFrameByType("EDITBOX", "Box", root, "", 0);
-  setFramePoint(box, FRAMEPOINT_TOPLEFT, root, FRAMEPOINT_TOPLEFT, 0.5, -0.25);
+  setFramePoint(box, FramePoint.topLeft, root, FramePoint.topLeft, 0.5, -0.25);
   setFrameText(box, "hi");
   setFrameVisible(box, frameColor(255, 1, 2, 3) > 0);
   const events = createEvents();
-  addFrameEvent(events, box, FRAMEEVENT_EDITBOX_ENTER);
+  addFrameEvent(events, box, FrameEvent.editboxEnter);
   onEvents(events, () => setFrameText(box, ""));
 }\n`);
   const raw = compile(`export function run(): void {
@@ -293,12 +335,12 @@ test("the files family lowers one to one and its native backend keeps a 300-byte
 });
 
 test("player calls lower to the natives they replaced, with a nested native and a global argument, byte for byte", () => {
-  const lowered = compile(`import { createEvents } from "../../src/game/events";\nimport { addLeaveEvent, eventPlayer, localPlayer, player, playerControl, playerName, playerSlot, playerSlotState, setPlayerColor } from "../../src/game/players";\n` + `export function run(slot: number): void {
+  const lowered = compile(`import { createEvents } from "../../src/game/events";\nimport { addLeaveEvent, eventPlayer, localPlayer, player, PlayerControl, playerControl, playerName, playerSlot, PlayerSlotState, playerSlotState, setPlayerColor } from "../../src/game/players";\n` + `export function run(slot: number): void {
   const leave = createEvents();
   const who = player(slot);
   addLeaveEvent(leave, who);
   setPlayerColor(who, slot);
-  if (eventPlayer() === localPlayer() && playerControl(who) === MAP_CONTROL_USER && playerSlotState(who) === PLAYER_SLOT_STATE_PLAYING) BJDebugMsg(playerName(who) + playerSlot(who));
+  if (eventPlayer() === localPlayer() && playerControl(who) === PlayerControl.user && playerSlotState(who) === PlayerSlotState.playing) BJDebugMsg(playerName(who) + playerSlot(who));
 }\n`);
   const raw = compile(`export function run(slot: number): void {
   const leave = CreateTrigger();
@@ -347,9 +389,9 @@ test("the native backend answers from each client's slots", () => {
 });
 
 test("view calls compile to the native calls they replaced, byte for byte", () => {
-  const lowered = compile(`import { setCameraField, cameraField, cameraTargetX, setTerrainFog, setSkyModel, setFilterStartColor, showFilter, resetTerrainFog } from "../../src/game/view";\n` + wrap(`
-  setCameraField(CAMERA_FIELD_ZOFFSET, 12.5, 0.0);
-  const distance = cameraField(CAMERA_FIELD_TARGET_DISTANCE) + cameraTargetX();
+  const lowered = compile(`import { CameraField, setCameraField, cameraField, cameraTargetX, setTerrainFog, setSkyModel, setFilterStartColor, showFilter, resetTerrainFog } from "../../src/game/view";\n` + wrap(`
+  setCameraField(CameraField.zOffset, 12.5, 0.0);
+  const distance = cameraField(CameraField.targetDistance) + cameraTargetX();
   setTerrainFog(0, 100.0, 200.0, 0.0, 0.25, 0.5, 0.75);
   setSkyModel(model);
   setFilterStartColor(distance, 1, 2, 3);

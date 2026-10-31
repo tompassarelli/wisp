@@ -1,6 +1,6 @@
-import type { Beam, Effect, EffectAnimation, FloatingText } from "../effects";
+import type { Beam, Effect, EffectAnimation as EffectAnimationType, FloatingText } from "../effects";
 import type { Player } from "../players";
-import { asAnimation, asHandle, asNumber, fromHandle } from "./types";
+import { asAnimation, asHandle, asNumber, fromHandle, fromValue } from "./types";
 import { boundWorld } from "./world";
 
 export function createEffect(model: string, x: number, y: number): Effect {
@@ -87,7 +87,7 @@ export function setEffectTeamColor(effect: Effect, owner: Player): void {
   world.effects.setTeamColor(asHandle(effect), asNumber(owner));
 }
 
-export function playEffectAnimation(effect: Effect, animation: EffectAnimation): void {
+export function playEffectAnimation(effect: Effect, animation: EffectAnimationType): void {
   const world = boundWorld();
   world.log?.("BlzPlaySpecialEffect", [effect, animation]);
   world.effects.play(asHandle(effect), asAnimation(animation));
@@ -206,3 +206,12 @@ export function setFloatingTextPermanent(text: FloatingText, permanent: boolean)
   world.log?.("SetTextTagPermanent", [text, permanent]);
   world.floatingText.setPermanent(asHandle(text), permanent);
 }
+
+export const EffectAnimation = {
+  stand: fromValue<EffectAnimationType>("ANIM_TYPE_STAND"),
+  birth: fromValue<EffectAnimationType>("ANIM_TYPE_BIRTH"),
+  death: fromValue<EffectAnimationType>("ANIM_TYPE_DEATH"),
+  walk: fromValue<EffectAnimationType>("ANIM_TYPE_WALK"),
+  spell: fromValue<EffectAnimationType>("ANIM_TYPE_SPELL"),
+  attack: fromValue<EffectAnimationType>("ANIM_TYPE_ATTACK"),
+};

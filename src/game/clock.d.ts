@@ -1,5 +1,15 @@
-export type Timer = timer;
-export type GameSpeed = gamespeed;
+import type { Opaque } from "./opaque";
+
+export type Timer = Opaque<"Timer">;
+export type GameSpeed = Opaque<"GameSpeed">;
+
+export declare const GameSpeed: {
+  readonly slowest: GameSpeed;
+  readonly slow: GameSpeed;
+  readonly normal: GameSpeed;
+  readonly fast: GameSpeed;
+  readonly fastest: GameSpeed;
+};
 
 export declare function createTimer(): Timer;
 export declare function startTimer(timer: Timer, seconds: number, periodic: boolean, handler: (this: void) => void): void;

@@ -1,8 +1,18 @@
 import type { Events } from "./events";
+import type { Opaque } from "./opaque";
 
-export type Player = player;
-export type PlayerControl = mapcontrol;
-export type PlayerSlotState = playerslotstate;
+export type Player = Opaque<"Player">;
+export type PlayerControl = Opaque<"PlayerControl">;
+export type PlayerSlotState = Opaque<"PlayerSlotState">;
+
+export declare const PlayerControl: {
+  readonly user: PlayerControl;
+  readonly computer: PlayerControl;
+};
+
+export declare const PlayerSlotState: {
+  readonly playing: PlayerSlotState;
+};
 
 export declare function player(slot: number): Player;
 export declare function playerSlot(player: Player): number;

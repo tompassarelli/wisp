@@ -1,7 +1,8 @@
-import type { CameraField, FilterBlendMode, FilterTexMapFlags } from "../view";
+import type { CameraField as CameraFieldType, FilterBlendMode as FilterBlendModeType, FilterTexMapFlags as FilterTexMapFlagsType } from "../view";
 import { boundWorld } from "./world";
+import { fromValue } from "./types";
 
-export function setCameraField(field: CameraField, value: number, duration: number): void {
+export function setCameraField(field: CameraFieldType, value: number, duration: number): void {
   const world = boundWorld();
   world.log?.("SetCameraField", [field, value, duration]);
   world.view.setCameraField(field, value);
@@ -28,7 +29,7 @@ export function setCameraSmoothing(factor: number): void {
   world.log?.("CameraSetSmoothingFactor", [factor]);
 }
 
-export function cameraField(field: CameraField): number {
+export function cameraField(field: CameraFieldType): number {
   const world = boundWorld();
   world.log?.("GetCameraField", [field]);
   return world.view.cameraField(field);
@@ -157,13 +158,13 @@ export function setFilterTexture(texture: string): void {
   world.view.setFilterTexture(texture);
 }
 
-export function setFilterBlendMode(mode: FilterBlendMode): void {
+export function setFilterBlendMode(mode: FilterBlendModeType): void {
   const world = boundWorld();
   world.log?.("SetCineFilterBlendMode", [mode]);
   world.view.setFilterBlendMode(mode);
 }
 
-export function setFilterTexMapFlags(flags: FilterTexMapFlags): void {
+export function setFilterTexMapFlags(flags: FilterTexMapFlagsType): void {
   const world = boundWorld();
   world.log?.("SetCineFilterTexMapFlags", [flags]);
   world.view.setFilterTexMapFlags(flags);
@@ -205,3 +206,22 @@ export function showFilter(visible: boolean): void {
   world.view.showFilter(visible);
 }
 
+export const CameraField = {
+  angleOfAttack: fromValue<CameraFieldType>("CAMERA_FIELD_ANGLE_OF_ATTACK"),
+  depthOfFieldDistance: fromValue<CameraFieldType>("CAMERA_FIELD_DEPTH_OF_FIELD_DISTANCE"),
+  depthOfFieldScale: fromValue<CameraFieldType>("CAMERA_FIELD_DEPTH_OF_FIELD_SCALE"),
+  farZ: fromValue<CameraFieldType>("CAMERA_FIELD_FARZ"),
+  fieldOfView: fromValue<CameraFieldType>("CAMERA_FIELD_FIELD_OF_VIEW"),
+  roll: fromValue<CameraFieldType>("CAMERA_FIELD_ROLL"),
+  rotation: fromValue<CameraFieldType>("CAMERA_FIELD_ROTATION"),
+  targetDistance: fromValue<CameraFieldType>("CAMERA_FIELD_TARGET_DISTANCE"),
+  zOffset: fromValue<CameraFieldType>("CAMERA_FIELD_ZOFFSET"),
+};
+
+export const FilterBlendMode = {
+  blend: fromValue<FilterBlendModeType>("BLEND_MODE_BLEND"),
+};
+
+export const FilterTexMapFlags = {
+  none: fromValue<FilterTexMapFlagsType>("TEXMAP_FLAG_NONE"),
+};

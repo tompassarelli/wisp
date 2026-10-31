@@ -8,13 +8,13 @@ import { readNativeDeclarations } from "../host/headless/headless";
 import { compile, wrap } from "./gameApiCompile";
 
 test("input calls lower to the natives they replaced, byte for byte", () => {
-  const lowered = compile(`import { createEvents } from "../../src/game/events";\nimport { addChatEvent, addKeyEvent, addPointerMoveEvent, chatText, enableSelections, enableUserControl, eventKey, eventPointerX, eventPointerY, keyDown, mouseDown, osKey, pointerX, pointerY, setPointer, showCursor, windowFocused } from "../../src/game/input";\n` + wrap(`
+  const lowered = compile(`import { createEvents } from "../../src/game/events";\nimport { MouseButton, addChatEvent, addKeyEvent, addPointerMoveEvent, chatText, enableSelections, enableUserControl, eventKey, eventPointerX, eventPointerY, keyDown, mouseDown, osKey, pointerX, pointerY, setPointer, showCursor, windowFocused } from "../../src/game/input";\n` + wrap(`
   const events = createEvents();
   const space = osKey(32);
   addKeyEvent(events, owner, space, 2, true);
   addPointerMoveEvent(events, owner);
   addChatEvent(events, owner, model, false);
-  if (eventKey() === 27 || keyDown(space) || windowFocused() || mouseDown(MOUSE_BUTTON_TYPE_LEFT)) BJDebugMsg(chatText());
+  if (eventKey() === 27 || keyDown(space) || windowFocused() || mouseDown(MouseButton.left)) BJDebugMsg(chatText());
   setPointer(pointerX() + eventPointerX(), pointerY() + eventPointerY());
   showCursor(false);
   enableSelections(false, false);

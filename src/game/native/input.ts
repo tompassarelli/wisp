@@ -1,5 +1,5 @@
 import type { Events } from "../events";
-import type { MouseButton, OsKey } from "../input";
+import type { MouseButton as MouseButtonType, OsKey } from "../input";
 import type { Player } from "../players";
 import { asHandle, asNumber, fromValue } from "./types";
 import { boundWorld } from "./world";
@@ -59,7 +59,7 @@ export function eventPointerY(): number {
   return world.events.triggerMouseY();
 }
 
-export function mouseDown(button: MouseButton): boolean {
+export function mouseDown(button: MouseButtonType): boolean {
   const world = boundWorld();
   world.log?.("BlzIsMouseButtonPressed", [button]);
   return world.input.mouseButtonHeld(button);
@@ -98,3 +98,7 @@ export function enableSelections(selection: boolean, only: boolean): void {
 export function enableUserControl(enabled: boolean): void {
   boundWorld().log?.("EnableUserControl", [enabled]);
 }
+
+export const MouseButton = {
+  left: fromValue<MouseButtonType>("MOUSE_BUTTON_TYPE_LEFT"),
+};

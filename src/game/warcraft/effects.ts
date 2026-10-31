@@ -1,4 +1,4 @@
-import type { Lowering } from "./lowering";
+import type { ConstantLowering, Lowering } from "./lowering";
 
 export const effects: Lowering = {
   createEffect: "AddSpecialEffect($1, $2, $3)",
@@ -35,4 +35,15 @@ export const effects: Lowering = {
   setFloatingTextColor: "SetTextTagColor($1, $2, $3, $4, $5)",
   setFloatingTextVisible: "SetTextTagVisibility($1, $2)",
   setFloatingTextPermanent: "SetTextTagPermanent($1, $2)",
+};
+
+export const effectsConstants: ConstantLowering = {
+  EffectAnimation: {
+    stand: "ANIM_TYPE_STAND",
+    birth: "ANIM_TYPE_BIRTH",
+    death: "ANIM_TYPE_DEATH",
+    walk: "ANIM_TYPE_WALK",
+    spell: "ANIM_TYPE_SPELL",
+    attack: "ANIM_TYPE_ATTACK",
+  },
 };

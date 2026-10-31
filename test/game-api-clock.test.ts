@@ -6,13 +6,13 @@ import { readNativeDeclarations } from "../host/headless/headless";
 import { compile, wrap } from "./gameApiCompile";
 
 test("clock calls lower to the natives they replaced, byte for byte", () => {
-  const lowered = compile(`import { createTimer, destroyTimer, gameSpeed, localElapsed, lockSpeed, pauseTimer, restartMatch, setNormalSpeed, startTimer } from "../../src/game/clock";\n` + wrap(`
+  const lowered = compile(`import { GameSpeed, createTimer, destroyTimer, gameSpeed, localElapsed, lockSpeed, pauseTimer, restartMatch, setNormalSpeed, startTimer } from "../../src/game/clock";\n` + wrap(`
   const tick = createTimer();
   startTimer(tick, 1 / 60, true, () => {});
   pauseTimer(tick);
   setNormalSpeed();
   lockSpeed();
-  if (localElapsed(tick) > 0 || gameSpeed() === MAP_SPEED_NORMAL) restartMatch(false);
+  if (localElapsed(tick) > 0 || gameSpeed() === GameSpeed.normal) restartMatch(false);
   destroyTimer(tick);`));
   const raw = compile(wrap(`
   const tick = CreateTimer();

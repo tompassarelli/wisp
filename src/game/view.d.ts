@@ -1,6 +1,28 @@
-export type CameraField = camerafield;
-export type FilterBlendMode = blendmode;
-export type FilterTexMapFlags = texmapflags;
+import type { Opaque } from "./opaque";
+
+export type CameraField = Opaque<"CameraField">;
+export type FilterBlendMode = Opaque<"FilterBlendMode">;
+export type FilterTexMapFlags = Opaque<"FilterTexMapFlags">;
+
+export declare const CameraField: {
+  readonly angleOfAttack: CameraField;
+  readonly depthOfFieldDistance: CameraField;
+  readonly depthOfFieldScale: CameraField;
+  readonly farZ: CameraField;
+  readonly fieldOfView: CameraField;
+  readonly roll: CameraField;
+  readonly rotation: CameraField;
+  readonly targetDistance: CameraField;
+  readonly zOffset: CameraField;
+};
+
+export declare const FilterBlendMode: {
+  readonly blend: FilterBlendMode;
+};
+
+export declare const FilterTexMapFlags: {
+  readonly none: FilterTexMapFlags;
+};
 
 export declare function setCameraField(field: CameraField, value: number, duration: number): void;
 export declare function setCameraBounds(x1: number, y1: number, x2: number, y2: number, x3: number, y3: number, x4: number, y4: number): void;

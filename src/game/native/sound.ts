@@ -1,5 +1,5 @@
-import type { Sound, VolumeGroup } from "../sound";
-import { asHandle, fromHandle } from "./types";
+import type { Sound, VolumeGroup as VolumeGroupType } from "../sound";
+import { asHandle, fromHandle, fromValue } from "./types";
 import { boundWorld } from "./world";
 
 export function createSound(file: string, looping: boolean, positional: boolean, stopOutOfRange: boolean, fadeInRate: number, fadeOutRate: number, environment: string): Sound {
@@ -97,10 +97,15 @@ export function endTheme(): void {
   boundWorld().log?.("EndThematicMusic", []);
 }
 
-export function setVolumeGroup(group: VolumeGroup, scale: number): void {
+export function setVolumeGroup(group: VolumeGroupType, scale: number): void {
   boundWorld().log?.("VolumeGroupSetVolume", [group, scale]);
 }
 
 export function resetVolumeGroups(): void {
   boundWorld().log?.("VolumeGroupReset", []);
 }
+
+export const VolumeGroup = {
+  combat: fromValue<VolumeGroupType>("SOUND_VOLUMEGROUP_COMBAT"),
+  spells: fromValue<VolumeGroupType>("SOUND_VOLUMEGROUP_SPELLS"),
+};

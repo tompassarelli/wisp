@@ -25,4 +25,4 @@ export function compile(source: string): { readonly diagnostics: string; readonl
   }
 }
 
-export const wrap = (body: string) => `export function run(model: string, owner: player): void {\n${body}\n}\n`;
+export const wrap = (body: string) => `export function run(model: string, owner: never): void {\n${body}\n}\n`;

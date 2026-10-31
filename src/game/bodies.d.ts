@@ -1,7 +1,8 @@
 import type { Player } from "./players";
+import type { Opaque } from "./opaque";
 
-export type Body = unit;
-export type Location = location;
+export type Body = Opaque<"Body">;
+export type Location = Opaque<"Location">;
 
 export declare function mapCenter(): Location;
 export declare function locationX(location: Location): number;

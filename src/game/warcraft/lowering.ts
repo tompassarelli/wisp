@@ -6,6 +6,12 @@
  */
 export type Lowering = Readonly<Record<string, string>>;
 
+/**
+ * A family's constants: the Wisp type's name, then each member's name to the Warcraft global it stands for.
+ * wisp:plugins/game-api.ts lowers `EffectAnimation.attack` to a read of that global.
+ */
+export type ConstantLowering = Readonly<Record<string, Readonly<Record<string, string>>>>;
+
 export type TemplateArgument =
   | { readonly arg: number }
   | { readonly literal: string }
