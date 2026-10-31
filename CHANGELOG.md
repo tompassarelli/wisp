@@ -6,6 +6,7 @@ declares (wisp:docs/architecture.md, "Where things live").
 ## Unreleased
 
 - `wisp/game/frames` and `wisp/game/events` are Wisp's UI frame, message, quest log and event-trigger APIs, lowered on Warcraft and run by the native backend on Bun like `wisp/game/effects`. `wisp/src/headless/frames` moved to `wisp/src/game/native/frameStore`.
+- `wisp/game/sound` is Wisp's own sound API (sounds, music, volume groups): on Warcraft each call lowers to its native at compile time, on Bun it resolves to the native backend in `src/game/native/sound.ts`. The sound store moved from `wisp/src/headless/natives/sound` to `wisp/src/game/native/soundStore`, and `SoundCue` is declared in `wisp/src/game/native/types` (still re-exported from `wisp/src/headless/client`).
 - `wisp/game/effects` is Wisp's own effects API (effects, beams and floating text): on Warcraft `plugins/game-api.ts` lowers each call to its native at compile time, on Bun it resolves to the native backend in `src/game/native`. `wisp/src/headless/animation`, `frameRate`, `lightnings` and `textTags` moved to `wisp/src/game/native`, and `Handle`, `EffectPose`, `EffectDeaths` and `HandleFactory` are no longer exported from `wisp/src/headless/client`.
 - The native window reads pads at its sample point: `InputSample` carries `axisX` and `axisY`, `WindowView.selectPad` takes the browser's `gamepadIndex`, and `bun wisp play --standalone --window native` plays with the first connected pad (wisp#110).
 - `wisp/src/netcode/ledger` now admits rows against the common frontier K

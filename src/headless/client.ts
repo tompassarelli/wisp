@@ -19,7 +19,8 @@ import { frameNatives, type FrameContext, inputNatives } from "./natives/frames"
 import { mathNatives } from "./natives/math";
 import { Playing } from "./natives/playing";
 import { PreloadText } from "./natives/preloadText";
-import { Sounds } from "./natives/sound";
+import { Sounds } from "../game/native/soundStore";
+import { soundNatives } from "./natives/sound";
 import { playerMouseEvent, TriggersTimers } from "./natives/triggersTimers";
 import { type Unit, Units } from "./natives/units";
 import { TextTags } from "../game/native/textTags";
@@ -31,7 +32,7 @@ import { Scenery, type SceneryFixtures } from "./warcraft3Scenery";
 
 export type { CameraPose, CineFilterPose, ClientFiles, IntentionalNoops, LocalNatives, MapEntry, MissingNative, NativeBehavior, NativeBehaviors, NativeCall, SoundCue, StandaloneProfile, SyncMessage, UnitPose, UnitStateFixture, UnitStateFixtures } from "./clientTypes";
 export { describeCall, describeNumber, describeValue, sameCall } from "./jassFormat";
-export { assertSoundCue } from "./natives/sound";
+export { assertSoundCue } from "../game/native/soundStore";
 export { FRAMES_PER_SECOND };
 
 export interface ClientScope {
@@ -185,7 +186,7 @@ export class HeadlessClient {
     const local = options.localNatives;
     const log = this.log;
     this.world = {
-      effects: this.effects, beams: this.lightnings, floatingText: this.textTags, frames: this.frameUi, events: this.timers, quests: this.quests,
+      effects: this.effects, beams: this.lightnings, floatingText: this.textTags, sounds: this.sounds, frames: this.frameUi, events: this.timers, quests: this.quests,
       display: (player, text) => { if (player === this.slot) this.messages.push(text); },
       log: logUnlessLocal(log, local),
     };
@@ -329,7 +330,7 @@ export class HeadlessClient {
       ...this.timers.behaviors(this.slot, network),
       ...this.preloadText.behaviors(),
       ...this.camera.behaviors(),
-      ...this.sounds.behaviors(),
+      ...soundNatives(this.sounds),
       ...effectNatives(this.effects),
       ...mathNatives(),
       ...this.playing.behaviors(),

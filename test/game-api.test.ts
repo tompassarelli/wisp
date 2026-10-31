@@ -6,6 +6,7 @@ import { report } from "../host/toolchain/compiler";
 import * as native from "../src/game/native/effects";
 import * as nativeEvents from "../src/game/native/events";
 import * as nativeFrames from "../src/game/native/frames";
+import * as nativeSound from "../src/game/native/sound";
 import { bindWorld } from "../src/game/native/world";
 import { HeadlessClient } from "../src/headless/client";
 import { readNativeDeclarations } from "../host/headless/headless";
@@ -13,6 +14,8 @@ import { parseTemplate } from "../src/game/warcraft/lowering";
 import { effects } from "../src/game/warcraft/effects";
 import { events } from "../src/game/warcraft/events";
 import { frames } from "../src/game/warcraft/frames";
+import { sound } from "../src/game/warcraft/sound";
+import type { VolumeGroup } from "../src/game/sound";
 
 const root = join(import.meta.dir, "..");
 
@@ -68,6 +71,7 @@ const families = [
   { name: "effects", table: effects, backend: native },
   { name: "frames", table: frames, backend: nativeFrames },
   { name: "events", table: events, backend: nativeEvents },
+  { name: "sound", table: sound, backend: nativeSound },
 ] as const;
 
 test.each(families)("every $name lowering row names a declared native with the arity of its Wisp function and an implemented backend call", ({ name, table, backend }) => {
@@ -166,5 +170,52 @@ test("the native backend runs frames, events and the quest log in the bound worl
   expect(first.quests.entries().map(entry => entry.title)).toEqual(["Controls"]);
   expect(first.messages).toEqual(["hello"]);
   expect(first.log.map(call => call.name).filter(name => name !== "BlzTriggerRegisterFrameEvent")).toEqual(["CreateTrigger", "BlzGetOriginFrame", "BlzCreateFrameByType", "BlzFrameSetText", "TriggerAddAction", "CreateQuest", "QuestSetTitle", "DisplayTextToPlayer", "DisplayTextToPlayer"]);
+  expect([...first.emulatedCalls.keys(), ...second.emulatedCalls.keys()]).toEqual([]);
+});
+
+test("a lowered sound call compiles to the native call it replaced, byte for byte", () => {
+  const lowered = compile(`import { createSound, playSound, setSoundPosition, stopSound, playTheme, endTheme } from "../../src/game/sound";\n` + wrap(`
+  const cue = createSound(model, false, true, true, 10, 10, "DefaultEAXON");
+  setSoundPosition(cue, 1.5, 2, 3);
+  stopSound(cue, false, true);
+  playSound(cue);
+  playTheme(model);
+  endTheme();`));
+  const raw = compile(wrap(`
+  const cue = CreateSound(model, false, true, true, 10, 10, "DefaultEAXON");
+  SetSoundPosition(cue, 1.5, 2, 3);
+  StopSound(cue, false, true);
+  StartSound(cue);
+  PlayThematicMusic(model);
+  EndThematicMusic();`));
+  expect(lowered.diagnostics).toBe("");
+  expect(raw.diagnostics).toBe("");
+  expect(lowered.lua).toBe(raw.lua);
+  expect(lowered.lua).toContain("EndThematicMusic()");
+});
+
+test("the native backend plays sounds through the bound world's cue log and logs the native call of each row", () => {
+  const declarations = readNativeDeclarations();
+  const make = (slot: number) => new HeadlessClient({ slot, humans: [0, 1], declarations, filePrefix: "game-api", localNatives: {}, network: [] });
+  const [first, second] = [make(0), make(1)];
+  bindWorld(first.world);
+  const cue = nativeSound.soundFromLabel("Defend", false, true, true, 10, 10);
+  nativeSound.setSoundDuration(cue, nativeSound.soundFileDuration("Sound\\Defend.wav") + 400);
+  nativeSound.setSoundPosition(cue, 1, 2, 3);
+  nativeSound.setSoundDistances(cue, 600, 3500);
+  nativeSound.playSound(cue);
+  nativeSound.stopSound(cue, false, false);
+  nativeSound.playMusic("a.mp3");
+  nativeSound.playTheme("b.mp3");
+  nativeSound.setVolumeGroup({} as VolumeGroup, 0);
+  bindWorld(second.world);
+  nativeSound.playSound(nativeSound.createSound("c.wav", true, false, false, 10, 10, "DefaultEAXON"));
+  bindWorld(undefined);
+  expect(first.soundLog.map(cue => [cue.event, cue.kind, cue.label ?? cue.source, cue.x, cue.y, cue.z])).toEqual([
+    ["create", "sound", "Defend", 0, 0, 0], ["start", "sound", "Defend", 1, 2, 3], ["stop", "sound", "Defend", 1, 2, 3],
+    ["start", "music", "a.mp3", 0, 0, 0], ["stop", "music", "a.mp3", 0, 0, 0], ["start", "music", "b.mp3", 0, 0, 0],
+  ]);
+  expect(second.soundLog.map(cue => cue.event)).toEqual(["create", "start"]);
+  expect(first.log.map(call => call.name)).toEqual(["CreateSoundFromLabel", "GetSoundFileDuration", "SetSoundDuration", "SetSoundPosition", "SetSoundDistances", "StartSound", "StopSound", "PlayMusic", "PlayThematicMusic", "VolumeGroupSetVolume"]);
   expect([...first.emulatedCalls.keys(), ...second.emulatedCalls.keys()]).toEqual([]);
 });

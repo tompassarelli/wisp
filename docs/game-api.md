@@ -34,3 +34,7 @@ A host binds the world it is about to run with `bindWorld(world)`: `host/headles
 ## Events
 
 `wisp/game/events`: `createEvents()`, `onEvents(events, handler)` and `destroyEvents(events)`. The trigger store is `src/headless/natives/triggersTimers.ts`, which implements `EventStore` (`src/game/native/eventStore.ts`) for the native backend; its sources other than frames (keys, sync, chat, leave) stay raw natives on an events value until their own family moves.
+
+## Sound
+
+`wisp/game/sound`: sounds (`createSound`, `soundFromLabel`, `playSound`, `stopSound`, `setSoundVolume`/`Pitch`/`Position`/`Distances`/`Cutoff`/`Duration`, `releaseWhenDone`, `soundFileDuration`), music (`playMusic`, `stopMusic`, `clearMusic`, `playTheme`, `endTheme`) and volume groups (`setVolumeGroup`, `resetVolumeGroups`). The store is `src/game/native/soundStore.ts`; its cue log reaches `host/window/soundPlayer.ts` through the client's `soundLog`. The native backend keeps the attenuation range, the cutoff, the volume groups and `clearMusic`/`endTheme` only in the call log, because the window mixes with rules of its own, and `soundFileDuration` reads 0 because headless decodes no file. `Sound` and `VolumeGroup` alias Warcraft's `sound` and `volumegroup` until the families that own them become opaque; the `SOUND_VOLUMEGROUP_*` constants stay raw globals until the constants box.

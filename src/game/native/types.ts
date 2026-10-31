@@ -31,6 +31,22 @@ export interface EffectPose extends AnimationState {
   death?: number;
 }
 
+export interface SoundCue {
+  readonly event: "create" | "start" | "stop" | "volume";
+  readonly kind: "sound" | "music";
+  readonly frame: number;
+  readonly handle: Handle;
+  readonly source: string | undefined;
+  readonly label: string | undefined;
+  readonly volume: number;
+  readonly effectiveVolume: number;
+  readonly looping: boolean;
+  readonly pitch: number;
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+}
+
 export type EffectDeaths = (this: void, model: string) => number | undefined;
 
 /** The store's view of a handle that the contract names as a Warcraft handle type. */

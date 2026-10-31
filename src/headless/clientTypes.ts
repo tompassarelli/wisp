@@ -58,21 +58,7 @@ export interface CameraPose {
   readonly fields: Readonly<Record<string, number>>;
 }
 
-export interface SoundCue {
-  readonly event: "create" | "start" | "stop" | "volume";
-  readonly kind: "sound" | "music";
-  readonly frame: number;
-  readonly handle: Handle;
-  readonly source: string | undefined;
-  readonly label: string | undefined;
-  readonly volume: number;
-  readonly effectiveVolume: number;
-  readonly looping: boolean;
-  readonly pitch: number;
-  readonly x: number;
-  readonly y: number;
-  readonly z: number;
-}
+export type { SoundCue } from "../game/native/types";
 
 export interface UnitPose extends AnimationState {
   readonly handle: Handle;
