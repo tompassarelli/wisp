@@ -23,15 +23,20 @@ struct Water {
 struct Surface {
     @builtin(position) clip: vec4<f32>,
     @location(0) world: vec3<f32>,
+    @location(1) local: vec2<f32>,
+    @location(2) span: vec2<f32>,
 };
 
 @vertex
 fn vertex_main(vertex: Vertex, instance: Instance) -> Surface {
-    let model = mat4x4<f32>(instance.model0, instance.model1, instance.model2, instance.model3);
+    let model = mat4x4<f32>(vec4<f32>(instance.model0.xyz, 0.0), vec4<f32>(instance.model1.xyz, 0.0), vec4<f32>(instance.model2.xyz, 0.0), instance.model3);
+    let half = vec2<f32>(instance.model0.w, instance.model1.w);
     let world = model * vec4<f32>(vertex.position, 1.0);
     var out: Surface;
     out.clip = frame.view_projection * world;
     out.world = world.xyz;
+    out.local = vertex.position.xy / max(half, vec2<f32>(1e-3));
+    out.span = half * vec2<f32>(length(instance.model0.xyz), length(instance.model1.xyz));
     return out;
 }
 
@@ -364,10 +369,12 @@ fn fragment_main(in: Surface) -> @location(0) vec4<f32> {
     var plate = 0.0;
     var rim = 0.0;
     var melt = 1.0;
+    var fade = 1.0;
     if (water.look.x > 0.0) {
-        let field = lava_field(in.world.xy, time);
+        let pool = in.span.x > 0.0 && in.span.x < 1000.0;
+        let field = lava_field(in.world.xy * select(1.0, 2.5, pool), time * select(1.0, 4.0, pool));
         let hazed = clamp((own - 2500.0) / 5000.0, 0.0, 1.0);
-        let level = 0.68 - 0.4 * water.look.x;
+        let level = 0.68 - 0.4 * water.look.x - select(0.0, 0.06, pool);
         let soft = max(fwidth(field.x) * 1.5, 0.012);
         let edge = smoothstep(level - soft, level + soft, field.x);
         let reach = max(fwidth(field.x) * 2.5, 0.05);
@@ -377,6 +384,12 @@ fn fragment_main(in: Surface) -> @location(0) vec4<f32> {
         melt = mix(0.55 + 0.9 * smoothstep(0.25, 0.7, field.y), 1.0, hazed);
         let toward = select(0.5, max(dot(normal, frame.light_toward.xyz), 0.0), frame.light_key.w > 0.5);
         let cooled = vec3<f32>(0.075, 0.018, 0.008) * (0.6 + 0.9 * toward) * (0.55 + 0.9 * field.z);
+        let across = (vec2<f32>(1.0) - abs(in.local)) * in.span;
+        let shore = select(1.0e6, min(across.x, across.y), in.span.x > 0.0 && in.span.y > 0.0);
+        let feather = tile * 0.04;
+        let into = shore + (field.z - 0.5) * feather * 0.7;
+        plate = max(plate, 1.0 - smoothstep(feather * 0.3, feather, into));
+        fade = smoothstep(0.0, feather * 0.22, into);
         colour = mix(colour, cooled, plate);
         rim += seam;
     }
@@ -421,12 +434,13 @@ fn fragment_main(in: Surface) -> @location(0) vec4<f32> {
     let edge = 1.0 - smoothstep(0.0, water.foam.w, thickness);
     let crest = smoothstep(0.55, 0.9, frame_height(uv * 2.3 + vec2<f32>(0.0, time * 0.02), time)) * smoothstep(0.92, 1.0, normal.z) * 0.25 * near * mix(1.0, clump, breakup);
     let ripple = 0.5 + 0.5 * sin(thickness * 0.08 - time * 2.0 + noise(in.world.xy * 0.15) * 6.0);
-    let foam = clamp(edge * (0.55 + 0.45 * ripple) * (0.4 + noise(in.world.xy * 0.9 + time * 0.3)) + crest + disturbed.z, 0.0, 1.0);
+    let shallows = select(edge * (0.55 + 0.45 * ripple) * (0.4 + noise(in.world.xy * 0.9 + time * 0.3)), 0.0, water.look.x > 0.0);
+    let foam = clamp(shallows + crest + disturbed.z, 0.0, 1.0) * (1.0 - plate);
     colour = mix(colour, water.foam.rgb, foam);
 
     if (frame.fog_color.w > 0.5) {
         let fog = clamp((own - frame.fog_range.x) / max(frame.fog_range.y - frame.fog_range.x, 1.0), 0.0, frame.fog_range.z);
         colour = mix(colour, frame.fog_color.rgb, fog);
     }
-    return vec4<f32>(colour, max(clamp(calm + foam, 0.0, 1.0), water.look.z));
+    return vec4<f32>(colour, max(clamp(calm + foam, 0.0, 1.0), water.look.z) * fade);
 }

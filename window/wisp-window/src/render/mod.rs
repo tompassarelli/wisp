@@ -405,7 +405,7 @@ impl Renderer {
             self.uv_scratch.extend_from_slice(model.rig.uv_rows());
             let slot = (group + self.counts[id]) as usize;
             self.counts[id] += 1;
-            self.instance_scratch[slot] = Instance { model: pose.matrix, tint: [pose.color[0], pose.color[1], pose.color[2], pose.alpha], team: [pose.team[0], pose.team[1], pose.team[2], 1.0], base: [base as u32, color_base as u32] };
+            self.instance_scratch[slot] = Instance { model: water::with_reach(pose.matrix, model.liquid.as_ref().filter(|_| model.body.is_none()).map(|(_, surface)| surface.half)), tint: [pose.color[0], pose.color[1], pose.color[2], pose.alpha], team: [pose.team[0], pose.team[1], pose.team[2], 1.0], base: [base as u32, color_base as u32] };
             if pose.sequence >= 0 && pose.alpha > 0.0 {
                 for (index, ((emitter, slot), sample)) in model.emitters.iter().zip(model.rig.emitters()).enumerate() {
                     let Some(slot) = *slot else { continue };

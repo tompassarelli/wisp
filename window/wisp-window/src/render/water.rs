@@ -210,6 +210,15 @@ impl WaterSettings {
     }
 }
 
+/// The matrix with the model's reach in its two spare cells (the w of its x and y columns), where the water shader reads it to find the model's edge.
+pub(super) fn with_reach(mut matrix: super::math::Mat4, reach: Option<[f32; 2]>) -> super::math::Mat4 {
+    if let Some([x, y]) = reach {
+        matrix[3] = x;
+        matrix[7] = y;
+    }
+    matrix
+}
+
 /// What the model shader reads to light models from the liquid below them.
 #[derive(Clone, Copy)]
 pub struct Glow {

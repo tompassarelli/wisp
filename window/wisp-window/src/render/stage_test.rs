@@ -13,6 +13,8 @@ use crate::capture;
 use crate::remaster::Quality;
 use crate::texture::Image;
 
+mod pool;
+
 struct Clocked(std::sync::Arc<std::sync::atomic::AtomicU32>);
 
 impl Rig for Clocked {
@@ -129,6 +131,8 @@ fn placed(model: &str, x: f32, y: f32, z: f32, color: [f32; 3]) -> Pose {
 /// A fighter's effect whose path names a liquid without being one.
 const PLAGUE_CLOUD: &str = "Abilities\\Spells\\Undead\\PlagueCloud\\PlagueCloudCaster.mdx";
 
+const POOL: &str = "war3mapImported\\StageLavaPool.mdx";
+
 fn sea(preset: Preset) -> &'static str {
     match preset {
         Preset::Water => "war3mapImported\\StageTombSea.mdx",
@@ -157,6 +161,7 @@ impl Stage {
         for preset in [Preset::Water, Preset::Poison, Preset::Lava] {
             renderer.add_model(sea(preset), model(block([-6000.0, -1300.0, -0.01], [6000.0, 6000.0, 0.0]), Paint::Water, Filter::Blend));
         }
+        renderer.add_model(POOL, model(block([-70.0, -60.0, -0.01], [70.0, 60.0, 0.0]), Paint::Water, Filter::Blend));
         renderer.add_model(PLAGUE_CLOUD, model(block([-60.0, -60.0, 0.0], [60.0, 60.0, 120.0]), Paint::None, Filter::Opaque));
         renderer.add_model("bed", model(block([-6000.0, -1300.0, -520.0], [6000.0, 300.0, -500.0]), Paint::None, Filter::Opaque));
         renderer.add_model("shore", model(shore(), Paint::None, Filter::Opaque));
@@ -187,6 +192,18 @@ impl Stage {
             fog: Some(Fog { color: [0.55, 0.7, 0.85], start: 2500.0, end: 9000.0, max: 0.75 }),
             poses: vec![placed("bed", 0.0, 0.0, 0.0, [0.55, 0.5, 0.35]), placed("shore", 0.0, 0.0, 0.0, [0.78, 0.68, 0.45]), placed("land", 0.0, 0.0, 0.0, [0.72, 0.62, 0.42]), placed(sea(preset), 0.0, 0.0, 0.0, [1.0; 3]), placed("deck", 0.0, 0.0, 0.0, [0.45, 0.4, 0.5]), fighter, placed("fighter", 260.0, 0.0, 0.0, [0.2, 0.4, 0.95])],
             clear: [0.55, 0.7, 0.85],
+            ..Scene::default()
+        }
+    }
+
+    /// A lava pool lying 1 unit over a deck with the lava sea far below, seen from the stage camera: the shallow pool of Blackrock's deck.
+    fn pool_scene() -> Scene {
+        let eye = [0.0, -330.0, 100.0];
+        Scene {
+            camera: Camera { view: look_at(eye, [0.0, 0.0, 35.0]), eye, tangent: 0.5, near: 20.0, far: 12000.0, sky_far: 12000.0, rise: 0.0, ..Default::default() },
+            light: Some(Light { toward: [0.3, -0.5, 0.8], key: [0.8, 0.5, 0.35], ambient: [0.35, 0.25, 0.25] }),
+            poses: vec![placed(sea(Preset::Lava), 0.0, 0.0, -300.0, [1.0; 3]), placed("deck", 0.0, 0.0, 0.0, [0.22, 0.18, 0.18]), placed(POOL, 0.0, 0.0, 31.0, [1.0; 3])],
+            clear: [0.2, 0.05, 0.04],
             ..Scene::default()
         }
     }
