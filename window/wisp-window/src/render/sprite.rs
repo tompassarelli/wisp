@@ -12,7 +12,7 @@ use super::model::{Part, Vertex};
 use super::scene::{Camera, Light, Scene};
 use super::liquid::Glow;
 use crate::model::Facing;
-use super::{Instance, Renderer, DEPTH, HDR, SAMPLES};
+use super::{Instance, Renderer, DEPTH, HDR};
 
 const MARGIN: f32 = 1.06;
 const DISTANCE_PER_EXTENT: f32 = 4.0;
@@ -44,7 +44,7 @@ struct Drawn {
 
 pub(super) struct Slot {
     size: (u32, u32),
-    msaa: wgpu::TextureView,
+    color: wgpu::TextureView,
     depth: wgpu::TextureView,
     resolved: wgpu::TextureView,
     frame: wgpu::Buffer,
@@ -184,11 +184,12 @@ impl Renderer {
         let colors = color_storage(&self.device, color_capacity);
         let uv_rows = uv_storage(&self.device, color_capacity);
         let group = frame_group(&self.device, &self.frame_layout, &frame, &bones, &colors, &uv_rows, self.shadow.bound());
+        let resolved = make(HDR, 1, wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING, "sprite");
         Slot {
             size,
-            msaa: make(HDR, SAMPLES, wgpu::TextureUsages::RENDER_ATTACHMENT, "sprite colour"),
-            depth: make(DEPTH, SAMPLES, wgpu::TextureUsages::RENDER_ATTACHMENT, "sprite depth"),
-            resolved: make(HDR, 1, wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING, "sprite"),
+            color: if self.samples > 1 { make(HDR, self.samples, wgpu::TextureUsages::RENDER_ATTACHMENT, "sprite colour") } else { resolved.clone() },
+            depth: make(DEPTH, self.samples, wgpu::TextureUsages::RENDER_ATTACHMENT, "sprite depth"),
+            resolved,
             frame,
             bones,
             bone_capacity,
@@ -263,7 +264,7 @@ impl Renderer {
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("sprite"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment { view: &slot.msaa, depth_slice: None, resolve_target: Some(&slot.resolved), ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT), store: wgpu::StoreOp::Discard } })],
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment { view: &slot.color, depth_slice: None, resolve_target: (self.samples > 1).then_some(&slot.resolved), ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT), store: if self.samples > 1 { wgpu::StoreOp::Discard } else { wgpu::StoreOp::Store } } })],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment { view: &slot.depth, depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(1.0), store: wgpu::StoreOp::Discard }), stencil_ops: None }),
                 timestamp_writes: timer.writes(crate::gpu_time::Pass::Sprites),
                 occlusion_query_set: None,

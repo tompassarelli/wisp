@@ -3,7 +3,7 @@
 use std::mem::size_of;
 
 use super::model::{Filter, Vertex, FILTERS};
-use super::{Instance, DEPTH, SAMPLES};
+use super::{Instance, DEPTH};
 
 pub(super) fn entry(binding: u32, visibility: wgpu::ShaderStages, ty: wgpu::BindingType) -> wgpu::BindGroupLayoutEntry {
     wgpu::BindGroupLayoutEntry { binding, visibility, ty, count: None }
@@ -48,7 +48,7 @@ pub(super) fn index_of(filter: Filter, faded: bool) -> usize {
 }
 
 /// The pipelines in `index_of` order, the seven of `FILTERS` and the two faded solid ones, and the frame and layer bind group layouts they use.
-pub(super) fn build(device: &wgpu::Device, format: wgpu::TextureFormat) -> (Vec<wgpu::RenderPipeline>, wgpu::BindGroupLayout, wgpu::BindGroupLayout) {
+pub(super) fn build(device: &wgpu::Device, format: wgpu::TextureFormat, samples: u32) -> (Vec<wgpu::RenderPipeline>, wgpu::BindGroupLayout, wgpu::BindGroupLayout) {
     let module = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("model"), source: wgpu::ShaderSource::Wgsl(shader_source(include_str!("shader.wgsl")).into()) });
     let both = wgpu::ShaderStages::VERTEX_FRAGMENT;
     let frame_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -103,7 +103,7 @@ pub(super) fn build(device: &wgpu::Device, format: wgpu::TextureFormat) -> (Vec<
                     stencil: Default::default(),
                     bias: Default::default(),
                 }),
-                multisample: wgpu::MultisampleState { count: SAMPLES, mask: !0, alpha_to_coverage_enabled: filter == Filter::Cutout && !faded },
+                multisample: wgpu::MultisampleState { count: samples, mask: !0, alpha_to_coverage_enabled: filter == Filter::Cutout && !faded && samples > 1 },
                 multiview_mask: None,
                 cache: None,
             })

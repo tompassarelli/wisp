@@ -12,7 +12,7 @@ use super::particles::Particles;
 use super::pipelines::{blend_of, entry};
 use super::scene::{Bolt, Look};
 use super::model::Filter;
-use super::{DEPTH, SAMPLES};
+use super::DEPTH;
 
 const BOLTS: usize = 256;
 const PLAIN_SEGMENTS: u32 = 24;
@@ -56,7 +56,7 @@ pub(super) struct Lightning {
 }
 
 impl Lightning {
-    pub(super) fn new(device: &wgpu::Device, format: wgpu::TextureFormat, particles: &Particles) -> Self {
+    pub(super) fn new(device: &wgpu::Device, format: wgpu::TextureFormat, particles: &Particles, samples: u32) -> Self {
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("lightning"), source: wgpu::ShaderSource::Wgsl(include_str!("lightning.wgsl").into()) });
         let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("lightning"),
@@ -79,7 +79,7 @@ impl Lightning {
             }),
             primitive: wgpu::PrimitiveState { topology: wgpu::PrimitiveTopology::TriangleStrip, ..Default::default() },
             depth_stencil: Some(wgpu::DepthStencilState { format: DEPTH, depth_write_enabled: Some(false), depth_compare: Some(wgpu::CompareFunction::LessEqual), stencil: Default::default(), bias: Default::default() }),
-            multisample: wgpu::MultisampleState { count: SAMPLES, mask: !0, alpha_to_coverage_enabled: false },
+            multisample: wgpu::MultisampleState { count: samples, mask: !0, alpha_to_coverage_enabled: false },
             multiview_mask: None,
             cache: None,
         });

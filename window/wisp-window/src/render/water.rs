@@ -19,7 +19,7 @@ use super::model::Vertex;
 use super::liquid::{Preset, WaterSettings};
 use super::ripples::{Source, SOURCES};
 use super::pipelines::{entry, shader_source, INSTANCE_ATTRIBUTES, VERTEX_ATTRIBUTES};
-use super::{Instance, DEPTH, SAMPLES};
+use super::{depth_shader, Instance, DEPTH};
 
 const FRAME_PREFIX: &str = "replaceabletextures\\water\\water";
 
@@ -88,6 +88,7 @@ impl WaterUniform {
 pub(super) struct Targets {
     pub size: (u32, u32),
     pub refracted: wgpu::TextureView,
+    pub refracted_texture: wgpu::Texture,
     pub reflect_color: wgpu::TextureView,
     pub reflect_resolved: wgpu::TextureView,
     pub reflect_depth: wgpu::TextureView,
@@ -95,29 +96,31 @@ pub(super) struct Targets {
 }
 
 impl Targets {
-    pub fn new(device: &wgpu::Device, format: wgpu::TextureFormat, size: (u32, u32)) -> Self {
+    pub fn new(device: &wgpu::Device, format: wgpu::TextureFormat, size: (u32, u32), samples: u32) -> Self {
         let reflect_size = ((size.0 / REFLECTION_SHRINK).max(1), (size.1 / REFLECTION_SHRINK).max(1));
         let make = |label, size: (u32, u32), format, samples, usage| {
-            device
-                .create_texture(&wgpu::TextureDescriptor {
-                    label: Some(label),
-                    size: wgpu::Extent3d { width: size.0, height: size.1, depth_or_array_layers: 1 },
-                    mip_level_count: 1,
-                    sample_count: samples,
-                    dimension: wgpu::TextureDimension::D2,
-                    format,
-                    usage,
-                    view_formats: &[],
-                })
-                .create_view(&Default::default())
+            device.create_texture(&wgpu::TextureDescriptor {
+                label: Some(label),
+                size: wgpu::Extent3d { width: size.0, height: size.1, depth_or_array_layers: 1 },
+                mip_level_count: 1,
+                sample_count: samples,
+                dimension: wgpu::TextureDimension::D2,
+                format,
+                usage,
+                view_formats: &[],
+            })
         };
+        let view = |texture: &wgpu::Texture| texture.create_view(&Default::default());
         let sampled = wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING;
+        let refracted = make("refraction", size, format, 1, sampled | wgpu::TextureUsages::COPY_DST);
+        let reflect_resolved = view(&make("reflection", reflect_size, format, 1, sampled));
         Self {
             size,
-            refracted: make("refraction", size, format, 1, sampled),
-            reflect_color: make("reflection colour", reflect_size, format, SAMPLES, wgpu::TextureUsages::RENDER_ATTACHMENT),
-            reflect_resolved: make("reflection", reflect_size, format, 1, sampled),
-            reflect_depth: make("reflection depth", reflect_size, DEPTH, SAMPLES, wgpu::TextureUsages::RENDER_ATTACHMENT),
+            refracted: view(&refracted),
+            refracted_texture: refracted,
+            reflect_color: if samples > 1 { view(&make("reflection colour", reflect_size, format, samples, wgpu::TextureUsages::RENDER_ATTACHMENT)) } else { reflect_resolved.clone() },
+            reflect_resolved,
+            reflect_depth: view(&make("reflection depth", reflect_size, DEPTH, samples, wgpu::TextureUsages::RENDER_ATTACHMENT)),
             reflect_size,
         }
     }
@@ -126,6 +129,7 @@ impl Targets {
 pub(super) struct Water {
     layout: wgpu::BindGroupLayout,
     pub pipeline: wgpu::RenderPipeline,
+    pub flat: wgpu::RenderPipeline,
     /// The pipeline for falling water (water/falls.rs), which shares the sea's images and uniform.
     pub falls: wgpu::RenderPipeline,
     uniform: wgpu::Buffer,
@@ -134,13 +138,14 @@ pub(super) struct Water {
     frames: BTreeMap<String, Image>,
     array: Option<wgpu::TextureView>,
     dirty: bool,
+    samples: u32,
     pub targets: Option<Targets>,
     /// The liquid the water model on screen names.
     pub liquid: Preset,
 }
 
 impl Water {
-    pub fn new(device: &wgpu::Device, format: wgpu::TextureFormat, frame_layout: &wgpu::BindGroupLayout) -> Self {
+    pub fn new(device: &wgpu::Device, format: wgpu::TextureFormat, frame_layout: &wgpu::BindGroupLayout, samples: u32) -> Self {
         let fragment = wgpu::ShaderStages::FRAGMENT;
         let texture = |multisampled, sample_type, view_dimension| wgpu::BindingType::Texture { sample_type, view_dimension, multisampled };
         let filterable = wgpu::TextureSampleType::Float { filterable: true };
@@ -151,14 +156,14 @@ impl Water {
                 entry(1, fragment, wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering)),
                 entry(2, fragment, texture(false, filterable, wgpu::TextureViewDimension::D2)),
                 entry(3, fragment, texture(false, filterable, wgpu::TextureViewDimension::D2)),
-                entry(4, fragment, texture(true, wgpu::TextureSampleType::Depth, wgpu::TextureViewDimension::D2)),
+                entry(4, fragment, texture(samples > 1, wgpu::TextureSampleType::Depth, wgpu::TextureViewDimension::D2)),
                 entry(5, fragment, wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering)),
                 entry(6, fragment, wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: false, min_binding_size: None }),
             ],
         });
-        let module = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("water"), source: wgpu::ShaderSource::Wgsl(shader_source(include_str!("water.wgsl")).into()) });
+        let module = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("water"), source: wgpu::ShaderSource::Wgsl(depth_shader(&shader_source(include_str!("water.wgsl")), samples).into()) });
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("water"), bind_group_layouts: &[Some(frame_layout), Some(&layout)], immediate_size: 0 });
-        let build = |label, fragment_entry: &str| device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        let build = |label, fragment_entry: &str, constants: &[(&str, f64)]| device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some(label),
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
@@ -173,20 +178,21 @@ impl Water {
             fragment: Some(wgpu::FragmentState {
                 module: &module,
                 entry_point: Some(fragment_entry),
-                compilation_options: Default::default(),
+                compilation_options: wgpu::PipelineCompilationOptions { constants, ..Default::default() },
                 targets: &[Some(wgpu::ColorTargetState { format, blend: Some(wgpu::BlendState::ALPHA_BLENDING), write_mask: wgpu::ColorWrites::ALL })],
             }),
             primitive: wgpu::PrimitiveState::default(),
             depth_stencil: Some(wgpu::DepthStencilState { format: DEPTH, depth_write_enabled: Some(false), depth_compare: Some(wgpu::CompareFunction::LessEqual), stencil: Default::default(), bias: Default::default() }),
-            multisample: wgpu::MultisampleState { count: SAMPLES, mask: !0, alpha_to_coverage_enabled: false },
+            multisample: wgpu::MultisampleState { count: samples, mask: !0, alpha_to_coverage_enabled: false },
             multiview_mask: None,
             cache: None,
         });
-        let (pipeline, falls) = (build("water", "fragment_main"), build("falls", "fragment_fall"));
+        let (pipeline, flat, falls) = (build("water", "fragment_main", &[]), build("flat water", "fragment_main", &[("FLAT", 1.0)]), build("falls", "fragment_fall", &[]));
         let sampler = |mode| device.create_sampler(&wgpu::SamplerDescriptor { address_mode_u: mode, address_mode_v: mode, mag_filter: wgpu::FilterMode::Linear, min_filter: wgpu::FilterMode::Linear, ..Default::default() });
         Self {
             layout,
             pipeline,
+            flat,
             falls,
             uniform: device.create_buffer_init(&wgpu::util::BufferInitDescriptor { label: Some("water"), contents: bytemuck::bytes_of(&WaterUniform::zeroed()), usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST }),
             tiled: sampler(wgpu::AddressMode::Repeat),
@@ -194,6 +200,7 @@ impl Water {
             frames: BTreeMap::new(),
             array: None,
             dirty: false,
+            samples,
             targets: None,
             liquid: Preset::Water,
         }
@@ -225,7 +232,7 @@ impl Water {
 
     pub fn fit(&mut self, device: &wgpu::Device, format: wgpu::TextureFormat, size: (u32, u32)) {
         if self.targets.as_ref().is_none_or(|targets| targets.size != size) {
-            self.targets = Some(Targets::new(device, format, size));
+            self.targets = Some(Targets::new(device, format, size, self.samples));
         }
     }
 

@@ -14,6 +14,7 @@ use crate::remaster::Quality;
 use crate::texture::Image;
 
 mod falls;
+mod low;
 mod pool;
 
 struct Clocked(std::sync::Arc<std::sync::atomic::AtomicU32>);
@@ -152,9 +153,13 @@ struct Stage {
 
 impl Stage {
     fn new(size: (u32, u32)) -> Option<Self> {
+        Self::with(size, crate::settings::Preset::High.features())
+    }
+
+    fn with(size: (u32, u32), features: crate::settings::Features) -> Option<Self> {
         let (device, queue) = super::gpu_tests::device()?;
         let format = wgpu::TextureFormat::Rgba8Unorm;
-        let mut renderer = Renderer::new(device.clone(), queue.clone(), format, Quality::Off, crate::settings::Preset::High.features());
+        let mut renderer = Renderer::new(device.clone(), queue.clone(), format, Quality::Off, features);
         for (index, frame) in water_frames().into_iter().enumerate() {
             renderer.water.keep(format!("replaceabletextures\\water\\water{index:02}.blp"), frame);
         }

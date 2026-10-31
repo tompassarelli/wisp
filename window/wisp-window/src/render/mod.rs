@@ -30,12 +30,9 @@ mod water;
 #[cfg(test)]
 mod stage_test;
 
-use std::collections::HashMap;
-use std::time::Instant;
+use std::{collections::HashMap, sync::Arc, time::Instant};
 use bytemuck::Zeroable;
 use wgpu::util::DeviceExt;
-
-use std::sync::Arc;
 
 use crate::decode_pool::Pool;
 use crate::model::Facing;
@@ -46,21 +43,20 @@ use gpu::{bone_storage, frame_group, frame_uniform_buffer, instance_storage, col
 use {lightning::Lightning, weather::Weather};
 use model::{Filter, ModelData, ModelEmitter, Paint, Vertex};
 use groups::Group;
-use shadow::Shadow;
+use {shadow::Shadow, targets::{samples_of, Targets}};
 use uniforms::{lighting_of, FrameUniform, Instance, LayerUniform, Lit, SceneFrame};
 use {liquid::{Glow, WaterSettings}, water::Water};
 use particles::{ParticleFrame, Particles, Slot};
 use scene::{Pose, Scene};
-use targets::Targets;
 use crate::post::{Post, Tuning, TUNING};
 
 pub use gpu::fitted;
+pub(crate) use targets::depth_shader;
 pub use sprite::Shot;
 pub use scene::Scene as DrawScene;
 
 const DEPTH: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 const HDR: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
-const SAMPLES: u32 = 4;
 const BONES_AT_START: usize = 16 * 1024;
 const SLOTS_AT_START: usize = 16 * 1024;
 const INSTANCES_AT_START: usize = 4 * 1024;
@@ -156,6 +152,7 @@ pub struct Renderer {
     sources: Vec<(String, Arc<[u8]>)>,
     incoming: Option<Box<Renderer>>,
     features: Features,
+    samples: u32,
     particles: Particles,
     lightning: Lightning,
     weather: Weather,
@@ -170,7 +167,8 @@ impl Renderer {
     }
 
     pub fn new(device: wgpu::Device, queue: wgpu::Queue, format: wgpu::TextureFormat, quality: Quality, features: Features) -> Self {
-        let (pipelines, frame_layout, layer_layout) = pipelines::build(&device, HDR);
+        let samples = samples_of(features);
+        let (pipelines, frame_layout, layer_layout) = pipelines::build(&device, HDR, samples);
         let bone_buffer = bone_storage(&device, BONES_AT_START);
         let color_buffer = color_storage(&device, SLOTS_AT_START);
         let uv_buffer = uv_storage(&device, SLOTS_AT_START);
@@ -182,11 +180,11 @@ impl Renderer {
             FrameSet { buffer, group }
         };
         let (main, sky, mirror, mirror_sky) = (set("main frame"), set("sky frame"), set("mirrored frame"), set("mirrored sky frame"));
-        let water = Water::new(&device, HDR, &frame_layout);
-        let particles = Particles::new(&device, HDR);
-        let lightning = Lightning::new(&device, HDR, &particles);
-        let weather = Weather::new(&device, HDR, &particles);
-        let post = Post::new(&device, &queue, format, HDR, DEPTH, SAMPLES);
+        let water = Water::new(&device, HDR, &frame_layout, samples);
+        let particles = Particles::new(&device, HDR, samples);
+        let lightning = Lightning::new(&device, HDR, &particles, samples);
+        let weather = Weather::new(&device, HDR, &particles, samples);
+        let post = Post::new(&device, &queue, format, HDR, DEPTH, samples);
         Self {
             white: upload(&device, &queue, &white()),
             sampler: repeat_sampler(&device),
@@ -243,6 +241,7 @@ impl Renderer {
             sources: Vec::new(),
             incoming: None,
             features,
+            samples,
             particles,
             lightning,
             weather,
@@ -321,7 +320,7 @@ impl Renderer {
         if self.targets.as_ref().is_some_and(|targets| targets.size == size) {
             return;
         }
-        let targets = Targets::new(&self.device, size);
+        let targets = Targets::new(&self.device, size, self.samples);
         self.post.fit(size, &targets.resolved, &targets.depth);
         self.targets = Some(targets);
     }

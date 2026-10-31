@@ -12,7 +12,7 @@ use super::pipelines::{blend_of, entry};
 use super::scene::{Camera, WeatherPose};
 use crate::settings::Features;
 use super::model::Filter;
-use super::{DEPTH, SAMPLES};
+use super::DEPTH;
 
 const SLOTS: usize = 8;
 const STRIDE: u32 = 16 * 1024;
@@ -103,7 +103,7 @@ pub(super) struct Weather {
 }
 
 impl Weather {
-    pub(super) fn new(device: &wgpu::Device, format: wgpu::TextureFormat, particles: &Particles) -> Self {
+    pub(super) fn new(device: &wgpu::Device, format: wgpu::TextureFormat, particles: &Particles, samples: u32) -> Self {
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("weather"), source: wgpu::ShaderSource::Wgsl(include_str!("weather.wgsl").into()) });
         let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("weather"),
@@ -123,7 +123,7 @@ impl Weather {
                 }),
                 primitive: wgpu::PrimitiveState { topology: wgpu::PrimitiveTopology::TriangleStrip, ..Default::default() },
                 depth_stencil: Some(wgpu::DepthStencilState { format: DEPTH, depth_write_enabled: Some(false), depth_compare: Some(wgpu::CompareFunction::LessEqual), stencil: Default::default(), bias: Default::default() }),
-                multisample: wgpu::MultisampleState { count: SAMPLES, mask: !0, alpha_to_coverage_enabled: false },
+                multisample: wgpu::MultisampleState { count: samples, mask: !0, alpha_to_coverage_enabled: false },
                 multiview_mask: None,
                 cache: None,
             })

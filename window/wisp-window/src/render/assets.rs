@@ -132,8 +132,12 @@ impl Renderer {
         self.quality != self.wanted || self.unbaked
     }
 
-    /// Starts building the wanted set beside the drawn one when it would differ and every texture it needs is in the cache; while playing, only a switch to Original may start.
+    /// Starts building the wanted set beside the drawn one when it would differ and every texture it needs is in the cache; while playing, only a switch to Original may start. A change of samples per pixel rebuilds the drawn set the same way.
     fn steer(&mut self) {
+        let samples = samples_of(self.features);
+        if self.incoming.as_ref().is_some_and(|incoming| incoming.samples != samples) {
+            self.incoming = None;
+        }
         let held = self.playing && self.wanted != Quality::Off;
         if held && self.incoming.as_ref().is_some_and(|incoming| incoming.quality != Quality::Off) {
             self.incoming = None;
@@ -147,11 +151,14 @@ impl Renderer {
             (_, Some(baked)) => self.quality != self.wanted || (self.unbaked && baked > self.baked_at_build),
             (_, None) => false,
         };
-        if !rebuild {
+        if !rebuild && self.samples == samples {
             return;
         }
-        self.baked_at_build = baked.unwrap_or(0);
-        let mut incoming = Box::new(Renderer::new(self.device.clone(), self.queue.clone(), self.format, self.wanted, self.features).with_upscaler(self.upscaler.clone()));
+        if rebuild {
+            self.baked_at_build = baked.unwrap_or(0);
+        }
+        let quality = if rebuild { self.wanted } else { self.quality };
+        let mut incoming = Box::new(Renderer::new(self.device.clone(), self.queue.clone(), self.format, quality, self.features).with_upscaler(self.upscaler.clone()));
         for (path, bytes) in &self.sources {
             incoming.ingest_shared(path, bytes.clone());
         }
@@ -190,6 +197,9 @@ impl Renderer {
         self.features = features;
         self.set_shadow_side(match features.shadows { Shadows::Off => 0, Shadows::Map(side) => side });
         self.set_post_tuning(tuning_of(features, self.tuning));
+        if samples_of(features) != self.samples {
+            self.steer();
+        }
         if let Some(incoming) = self.incoming.as_mut() {
             incoming.set_features(features);
         }

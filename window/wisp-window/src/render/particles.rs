@@ -12,7 +12,7 @@ use bytemuck::{Pod, Zeroable};
 use super::math::Mat4;
 use super::model::{EmitterSample, Filter, ModelEmitter};
 use super::pipelines::{blend_of, entry};
-use super::{FrameUniform, DEPTH, SAMPLES};
+use super::{FrameUniform, DEPTH};
 use crate::model::{LINE_EMITTER, XY_QUAD};
 
 const RING: usize = 16 * 1024;
@@ -113,7 +113,7 @@ fn blend_index(filter_mode: u32) -> usize {
 }
 
 impl Particles {
-    pub(super) fn new(device: &wgpu::Device, format: wgpu::TextureFormat) -> Self {
+    pub(super) fn new(device: &wgpu::Device, format: wgpu::TextureFormat, samples: u32) -> Self {
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("particles"), source: wgpu::ShaderSource::Wgsl(include_str!("particle.wgsl").into()) });
         let frame_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("particle frame"),
@@ -146,7 +146,7 @@ impl Particles {
                     }),
                     primitive: wgpu::PrimitiveState::default(),
                     depth_stencil: Some(wgpu::DepthStencilState { format: DEPTH, depth_write_enabled: Some(false), depth_compare: Some(wgpu::CompareFunction::LessEqual), stencil: Default::default(), bias: Default::default() }),
-                    multisample: wgpu::MultisampleState { count: SAMPLES, mask: !0, alpha_to_coverage_enabled: false },
+                    multisample: wgpu::MultisampleState { count: samples, mask: !0, alpha_to_coverage_enabled: false },
                     multiview_mask: None,
                     cache: None,
                 })

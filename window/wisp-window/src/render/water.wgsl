@@ -22,6 +22,8 @@ struct Water {
 @group(1) @binding(5) var clamped: sampler;
 @group(1) @binding(6) var<uniform> water: Water;
 
+override FLAT: bool = false;
+
 struct Surface {
     @builtin(position) clip: vec4<f32>,
     @location(0) world: vec3<f32>,
@@ -330,17 +332,21 @@ fn fragment_main(in: Surface) -> @location(0) vec4<f32> {
     let close = mix(1.0, 1.0 - smoothstep(reach * 0.3, reach, own), step(0.0001, water.calm.y));
     let cover = water.calm.z;
     let clump = mix(1.0, smoothstep(1.0 - cover, min(1.0 - cover + 0.22, 1.0), field), breakup);
-    let turn = breakup * 0.61;
-    let fine = slope(rotated(uv, turn) * mix(1.0, 0.83, breakup) + vec2<f32>(time * 0.011, time * 0.006), time, 0.004, spread) * mix(1.0, (0.2 + 0.8 * clump) * close, breakup);
-    let coarse = slope(rotated(uv, -turn * 1.7) * mix(0.37, 0.19, breakup) - vec2<f32>(time * 0.007, -time * 0.004), time * 0.7, 0.01, spread) * mix(1.0, 0.45 + 0.55 * close, breakup);
-    let bent = in.world.xy + (vec2<f32>(noise(in.world.xy * 0.0006 + vec2<f32>(time * 0.01, 5.0)), noise(in.world.xy * 0.0006 + vec2<f32>(31.0, -time * 0.008))) - 0.5) * 1400.0 * breakup;
-    let broad = (gerstner(bent, time) + swell(bent, time) * water.sparks.z * (1.0 - 0.9 * smoothstep(1800.0, 6000.0, own))) * mix(1.0, 0.2 + 1.3 * field, breakup);
-    let disturbed = disturbance(in.world.xy, time);
-    let strength = water.flow.y * 3.0 * calm * near;
-    let n1 = normalize(vec3<f32>(-fine * strength, 1.0));
-    let n2 = normalize(vec3<f32>(-coarse * strength, 1.0));
-    let n3 = normalize(vec3<f32>(-(broad * calm + disturbed.xy * min(near * 1.5, 1.0)), 1.0));
-    let normal = reorient(reorient(n1, n2), n3);
+    var normal = vec3<f32>(0.0, 0.0, 1.0);
+    var disturbed = vec3<f32>(0.0);
+    if (!FLAT) {
+        let turn = breakup * 0.61;
+        let fine = slope(rotated(uv, turn) * mix(1.0, 0.83, breakup) + vec2<f32>(time * 0.011, time * 0.006), time, 0.004, spread) * mix(1.0, (0.2 + 0.8 * clump) * close, breakup);
+        let coarse = slope(rotated(uv, -turn * 1.7) * mix(0.37, 0.19, breakup) - vec2<f32>(time * 0.007, -time * 0.004), time * 0.7, 0.01, spread) * mix(1.0, 0.45 + 0.55 * close, breakup);
+        let bent = in.world.xy + (vec2<f32>(noise(in.world.xy * 0.0006 + vec2<f32>(time * 0.01, 5.0)), noise(in.world.xy * 0.0006 + vec2<f32>(31.0, -time * 0.008))) - 0.5) * 1400.0 * breakup;
+        let broad = (gerstner(bent, time) + swell(bent, time) * water.sparks.z * (1.0 - 0.9 * smoothstep(1800.0, 6000.0, own))) * mix(1.0, 0.2 + 1.3 * field, breakup);
+        disturbed = disturbance(in.world.xy, time);
+        let strength = water.flow.y * 3.0 * calm * near;
+        let n1 = normalize(vec3<f32>(-fine * strength, 1.0));
+        let n2 = normalize(vec3<f32>(-coarse * strength, 1.0));
+        let n3 = normalize(vec3<f32>(-(broad * calm + disturbed.xy * min(near * 1.5, 1.0)), 1.0));
+        normal = reorient(reorient(n1, n2), n3);
+    }
 
     let facing = clamp(dot(normal, view), 0.0, 1.0);
     let fresnel = 0.02 + 0.98 * pow(1.0 - facing, 5.0);
@@ -360,10 +366,16 @@ fn fragment_main(in: Surface) -> @location(0) vec4<f32> {
     let muted = water.mid.w;
     let stops = mix(mix(water.shallow.rgb, water.mid.rgb, clamp(ramp * 2.0, 0.0, 1.0)), water.deep.rgb, clamp(ramp * 2.0 - 1.0, 0.0, 1.0));
     let body = mix(mix(water.shallow.rgb, water.deep.rgb, ramp), stops, muted) * mix(1.0, mix(0.72 + 0.56 * field, 0.94 + 0.12 * field, muted), breakup);
-    let glow = min(frame_height(uv * 1.7 + vec2<f32>(0.3, time * 0.01), time), frame_height(uv * 1.3 - vec2<f32>(time * 0.013, 0.1), time * 1.3));
+    var glow = 0.0;
+    if (!FLAT) {
+        glow = min(frame_height(uv * 1.7 + vec2<f32>(0.3, time * 0.01), time), frame_height(uv * 1.3 - vec2<f32>(time * 0.013, 0.1), time * 1.3));
+    }
     let caustic = pow(clamp(glow * 1.6, 0.0, 1.0), 3.0) * (1.0 - absorb) * water.shine.z * mix(1.0, clump * close, breakup);
     var colour = mix(bed + caustic * vec3<f32>(0.5, 0.9, 1.0), body, absorb);
-    let lines = web(in.world.xy, time, spread) * calm * water.shine.z * (1.0 - 0.45 * ramp) * mix(1.0, clump * close, breakup);
+    var lines = 0.0;
+    if (!FLAT) {
+        lines = web(in.world.xy, time, spread) * calm * water.shine.z * (1.0 - 0.45 * ramp) * mix(1.0, clump * close, breakup);
+    }
     colour += mix(vec3<f32>(0.55, 0.95, 1.0), water.glow.rgb * 1.5, step(0.0001, water.glow.w)) * lines * mix(0.55, 1.25, breakup);
 
     var plate = 0.0;
@@ -432,7 +444,10 @@ fn fragment_main(in: Surface) -> @location(0) vec4<f32> {
     colour = mix(colour, hazed, haze * mix(1.0, 1.35, breakup));
 
     let edge = 1.0 - smoothstep(0.0, water.foam.w, thickness);
-    let crest = smoothstep(0.55, 0.9, frame_height(uv * 2.3 + vec2<f32>(0.0, time * 0.02), time)) * smoothstep(0.92, 1.0, normal.z) * 0.25 * near * mix(1.0, clump, breakup) * (1.0 - muted);
+    var crest = 0.0;
+    if (!FLAT) {
+        crest = smoothstep(0.55, 0.9, frame_height(uv * 2.3 + vec2<f32>(0.0, time * 0.02), time)) * smoothstep(0.92, 1.0, normal.z) * 0.25 * near * mix(1.0, clump, breakup) * (1.0 - muted);
+    }
     let ripple = 0.5 + 0.5 * sin(thickness * 0.08 - time * 2.0 + noise(in.world.xy * 0.15) * 6.0);
     let shallows = select(edge * (0.55 + 0.45 * ripple) * (0.4 + noise(in.world.xy * 0.9 + time * 0.3)), 0.0, water.look.x > 0.0);
     let streak = smoothstep(0.38, 0.72, noise(vec2<f32>(in.world.x * 0.012 + time * 0.04, in.world.y * 0.05 - time * 0.015)));

@@ -163,7 +163,7 @@ impl Post {
         let layouts = Layouts {
             cloud: layout("cloud", &[params_entry()]),
             sky: layout("sky", &[params_entry(), texture_entry(1, false, flat, false), sampler_entry(2)]),
-            depth: layout("depth", &[params_entry(), texture_entry(1, true, flat, true)]),
+            depth: layout("depth", &[params_entry(), texture_entry(1, samples > 1, flat, true)]),
             occlusion: layout("occlusion", &[params_entry(), unfiltered_entry(1)]),
             bloom: layout("bloom", &[params_entry(), sampler_entry(1), texture_entry(2, false, flat, false)]),
             composite: layout(
@@ -174,7 +174,8 @@ impl Post {
         let shrink = format!("const REFLECTION_SHRINK: f32 = {REFLECTION_SHRINK}.0;\n");
         let sky = module(device, "sky", &[NOISE, &shrink, include_str!("sky.wgsl")]);
         let cloud = module(device, "cloud", &[NOISE, include_str!("clouds.wgsl")]);
-        let depth = module(device, "depth", &[include_str!("depth.wgsl")]);
+        let depth_source = crate::render::depth_shader(include_str!("depth.wgsl"), samples);
+        let depth = module(device, "depth", &[depth_source.as_str()]);
         let half_depth = module(device, "half depth", &[include_str!("half_depth.wgsl")]);
         let occlusion = module(device, "occlusion", &[include_str!("occlusion.wgsl")]);
         let denoise = module(device, "denoise", &[include_str!("denoise.wgsl")]);

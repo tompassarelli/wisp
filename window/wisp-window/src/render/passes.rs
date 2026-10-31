@@ -2,6 +2,7 @@
 
 use crate::gpu_time::{Pass, PassTimer};
 use crate::post::Look;
+use crate::settings::Water;
 
 use super::ripples::Placement;
 use super::scene::Scene;
@@ -93,7 +94,11 @@ impl Renderer {
                         pass.set_bind_group(1, layer, &[]);
                     }
                     (bind, Some(images)) => {
-                        pass.set_pipeline(if matches!(bind, Bind::Fall) { &self.water.falls } else { &self.water.pipeline });
+                        pass.set_pipeline(match bind {
+                            Bind::Fall => &self.water.falls,
+                            _ if self.features.water == Water::Flat => &self.water.flat,
+                            _ => &self.water.pipeline,
+                        });
                         pass.set_bind_group(1, images, &[]);
                     }
                     (_, None) => continue,
@@ -114,7 +119,7 @@ impl Renderer {
         }
     }
 
-    /// The sky and the scene seen from under the water plane, at the reflection's size, for the water pass to read.
+    /// The sky and the scene seen from under the water plane, at the reflection's size, for the water pass to read; flat water reflects the sky alone.
     fn draw_reflection(&self, encoder: &mut wgpu::CommandEncoder, timer: &mut PassTimer, clear: wgpu::Color, procedural_sky: bool) {
         let (Some(water), true) = (self.water.targets.as_ref(), self.water_level.is_some()) else { return };
         let sky = self.sky_group_of.as_ref().filter(|_| !procedural_sky);
@@ -124,12 +129,14 @@ impl Renderer {
             self.draw_both(&mut pass, std::slice::from_ref(group), Stage::Everything, None);
         }
         let load = if sky.is_some() { wgpu::LoadOp::Load } else { wgpu::LoadOp::Clear(clear) };
-        let mut pass = Attachments { label: "reflection", color: &water.reflect_color, depth: &water.reflect_depth, load, resolve: Some(&water.reflect_resolved), depth_ops: fresh(wgpu::StoreOp::Discard), size: water.reflect_size, timestamps: timer.writes(Pass::Reflection) }.begin(encoder);
+        let mut pass = Attachments { label: "reflection", color: &water.reflect_color, depth: &water.reflect_depth, load, resolve: (self.samples > 1).then_some(&water.reflect_resolved), depth_ops: fresh(wgpu::StoreOp::Discard), size: water.reflect_size, timestamps: timer.writes(Pass::Reflection) }.begin(encoder);
         if procedural_sky {
             self.post.draw_reflected_sky(&mut pass);
         }
-        pass.set_bind_group(0, &self.mirror.group, &[]);
-        self.draw_both(&mut pass, &self.groups, Stage::Everything, None);
+        if self.features.water != Water::Flat {
+            pass.set_bind_group(0, &self.mirror.group, &[]);
+            self.draw_both(&mut pass, &self.groups, Stage::Everything, None);
+        }
     }
 
     /// Draws `scene` into `target`, a surface view of `size` in this renderer's format, in the encoder's order: the sky, then the world.
@@ -177,14 +184,17 @@ impl Renderer {
                 self.draw_both(&mut pass, std::slice::from_ref(group), Stage::Everything, None);
             }
         }
-        let refracted = self.water.targets.as_ref().map(|water| &water.refracted);
-        if let (Some(images), Some(refracted)) = (&images, refracted) {
+        let water = self.water.targets.as_ref();
+        if let (Some(images), Some(water)) = (&images, water) {
             {
-                let mut pass = Attachments { label: "solid", color: &targets.color, depth: &targets.depth, load: wgpu::LoadOp::Load, resolve: Some(refracted), depth_ops: fresh(wgpu::StoreOp::Store), size, timestamps: timer.writes(Pass::Scene) }.begin(encoder);
+                let mut pass = Attachments { label: "solid", color: &targets.color, depth: &targets.depth, load: wgpu::LoadOp::Load, resolve: targets.resolving(&water.refracted), depth_ops: fresh(wgpu::StoreOp::Store), size, timestamps: timer.writes(Pass::Scene) }.begin(encoder);
                 pass.set_bind_group(0, &self.main.group, &[]);
                 self.draw_both(&mut pass, &self.groups, Stage::Solid, None);
             }
-            let mut pass = Attachments { label: "water", color: &targets.color, depth: &targets.depth, load: wgpu::LoadOp::Load, resolve: Some(&targets.resolved), depth_ops: None, size, timestamps: timer.writes(Pass::Water) }.begin(encoder);
+            if self.samples == 1 {
+                encoder.copy_texture_to_texture(targets.resolved_texture.as_image_copy(), water.refracted_texture.as_image_copy(), water.refracted_texture.size());
+            }
+            let mut pass = Attachments { label: "water", color: &targets.color, depth: &targets.depth, load: wgpu::LoadOp::Load, resolve: targets.resolving(&targets.resolved), depth_ops: None, size, timestamps: timer.writes(Pass::Water) }.begin(encoder);
             pass.set_bind_group(0, &self.main.group, &[]);
             self.draw_both(&mut pass, &self.groups, Stage::Water, Some(images));
             self.draw_both(&mut pass, &self.groups, Stage::Soft, None);
@@ -193,7 +203,7 @@ impl Renderer {
             self.weather.draw(&mut pass, &self.particles);
             drop(pass);
         } else {
-            let mut pass = Attachments { label: "scene", color: &targets.color, depth: &targets.depth, load: wgpu::LoadOp::Load, resolve: Some(&targets.resolved), depth_ops: fresh(wgpu::StoreOp::Store), size, timestamps: timer.writes(Pass::Scene) }.begin(encoder);
+            let mut pass = Attachments { label: "scene", color: &targets.color, depth: &targets.depth, load: wgpu::LoadOp::Load, resolve: targets.resolving(&targets.resolved), depth_ops: fresh(wgpu::StoreOp::Store), size, timestamps: timer.writes(Pass::Scene) }.begin(encoder);
             pass.set_bind_group(0, &self.main.group, &[]);
             self.draw_both(&mut pass, &self.groups, Stage::Everything, None);
             self.particles.draw(&mut pass);

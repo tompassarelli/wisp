@@ -100,7 +100,7 @@ pub enum Water {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Features {
     pub shadows: Shadows,
-    /// Samples per pixel: 1, 2, 4 or 8. Unread until the final-image pass can resample its depth.
+    /// Samples per pixel: 1 draws the scene without multisampling, and any more draws it at 4, the count every adapter offers for the scene's formats.
     pub msaa: u32,
     pub ssao: bool,
     /// Screen-space shadows from the sun: a short ray march in the depth that seats feet, weapons and small props where the shadow map is too coarse.
