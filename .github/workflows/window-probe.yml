@@ -1,0 +1,42 @@
+name: Window crash probe
+
+on:
+  push:
+    branches: ["farm/window-probe-143b"]
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [suite, post-module]
+    defaults:
+      run:
+        shell: bash
+        working-directory: window
+    env:
+      WGPU_BACKEND: dx12
+      WGPU_ADAPTER_NAME: Microsoft Basic Render Driver
+    steps:
+      - uses: actions/checkout@v4
+      - run: cargo test --release --locked --lib --no-run
+      - name: Run it repeatedly and count the crashes
+        run: |
+          set +e
+          case "${{ matrix.mode }}" in
+            suite) args=(); n=20 ;;
+            post-module) args=(post::tests); n=20 ;;
+          esac
+          crashed=0
+          for i in $(seq 1 $n); do
+            cargo test --release --locked --lib "${args[@]}" > "run-$i.log" 2>&1
+            code=$?
+            echo "run $i exit $code"
+            if [ $code -ne 0 ]; then crashed=$((crashed+1)); grep -E "ACCESS_VIOLATION|FAILED|panicked" "run-$i.log" | head -3; fi
+          done
+          echo "RESULT ${{ matrix.mode }}: $crashed of $n runs failed" | tee -a "$GITHUB_STEP_SUMMARY"
