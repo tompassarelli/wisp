@@ -6,7 +6,7 @@ pub const LEADING: f32 = 1.2;
 const MINIMUM_DEFAULT_SIZE: f32 = 10.0;
 const DEFAULT_SIZE_UNITS: f32 = 0.0122;
 const FALLBACK_HEIGHT: f32 = 15.0;
-/// Measured on Classic build 24268: about 8.5 px in a 724 px window.
+/// Measured on Classic build 24268: about 8.5 px in a 724 px window, and an unscaled banner set to 0.019 drew 12 px of cap height at 1084 px.
 const PLAIN_TEXT_BASE: f32 = 0.0085;
 const UNITS_HIGH: f32 = 0.6;
 const UNITS_WIDE: f32 = 0.8;
@@ -26,10 +26,10 @@ pub fn pixels(rectangle: [f32; 4], area: Pixels) -> Pixels {
     [area[0] + area[2] / 2.0 + (left - UNITS_WIDE / 2.0) * scale, area[1] + (UNITS_HIGH - top) * scale, (right - left) * scale, (top - bottom) * scale]
 }
 
-/// The font size in pixels. A scaled plain frame is its scale times Classic's fixed base, since Classic ignores the font height set on a plain `TEXT` frame; any other frame is its font height, or one that scales with the screen and the frame's height, times its scale.
+/// The font size in pixels. A plain frame is its scale times Classic's fixed base, since Classic ignores the font height set on a plain `TEXT` frame; any other frame is its font height, or one that scales with the screen and the frame's height, times its scale.
 pub fn font_size(font_height: f32, scale: f32, plain: bool, frame_height: f32, area_height: f32) -> f32 {
     let screen = area_height / UNITS_HIGH;
-    if plain && scale != 1.0 {
+    if plain {
         return PLAIN_TEXT_BASE * screen * scale;
     }
     let base = if font_height > 0.0 { font_height * screen } else { MINIMUM_DEFAULT_SIZE.max((DEFAULT_SIZE_UNITS * screen).min(if frame_height > 0.0 { frame_height } else { FALLBACK_HEIGHT })) };
@@ -184,7 +184,7 @@ mod tests {
                 near(font_size(wanted, scale, true, 0.0, height), expected);
                 near(font_size(wanted, scale, false, 0.0, height), expected * scale);
             }
-            near(font_size(0.019, 1.0, true, 0.0, height), 0.019 * height / 0.6);
+            near(font_size(0.019, 1.0, true, 0.0, height), 0.0085 * height / 0.6);
             near(font_size(0.036, 0.6, false, 0.0, height), 0.036 * 0.6 * height / 0.6);
         }
     }

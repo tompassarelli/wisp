@@ -15,7 +15,8 @@ test("uiTextSize_multiplies_a_templated_frames_font_by_its_scale", () => {
   expect(uiTextSize({ font: { height: 0.036 }, scale: 0.6, plain: false }, 1920, 0)).toBeCloseTo(0.036 * 0.6 * 3200, 3);
 });
 
-test("uiTextSize_keeps_an_unscaled_plain_frames_font_height", () => {
-  expect(uiTextSize({ font: { height: 0.019 }, scale: 1, plain: true }, 1080, 0)).toBeCloseTo(34.2, 3);
-  expect(uiTextSize({ font: { height: 0.019 }, scale: 1, plain: true }, 1920, 0)).toBeCloseTo(60.8, 3);
+test("uiTextSize_sizes_an_unscaled_plain_frame_by_the_base_not_its_font_height", () => {
+  expect(uiTextSize({ font: { height: 0.019 }, scale: 1, plain: true }, 1080, 0)).toBeCloseTo(15.3, 3);
+  expect(uiTextSize({ font: { height: 0.019 }, scale: 1, plain: true }, 1920, 0)).toBeCloseTo(27.2, 3);
+  expect(uiTextSize({ font: { height: 0.019 }, scale: 1, plain: false }, 1080, 0)).toBeCloseTo(34.2, 3);
 });

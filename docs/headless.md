@@ -848,9 +848,9 @@ saves them as the scene's `environment`.
   height, times `BlzFrameSetScale`, placed by `BlzFrameSetTextAlignment` (or
   the template's `justify`) inside its rectangle, outlined when the font
   flags hold 1 (`OUTLINE`). A frame made by `BlzCreateFrameByType` with no
-  template that has a `BlzFrameSetScale` draws at 0.0085 times that scale
+  template draws at 0.0085 times its scale (1 when it has none)
   instead: Classic ignores the font height on such a frame (measured on
-  build 24268), so Smashcraft's `sizeText` countdown, which sets a scale of
+  build 24268, scaled and unscaled), so Smashcraft's `sizeText` countdown, which sets a scale of
   `size / 0.0085` beside a font of `size`, is `size` tall in the Chrome window
   and the native window, not `size` squared over 0.0085 (`uiTextSize`,
   wisp:host/render/screen.ts; `font_size` in the native window's
