@@ -5,7 +5,7 @@ import { chooseHostRelay, showJoinPing } from "../net/regionChoice";
 import { NetFailure } from "../net/failure";
 import { type NetListening, type NetRole, runNetPeer } from "../net/peer";
 import { RenderFailure } from "../render/headlessRender";
-import type { StandaloneGame, StandaloneNet, StandaloneNetSession } from "./standalone";
+import type { StandaloneGame, StandaloneNet, StandaloneNetSession } from "./standaloneGame";
 
 class MapMismatch extends Schema.TaggedError<MapMismatch, { readonly brand: unique symbol }>()("MapMismatch", { code: Schema.String, here: Schema.String }) {
   override get message(): string {

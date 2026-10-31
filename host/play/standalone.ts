@@ -4,14 +4,11 @@ import { join } from "node:path";
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { Deferred, Effect, FiberSet, Schema } from "effect";
 import { ChildProcess } from "effect/process";
-import type { HeadlessClient } from "../../src/headless/client";
-import type { LockstepLink } from "../../src/headless/lockstep";
 import { missingNativeMessage } from "../../src/headless/journey";
 import { spawnLogged } from "../process/hostProcess";
 import { findReforgedInstall, STORAGE_ENV, type InstallLookup } from "../os/warcraft/reforgedInstall";
 import { requireGpuLease } from "../render/gpuLease";
-import type { NetSession } from "../net/peer";
-import { captureScene, sceneWithUnits, RenderFailure, type HeadlessRenderProject } from "../render/headlessRender";
+import { captureScene, sceneWithUnits, RenderFailure } from "../render/headlessRender";
 import { browserBundle } from "../render/browserBundle";
 import { createSoundResolver } from "../render/standaloneSound";
 import { prepareWindowLibrary } from "../window/binding";
@@ -20,42 +17,11 @@ import { openSimPlayer } from "../window/simPlayer";
 import { createSoundPlayer } from "../window/soundPlayer";
 import type { NativeGameModule } from "../window/simProtocol";
 import type { StandaloneFrame, StandaloneInput } from "../render/standaloneFrames";
+import type { StandaloneGame, StandaloneNet } from "./standaloneGame";
 import { openNetMatch } from "./standaloneNet";
 
 export type { StandaloneFrame, StandaloneInput } from "../render/standaloneFrames";
-
-export interface StandaloneSession {
-  readonly client: HeadlessClient;
-  step(input: StandaloneInput): void;
-  checksum(): string;
-  frame?(): number;
-  finished?(): boolean;
-  /** The named stage times of the last step in milliseconds, such as the sim tick or a rollback's resimulation; the step adds `scene`, the time from the headless client to the scene, and the native window reports a spread for each name. */
-  stages?(): Readonly<Record<string, number>>;
-  close(): void;
-  /** Frames advance on their own (a networked match); `step` only hands over the input and the scene is read as it stands. */
-  readonly paced?: boolean;
-}
-
-/** One slot of a networked match: the transport steps it, the window reads its scene and gives it the local input. */
-export interface StandaloneNetSession extends NetSession {
-  readonly client: HeadlessClient;
-  input(this: void, input: StandaloneInput): void;
-  finished?(this: void): boolean;
-}
-
-export interface StandaloneGame {
-  readonly title: string;
-  readonly render: HeadlessRenderProject;
-  create(options?: { readonly script?: string }): Promise<StandaloneSession>;
-  /** Host and join (wisp:docs/play.md): the map's hash, compared before a match, and one slot's session over the link. */
-  readonly net?: {
-    mapHash(this: void): Promise<string>;
-    create(this: void, link: LockstepLink, slot: number, humans: number, options?: { readonly script?: string }): Promise<StandaloneNetSession>;
-  };
-}
-
-export type StandaloneNet = { readonly host: { readonly port: number; readonly relay?: string } } | { readonly join: string };
+export type { StandaloneGame, StandaloneNet, StandaloneNetSession, StandaloneSession } from "./standaloneGame";
 
 export type StandaloneWindow = "chrome" | "native";
 

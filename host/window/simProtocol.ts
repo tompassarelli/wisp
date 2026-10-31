@@ -1,4 +1,4 @@
-import type { StandaloneNet } from "../play/standalone";
+import type { StandaloneNet } from "../play/standaloneGame";
 
 /**
  * The module and export a worker thread imports to get the game, which cannot cross threads as an object. The export is the game, or a
