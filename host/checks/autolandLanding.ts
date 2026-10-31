@@ -11,7 +11,7 @@ export function landing(candidate: string, moved: string): Landing {
   return paths(moved).some((path) => SHARED_INPUT.test(path) || own.has(path)) ? "retest" : "land";
 }
 
-export function landedPrefix(lanes: readonly StackedLane[], moved: string): number {
+function landedPrefix(lanes: readonly StackedLane[], moved: string): number {
   const cut = lanes.findIndex((lane) => lane.moved || landing(lane.paths, moved) === "retest");
   return cut === -1 ? lanes.length : cut;
 }
