@@ -3,7 +3,7 @@ export class ClientScreen {
   private pixelWidth: number;
   private pixelHeight: number;
 
-  constructor(size: { readonly width: number; readonly height: number }) {
+  constructor(size: { readonly width: number; readonly height: number } = { width: 1920, height: 1080 }) {
     this.pixelWidth = size.width;
     this.pixelHeight = size.height;
   }

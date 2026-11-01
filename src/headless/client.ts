@@ -69,8 +69,8 @@ export interface ClientOptions {
   readonly intentionalNoops?: IntentionalNoops;
   readonly standaloneProfile?: StandaloneProfile | undefined;
   readonly network: SyncMessage[];
-  /** Pixels `BlzGetLocalClientWidth/Height`, `BlzPixelToFrame*` and `BlzFrameToPixel*` read. */
-  readonly screen: { readonly width: number; readonly height: number };
+  /** Pixels `BlzGetLocalClientWidth/Height`, `BlzPixelToFrame*` and `BlzFrameToPixel*` read; unset, 1920 x 1080, what a lockstep's first client reports. */
+  readonly screen?: { readonly width: number; readonly height: number };
   readonly scope?: ClientScope;
 
   readonly natives?: (this: void, client: HeadlessClient) => NativeBehaviors;
