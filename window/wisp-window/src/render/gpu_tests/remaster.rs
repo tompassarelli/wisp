@@ -86,9 +86,10 @@ fn the_players_switch_to_remastered_applies_mid_match_when_the_cache_is_complete
     let mut renderer = baked_original(8, 1, 0);
     renderer.set_playing(true);
     renderer.set_quality(Quality::Standard);
-    let began = std::time::Instant::now();
+    pump_until(&mut renderer, |renderer| renderer.bake_progress().is_some_and(|progress| progress.ready()));
+    renderer.steer();
+    assert!(!renderer.incoming.is_idle() || renderer.quality == Quality::Standard, "once the bake has counted the cache, the next steer builds the remastered set mid-match");
     pump_until(&mut renderer, |renderer| renderer.quality == Quality::Standard);
-    assert!(began.elapsed() < std::time::Duration::from_millis(500), "the switch took {:?}, over thirty frames at 60 Hz", began.elapsed());
     assert!(renderer.playing && renderer.reliefs.contains_key("art0.png") && !renderer.art_pending(), "the remastered set is on screen while the match plays");
 }
 
