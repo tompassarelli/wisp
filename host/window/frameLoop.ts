@@ -84,7 +84,8 @@ export function createFrameLoop(player: NativePlayer, window: WindowView, option
     if (previous !== 0) series.intervals.push(began - previous);
     previous = began;
     try {
-      const input: StandaloneInput = options.scripted ? { buttons: [], axisX: 0, axisY: 0 } : { buttons: window.buttons(sample.mask), axisX: sample.axisX, axisY: sample.axisY, pointer: sample.pointer, keys: sample.keys };
+      const screen = { width: sample.pointer.width, height: sample.pointer.height };
+      const input: StandaloneInput = options.scripted ? { buttons: [], axisX: 0, axisY: 0, screen } : { buttons: window.buttons(sample.mask), axisX: sample.axisX, axisY: sample.axisY, pointer: sample.pointer, keys: sample.keys, screen };
       const frame = player.advance(input);
       for (const [name, ms] of Object.entries(frame.stages ?? {})) (series.stages[name] ??= []).push(ms);
       const stepped = performance.now();

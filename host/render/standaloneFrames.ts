@@ -12,6 +12,8 @@ export interface StandaloneInput {
   readonly pointer?: PointerReading;
   /** The window's keyboard since the step before, oldest first: every key as the OS key event Warcraft raises, for `createKeyFeed` (wisp:src/headless/keyInput.ts). A pad's presses stay in `buttons`. */
   readonly keys?: readonly KeyTransition[];
+  /** The window's size in pixels, which the local client reports as its screen (`HeadlessClient.resize`); unset keeps the client's own. */
+  readonly screen?: { readonly width: number; readonly height: number };
 }
 
 export interface StandaloneFrame {

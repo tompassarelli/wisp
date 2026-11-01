@@ -116,8 +116,15 @@ export class HeadlessClient {
   readonly quests: Quests;
   readonly textAreaAutoScroll = new Map<Handle, boolean>();
   readonly input = new Input();
+  private readonly pixels: { width: number; height: number };
   /** Pixels `BlzGetLocalClientWidth/Height` report, which a window's cursor is mapped into. */
-  readonly screen: { readonly width: number; readonly height: number };
+  get screen(): { readonly width: number; readonly height: number } { return this.pixels; }
+  /** Sizes the screen to the window the client is drawn in, as Warcraft's client reports its own window; a zero side, a minimised window, keeps the last size. */
+  resize(width: number, height: number): void {
+    if (width <= 0 || height <= 0) return;
+    this.pixels.width = width;
+    this.pixels.height = height;
+  }
 
   get heldMouseButtons(): Set<unknown> { return this.input.heldMouseButtons; }
   get mouseScreenX(): number { return this.input.pointerX; }
@@ -177,7 +184,7 @@ export class HeadlessClient {
   readonly bodies: Bodies;
 
   constructor(options: ClientOptions) {
-    this.screen = options.screen;
+    this.pixels = { width: options.screen.width, height: options.screen.height };
     this.abilities = new Warcraft3Abilities(options.abilityObjects);
     this.view = new View(() => this.frame);
     this.scenery = new Scenery(options.scenery, this.view);
@@ -201,7 +208,7 @@ export class HeadlessClient {
     this.scope = options.scope;
     this.preloadText = new PreloadText({ slot: options.slot, filePrefix: options.filePrefix, stored: options.files, files: this.files, published: this.published,
       messages: this.messages, errors: this.errors, missed: () => { this.missedLookups++; } });
-    this.frameUi = new FrameUi(() => this.frames, handle, () => this.natives.ORIGIN_FRAME_GAME_UI, options.screen);
+    this.frameUi = new FrameUi(() => this.frames, handle, () => this.natives.ORIGIN_FRAME_GAME_UI, this.pixels);
     this.quests = new Quests(handle);
     this.players = new Players({ slot: options.slot, humans: options.humans, names: options.playerNames, forces: this.units });
     this.clock = new Clock(handle);

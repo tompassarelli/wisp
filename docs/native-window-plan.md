@@ -509,7 +509,7 @@ The native window takes over the page's whole job, not only its drawing
   `src/headless/pointer.ts` maps the cursor onto Warcraft's 0.8 by 0.6 UI
   screen (the 4:3 area centred in the window and scaled by its height, as
   `layout::pixels` draws frames) and into the client's screen pixels, inverting the game's `pointerX`/`pointerY`, for `BlzGetMouseScreenPosX/Y` and
-  `BlzIsMouseButtonPressed`. A left press and release on the same frame that
+  `BlzIsMouseButtonPressed`. The client's screen is the window's size: each step hands it over as `StandaloneInput.screen` and the runner resizes the local client to it, so `BlzGetLocalClientWidth/Height` report the window as Warcraft's client reports its own, and a layout that places frames from the screen's edges follows the window through a resize (until 2 November 2026 the client kept 1920x1080 whatever the window, so a pause screen laid out for 16:9 ran off a 4:3 window). A left press and release on the same frame that
   takes clicks is `FRAMEEVENT_CONTROL_CLICK` for the player, sent through the
   lockstep like a key; the frame is the topmost one that takes clicks (frame
   level, then creation order). A session reads the mouse from the

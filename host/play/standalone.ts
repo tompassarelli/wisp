@@ -90,6 +90,7 @@ export const openStandalone = (game: StandaloneGame, options: StandaloneOptions 
   if (options.out !== undefined) yield* attempt(() => mkdir(options.out!, { recursive: true }));
   const advance = (input: StandaloneInput) => {
     const start = performance.now();
+    if (input.screen !== undefined) session.client.resize(input.screen.width, input.screen.height);
     session.step(input);
     const outside = session.client.missingNatives.find((missing) => missing.outsideProfile === true);
     if (outside !== undefined) throw new Error(`p${outside.client} frame ${outside.frame}: ${missingNativeMessage(outside)}`);

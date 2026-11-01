@@ -26,7 +26,7 @@ const playerOf = (steps: readonly (Readonly<Record<string, number>> | undefined)
   };
 };
 
-const sample = (frame: number) => ({ frame, sampleNs: 0, mask: 0, keys: [], axisX: 0, axisY: 0 }) as unknown as InputSample;
+const sample = (frame: number, width = 1280, height = 720) => ({ frame, sampleNs: 0, mask: 0, keys: [], axisX: 0, axisY: 0, pointer: { x: 0, y: 0, width, height, inside: false, held: 0, pressed: 0, released: 0 } }) as unknown as InputSample;
 
 const run = (player: NativePlayer, window: WindowView, frames: number) => new Promise<Readonly<Record<string, unknown>>>((resolve) => {
   const loop = createFrameLoop(player, window, { scripted: true, startupMs: 0 }, resolve);
@@ -56,4 +56,15 @@ test("[spec docs/native-window-plan.md] the result gives the GPU's time per pass
   const lost = await run(playerOf([undefined]), fakeWindow({}), 1);
   expect(lost.gpuPassMs).toBeUndefined();
   expect(lost.gpuPassMsAbsent).toBe("no frame's timestamps came back from the GPU");
+});
+
+test("[spec docs/native-window-plan.md] every step hands the game the window's size as its screen, in a scripted run and a played one, and a resize reaches the next step", async () => {
+  for (const scripted of [true, false]) {
+    const screens: unknown[] = [];
+    const player: NativePlayer = { ...playerOf([]), advance: (input) => { screens.push(input.screen); return { scene, sounds: [], frame: screens.length, step: screens.length, capture: false, done: false, serverMs: 0 }; } };
+    const loop = createFrameLoop(player, fakeWindow({}), { scripted, startupMs: 0 }, () => {});
+    loop.step(sample(0, 1600, 900));
+    loop.step(sample(1, 1280, 960));
+    expect(screens).toEqual([{ width: 1600, height: 900 }, { width: 1280, height: 960 }]);
+  }
 });
