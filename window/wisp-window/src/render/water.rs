@@ -131,7 +131,6 @@ impl Targets {
 pub(super) struct Water {
     layout: wgpu::BindGroupLayout,
     pub pipeline: wgpu::RenderPipeline,
-    pub flat: wgpu::RenderPipeline,
     /// The pipeline for falling water (water/falls.rs), which shares the sea's images and uniform.
     pub falls: wgpu::RenderPipeline,
     uniform: wgpu::Buffer,
@@ -165,7 +164,7 @@ impl Water {
         });
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("water"), source: wgpu::ShaderSource::Wgsl(depth_shader(&shader_source(include_str!("water.wgsl")), samples).into()) });
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("water"), bind_group_layouts: &[Some(frame_layout), Some(&layout)], immediate_size: 0 });
-        let build = |label, fragment_entry: &str, constants: &[(&str, f64)]| device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        let build = |label, fragment_entry: &str| device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some(label),
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
@@ -180,7 +179,7 @@ impl Water {
             fragment: Some(wgpu::FragmentState {
                 module: &module,
                 entry_point: Some(fragment_entry),
-                compilation_options: wgpu::PipelineCompilationOptions { constants, ..Default::default() },
+                compilation_options: Default::default(),
                 targets: &[Some(wgpu::ColorTargetState { format, blend: Some(wgpu::BlendState::ALPHA_BLENDING), write_mask: wgpu::ColorWrites::ALL })],
             }),
             primitive: wgpu::PrimitiveState::default(),
@@ -189,12 +188,11 @@ impl Water {
             multiview_mask: None,
             cache: None,
         });
-        let (pipeline, flat, falls) = (build("water", "fragment_main", &[]), build("flat water", "fragment_main", &[("FLAT", 1.0)]), build("falls", "fragment_fall", &[]));
+        let (pipeline, falls) = (build("water", "fragment_main"), build("falls", "fragment_fall"));
         let sampler = |mode| device.create_sampler(&wgpu::SamplerDescriptor { address_mode_u: mode, address_mode_v: mode, mag_filter: wgpu::FilterMode::Linear, min_filter: wgpu::FilterMode::Linear, ..Default::default() });
         Self {
             layout,
             pipeline,
-            flat,
             falls,
             uniform: device.create_buffer_init(&wgpu::util::BufferInitDescriptor { label: Some("water"), contents: bytemuck::bytes_of(&WaterUniform::zeroed()), usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST }),
             tiled: sampler(wgpu::AddressMode::Repeat),

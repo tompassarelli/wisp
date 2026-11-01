@@ -38,7 +38,7 @@ impl Preset {
     /// The features this preset runs.
     pub fn features(self) -> Features {
         match self {
-            Preset::Low => Features { shadows: Shadows::Off, msaa: 1, ssao: false, contact_shadows: false, bloom: false, volumetrics: false, cloud_layers: 1, weather_percent: 25, water: Water::Flat, render_scale_percent: 75 },
+            Preset::Low => Features { shadows: Shadows::Off, msaa: 1, ssao: false, contact_shadows: false, bloom: false, volumetrics: false, cloud_layers: 1, weather_percent: 25, water: Water::Reflective, render_scale_percent: 75 },
             Preset::Medium => Features { shadows: Shadows::Map(1024), msaa: 2, ssao: false, contact_shadows: false, bloom: false, volumetrics: false, cloud_layers: 2, weather_percent: 50, water: Water::Reflective, render_scale_percent: 100 },
             Preset::High => Features { shadows: Shadows::Map(2048), msaa: 4, ssao: true, contact_shadows: true, bloom: true, volumetrics: false, cloud_layers: 3, weather_percent: 100, water: Water::Reflective, render_scale_percent: 100 },
             Preset::Ultra => Features { shadows: Shadows::Map(4096), msaa: 8, ssao: true, contact_shadows: true, bloom: true, volumetrics: true, cloud_layers: 3, weather_percent: 100, water: Water::Refractive, render_scale_percent: 100 },
@@ -91,7 +91,6 @@ pub enum Shadows {
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Water {
-    Flat,
     Reflective,
     Refractive,
 }

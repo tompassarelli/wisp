@@ -23,7 +23,7 @@ fn drawn_at(stage: &mut Stage, scene: &Scene, seconds: f32, label: &str) -> Vec<
 }
 
 /// Luma of a block of open water: its standard deviation, its 99th percentile over its median, and its fine detail (the mean luma step from a pixel to the one below it, which broad shading leaves near zero).
-fn block_spread(rgba: &[u8], x: std::ops::Range<u32>, y: std::ops::Range<u32>) -> (f32, f32, f32) {
+pub(super) fn block_spread(rgba: &[u8], x: std::ops::Range<u32>, y: std::ops::Range<u32>) -> (f32, f32, f32) {
     let steps: Vec<f32> = y.clone().flat_map(|row| x.clone().map(move |column| (column, row))).map(|(column, row)| (luma(rgba, column, row + 1) - luma(rgba, column, row)).abs()).collect();
     let detail = steps.iter().sum::<f32>() / steps.len() as f32;
     let mut values: Vec<f32> = y.flat_map(|row| x.clone().map(move |column| (column, row))).map(|(column, row)| luma(rgba, column, row)).collect();
@@ -35,10 +35,10 @@ fn block_spread(rgba: &[u8], x: std::ops::Range<u32>, y: std::ops::Range<u32>) -
 }
 
 /// The least fine detail open water shows once it carries chop.
-const FINE_DETAIL: f32 = 0.62;
+pub(super) const FINE_DETAIL: f32 = 0.62;
 
 /// Open water on both sides of the deck, below the horizon haze and clear of the shore, the deck and the fighters.
-const OPEN: [(std::ops::Range<u32>, std::ops::Range<u32>); 2] = [(30..190, 470..630), (770..930, 470..630)];
+pub(super) const OPEN: [(std::ops::Range<u32>, std::ops::Range<u32>); 2] = [(30..190, 470..630), (770..930, 470..630)];
 
 #[test]
 fn the_sea_carries_fine_chop_inside_the_quiet_style() {

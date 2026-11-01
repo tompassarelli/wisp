@@ -2,7 +2,6 @@
 
 use crate::gpu_time::{Pass, PassTimer};
 use crate::post::Look;
-use crate::settings::Water;
 
 use super::ripples::Placement;
 use super::scene::Scene;
@@ -96,7 +95,6 @@ impl Renderer {
                     (bind, Some(images)) => {
                         pass.set_pipeline(match bind {
                             Bind::Fall => &self.water.falls,
-                            _ if self.features.water == Water::Flat => &self.water.flat,
                             _ => &self.water.pipeline,
                         });
                         pass.set_bind_group(1, images, &[]);
@@ -119,7 +117,7 @@ impl Renderer {
         }
     }
 
-    /// The sky and the scene seen from under the water plane, at the reflection's size, for the water pass to read; flat water reflects the sky alone.
+    /// The sky and the scene seen from under the water plane, at the reflection's size, for the water pass to read.
     fn draw_reflection(&self, encoder: &mut wgpu::CommandEncoder, timer: &mut PassTimer, clear: wgpu::Color, procedural_sky: bool) {
         let (Some(water), true) = (self.water.targets.as_ref(), self.water_level.is_some()) else { return };
         let sky = self.sky_group_of.as_ref().filter(|_| !procedural_sky);
@@ -133,10 +131,8 @@ impl Renderer {
         if procedural_sky {
             self.post.draw_reflected_sky(&mut pass);
         }
-        if self.features.water != Water::Flat {
-            pass.set_bind_group(0, &self.mirror.group, &[]);
-            self.draw_both(&mut pass, &self.groups, Stage::Everything, None);
-        }
+        pass.set_bind_group(0, &self.mirror.group, &[]);
+        self.draw_both(&mut pass, &self.groups, Stage::Everything, None);
     }
 
     /// Draws `scene` into `target`, a surface view of `size` in this renderer's format, in the encoder's order: the sky, then the world.
