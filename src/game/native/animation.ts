@@ -221,6 +221,7 @@ export function animationSample(sequences: readonly AnimationSequence[], animati
   if (animation.animation !== undefined) {
     let index = selectSequence(sequences, animation.animation, animation.subAnimations);
     if (index < 0) index = selectSequence(sequences, "stand");
+    if (index < 0 && sequences.length > 0) index = 0;
     const sequence = sequences[index];
     return sequence === undefined ? { sequence: -1, frame: 0 } : { sequence: index, frame: sequenceFrame(sequence, ms) };
   }

@@ -42,6 +42,19 @@ test("[property seed 58] animation: an effect never told what to play shows Birt
   }
 });
 
+test("animation: a name the model lacks shows Stand, and on a model with no Stand its first sequence, never no sequence, so a Birth-and-Death missile asked for stand shows Birth, not every track at its default", () => {
+  const missile = [sequence("Birth", 0, 1500, false), sequence("Death", 2000, 3267, false)];
+  const at = (animation: string | number, elapsed: number) => animationSample(missile, { animation, subAnimations: [], elapsed }, "effect");
+  shows(at("stand", f32(0.5)), 0, 499, "stand on a missile with Birth and Death only");
+  shows(at("stand", 3), 0, 1500, "stand held at Birth's end after it");
+  shows(at("walk", 0), 0, 0, "a name the model lacks");
+  shows(at(99, 0), 0, 0, "an index the model lacks");
+  shows(at("death", f32(0.25)), 1, 2249, "a name the model has");
+  const withStand = [sequence("Birth", 0, 1500, false), sequence("Stand", 2000, 3000), sequence("Death", 4000, 5000, false)];
+  shows(animationSample(withStand, { animation: "walk", subAnimations: [], elapsed: 0 }, "effect"), 1, 2000, "a name the model lacks, with a Stand");
+  shows(animationSample([], { animation: "stand", subAnimations: [], elapsed: 0 }, "effect"), -1, 0, "a model with no sequences");
+});
+
 test("[spec wisp#2] animation: a clock on an exact millisecond draws the millisecond before it and a fractional clock its whole millisecond; zero draws the start, a lap's end the lap's last millisecond, and a held sequence its end", () => {
   const model = [sequence("Stand", 0, 244669), sequence("Attack", 3000, 3500, false), sequence("Walk", 1000, 2000)];
   const at = (animation: string, elapsed: number) => animationSample(model, { animation, subAnimations: [], elapsed }, "effect");
