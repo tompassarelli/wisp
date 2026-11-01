@@ -38,7 +38,7 @@ import { type AbilityObjectFixtures, Warcraft3Abilities } from "./warcraft3Abili
 import { Warcraft3Inventory, type Warcraft3InventoryFixtures } from "./warcraft3Inventory";
 import { WARCRAFT3_ENUM_VALUES } from "./warcraft3Natives";
 import { Scenery, type SceneryFixtures } from "./warcraft3Scenery";
-import { ClientScreen } from "./clientScreen";
+import { type ClientScreen, clientScreen } from "./clientScreen";
 
 export type { ClientFiles, IntentionalNoops, LocalNatives, MapEntry, MissingNative, NativeBehavior, NativeBehaviors, NativeCall, SoundCue, StandaloneProfile, SyncMessage, UnitPose, UnitStateFixture, UnitStateFixtures } from "./clientTypes";
 export { describeNumber } from "../game/native/textFormat";
@@ -178,7 +178,7 @@ export class HeadlessClient {
   readonly bodies: Bodies;
 
   constructor(options: ClientOptions) {
-    this.screen = new ClientScreen(options.screen);
+    this.screen = clientScreen(options.screen);
     this.abilities = new Warcraft3Abilities(options.abilityObjects);
     this.view = new View(() => this.frame);
     this.scenery = new Scenery(options.scenery, this.view);
