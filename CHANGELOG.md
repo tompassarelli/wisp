@@ -5,6 +5,8 @@ declares (wisp:docs/architecture.md, "Where things live").
 
 ## Unreleased
 
+## 0.1
+
 - The families' handle and enumeration types are opaque (`Opaque<"Name">` in `wisp/src/game/opaque`), so a Warcraft handle no longer passes as a `Player`, `Frame`, `Effect` or the like. The enumerations have constants (`EffectAnimation`, `FramePoint`, `FrameEvent`, `TextAlignment`, `OriginFrame`, `CameraField`, `FilterBlendMode`, `FilterTexMapFlags`, `VolumeGroup`, `PlayerControl`, `PlayerSlotState`, `MouseButton`, `GameSpeed`), which `plugins/game-api.ts` lowers to the Warcraft global read and the native backend gives as values. `wisp/game/frames` re-exports `Events` from `wisp/game/events`.
 - `wisp/game/clock` is Wisp's clock API (`createTimer`, `startTimer`, `pauseTimer`, `destroyTimer`, `localElapsed`, `setNormalSpeed`, `lockSpeed`, `gameSpeed`, `restartMatch`), lowered on Warcraft and run on Bun over a `Clock` store in `HeadlessClient.world` that counts whole frames and is stepped by `HeadlessClient.step`.
 - `wisp/game/input` is Wisp's input API (`osKey`, `addKeyEvent`, `eventKey`, `keyDown`, `windowFocused`, `pointerX`/`pointerY`, `eventPointerX`/`eventPointerY`, `mouseDown`, `setPointer`, `showCursor`, `addChatEvent`, `chatText`, `addPointerMoveEvent`, `enableSelections`, `enableUserControl`). `HeadlessClient.world` carries an `input` store, which `client.input` exposes; `mouseScreenX`, `mouseScreenY` and `heldMouseButtons` read through it.
