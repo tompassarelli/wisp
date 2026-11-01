@@ -80,4 +80,5 @@ them; an export change is listed in CHANGELOG.md. Generated files
 What Tom approved (north-data locked.toml) changes only with his sign-off: safe-push refuses it without a `Tom-approved: <convo id> "<his words>"` trailer quoting a newer message he typed.
 
 Use owned lanes, named staging and safe-push. Preserve current immutable pins.
+A change lands once: its regenerated records, re-recorded tests or goldens, doc lines and mutant names go into the lane before `safe-push`, which lands the lane as one commit, never as follow-up landings; a check that can only write its record after landing folds it into the next landing.
 Native client control belongs to the accountable parent run for this extraction.
