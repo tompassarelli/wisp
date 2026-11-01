@@ -38,6 +38,7 @@ import { type AbilityObjectFixtures, Warcraft3Abilities } from "./warcraft3Abili
 import { Warcraft3Inventory, type Warcraft3InventoryFixtures } from "./warcraft3Inventory";
 import { WARCRAFT3_ENUM_VALUES } from "./warcraft3Natives";
 import { Scenery, type SceneryFixtures } from "./warcraft3Scenery";
+import { ClientScreen } from "./clientScreen";
 
 export type { ClientFiles, IntentionalNoops, LocalNatives, MapEntry, MissingNative, NativeBehavior, NativeBehaviors, NativeCall, SoundCue, StandaloneProfile, SyncMessage, UnitPose, UnitStateFixture, UnitStateFixtures } from "./clientTypes";
 export { describeNumber } from "../game/native/textFormat";
@@ -116,15 +117,8 @@ export class HeadlessClient {
   readonly quests: Quests;
   readonly textAreaAutoScroll = new Map<Handle, boolean>();
   readonly input = new Input();
-  private readonly pixels: { width: number; height: number };
-  /** Pixels `BlzGetLocalClientWidth/Height` report, which a window's cursor is mapped into. */
-  get screen(): { readonly width: number; readonly height: number } { return this.pixels; }
-  /** Sizes the screen to the window the client is drawn in, as Warcraft's client reports its own window; a zero side, a minimised window, keeps the last size. */
-  resize(width: number, height: number): void {
-    if (width <= 0 || height <= 0) return;
-    this.pixels.width = width;
-    this.pixels.height = height;
-  }
+  /** Pixels `BlzGetLocalClientWidth/Height` report; `resize` follows the window the client is drawn in. */
+  readonly screen: ClientScreen;
 
   get heldMouseButtons(): Set<unknown> { return this.input.heldMouseButtons; }
   get mouseScreenX(): number { return this.input.pointerX; }
@@ -184,7 +178,7 @@ export class HeadlessClient {
   readonly bodies: Bodies;
 
   constructor(options: ClientOptions) {
-    this.pixels = { width: options.screen.width, height: options.screen.height };
+    this.screen = new ClientScreen(options.screen);
     this.abilities = new Warcraft3Abilities(options.abilityObjects);
     this.view = new View(() => this.frame);
     this.scenery = new Scenery(options.scenery, this.view);
@@ -208,7 +202,7 @@ export class HeadlessClient {
     this.scope = options.scope;
     this.preloadText = new PreloadText({ slot: options.slot, filePrefix: options.filePrefix, stored: options.files, files: this.files, published: this.published,
       messages: this.messages, errors: this.errors, missed: () => { this.missedLookups++; } });
-    this.frameUi = new FrameUi(() => this.frames, handle, () => this.natives.ORIGIN_FRAME_GAME_UI, this.pixels);
+    this.frameUi = new FrameUi(() => this.frames, handle, () => this.natives.ORIGIN_FRAME_GAME_UI, this.screen);
     this.quests = new Quests(handle);
     this.players = new Players({ slot: options.slot, humans: options.humans, names: options.playerNames, forces: this.units });
     this.clock = new Clock(handle);
