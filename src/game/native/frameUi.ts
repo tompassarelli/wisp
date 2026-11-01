@@ -54,7 +54,7 @@ export class FrameUi {
   }
 
   createSimple(template: string, owner: unknown, context: number): Frame {
-    return this.made(template, template, owner, context);
+    return this.tree().createSimple(() => this.handle("framehandle"), template, isFrame(owner) ? owner : undefined, context) ?? this.made(template, template, owner, context);
   }
 
   createByType(type: string, name: string, owner: unknown, inherits: string, context: number): Frame {

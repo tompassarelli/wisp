@@ -21,6 +21,10 @@ fn button(hovered: bool) -> String {
 }
 
 fn built(hovered: bool) -> Option<(UiRenderer, Vec<(Source, Quad)>)> {
+    built_from(&button(hovered))
+}
+
+fn built_from(scene_json: &str) -> Option<(UiRenderer, Vec<(Source, Quad)>)> {
     let (device, queue) = crate::test_gpu::device()?;
     let texture = device.create_texture(&wgpu::TextureDescriptor {
         label: None,
@@ -34,7 +38,7 @@ fn built(hovered: bool) -> Option<(UiRenderer, Vec<(Source, Quad)>)> {
     });
     let textures = Plain { view: texture.create_view(&Default::default()) };
     let mut ui = UiRenderer::new(device, queue, wgpu::TextureFormat::Rgba8Unorm);
-    ui.load_scene(button(hovered).as_bytes()).unwrap();
+    ui.load_scene(scene_json.as_bytes()).unwrap();
     let scene = std::mem::take(&mut ui.scene);
     assert!(ui.build(&scene, &UiScene::default(), AREA, &textures));
     let mut start = 0;
@@ -78,4 +82,13 @@ fn a_hovered_control_adds_its_highlight_over_the_whole_frame_under_its_label() {
     assert_eq!(lit[0].1.rect, [100.0, 100.0, 200.0, 50.0]);
     let at = quads.iter().position(|(_, quad)| quad.coverage == IMAGE_ADDED).unwrap();
     assert!(at < quads.iter().position(|(source, _)| *source == Source::Glyphs).unwrap());
+}
+
+#[test]
+fn a_texture_with_a_region_draws_only_that_sub_rectangle_of_its_image() {
+    let scene = r#"{"ui":[{"name":"arch","type":"TEXTURE","rectangle":[0.1,0.5,0.3,0.45],"texture":"tile.blp","uv":[0.5,0,1,0.5],"alpha":255,"visible":true},
+        {"name":"whole","type":"BACKDROP","rectangle":[0.4,0.5,0.6,0.45],"texture":"tile.blp","alpha":255,"visible":true}]}"#;
+    let Some((_, quads)) = built_from(scene) else { return };
+    let uvs: Vec<[f32; 4]> = quads.iter().map(|(_, quad)| quad.uv).collect();
+    assert_eq!(uvs, [[0.5, 0.0, 1.0, 0.5], [0.0, 0.0, 1.0, 1.0]]);
 }

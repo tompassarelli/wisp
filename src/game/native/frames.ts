@@ -27,6 +27,12 @@ export function createFrame(template: string, owner: Frame, priority: number, co
   return fromHandle<Frame>(world.frames.create(template, owner, context));
 }
 
+export function createSimpleFrame(template: string, owner: Frame, context: number): Frame {
+  const world = boundWorld();
+  world.log?.("BlzCreateSimpleFrame", [template, owner, context]);
+  return fromHandle<Frame>(world.frames.createSimple(template, owner, context));
+}
+
 export function createFrameByType(kind: FrameKind, name: string, owner: Frame, inherits: string, context: number): Frame {
   const world = boundWorld();
   world.log?.("BlzCreateFrameByType", [kind, name, owner, inherits, context]);

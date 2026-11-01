@@ -3,6 +3,7 @@ import { readNativeDeclarations } from "../host/headless/headless";
 import { multiply } from "../host/browser/matrix";
 import type { DrawnPose, RenderScene } from "../host/render/headlessRender";
 import { camera, transform, uiPixels, uiReport } from "../host/render/screen";
+import type { FrameDefinition } from "../host/compile/frames";
 import { HeadlessClient } from "../src/headless/client";
 import { MEASURED_1280X720, MEASURED_800X600 } from "./frames125/expected";
 import { PLACEMENTS } from "./frames125/layout";
@@ -38,6 +39,25 @@ test("[reference smashcraft#363] a BACKDROP bust reports its native rectangle an
     expect(row).toMatchObject({ name: "bust", type: "BACKDROP", texture: "Bust.blp", ...identity, region: [0, 0, 1, 1], outside43: false });
     for (const [actual, expected] of [[row?.pixels.x, x], [row?.pixels.y, y], [row?.pixels.width, size], [row?.pixels.height, size]] as const) expect(actual).toBeCloseTo(expected, 4);
   }
+});
+
+test("[scenario] a SIMPLEFRAME texture with a TexCoord reports its sub-rectangle region and draws beneath a BACKDROP at a higher level", () => {
+  const arch: FrameDefinition = { name: "Arch", type: "SIMPLEFRAME", width: 0.25, height: 0.125, textures: [{ key: "tile", layer: "BACKGROUND", file: "Tile.blp", texCoord: [0.5, 1, 0, 0.5] }] };
+  const client = new HeadlessClient({ slot: 0, humans: [0], declarations: readNativeDeclarations(), filePrefix: "screen", localNatives: {}, network: [], screen: { width: 1280, height: 720 }, frames: [arch] });
+  const call = (name: string, ...args: unknown[]) => (client.natives[name] as (this: void, ...args: unknown[]) => unknown)(...args);
+  const backdrop = call("BlzCreateFrameByType", "BACKDROP", "plate", undefined, "", 0);
+  call("BlzFrameSetAbsPoint", backdrop, 0, 0.25, 0.75);
+  call("BlzFrameSetSize", backdrop, 0.25, 0.125);
+  call("BlzFrameSetTexture", backdrop, "Plate.blp", 0, true);
+  call("BlzFrameSetLevel", backdrop, -3);
+  const simple = call("BlzCreateSimpleFrame", "Arch", undefined, 0);
+  call("BlzFrameSetAbsPoint", simple, 0, 0.25, 0.75);
+  const rows = uiReport({ ui: client.frames.snapshot() }, 1280, 720);
+  expect(rows.filter((row) => row.texture !== null).map((row) => [row.name, row.type, row.texture, row.region])).toEqual([
+    ["ArchTile", "TEXTURE", "Tile.blp", [0.5, 0, 1, 0.5]],
+    ["plate", "BACKDROP", "Plate.blp", [0, 0, 1, 1]],
+  ]);
+  expect(rows.find((row) => row.name === "ArchTile")?.ui).toEqual([0.25, 0.75, 0.5, 0.625]);
 });
 
 test("[reference wisp#125] frames125 boxes match native at 800x600 and 1280x720: frame scale and the 4:3 area", () => {

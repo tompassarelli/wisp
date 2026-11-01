@@ -310,7 +310,7 @@ impl UiRenderer {
             if !frame.texture.is_empty() && pixels[2] > 0.0 && pixels[3] > 0.0 {
                 if let Some(group) = self.image_group(&frame.texture, textures) {
                     let tint = rgba(frame.color, alpha * (frame.color >> 24) as f32 / 255.0);
-                    self.emit(Source::Image(group), Quad { rect: pixels, uv: [0.0, 0.0, 1.0, 1.0], color: tint, coverage: 0 });
+                    self.emit(Source::Image(group), Quad { rect: pixels, uv: frame.uv, color: tint, coverage: 0 });
                 }
             }
             if !frame.text.is_empty() && !self.text(frame, pixels, area[3], alpha) {

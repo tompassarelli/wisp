@@ -2,6 +2,7 @@ import type { ConstantLowering, Lowering } from "./lowering";
 
 export const frames: Lowering = {
   createFrame: "BlzCreateFrame($1, $2, $3, $4)",
+  createSimpleFrame: "BlzCreateSimpleFrame($1, $2, $3)",
   createFrameByType: "BlzCreateFrameByType($1, $2, $3, $4, $5)",
   destroyFrame: "BlzDestroyFrame($1)",
   clearFramePoints: "BlzFrameClearAllPoints($1)",

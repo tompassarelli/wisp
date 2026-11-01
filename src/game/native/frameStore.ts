@@ -1,5 +1,6 @@
 import type { Handle } from "./types";
 import { f32 } from "../../sim/f32";
+import { floorDiv } from "../../sim/intMath";
 
 export interface Frame extends Handle {
 
@@ -34,6 +35,12 @@ export interface Frame extends Handle {
   spriteAnimation: number;
   /** Seconds into the model's timeline a game that scrubs sets with `WispFrameSetSpriteTime`; negative while the sprite loops its sequence. */
   spriteTime: number;
+  /** A SIMPLEFRAME or one of its textures: drawn beneath every other frame, by simple frame then texture layer. */
+  simple: boolean;
+  /** A simple texture's layer, empty on any other frame. */
+  layer: string;
+  /** A simple texture's [left, right, top, bottom] share of its file, as the FDF's TexCoord; undefined draws the whole file. */
+  texCoord: SimpleTexCoord | undefined;
 
   readonly points: Map<unknown, { readonly x: number; readonly y: number }>;
 
@@ -68,9 +75,43 @@ interface FrameTemplateNode {
   readonly children?: readonly FrameTemplateNode[];
 }
 
+export type SimpleTexCoord = readonly [left: number, right: number, top: number, bottom: number];
+
+interface TemplateTexture {
+  readonly key: string;
+  readonly layer: string;
+  readonly file?: string;
+  readonly texCoord?: SimpleTexCoord;
+  readonly width?: number;
+  readonly height?: number;
+  readonly anchor?: { readonly point: string; readonly x: number; readonly y: number };
+}
+
+const SIMPLE_FLOOR = -1073741824;
+const SIMPLE_LAYERS: readonly string[] = ["BACKGROUND", "BORDER", "ARTWORK", "OVERLAY"];
+
+// A simple texture fades with its simple frame.
+function shownAlpha(frame: Frame): number {
+  return frame.simple && frame.parent?.simple === true ? floorDiv(frame.alpha * frame.parent.alpha + 127, 255) : frame.alpha;
+}
+
+function snapshotUv(frame: Frame): { readonly uv?: Rectangle } {
+  const texCoord = frame.texCoord;
+  return texCoord === undefined ? {} : { uv: [texCoord[0], texCoord[2], texCoord[1], texCoord[3]] };
+}
+
+// Warcraft draws every simple frame beneath every other frame; within one, textures go by layer, then by creation order.
+function simpleLevel(frame: Frame, simples: ReadonlyMap<Frame, number>): number {
+  const root = frame.type === "SIMPLEFRAME" ? frame : frame.parent;
+  const rank = SIMPLE_LAYERS.indexOf(frame.layer);
+  return SIMPLE_FLOOR + (root === undefined ? 0 : simples.get(root) ?? 0) * 4 + (rank < 0 ? 0 : rank);
+}
+
 export interface FrameTemplate {
   readonly name: string;
   readonly type?: string;
+  /** A SIMPLEFRAME's textures, made by `BlzCreateSimpleFrame`. */
+  readonly textures?: readonly TemplateTexture[];
   readonly texture?: string;
 
   readonly text?: string;
@@ -78,7 +119,7 @@ export interface FrameTemplate {
   readonly justify?: TemplateJustify;
   readonly width: number;
   readonly height: number;
-  readonly children: readonly FrameTemplateNode[];
+  readonly children?: readonly FrameTemplateNode[];
 }
 
 interface TemplateFont { readonly file: string; readonly size: number; readonly flags?: number }
@@ -163,6 +204,8 @@ export interface FrameSnapshot {
   readonly plain: boolean;
   /** Set only on a frame that shows a model: the path, the model's camera index and the sequence index to play. */
   readonly sprite?: { readonly model: string; readonly camera: number; readonly animation: number; readonly time: number };
+  /** Set only on a simple texture with a TexCoord: the share of the texture to draw, [u0, v0, u1, v1] from the top left. */
+  readonly uv?: Rectangle;
 }
 
 type PlacedPoint = readonly [readonly [number, number], { readonly x: number; readonly y: number }];
@@ -215,7 +258,7 @@ export class Frames {
       width: 0, height: 0, points: new Map(), anchors: [], destroyed: false,
       texture: "", color: 0xffffffff, textColor: 0xffffffff, alpha: 255,
       font: { file: "", height: 0, flags: 0 }, alignment: undefined, scale: 1, plain: true,
-      model: "", modelCamera: 0, spriteAnimation: 0, spriteTime: -1,
+      model: "", modelCamera: 0, spriteAnimation: 0, spriteTime: -1, simple: false, layer: "", texCoord: undefined,
     };
     this.all.push(frame);
     return frame;
@@ -252,13 +295,35 @@ export class Frames {
         make(node.children ?? [], frame);
       }
     };
-    make(definition.children, root);
+    make(definition.children ?? [], root);
     for (const [node, frame] of placed) {
       for (const anchor of node.points ?? []) {
         const relative = anchor.relative === undefined ? frame.parent : byKey.get(anchor.relative);
         if (relative === undefined) continue;
         frame.anchors.push({ point: anchor.point, relative, relativePoint: anchor.relativePoint ?? anchor.point, x: anchor.x, y: anchor.y });
       }
+    }
+    return root;
+  }
+
+  /** `BlzCreateSimpleFrame` of a defined SIMPLEFRAME: the frame and its textures as children; undefined for a name with no such definition. */
+  createSimple(handle: (this: void) => Handle, name: string, parent: Frame | undefined, context: number): Frame | undefined {
+    const definition = this.templates.get(name);
+    if (definition === undefined || definition.type !== "SIMPLEFRAME") return undefined;
+    const root = this.add(handle(), "SIMPLEFRAME", name, parent, context);
+    root.simple = true;
+    root.width = definition.width;
+    root.height = definition.height;
+    for (const texture of definition.textures ?? []) {
+      const frame = this.add(handle(), "TEXTURE", definition.name + texture.key.charAt(0).toUpperCase() + texture.key.slice(1), root, context);
+      frame.simple = true;
+      frame.layer = texture.layer;
+      frame.texCoord = texture.texCoord;
+      frame.texture = texture.file ?? "";
+      frame.width = texture.width ?? 0;
+      frame.height = texture.height ?? 0;
+      if (texture.anchor !== undefined) frame.anchors.push({ point: texture.anchor.point, relative: root, relativePoint: texture.anchor.point, x: texture.anchor.x, y: texture.anchor.y });
+      else if (texture.width === undefined && texture.height === undefined) for (const point of ["TOPLEFT", "BOTTOMRIGHT"]) frame.anchors.push({ point, relative: root, relativePoint: point, x: 0, y: 0 });
     }
     return root;
   }
@@ -316,16 +381,20 @@ export class Frames {
   snapshot(options: { readonly visibleOnly?: boolean } = {}): FrameSnapshot[] {
     const snapshots: FrameSnapshot[] = [];
     const placements = new Placements();
+    const simples = new Map<Frame, number>();
     for (const frame of this.all) {
       if (frame.destroyed) continue;
+      if (frame.simple && frame.type === "SIMPLEFRAME") simples.set(frame, simples.size);
+      const alpha = shownAlpha(frame);
       const visible = this.shown(frame);
-      if (options.visibleOnly && (!visible || frame.alpha <= 0)) continue;
+      if (options.visibleOnly && (!visible || alpha <= 0)) continue;
       const control = frame.template === "" ? undefined : this.control(frame);
       snapshots.push({ handle: { kind: frame.kind, id: frame.id }, name: frame.name, type: frame.type,
         ...(frame.template === "" ? {} : { template: frame.template }), ...(control === undefined ? {} : { control }),
         parentId: frame.parent?.id, rectangle: this.rectangle(frame, placements), text: frame.text, texture: frame.texture,
-        color: frame.color, textColor: frame.textColor, alpha: frame.alpha, visible, level: this.drawLevel(frame),
+        color: frame.color, textColor: frame.textColor, alpha, visible, level: frame.simple ? simpleLevel(frame, simples) : this.drawLevel(frame),
         font: frame.font, alignment: frameAlignment(frame), scale: frame.scale, plain: frame.plain,
+        ...snapshotUv(frame),
         ...(frame.model === "" ? {} : { sprite: { model: frame.model, camera: frame.modelCamera, animation: frame.spriteAnimation, time: frame.spriteTime } }) });
     }
     return snapshots;

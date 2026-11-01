@@ -5,6 +5,9 @@ declares (wisp:docs/architecture.md, "Where things live").
 
 ## Unreleased
 
+- `wisp/game/frames` has `createSimpleFrame(template, owner, context)`, and the bindings `generateFrames` writes use the game API (`Frame`, `FramePoint`, `loadFrameFile`, `createFrame` or `createSimpleFrame`, `namedFrame`, `setFrameAbsPoint`, `setFrameLevel`, `setFrameText`, `setFrameEnabled`) instead of raw `Blz` natives.
+- `wisp/scripts/wisp/frames` exports `generateFrames` and `frameDefinitionProblems`, and `FrameDefinition` takes `type: "SIMPLEFRAME"` with `textures` (`SimpleTexture`: key, layer, file, texCoord, alphaMode, width, height, anchor) and an optional `children`.
+
 ## 0.1
 
 - The families' handle and enumeration types are opaque (`Opaque<"Name">` in `wisp/src/game/opaque`), so a Warcraft handle no longer passes as a `Player`, `Frame`, `Effect` or the like. The enumerations have constants (`EffectAnimation`, `FramePoint`, `FrameEvent`, `TextAlignment`, `OriginFrame`, `CameraField`, `FilterBlendMode`, `FilterTexMapFlags`, `VolumeGroup`, `PlayerControl`, `PlayerSlotState`, `MouseButton`, `GameSpeed`), which `plugins/game-api.ts` lowers to the Warcraft global read and the native backend gives as values. `wisp/game/frames` re-exports `Events` from `wisp/game/events`.

@@ -46,6 +46,8 @@ export declare const OriginFrame: {
 export type FrameKind = "BACKDROP" | "BUTTON" | "CHECKBOX" | "EDITBOX" | "FRAME" | "GLUEBUTTON" | "GLUETEXTBUTTON" | "HIGHLIGHT" | "SCROLLBAR" | "SLIDER" | "SPRITE" | "TEXT" | "TEXTAREA";
 
 export declare function createFrame(template: string, owner: Frame, priority: number, context: number): Frame;
+/** A SIMPLEFRAME the game ships in an FDF (`BlzCreateSimpleFrame`); its textures are found with `namedFrame`. */
+export declare function createSimpleFrame(template: string, owner: Frame, context: number): Frame;
 export declare function createFrameByType(kind: FrameKind, name: string, owner: Frame, inherits: string, context: number): Frame;
 export declare function destroyFrame(frame: Frame): void;
 export declare function clearFramePoints(frame: Frame): void;

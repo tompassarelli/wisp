@@ -11,6 +11,8 @@ pub struct UiFrame {
     pub rectangle: [f32; 4],
     pub text: String,
     pub texture: String,
+    /// The share of `texture` to draw, [u0, v0, u1, v1] from its top left: a simple frame texture's TexCoord, the whole image otherwise.
+    pub uv: [f32; 4],
     pub color: u32,
     pub text_color: u32,
     pub alpha: u8,
@@ -79,6 +81,7 @@ struct Row<'a> {
     text: Cow<'a, str>,
     #[serde(borrow, default)]
     texture: Cow<'a, str>,
+    uv: Option<[f32; 4]>,
     #[serde(default = "opaque", deserialize_with = "jass_bits")]
     color: u32,
     #[serde(rename = "textColor", default = "opaque", deserialize_with = "jass_bits")]
@@ -152,6 +155,7 @@ impl UiScene {
                     rectangle,
                     text: row.text.into_owned(),
                     texture: row.texture.into_owned(),
+                    uv: row.uv.unwrap_or([0.0, 0.0, 1.0, 1.0]),
                     color: row.color,
                     text_color: row.text_color,
                     alpha: row.alpha.min(255) as u8,

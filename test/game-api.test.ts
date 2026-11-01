@@ -192,9 +192,10 @@ test("the native backend refuses to run with no world bound", () => {
 });
 
 test("frame and event calls lower to the natives they replaced, byte for byte", () => {
-  const lowered = compile(`import { createEvents, onEvents } from "../../src/game/events";\nimport { addFrameEvent, createFrameByType, FrameEvent, FramePoint, frameColor, OriginFrame, originFrame, setFramePoint, setFrameText, setFrameVisible } from "../../src/game/frames";\n` + `export function run(): void {
+  const lowered = compile(`import { createEvents, onEvents } from "../../src/game/events";\nimport { addFrameEvent, createFrameByType, createSimpleFrame, FrameEvent, FramePoint, frameColor, OriginFrame, originFrame, setFramePoint, setFrameText, setFrameVisible } from "../../src/game/frames";\n` + `export function run(): void {
   const root = originFrame(OriginFrame.gameUi, 0);
   const box = createFrameByType("EDITBOX", "Box", root, "", 0);
+  setFrameVisible(createSimpleFrame("Arch", root, 0), true);
   setFramePoint(box, FramePoint.topLeft, root, FramePoint.topLeft, 0.5, -0.25);
   setFrameText(box, "hi");
   setFrameVisible(box, frameColor(255, 1, 2, 3) > 0);
@@ -205,6 +206,7 @@ test("frame and event calls lower to the natives they replaced, byte for byte", 
   const raw = compile(`export function run(): void {
   const root = BlzGetOriginFrame(ORIGIN_FRAME_GAME_UI, 0);
   const box = BlzCreateFrameByType("EDITBOX", "Box", root, "", 0);
+  BlzFrameSetVisible(BlzCreateSimpleFrame("Arch", root, 0), true);
   BlzFrameSetPoint(box, FRAMEPOINT_TOPLEFT, root, FRAMEPOINT_TOPLEFT, 0.5, -0.25);
   BlzFrameSetText(box, "hi");
   BlzFrameSetVisible(box, BlzConvertColor(255, 1, 2, 3) > 0);

@@ -7,7 +7,7 @@ whose create function returns every frame as a typed handle. The map still
 uses Warcraft's own frame system; there is no virtual DOM, renderer or
 reactive layer.
 
-Entry points: `generateFrames(definition)` and `writeFrames(definition,
+Entry points: `generateFrames(definition)`, `frameDefinitionProblems(definition)` and `writeFrames(definition,
 importDir, bindingsFile)` in wisp:host/compile/frames.ts. A real panel's
 definition is in wisp:test/fixtures/frames/opponentSettings.ts.
 
@@ -64,13 +64,17 @@ For a definition named `OpponentSettings`:
 - `war3mapImported\OpponentSettings.toc`: the FDF path followed by the blank
   line a TOC needs.
 - The bindings module: `OPPONENTSETTINGS_TOC`, an `OpponentSettingsFrames`
-  interface with `root` and every key, and `createOpponentSettings(parent,
-  context)`. It calls `BlzLoadTOCFile` (each call, since a headless run's clients share module state), `BlzCreateFrame("OpponentSettings",
-  parent, 0, context)`, places and levels the root, finds each child with
-  `BlzGetFrameByName(name, context)`, then sets button labels and disables
-  `enabled: false` frames. It returns `undefined` when the TOC does not load.
-  The module is pure TypeScript over Warcraft natives and compiles to Lua like
-  any map module.
+  interface with `root` and every key as `Frame` handles, and
+  `createOpponentSettings(parent, context)`, written against the game API
+  (`import ... from "wisp/game/frames"`, never a raw `Blz` native, so the
+  native backend runs it). It calls `loadFrameFile` (each call, since a
+  headless run's clients share module state), `createFrame("OpponentSettings",
+  parent, 0, context)`, places (`setFrameAbsPoint`) and levels
+  (`setFrameLevel`) the root, finds each child with `namedFrame(name,
+  context)`, then sets button labels (`setFrameText`) and disables
+  (`setFrameEnabled`) `enabled: false` frames. It returns `undefined` when the
+  TOC does not load. The module is pure TypeScript over the game API and
+  compiles to Lua like any map module.
 
 Use a different `context` per copy (one per player, say) instead of name
 suffixes. Every client must create the same frames in the same order; show,
@@ -90,19 +94,57 @@ named, parented, sized and placed by its anchors, `TEXT` frames holding their
 static text. Clicks, shown text and hiding the root then behave in journeys as
 they do for hand-wired frames.
 
+## SIMPLE frames: a sub-rectangle of a texture
+
+Warcraft draws part of a texture only through a SIMPLEFRAME's `Texture` with
+`TexCoord left, right, top, bottom` (its own ConsoleUI.fdf cuts the race
+console tiles this way); a BACKDROP always draws its texture whole. A
+definition with `type: "SIMPLEFRAME"` has `textures` instead of `children`:
+
+```ts
+{ name: "RaceArch", type: "SIMPLEFRAME", width: 0.0625, height: 0.125,
+  at: { point: "BOTTOMLEFT", x: 0.25, y: 0 },
+  textures: [{ key: "tile", layer: "BACKGROUND", file: "UI\\Console\\Human\\HumanUITile01.blp", texCoord: [0.5, 1, 0, 0.5] }] }
+```
+
+A texture is `{ key, layer, file?, texCoord?, alphaMode?, width?, height?,
+anchor? }`: `layer` is `BACKGROUND`, `BORDER`, `ARTWORK` or `OVERLAY`;
+`texCoord` is `[left, right, top, bottom]` as shares of the file, each 0..1;
+`alphaMode` is `BLEND` or `ALPHAKEY`; `anchor` is `{ point, x, y }` on the
+frame. With no `width`, `height` or `anchor` the texture fills the frame
+(`SetAllPoints`). The generated FDF is one `Frame "SIMPLEFRAME" "RaceArch"`
+with a `Layer` block per used layer holding `Texture "RaceArchTile"` (the
+definition's name and the capitalized key). The bindings module's create
+function calls `createSimpleFrame("RaceArch", parent, context)` (the game API's `BlzCreateSimpleFrame`), places
+the root with `at`, and returns `root` and each texture key as the handle
+`namedFrame("RaceArchTile", context)` finds. `setFrameTexture` on a
+texture handle changes its file and keeps its `texCoord`; `setFrameSize`,
+`setFrameAbsPoint`, `setFramePoint`, `setFrameVisible` and
+`setFrameAlpha` on the root move, size, hide and fade its textures.
+
+Draw order, as Warcraft does it: every SIMPLEFRAME and its textures draw
+beneath every other frame, whatever the levels. Inside one simple frame the
+textures draw by layer (`BACKGROUND` under `BORDER` under `ARTWORK` under
+`OVERLAY`), then in definition order. Headless clients report that order in
+each frame's `level`, and a texture's `uv` is `[u0, v0, u1, v1]` from the top
+left of its file (TexCoord `0.5, 1, 0, 0.5` is `[0.5, 0, 1, 0.5]`). The
+native window samples only that sub-rectangle, and `uiReport` and
+`headless --bounds` give it as the row's `region`. The Chrome renderer still
+draws every texture whole.
+
 ## Errors at build time
 
 `generateFrames` throws `FrameDefinitionError` listing every problem;
 `frameDefinitionProblems` returns them. It reports a definition name or key
 that is not an identifier, a reserved key (`root`, `toc`), a duplicate key or
 frame name, an unknown frame type or point, an anchor to a frame the
-definition does not have, an unknown template, a quote or line break in a
+definition does not have, an unknown template, a SIMPLEFRAME texture with an unknown layer or alpha mode, a `texCoord` outside 0..1 or a texture key that repeats, a quote or line break in a
 string the FDF would carry, a `TEXT` with neither font nor template, and a
 text, font or texture on a frame type that cannot show it.
 
 ## Boundaries
 
-Only the fields above are generated; edit boxes, lists, SIMPLE frames,
+Only the fields above are generated; edit boxes, lists, SIMPLE frames other than a textured SIMPLEFRAME,
 tooltips and FDF features beyond them are written by hand or added here when
 a game needs them. Clicks, focus and keyboard handling stay in the game's
 script (for example its own button-click trigger over the returned handles).
