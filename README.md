@@ -2,9 +2,9 @@
 
 # Wisp
 
-**Warcraft III modding at warp speed.**
+**A custom game engine that publishes natively and to Warcraft III.**
 
-Modern tooling, testing, build automation, and developer experience for Warcraft III modding.
+Write a game once in TypeScript and ship it as a native desktop game and as a Warcraft III map, with modern tooling, testing and build automation for both.
 
 Warcraft III is still a great platform for custom games, but its modding tools
 are dated and the official editor has barely changed. Wisp lets you write a map
@@ -26,13 +26,14 @@ What it does for any map:
   offline LAN matches with no Battle.net account.
 
 The simulator is the runtime: Wisp's own from-scratch implementation of the
-game's rules. It exists for fast testing and, for games that opt in, a
-standalone browser player. It does not replace Warcraft III.
+game's rules. It runs your tests in seconds and, for games that opt in, drives a
+native desktop player with its own renderer. The Warcraft III map still runs in
+the real game.
 
 Wisp runs on Linux today; Windows and macOS support is tracked in
 [wisp#108](https://github.com/tompassarelli/wisp/issues/108). Games own their
 simulation, UI, assets and map declaration; Wisp never reads their source.
-[Smashcraft](https://github.com/tompassarelli/smashcraft) is the first game
+[Mak'gora](https://github.com/tompassarelli/makgora) is the first game
 built on it.
 
 ## Principles
