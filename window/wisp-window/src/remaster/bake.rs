@@ -1,6 +1,7 @@
-//! The one place the remaster's upscaler runs: a background thread that fills the cache with every texture the window has been sent, newest first, and waits while the game is playing, so a match never shares the GPU with the upscaler and the art on screen only ever reads the cache.
+//! The one place the remaster's upscaler runs: a background thread that fills the cache with every texture the window has been sent, newest first, so the art on screen only ever reads the cache. During a match it rests four times as long as each texture took before the next, so the upscaler holds at most a fifth of the GPU and the progress still reaches 100%.
 
 use std::collections::HashSet;
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -9,6 +10,9 @@ use super::{cache_key, prepare, Cache, Edges, Quality, Role, Upscaler};
 
 /// Rest between two upscaled textures, so the render thread's frames are not queued behind one network run after another.
 const BETWEEN: Duration = Duration::from_millis(16);
+
+/// During a match, the rest after a texture is this many times what it took to bake.
+const IN_PLAY_REST: u32 = 4;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub struct Progress {
@@ -92,7 +96,7 @@ impl Baker {
         self.shared.wake.notify_all();
     }
 
-    /// While the game is playing, no texture starts baking; the check of what the cache already holds is only file reads and hashing, so it goes on and the progress stays true.
+    /// While the game is playing, the bake rests longer between textures, so the match keeps most of the GPU.
     pub fn set_playing(&self, playing: bool) {
         let mut state = lock(&self.shared);
         if state.playing && !playing && state.upscaled_while_playing > 0 {
@@ -123,7 +127,7 @@ fn run(shared: &Shared, quality: Quality, cache: &Cache, upscaler: &Upscaler) {
     loop {
         let step = {
             let mut state = lock(shared);
-            while !state.stopped && state.unchecked.is_empty() && (state.playing || state.queue.is_empty()) {
+            while !state.stopped && state.unchecked.is_empty() && state.queue.is_empty() {
                 state = shared.wake.wait(state).unwrap_or_else(|poisoned| poisoned.into_inner());
             }
             if state.stopped {
@@ -142,26 +146,45 @@ fn run(shared: &Shared, quality: Quality, cache: &Cache, upscaler: &Upscaler) {
                 } else {
                     lock(shared).queue.push(Missing { job, key });
                 }
-                false
+                None
             }
-            Step::Bake(Missing { job, key }) => {
-                let (edges, role) = (Edges::for_path(&job.path), Role::for_path(&job.path));
-                match prepare(&job.bytes, quality, Some(cache), upscaler, edges, role, &job.path) {
-                    Ok(prepared) if prepared.relief.is_none() => cache.keep_as_is(&key),
-                    Ok(_) => {}
-                    Err(error) => {
-                        eprintln!("wisp remaster: {}: {error}", job.path);
-                        cache.keep_as_is(&key);
-                    }
-                }
+            Step::Bake(missing) => {
+                let began = Instant::now();
+                bake(&missing, quality, cache, upscaler);
+                let took = began.elapsed();
                 finish(shared, true);
-                true
+                Some(took)
             }
         };
-        if baked {
-            thread::sleep(BETWEEN);
+        if let Some(took) = baked {
+            rest_after(shared, took);
         }
     }
+}
+
+/// Upscales one texture into the cache. Whatever happens, the cache holds its key afterwards, so the progress counts it and no later bake queues it again: a texture the remaster leaves alone, cannot read, or could not store maps for (Real-CUGAN failed on it alone, or the write failed) is marked to be drawn with its original art, and said so once.
+fn bake(Missing { job, key }: &Missing, quality: Quality, cache: &Cache, upscaler: &Upscaler) {
+    let (edges, role) = (Edges::for_path(&job.path), Role::for_path(&job.path));
+    let failure = match catch_unwind(AssertUnwindSafe(|| prepare(&job.bytes, quality, Some(cache), upscaler, edges, role, &job.path))) {
+        Ok(Ok(prepared)) if prepared.relief.is_none() => None,
+        Ok(Ok(_)) => (!cache.holds(key)).then(|| "its remastered maps were not stored".to_string()),
+        Ok(Err(error)) => Some(error),
+        Err(_) => Some("the upscaler panicked".to_string()),
+    };
+    if let Some(failure) = failure {
+        eprintln!("wisp remaster: {}: {failure}, so it keeps its original art", job.path);
+    }
+    if !cache.holds(key) {
+        cache.keep_as_is(key);
+    }
+}
+
+/// Rests after a texture that took `took` to bake: `BETWEEN`, or during a match `IN_PLAY_REST` times `took`, cut short when the match ends or the bake stops.
+fn rest_after(shared: &Shared, took: Duration) {
+    thread::sleep(BETWEEN);
+    let state = lock(shared);
+    let rest = (took * IN_PLAY_REST).saturating_sub(BETWEEN);
+    let _ = shared.wake.wait_timeout_while(state, rest, |state| state.playing && !state.stopped);
 }
 
 /// Counts one texture as ready, and reports once the last of the queue is.
@@ -204,7 +227,7 @@ mod tests {
     }
 
     #[test]
-    fn nothing_bakes_while_playing_and_everything_bakes_once_play_stops() {
+    fn a_match_does_not_hold_the_bake_and_every_texture_is_baked_once() {
         let directory = std::env::temp_dir().join(format!("wisp-bake-test-{}", std::process::id()));
         let cache = Arc::new(Cache::at(directory.clone()).unwrap());
         let upscaler = Arc::new(Upscaler::classical());
@@ -213,10 +236,7 @@ mod tests {
         baker.add("a.png", png(1));
         baker.add("b.png", png(2));
         baker.add("A.PNG", png(3));
-        thread::sleep(Duration::from_millis(100));
-        assert_eq!(baker.progress(), Progress { done: 0, total: 2 }, "a path is queued once and nothing bakes during play");
-        baker.set_playing(false);
-        assert!(until_ready(&baker).ready());
+        assert_eq!(until_ready(&baker), Progress { done: 2, total: 2 }, "a path is queued once, and the match does not stop the bake");
         for seed in [1, 2] {
             assert!(cache.holds(&cache_key(&png(seed), Quality::Standard, &upscaler, Edges::Mirror, Role::Figure)));
         }
@@ -224,31 +244,20 @@ mod tests {
     }
 
     #[test]
-    fn progress_counts_the_cached_textures_at_once_and_each_baked_one_as_it_finishes() {
-        let directory = std::env::temp_dir().join(format!("wisp-bake-progress-test-{}", std::process::id()));
+    fn a_texture_that_cannot_be_baked_counts_as_done_and_is_not_queued_again() {
+        let directory = std::env::temp_dir().join(format!("wisp-bake-failure-test-{}", std::process::id()));
         let cache = Arc::new(Cache::at(directory.clone()).unwrap());
         let upscaler = Arc::new(Upscaler::classical());
-        let first = Baker::start(Quality::Standard, cache.clone(), upscaler.clone());
-        for seed in [1, 2, 3] {
-            first.add(&format!("old{seed}.png"), png(seed));
-        }
-        assert!(until_ready(&first).ready());
-        drop(first);
-        let baker = Baker::start(Quality::Standard, cache, upscaler);
+        let unreadable: Arc<[u8]> = Arc::from(&b"not a texture"[..]);
+        let unstored = png(9);
+        let key = |bytes: &[u8]| cache_key(bytes, Quality::Standard, &upscaler, Edges::Mirror, Role::Figure);
+        std::fs::create_dir_all(directory.join(format!("{}.albedo.tmp", key(&unstored)))).unwrap();
+        let baker = Baker::start(Quality::Standard, cache.clone(), upscaler.clone());
         baker.set_playing(true);
-        for seed in [1, 2, 3, 4, 5] {
-            baker.add(&format!("new{seed}.png"), png(seed));
-        }
-        for _ in 0..2000 {
-            if baker.progress().done == 3 {
-                break;
-            }
-            thread::sleep(Duration::from_millis(1));
-        }
-        thread::sleep(Duration::from_millis(100));
-        assert_eq!(baker.progress(), Progress { done: 3, total: 5 }, "the three cached textures count while the match holds the two unbaked");
-        baker.set_playing(false);
-        assert_eq!(until_ready(&baker), Progress { done: 5, total: 5 });
+        baker.add("broken.blp", unreadable.clone());
+        baker.add("unstored.png", unstored.clone());
+        assert_eq!(until_ready(&baker), Progress { done: 2, total: 2 }, "both count as done");
+        assert!(cache.holds(&key(&unreadable)) && cache.holds(&key(&unstored)), "both are marked, so the next bake counts them from the cache");
         let _ = std::fs::remove_dir_all(directory);
     }
 }

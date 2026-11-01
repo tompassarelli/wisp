@@ -92,7 +92,7 @@ impl Upscaler {
                 (classical, false)
             }
             Err(error) => {
-                self.notices.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).push(format!("Real-CUGAN failed on {name} ({error}), so this texture uses the edge-directed filter"));
+                self.notices.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).push(format!("Real-CUGAN failed on {name} ({error}), so the edge-directed filter doubled it"));
                 (classical, true)
             }
         }

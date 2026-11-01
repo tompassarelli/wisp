@@ -25,33 +25,22 @@ fn a_window_that_starts_on_original_art_swaps_the_remaster_in_when_it_is_built()
 }
 
 #[test]
-fn a_match_keeps_the_art_it_started_with_and_the_bake_waits_until_play_stops() {
-    let Some((device, queue)) = device() else { return };
-    let mut renderer = Renderer::new(device.clone(), queue.clone(), FORMAT, crate::remaster::Quality::Off, crate::settings::Preset::High.features());
+fn a_texture_that_arrives_mid_match_bakes_in_the_match_and_is_drawn_once_play_stops() {
+    if device().is_none() {
+        return;
+    }
+    let mut renderer = baked_remastered();
     renderer.set_playing(true);
-    renderer.set_quality(crate::remaster::Quality::Standard);
-    let seed = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().subsec_nanos().to_le_bytes();
-    let pixels: Vec<u8> = (0..8 * 8).flat_map(|index| [index as u8 ^ seed[0], seed[1], seed[2], 255]).collect();
-    let mut png = Vec::new();
-    image::codecs::png::PngEncoder::new(&mut png).write_image(&pixels, 8, 8, image::ExtendedColorType::Rgba8).unwrap();
-    renderer.ingest("match.png", png);
-    for _ in 0..200 {
+    renderer.ingest("fresh.png", seeded_png(8, 201));
+    pump_until(&mut renderer, |renderer| renderer.bake_progress().is_some_and(|progress| progress.ready() && progress.total == 2));
+    for _ in 0..100 {
         renderer.pump();
         std::thread::sleep(std::time::Duration::from_millis(1));
     }
-    assert!(renderer.incoming.is_idle() && renderer.reliefs.is_empty(), "no remastered set is built during play");
-    assert_eq!(renderer.bake_progress().map(|progress| progress.done), Some(0), "the bake waits during play");
+    assert!(renderer.art_pending() && !renderer.reliefs.contains_key("fresh.png") && renderer.incoming.is_idle(), "the automatic rebuild waits for the match to end");
     renderer.set_playing(false);
-    for _ in 0..4000 {
-        renderer.pump();
-        if !renderer.art_pending() {
-            break;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(1));
-    }
-    assert!(renderer.reliefs.contains_key("match.png"), "once play stops the texture is baked and the remastered set swapped in");
+    pump_until(&mut renderer, |renderer| renderer.reliefs.contains_key("fresh.png") && !renderer.art_pending());
 }
-
 
 fn seeded_png(side: u32, salt: u8) -> Vec<u8> {
     let seed = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().subsec_nanos().to_le_bytes();
@@ -103,23 +92,44 @@ fn the_players_switch_to_remastered_applies_mid_match_when_the_cache_is_complete
     assert!(renderer.playing && renderer.reliefs.contains_key("art0.png") && !renderer.art_pending(), "the remastered set is on screen while the match plays");
 }
 
+/// A renderer drawing the Remastered art, its textures all in the bake cache.
+fn baked_remastered() -> Renderer {
+    let mut renderer = baked_original(8, 1, 0);
+    renderer.set_quality(Quality::Standard);
+    pump_until(&mut renderer, |renderer| renderer.quality == Quality::Standard && !renderer.art_pending());
+    renderer
+}
+
 #[test]
-fn the_players_switch_waits_while_a_texture_is_not_baked() {
+fn remastered_then_original_then_remastered_mid_match_bakes_the_new_textures_and_applies_in_the_match() {
     if device().is_none() {
         return;
     }
-    let mut renderer = baked_original(8, 1, 0);
+    let mut renderer = baked_remastered();
     renderer.set_playing(true);
     renderer.ingest("fresh.png", seeded_png(8, 200));
+    renderer.set_quality(Quality::Off);
+    pump_until(&mut renderer, |renderer| renderer.quality == Quality::Off && renderer.incoming.is_idle());
     renderer.set_quality(Quality::Standard);
-    for _ in 0..200 {
-        renderer.pump();
-        std::thread::sleep(std::time::Duration::from_millis(1));
+    pump_until(&mut renderer, |renderer| renderer.quality == Quality::Standard && !renderer.art_pending());
+    assert!(renderer.playing, "the match never stopped");
+    assert_eq!(renderer.bake_progress(), Some(crate::remaster::Progress { done: 2, total: 2 }));
+    assert!(renderer.reliefs.contains_key("art0.png") && renderer.reliefs.contains_key("fresh.png"), "the texture that arrived mid-match is baked and drawn remastered");
+}
+
+#[test]
+fn switching_back_before_original_is_drawn_still_reaches_100_percent_in_the_match() {
+    if device().is_none() {
+        return;
     }
-    assert!(renderer.quality == Quality::Off && renderer.incoming.is_idle() && renderer.art_pending(), "a set missing a texture is not built mid-match");
-    renderer.set_playing(false);
-    pump_until(&mut renderer, |renderer| renderer.reliefs.contains_key("fresh.png"));
-    assert_eq!(renderer.quality, Quality::Standard);
+    let mut renderer = baked_remastered();
+    renderer.set_playing(true);
+    renderer.ingest("fresh.png", seeded_png(8, 202));
+    renderer.set_quality(Quality::Off);
+    renderer.pump();
+    renderer.set_quality(Quality::Standard);
+    pump_until(&mut renderer, |renderer| renderer.bake_progress().is_some_and(|progress| progress.ready() && progress.total == 2));
+    assert_eq!(renderer.quality, Quality::Standard, "the drawn art stayed Remastered");
 }
 
 #[test]

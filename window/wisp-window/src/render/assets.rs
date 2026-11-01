@@ -206,7 +206,7 @@ impl Renderer {
         self.steer();
     }
 
-    /// Whether the game is in play, as its scene says: the bake waits, and the textures that arrive mid-match are not rebuilt in until play stops, so a match keeps the art it started with unless the player switches it.
+    /// Whether the game is in play, as its scene says: the bake rests longer between textures, and the textures that arrive mid-match are baked but not rebuilt in until play stops, so a match keeps the art it started with unless the player switches it.
     pub fn set_playing(&mut self, playing: bool) {
         if playing == self.playing {
             return;

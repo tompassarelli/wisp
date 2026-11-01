@@ -115,7 +115,6 @@ pub struct Bake {
 impl Bake {
     pub fn label(self) -> String {
         match (self.progress.ready(), self.filter) {
-            (false, _) if self.playing => format!("Preparing {}%, the new art applies after the match", self.progress.percent()),
             (false, _) => format!("Preparing {}%", self.progress.percent()),
             (true, true) => "Ready, basic filter (no GPU upscaler)".into(),
             (true, false) if self.pending && self.playing => "Ready, new textures from the next match".into(),
@@ -224,7 +223,7 @@ mod tests {
     fn the_bake_label_says_what_the_art_waits_for() {
         let bake = |done, playing, pending| Bake { progress: Progress { done, total: 4 }, filter: false, playing, pending }.label();
         assert_eq!(bake(1, false, false), "Preparing 25%");
-        assert_eq!(bake(1, true, false), "Preparing 25%, the new art applies after the match");
+        assert_eq!(bake(1, true, false), "Preparing 25%", "the bake runs in a match too, and the art applies when it is done");
         assert_eq!(bake(4, true, true), "Ready, new textures from the next match");
         assert_eq!(bake(4, true, false), "Ready");
     }
