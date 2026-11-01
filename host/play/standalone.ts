@@ -26,7 +26,7 @@ export type { StandaloneGame, StandaloneNet, StandaloneNetSession, StandaloneSes
 export type StandaloneWindow = "chrome" | "native";
 
 export interface StandaloneOptions {
-  /** `native` opens wisp-window (wisp:docs/native-window-plan.md); `chrome` is today's page. */
+  /** `native`, the default, opens wisp-window (wisp:docs/native-window-plan.md); `chrome` opens the browser page, the fallback for the checks the native window does not run yet. */
   readonly window?: StandaloneWindow;
   readonly script?: string;
   readonly frames?: number;
@@ -242,17 +242,17 @@ export const runStandalone = (game: StandaloneGame, options: StandaloneOptions =
     process.env[STORAGE_ENV] = install.storage;
   }
   if (options.gpuLease !== false && agentRender(options)) yield* requireGpuLease();
-  if (options.window === "native") return yield* runNativeStandalone(game, options);
+  if (options.window !== "chrome") return yield* runNativeStandalone(game, options);
   if (options.net !== undefined) return yield* runNetStandalone(game, options, options.net);
   const player = yield* openStandalone(game, options);
   const { closed } = yield* openWindow(game, options, player.url);
   printSummary(yield* Effect.raceFirst(player.completed, closed));
 })).pipe(Effect.provide(BunServices.layer));
 
-/** Reads `--window chrome|native` from a play command's arguments; the rest come back untouched. */
-export function standaloneWindowArgument(args: readonly string[]): { readonly window?: StandaloneWindow; readonly rest: readonly string[] } | string {
+/** Reads `--window chrome|native` from a play command's arguments, native when absent; the rest come back untouched. */
+export function standaloneWindowArgument(args: readonly string[]): { readonly window: StandaloneWindow; readonly rest: readonly string[] } | string {
   const at = args.indexOf("--window");
-  if (at < 0) return { rest: args };
+  if (at < 0) return { window: "native", rest: args };
   const value = args[at + 1];
   if (value !== "chrome" && value !== "native") return "--window needs chrome or native";
   return { window: value, rest: [...args.slice(0, at), ...args.slice(at + 2)] };

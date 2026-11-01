@@ -243,11 +243,14 @@ The window a person plays opens without a lease, and `gpuLease: false` in `Stand
 
 ### Native window
 
-`play --standalone --window native` opens `wisp-window` (the Rust library in
-`window/`, planned in [native-window-plan.md](native-window-plan.md)) instead of
-Chrome, and `chrome` stays the default. A game reads the flag with
-`standaloneWindowArgument` and passes `window` in the options of
-`runStandalone`. Bun loads the library with `bun:ffi` from
+`play --standalone` opens `wisp-window` (the Rust library in `window/`, planned
+in [native-window-plan.md](native-window-plan.md)), the default window.
+`--window chrome` opens the Chrome page instead, the fallback for the checks
+that do not run in the native window yet (frame captures, Smashcraft's
+net-accept, render compare) until the native window passes them and Chrome is
+removed. A game reads the flag with `standaloneWindowArgument`, which gives
+`native` when the flag is absent, and passes `window` in the options of
+`runStandalone`, which opens the native window unless `window` is `chrome`. Bun loads the library with `bun:ffi` from
 `WISP_WINDOW_LIBRARY`, else beside the executable, else `window/target/release`, else
 the build of the package's `window/` source in `~/.cache/wisp/window`, which the command builds on
 its first run ([Where a consumer gets the library](native-window-plan.md#where-a-consumer-gets-the-library-wisp130)). The library runs the
@@ -290,8 +293,8 @@ shows the loading and ready text in the window's title. The scene is parsed in
 the library on every frame, so the cost of encoding and parsing it is measured
 before the renderer is ported. Keyboard and pads (box W5: the left stick and the standard-layout buttons of the
 first connected pad, or `gamepadIndex`, read at the sample point; the keyboard is not buttons but Warcraft's key events, every press and release with its oskey and meta mask, released when the window loses focus); captures and
-`--headless` stay with Chrome (`--capture-frames` with the native window is
-refused). Sound plays through cpal: the game's cues resolve as the page's do, decode once per resolved file (Vorbis, MP3, FLAC and PCM WAV) and play at `volume / 127` and the cue's pitch as a playback rate; `standalone.json` carries the page's `audioEvents`, `audioReadyEvents`, `audioPlayed`, `audioDecodedAssets` and `missingSounds`, with `audioOutput` naming the device (or `none`), and `musicLog`, one row per start or stop of the music (frame, event, resolved file, and the music files held after it), which is the native side of a one-track-per-screen check. `standalone.json` keeps the page's fields and adds `adapter`,
+`--headless` stay with Chrome: pass `--window chrome` (`--capture-frames` with
+the native window is refused). Sound plays through cpal: the game's cues resolve as the page's do, decode once per resolved file (Vorbis, MP3, FLAC and PCM WAV) and play at `volume / 127` and the cue's pitch as a playback rate; `standalone.json` carries the page's `audioEvents`, `audioReadyEvents`, `audioPlayed`, `audioDecodedAssets` and `missingSounds`, with `audioOutput` naming the device (or `none`), and `musicLog`, one row per start or stop of the music (frame, event, resolved file, and the music files held after it), which is the native side of a one-track-per-screen check. `standalone.json` keeps the page's fields and adds `adapter`,
 `backend`, `presentMode`, `desiredMaximumFrameLatency`, `wakeMs`, `encodeMs`,
 `parseMs`, `inputToPresentMs` (the present time minus the sample time of the scene
 drawn), `missedPresents` (an acquire interval over 1.5 T, with
@@ -304,7 +307,7 @@ An agent that opens the window for a person to play starts it in that person's s
 ```bash
 env XDG_RUNTIME_DIR=/run/user/$(id -u) DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u)/bus \
   systemd-run --user --scope --quiet --slice=app.slice --unit=wisp-play-$(date +%s) -- \
-  env -u AI_AGENT bun wisp play --standalone --window native --map MAP.w3x
+  env -u AI_AGENT bun wisp play --standalone --map MAP.w3x
 ```
 
 Leave `WISP_WINDOW_PRESENT` unset there. Under `Fifo` a window that is not on screen presents about once a second, because the compositor (niri, for one) throttles the frame callbacks of a hidden surface, so a frame rate read while the player looks at another window says nothing about play; `Mailbox` keeps drawing at full GPU cost while hidden.
@@ -430,7 +433,7 @@ the first connected pad.
 For a recorded run, games can expose:
 
 ```bash
-bun wisp play --standalone --script test/journey.pad --headless --frames 1070 --out build/standalone --capture-frames 200,600,1000
+bun wisp play --standalone --window chrome --script test/journey.pad --headless --frames 1070 --out build/standalone --capture-frames 200,600,1000
 ```
 
 The generic options are `script` (file path), `frames` (step count), `out`
@@ -491,8 +494,8 @@ room after 10 idle minutes); each later step of the handshake has 30 s.
 Closing either window sends a goodbye, so the other side ends at once with
 `PeerLeft`; a side that goes quiet ends the other after 3 s with `PeerSilent`.
 `--script`, `--headless`, `--frames` and `--out` work as above, one script per
-player. `--window native` hosts and joins the same way; its worker thread runs
-the match's peer (wisp:docs/native-window-plan.md, "Networked play on the
-worker"). To try it through delay and loss on one machine, put
+player. The native window's worker thread runs the match's peer
+(wisp:docs/native-window-plan.md, "Networked play on the worker"), and
+`--window chrome` hosts and joins in the page. To try it through delay and loss on one machine, put
 `net proxy --listen P --to 127.0.0.1:HOSTPORT --rtt 120` between them and join
 `127.0.0.1:P`.

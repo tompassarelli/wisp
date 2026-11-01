@@ -621,7 +621,7 @@ source and the player finds or builds the library itself. `windowLibraryPath()`
 (wisp:host/window/binding.ts) takes `WISP_WINDOW_LIBRARY`, else the library beside the
 executable, else `window/target/release` in a checkout, else the build in
 `~/.cache/wisp/window/HASH/release/`, where HASH covers the Cargo files, the flake and
-the crate's source and assets. `play --standalone --window native` and `window probe` first run
+the crate's source and assets. `play --standalone` (native by default) and `window probe` first run
 `prepareWindowLibrary` (wisp:host/window/library.ts): when nothing exists at that path it runs
 `cargo build --release --locked` with `CARGO_BUILD_INCREMENTAL=true` (it beats a user-level `build.incremental = false`; sccache, which gex45 and the laptop set as `RUSTC_WRAPPER` for every build, refuses any build under `CARGO_INCREMENTAL` but passes the incremental `wisp-window` crate through and caches the registry crates, so a build that must recompile them reuses another's) and `CARGO_TARGET_DIR` set to one shared folder, `~/.cache/wisp/window/target`, once per
 revision of the source, then publishes the built library to that revision's `HASH/release/`. Every revision builds in the shared folder because a copied folder loses rustc's incremental state (rebuilding the crate took 26 s instead of 3 s), so a played edit rebuilds only `wisp-window` incrementally (wisp#162). On Linux with nix the command runs in `window/flake.nix`'s dev shell, which
@@ -631,9 +631,12 @@ On Windows cargo builds with the runner's toolchain and no runtime libraries are
 
 ### Migration order
 
-`--window native` is added beside the Chrome window, which stays the default
-and keeps working. The native window becomes the default only once it passes
-the same checks the Chrome window holds:
+`--window native` was added beside the Chrome window, and on 2026-11-01 Tom
+made it the default ahead of the checks below, because Smashcraft's packaged
+player had played a 5400-frame relay match in it with no checksum mismatch
+(smashcraft#807). `--window chrome` keeps the Chrome window as the explicit
+fallback that the Chrome-only tools pass, until the native window passes the
+same checks the Chrome window holds:
 
 - Smashcraft's standalone parity (smashcraft#806);
 - net-accept with `presentedMs.p95` at most 16.7 ms;
@@ -1401,9 +1404,10 @@ yet are created by that box. Each graphics run takes the gpu lease as
 
   Done when:
   `gh run list -R tompassarelli/wisp -w windows.yml -b main -L 1 --json conclusion -q '.[0].conclusion' | grep -x success`
-- **W8 Native window becomes the default** ([wisp#112](https://github.com/tompassarelli/wisp/issues/112)). Smashcraft's standalone
-  parity and net-accept pass with `--window native`, W2's latency target
-  holds, and `--window native` becomes the default.
+- **W8 Native window becomes the default** ([wisp#112](https://github.com/tompassarelli/wisp/issues/112)). `--window native`
+  is the default since 2026-11-01 and the tools that still need Chrome pass
+  `--window chrome`. Open: Smashcraft's standalone parity and net-accept pass
+  with `--window native`, and W2's latency target holds.
 
   Done when:
   `cd ~/code/smashcraft/main/ts && bun wisp parity standalone test/native/pads/cpu-expert.pad --presentation native,pool-predicted --window native && bun wisp net-accept --window native --out build/native-accept`

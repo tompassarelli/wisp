@@ -6,9 +6,10 @@ import { standaloneWindowArgument } from "../host/play/standalone";
 
 const hasDisplay = (process.env.WAYLAND_DISPLAY ?? process.env.DISPLAY) !== undefined && existsSync(windowLibraryPath());
 
-test("[spec docs/play.md] --window picks chrome or the native window and leaves the other arguments", () => {
+test("[spec docs/play.md] --window picks chrome or the native window, native when absent, and leaves the other arguments", () => {
   expect(standaloneWindowArgument(["--script", "a.pad", "--window", "native", "--frames", "3"])).toEqual({ window: "native", rest: ["--script", "a.pad", "--frames", "3"] });
-  expect(standaloneWindowArgument(["--frames", "3"])).toEqual({ rest: ["--frames", "3"] });
+  expect(standaloneWindowArgument(["--frames", "3"])).toEqual({ window: "native", rest: ["--frames", "3"] });
+  expect(standaloneWindowArgument(["--window", "chrome", "--frames", "3"])).toEqual({ window: "chrome", rest: ["--frames", "3"] });
   expect(standaloneWindowArgument(["--window", "gl"])).toBe("--window needs chrome or native");
   expect(standaloneWindowArgument(["--window"])).toBe("--window needs chrome or native");
 });
