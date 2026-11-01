@@ -61,7 +61,7 @@ test("[scenario] a SIMPLEFRAME texture with a TexCoord reports its sub-rectangle
 });
 
 test("[reference wisp#125] frames125 boxes match native at 800x600 and 1280x720: frame scale and the 4:3 area", () => {
-  const client = new HeadlessClient({ slot: 0, humans: [0], declarations: readNativeDeclarations(), filePrefix: "frames125", localNatives: {}, network: [] });
+  const client = new HeadlessClient({ screen: { width: 1920, height: 1080 }, slot: 0, humans: [0], declarations: readNativeDeclarations(), filePrefix: "frames125", localNatives: {}, network: [] });
   const call = (name: string, ...args: unknown[]) => (client.natives[name] as (this: void, ...args: unknown[]) => unknown)(...args);
   const created = new Map<string, unknown>();
   const gameUi = call("BlzGetOriginFrame", client.natives.ORIGIN_FRAME_GAME_UI, 0);

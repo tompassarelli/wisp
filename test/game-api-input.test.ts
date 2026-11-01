@@ -41,7 +41,7 @@ test("input calls lower to the natives they replaced, byte for byte", () => {
 
 test("the native backend runs a client's key, chat and pointer events and local reads over its own input, and the emulated natives stay at zero", () => {
   const declarations = readNativeDeclarations();
-  const make = (slot: number) => new HeadlessClient({ slot, humans: [0, 1], declarations, filePrefix: "game-api", localNatives: {}, network: [] });
+  const make = (slot: number) => new HeadlessClient({ screen: { width: 1920, height: 1080 }, slot, humans: [0, 1], declarations, filePrefix: "game-api", localNatives: {}, network: [] });
   const [first, second] = [make(0), make(1)];
   const heard: string[] = [];
   bindWorld(first.world);
@@ -75,7 +75,7 @@ test("the native backend runs a client's key, chat and pointer events and local 
 });
 
 test("[boundary] the chat panel's registrations run on Bun over the native backend and register each slot", () => {
-  const client = new HeadlessClient({ slot: 0, humans: [0, 1], declarations: readNativeDeclarations(), filePrefix: "game-api", localNatives: {}, network: [] });
+  const client = new HeadlessClient({ screen: { width: 1920, height: 1080 }, slot: 0, humans: [0, 1], declarations: readNativeDeclarations(), filePrefix: "game-api", localNatives: {}, network: [] });
   bindWorld(client.world);
   const events = nativeEvents.createEvents();
   registerChatEvents(events, [0, 1]);
