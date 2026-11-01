@@ -70,7 +70,9 @@ export function setPointer(x: number, y: number): void {
 }
 
 export function showCursor(shown: boolean): void {
-  boundWorld().log?.("BlzEnableCursor", [shown]);
+  const world = boundWorld();
+  world.log?.("BlzEnableCursor", [shown]);
+  world.input.cursorShown = shown;
 }
 
 export function addChatEvent(events: Events, player: Player, text: string, exact: boolean): void {

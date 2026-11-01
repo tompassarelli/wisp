@@ -134,6 +134,9 @@ pub struct Scene {
     /// Whether the game is in play (a match) rather than in its menus, as the map last told `WispSetPlaying`; the remaster bakes and swaps art only while it is not.
     #[serde(default)]
     pub playing: bool,
+    /// Whether the map hid the OS cursor over the window (`BlzEnableCursor(false)`, `showCursor(false)`); the window shows it again while its options screen is open.
+    #[serde(default, rename = "cursorHidden")]
+    pub cursor_hidden: bool,
     #[serde(default)]
     pub clear: [f32; 3],
 }

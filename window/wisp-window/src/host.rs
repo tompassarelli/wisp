@@ -329,6 +329,7 @@ impl Drop for Host {
 struct WindowSurface {
     refresh_ms: Option<f64>,
     gpu: Gpu,
+    cursor_shown: bool,
     requested: PresentSetting,
     reported: (PresentSetting, usize),
     window: Arc<Window>,
@@ -376,6 +377,12 @@ impl Surface for WindowSurface {
     fn draw(&mut self, image: &Self::Image, step: u64) {
         self.gpu.menu_events(self.shared.menu.drain());
         self.gpu.draw(image, step);
+        let shown = self.gpu.cursor_shown();
+        if shown != self.cursor_shown {
+            self.cursor_shown = shown;
+            self.window.set_cursor_visible(shown);
+            eprintln!("wisp-window: cursor {}", if shown { "shown" } else { "hidden" });
+        }
     }
 
     fn load_scene(&mut self, bytes: &[u8]) -> Result<(), String> {
@@ -448,7 +455,7 @@ fn render_loop(shared: Arc<Shared>, windows: mpsc::Receiver<Arc<Window>>, aspect
     };
     *lock(&shared.info) = info_json(&gpu);
     let reported = (gpu.setting(), gpu.image_count());
-    let surface = WindowSurface { gpu, refresh_ms: None, requested: PresentSetting::Fifo, reported, window, shared: shared.clone() };
+    let surface = WindowSurface { gpu, cursor_shown: true, refresh_ms: None, requested: PresentSetting::Fifo, reported, window, shared: shared.clone() };
     let mut frames = FrameLoop::new(surface, LibraryClock, shared.mailbox.clone(), shared.metrics.clone(), steps);
     while !shared.mailbox.is_stopping() {
         if shared.closed.load(Ordering::Acquire) {

@@ -21,6 +21,7 @@ export function inputNatives({ ui, textAreaAutoScroll, input }: FrameContext): R
     BlzIsMouseButtonPressed: (button: unknown) => input.mouseButtonHeld(button),
     BlzGetMouseScreenPosX: () => input.pointerX,
     BlzGetMouseScreenPosY: () => input.pointerY,
+    BlzEnableCursor: (shown: unknown) => { input.cursorShown = shown === true; },
     BlzPixelToFrameX: (pixel: number) => f32(pixel * f32(0.8) / screen.width),
     BlzPixelToFrameY: (pixel: number) => f32(pixel * f32(0.6) / screen.height),
     BlzFrameToPixelX: (frame: number) => Math.round(frame * screen.width / f32(0.8)),

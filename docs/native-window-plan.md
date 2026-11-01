@@ -517,6 +517,10 @@ The native window takes over the page's whole job, not only its drawing
   `FRAMEEVENT_MOUSE_ENTER`, `MOUSE_LEAVE`, `MOUSE_DOWN`, `MOUSE_UP`, wheel and
   drag, and the world-coordinate `EVENT_PLAYER_MOUSE_*` events (hover and drag
   are the second box of this work).
+  `BlzEnableCursor(false)` (`showCursor(false)`) hides the OS cursor over the
+  window: the scene carries `cursorHidden`, and the render thread calls
+  `set_cursor_visible` when it changes and prints `wisp-window: cursor hidden`
+  or `shown`; the options screen always shows it.
 - **Pads.** SDL3's gamepad API reads every pad on Linux and Windows, the
   stack padbridge feeds Warcraft with, so a pad has the same layout in both
   and the window gets SDL's controller database and its HIDAPI drivers

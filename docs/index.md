@@ -1,3 +1,4 @@
+| Hide the OS cursor over the native window while the map draws its own pointer | [Native window](native-window-plan.md) (wisp:src/game/native/input.ts, wisp:window/wisp-window/src/host.rs) | `showCursor(false)` (`BlzEnableCursor(false)`); `showCursor(true)` shows it again, and the options screen always shows it. |
 # Wisp feature index
 
 [Native input preflight](platforms.md) verifies the private window's focus and

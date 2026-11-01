@@ -4,6 +4,7 @@ import * as nativeInput from "../src/game/native/input";
 import * as nativePlayers from "../src/game/native/players";
 import { bindWorld } from "../src/game/native/world";
 import { HeadlessClient } from "../src/headless/client";
+import { captureScene } from "../host/render/headlessRender";
 import { readNativeDeclarations } from "../host/headless/headless";
 import { registerChatEvents, registerChatHistoryKey } from "../src/ui/chatPanel";
 import { compile, wrap } from "./gameApiCompile";
@@ -82,4 +83,20 @@ test("[boundary] the chat panel's registrations run on Bun over the native backe
   bindWorld(undefined);
   expect(client.log.map(call => call.name)).toEqual(["CreateTrigger", "Player", "TriggerRegisterPlayerChatEvent", "Player", "TriggerRegisterPlayerChatEvent", "ConvertOsKeyType", "Player", "BlzTriggerRegisterPlayerKeyEvent"]);
   expect([...client.emulatedCalls.keys()]).toEqual([]);
+});
+
+test("showCursor(false) on the native backend and BlzEnableCursor(false) on the emulation hide the native window's cursor until it is shown again", () => {
+  const client = new HeadlessClient({ slot: 0, humans: [0], declarations: readNativeDeclarations(), filePrefix: "game-api", localNatives: {}, network: [] });
+  const hidden = () => captureScene(client).cursorHidden === true;
+  expect(hidden()).toBe(false);
+  bindWorld(client.world);
+  nativeInput.showCursor(false);
+  expect(hidden()).toBe(true);
+  nativeInput.showCursor(true);
+  bindWorld(undefined);
+  expect(hidden()).toBe(false);
+  (client.natives.BlzEnableCursor as (shown: boolean) => void)(false);
+  expect(hidden()).toBe(true);
+  (client.natives.BlzEnableCursor as (shown: boolean) => void)(true);
+  expect(hidden()).toBe(false);
 });

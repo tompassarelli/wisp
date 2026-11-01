@@ -95,7 +95,7 @@ export interface RenderedFrame {
 }
 
 export const captureScene = (client: HeadlessClient, options: { readonly visibleOnly?: boolean; readonly matchFrame?: number } = {}): RenderScene => ({
-  frame: client.frame, ...(options.matchFrame === undefined ? {} : { matchFrame: options.matchFrame }), playing: client.playing.on, client: client.slot, effects: client.effectPoses({ visibleOnly: options.visibleOnly ?? false }), units: client.unitPoses(), camera: client.cameraPose(), ui: client.frames.snapshot({ visibleOnly: options.visibleOnly ?? false }), filter: client.cineFilterPose(), textTags: client.textTags.poses(), lightnings: client.lightnings.poses(), weathers: client.weathers.poses(), ribbons: client.ribbons.poses(),
+  frame: client.frame, ...(options.matchFrame === undefined ? {} : { matchFrame: options.matchFrame }), playing: client.playing.on, ...(client.input.cursorShown ? {} : { cursorHidden: true }), client: client.slot, effects: client.effectPoses({ visibleOnly: options.visibleOnly ?? false }), units: client.unitPoses(), camera: client.cameraPose(), ui: client.frames.snapshot({ visibleOnly: options.visibleOnly ?? false }), filter: client.cineFilterPose(), textTags: client.textTags.poses(), lightnings: client.lightnings.poses(), weathers: client.weathers.poses(), ribbons: client.ribbons.poses(),
   environment: sceneEnvironment(client),
 });
 

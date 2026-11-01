@@ -17,6 +17,8 @@ use crate::surface_target::SurfaceTarget;
 use crate::render::{DrawScene, Renderer};
 use crate::ui::{is_font, UiRenderer};
 
+mod cursor;
+
 
 const COUNTER_BITS: usize = 24;
 const VERTICES: usize = COUNTER_BITS * 6;

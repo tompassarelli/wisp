@@ -3,6 +3,8 @@ export class Input {
   readonly heldMouseButtons = new Set<unknown>();
   pointerX = 0;
   pointerY = 0;
+  /** Whether the map shows the OS cursor over the window (`BlzEnableCursor`); the native window hides it while this is false. */
+  cursorShown = true;
   private readonly heldKeys = new Set<number>();
   private heldMeta = 0;
 

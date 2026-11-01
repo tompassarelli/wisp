@@ -8,6 +8,7 @@ export interface RenderScene {
   readonly frame: number;
   readonly matchFrame?: number;
   readonly playing?: boolean;
+  readonly cursorHidden?: boolean;
   readonly client: number;
   readonly effects: readonly DrawnPose[];
   readonly units: ReturnType<HeadlessClient["unitPoses"]>;
