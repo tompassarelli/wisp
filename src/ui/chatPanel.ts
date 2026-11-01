@@ -206,6 +206,11 @@ export class ChatPanel {
     if (eventPlayer() === localPlayer()) this.historyOpen = !this.historyOpen;
   }
 
+  /** Whether the player has the entry line open, which only the native window has. */
+  isTyping(): boolean {
+    return this.entry !== undefined && WispChatEntryText() !== undefined;
+  }
+
   /** Draws the recent view in a `ChatBox`, the framed box in a `ChatSlot` (with a `frame` style), or nothing when `box` is undefined; `seconds` is the time since the last call. */
   update(seconds: number, box: ChatBox | ChatSlot | undefined): void {
     advanceChat(this.log, seconds);
@@ -404,11 +409,11 @@ export class ChatPanel {
   }
 
   private hide(): void {
+    this.showEntry(undefined, false);
     if (!this.backdropShown) return;
     this.backdropShown = false;
     this.placedKey = "";
     setFrameVisible(this.backdrop, false);
     for (let index = 0; index < this.rowFrames.length; index++) this.showRow(index, undefined, 1.0);
-    this.showEntry(undefined, false);
   }
 }

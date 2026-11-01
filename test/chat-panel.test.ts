@@ -61,3 +61,27 @@ test("[scenario] a framed chat box whose style gives no title creates no title f
   expect(frameNames(STYLE)).toEqual(["TestChatTitle", "TestChatTitleBar"]);
   expect(frameNames({ ...STYLE, name: "BareChat", frame })).toEqual([]);
 });
+
+test("[scenario] leaving the framed box for a recent view with no lines hides the entry line's placeholder, and a box with no lines still shows the line while the player types", () => {
+  const panels = new Map<number, ChatPanel>();
+  const map = { install: () => {}, start: () => { panels.set(GetPlayerId(GetLocalPlayer()), new ChatPanel(STYLE)); } };
+  const clients = runtime.clients(map, [0, 1]);
+  clients.start();
+  clients.frames(2);
+  const local = clients.client(0);
+  const typing = () => { let open: boolean | undefined; local.run(() => { open = panels.get(0)?.isTyping(); }); return open; };
+  const BOX = { left: 0.02, bottom: 0.152, width: 0.3, rows: 4 };
+  const draw = (box: ChatSlot | typeof BOX | undefined) => { local.run(() => { panels.get(0)?.update(1 / 60, box as never); }); return local.frames.shownText(); };
+
+  expect(draw(SLOT)).toContain("|cff909090Type your chat here");
+  expect(draw(undefined)).toEqual([]);
+  expect(draw(SLOT)).toContain("|cff909090Type your chat here");
+  expect(draw(BOX)).toEqual([]);
+  expect(typing()).toBe(false);
+
+  createKeyFeed(clients, 0)(press(ENTER));
+  expect(typing()).toBe(true);
+  createKeyFeed(clients, 0)(press(0x47, "g"));
+  expect(draw(BOX).some(text => text.startsWith("g"))).toBe(true);
+  expect(draw(BOX).includes("|cff909090Type your chat here")).toBe(false);
+});

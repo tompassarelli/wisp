@@ -99,3 +99,7 @@ stand-in for it:
   the placeholder until the player types, then the text with a blinking caret;
   in the recent view it appears at the box's bottom only while the player types,
   with every kept line above it.
+  A panel given no box (`update(seconds, undefined)`) or a box with no lines
+  hides the entry line too, including the placeholder left from the framed box;
+  `isTyping()` tells a map whether the line is open, so it can keep a box up
+  for it.
