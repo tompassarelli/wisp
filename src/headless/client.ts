@@ -11,6 +11,7 @@ import { FRAMES_PER_SECOND, steppedFrames } from "../game/native/frameRate";
 import { describeNumber } from "../game/native/textFormat";
 import { checkIntentionalNoops, EmulatedCalls, loggedNative, logUnlessLocal } from "./nativeCalls";
 import { Lightnings } from "../game/native/lightnings";
+import { Ribbons } from "./ribbons";
 import { Weathers } from "./weather";
 import { ViewNatives } from "./natives/view";
 import { Clock } from "../game/native/clockStore";
@@ -109,6 +110,7 @@ export class HeadlessClient {
   readonly textTags = new TextTags(kind => this.handle(kind));
   readonly lightnings = new Lightnings(kind => this.handle(kind));
   readonly weathers = new Weathers();
+  readonly ribbons = new Ribbons();
   readonly world: World;
   readonly frameUi: FrameUi;
   readonly quests: Quests;
@@ -297,6 +299,7 @@ export class HeadlessClient {
       }),
       ...lightningNatives(this.lightnings),
       ...this.weathers.behaviors({ handle }),
+      ...this.ribbons.behaviors(),
       ...this.inventory.behaviors(),
       ...this.units.playerBehaviors(),
       ...playerNatives(this.players),

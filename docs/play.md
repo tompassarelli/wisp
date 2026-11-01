@@ -322,6 +322,8 @@ seconds)`, a Wisp native the Warcraft build does not have, so it calls it only f
 code. A sprite is drawn again only when its pose, size or light changes. A map tells the native window that a match is on with `WispSetPlaying(true)` and that it is back in its menus with `WispSetPlaying(false)`; the window bakes remastered art only while not playing and never changes the art mid-match (native-window-plan.md, "Remaster at load"). Chrome does not draw
 SPRITE frames.
 
+A map draws its own ribbon strips, such as a weapon's swing arc, with `WispSetRibbon(id, points, count, red, green, blue)`: strip `id` gets `count` edges (at most 32; at most 8 strips at once), each seven numbers of `points` (one end x, y, z, the other end x, y, z in world units, then alpha 0 to 1), drawn additively in the colour (0 to 1); the next call with the same id replaces the strip and a count of 0 removes it. Bun copies the edges at the call (src/headless/ribbons.ts), so a map may reuse one buffer every frame. The scene carries them as `ribbons` and the window receives them as `strips`, drawn by the ribbon pass that model ribbon emitters share. Warcraft III has no such native, so a map guards the call with `typeof WispSetRibbon === "function"` and Warcraft draws nothing.
+
 A frame made from one of Warcraft's control templates (`BlzCreateFrame("ScriptDialogButton", ...)`,
 or `BlzCreateFrameByType` inheriting it) draws as Warcraft draws it: Bun reads the template's
 frame definition file and `UI\war3skins.txt` from the player's install when the window first

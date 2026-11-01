@@ -3386,6 +3386,8 @@ declare function BlzIsTargetIndicatorEnabled(): boolean;
 declare function BlzShowTerrain(show: boolean): void;
 /** Wisp's own: the native window paints the sky from the fog and the light again, as it does for a map that never calls `WispSetSkyLook`. */
 declare function WispResetSkyLook(): void;
+/** Wisp's own: the native window draws strip `id` as an additive ribbon of `count` edges (at most 32, up to 8 strips), each seven numbers of `points`: one end x, y, z, the other end x, y, z in world units, then alpha 0 to 1; colour is 0 to 1. A count of 0 removes the strip. Warcraft III has no such call, so a map guards it with `typeof`. */
+declare function WispSetRibbon(id: number, points: readonly number[], count: number, red: number, green: number, blue: number): void;
 declare function BlzShowSkyBox(show: boolean): void;
 declare function BlzStartRecording(fps: number): void;
 declare function BlzEndRecording(): void;

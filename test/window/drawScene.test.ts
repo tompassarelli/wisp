@@ -151,3 +151,9 @@ test("modelLibrary_reports_a_lightning_table_column_it_lacks_once", async () => 
   await until(() => library.loading() === 0);
   expect(problems.filter((problem) => problem.includes("column"))).toEqual(["Splats\\LightningData.slk has no dir, width, r, g, b, noisescale, texcoordscale column"]);
 });
+
+test("[boundary] drawScene sends each ribbon as a strip of its edges and colour", () => {
+  const ribbons = [{ id: 0, edges: [[1, 2, 3, 4, 5, 6, 0], [7, 8, 9, 10, 11, 12, 0.85]], color: [0.35, 1, 0.2] }];
+  const drawn = drawScene({ ...scene, effects: [], ribbons } as unknown as RenderScene, { sequences: () => undefined, show: () => undefined, loading: () => 0, light: () => undefined, lightning: () => undefined });
+  expect(drawn.strips).toEqual([{ edges: [[1, 2, 3, 4, 5, 6, 0], [7, 8, 9, 10, 11, 12, 0.85]], color: [0.35, 1, 0.2] }]);
+});
