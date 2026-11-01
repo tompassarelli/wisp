@@ -93,7 +93,7 @@ test("[reference] chat: the framed box fills its slot with the title bar on top,
   const typed = chatFrameLayout(slot, measures, true, 8, 16);
   assertEquals(typed.entry?.bottom, 0.25390625);
   assertEquals(typed.rows.bottom, 0.26953125);
-  assertEquals(typed.titleBar.bottom, 0.31640625);
+  assertEquals(typed.title?.bar.bottom, 0.31640625);
   assertEquals(typed.rowCount, 5);
   assertEquals(typed.thumb.height, 0.0244140625);
   assertEquals(typed.rows.width, 0.23046875);
@@ -107,4 +107,8 @@ test("[reference] chat: the framed box fills its slot with the title bar on top,
   addChatLine(log, 0, "Al", "one two three four five six seven eight");
   addChatLine(log, 0, "Bo", "hi");
   assertEquals(chatRowCount(log, 20.0, EVEN), 4);
+  const untitled = chatFrameLayout(slot, { ...measures, titleHeight: 0.0 }, true, 8, 16);
+  assertEquals(untitled.title, undefined);
+  assertEquals(untitled.rows.bottom, typed.rows.bottom);
+  assertEquals(untitled.rowCount, 8);
 });

@@ -11,8 +11,8 @@ export interface ChatRect {
 }
 
 export interface ChatFrameLayout {
-  readonly titleBar: ChatRect;
-  readonly title: ChatRect;
+  /** The title bar and its text; undefined when `titleHeight` is 0. */
+  readonly title: { readonly bar: ChatRect; readonly text: ChatRect } | undefined;
   /** How many history rows fit, and where they go: the newest row's bottom edge is `rows.bottom`. */
   readonly rowCount: number;
   readonly rows: ChatRect;
@@ -25,13 +25,14 @@ export interface ChatFrameLayout {
 export interface ChatFrameMeasures {
   readonly rowHeight: number;
   readonly margin: number;
+  /** 0 for a box without a title bar. */
   readonly titleHeight: number;
   readonly barWidth: number;
   readonly entryHeight: number;
 }
 
 /**
- * The framed box filling `slot`, inset by the margin: the title bar along the top, the entry line (when the box has one) along the bottom, and
+ * The framed box filling `slot`, inset by the margin: the title bar (when `titleHeight` is not 0) along the top, the entry line (when the box has one) along the bottom, and
  * between them as many history rows as fit, at most `maxRows`, sitting on the entry line with the scrollbar beside them at the right edge,
  * whose thumb shows the rows' share of the `total` rows the history wraps to, at the newest end.
  */
@@ -40,18 +41,21 @@ export function chatFrameLayout(slot: ChatRect, measures: ChatFrameMeasures, ent
   const left = f32(slot.left + margin);
   const width = f32(slot.width - f32(margin * 2.0));
   const top = f32(f32(slot.bottom + slot.height) - margin);
+  const titled = titleHeight > 0.0;
   const titleBottom = f32(top - titleHeight);
   const inner = f32(slot.bottom + margin);
   const rowsBottom = entry ? f32(inner + f32(entryHeight + margin)) : inner;
-  const space = f32(f32(titleBottom - margin) - rowsBottom);
+  const space = f32(f32(titled ? f32(titleBottom - margin) : titleBottom) - rowsBottom);
   let rowCount = 0;
   while (rowCount < maxRows && f32(rowHeight * (rowCount + 1)) <= space) rowCount++;
   const rowsHeight = f32(rowHeight * rowCount);
   const barLeft = f32(f32(left + width) - barWidth);
   const shown = total <= rowCount ? 1.0 : f32(rowCount / total);
   return {
-    titleBar: { left, bottom: titleBottom, width, height: titleHeight },
-    title: { left: f32(left + margin), bottom: titleBottom, width: f32(width - f32(margin * 2.0)), height: titleHeight },
+    title: titled ? {
+      bar: { left, bottom: titleBottom, width, height: titleHeight },
+      text: { left: f32(left + margin), bottom: titleBottom, width: f32(width - f32(margin * 2.0)), height: titleHeight },
+    } : undefined,
     rowCount,
     rows: { left: f32(left + margin), bottom: rowsBottom, width: f32(f32(barLeft - margin) - f32(left + margin)), height: rowsHeight },
     track: { left: barLeft, bottom: rowsBottom, width: barWidth, height: rowsHeight },

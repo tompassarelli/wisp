@@ -13,7 +13,7 @@ const STYLE: ChatStyle = {
   name: "TestChat", font: "Fonts\\FRIZQT__.TTF", fontSize: 0.008, rowHeight: 0.0112, glyphWidths: FRIZ_QUADRATA_WIDTHS, margin: 0.005,
   panelTexture: "panel.blp", panelAlpha: 210, level: 400, capacity: 50, historyRows: 8, recentSeconds: 14.0, fadeSeconds: 3.0,
   colour: () => 0xffffff, ignore: (text) => text.startsWith("-"),
-  frame: { panelTexture: "framed.blp", title: "Chat", titleFontSize: 0.011, titleTexture: "title.blp", titleAlpha: 230, barTexture: "bar.blp", fieldTexture: "field.blp", placeholder: "Type your chat here", placeholderColour: 0x909090 },
+  frame: { panelTexture: "framed.blp", title: { text: "Chat", fontSize: 0.011, texture: "title.blp", alpha: 230 }, barTexture: "bar.blp", fieldTexture: "field.blp", placeholder: "Type your chat here", placeholderColour: 0x909090 },
 };
 const SLOT: ChatSlot = { left: 0.02, bottom: 0.2, width: 0.22, height: 0.12 };
 const ENTER = 0x0d;
@@ -46,4 +46,18 @@ test("[scenario] the framed chat box shows its title, the chat event's lines and
   createKeyFeed(clients, 0)(press(ENTER));
   clients.frames(1);
   expect(draw()).toEqual(["|cffffffffPlayer 2|r: hello there", "|cffffffffPlayer 1|r: gg", "Chat", "|cff909090Type your chat here"]);
+});
+
+test("[scenario] a framed chat box whose style gives no title creates no title frames and draws no title text or bar", () => {
+  const frameNames = (style: ChatStyle): string[] => {
+    const clients = runtime.clients({ install: () => {}, start: () => {} }, [0]);
+    clients.start();
+    clients.frames(1);
+    const local = clients.client(0);
+    local.run(() => { new ChatPanel(style).update(1 / 60, SLOT); });
+    return local.frames.snapshot().map((frame) => frame.name).filter((name) => name.includes("Title"));
+  };
+  const frame = { ...STYLE.frame as NonNullable<ChatStyle["frame"]>, title: undefined };
+  expect(frameNames(STYLE)).toEqual(["TestChatTitle", "TestChatTitleBar"]);
+  expect(frameNames({ ...STYLE, name: "BareChat", frame })).toEqual([]);
 });

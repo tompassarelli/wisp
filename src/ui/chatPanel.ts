@@ -38,15 +38,21 @@ export interface ChatStyle {
   readonly frame?: ChatFrameStyle;
 }
 
-/** The framed box: its backdrop, drawn at `panelAlpha`, its title bar, scrollbar and entry line. */
+/** The title bar along the top of the framed box. */
+export interface ChatTitleStyle {
+  /** The text, colour codes and all. */
+  readonly text: string;
+  readonly fontSize: number;
+  /** The bar's fill, none when undefined, and its opacity, 0 to 255. */
+  readonly texture?: string;
+  readonly alpha: number;
+}
+
+/** The framed box: its backdrop, drawn at `panelAlpha`, its optional title bar, scrollbar and entry line. */
 export interface ChatFrameStyle {
   readonly panelTexture: string;
-  /** The title bar's text, colour codes and all. */
-  readonly title: string;
-  readonly titleFontSize: number;
-  /** The title bar's fill, none when undefined, and its opacity, 0 to 255. */
-  readonly titleTexture?: string;
-  readonly titleAlpha: number;
+  /** The title bar; without it the box has none and the history uses the space. */
+  readonly title?: ChatTitleStyle;
   /** The fill of the scrollbar's track and thumb. */
   readonly barTexture: string;
   /** The fill of the entry line's field. */
@@ -65,7 +71,7 @@ export interface ChatBox {
   readonly rows: number;
 }
 
-/** The rectangle the framed box fills, always shown: a title bar, the history with its scrollbar and, in the native window, the entry line along the bottom; as many rows as the rectangle holds, at most `historyRows`. */
+/** The rectangle the framed box fills, always shown: a title bar when the style has one, the history with its scrollbar and, in the native window, the entry line along the bottom; as many rows as the rectangle holds, at most `historyRows`. */
 export interface ChatSlot {
   readonly left: number;
   readonly bottom: number;
@@ -90,10 +96,14 @@ const hasChatEntry = (): boolean => typeof WispChatEntryText === "function";
 
 interface FramedParts {
   readonly panel: Frame;
-  readonly title: Frame;
   readonly track: Frame;
   readonly thumb: Frame;
-  readonly titleBar: Frame | undefined;
+  readonly title: TitleParts | undefined;
+}
+
+interface TitleParts {
+  readonly text: Frame;
+  readonly bar: Frame | undefined;
 }
 
 const setRect = (frame: Frame, rect: ChatRect): void => {
@@ -109,7 +119,7 @@ export class ChatPanel {
   private readonly shownText: string[] = [];
   private readonly shownAlpha: number[] = [];
   private readonly rowShown: boolean[] = [];
-  /** The framed box's backdrop, title, scrollbar track and thumb, and its title bar when the style has one. */
+  /** The framed box's backdrop, scrollbar track and thumb, and its title text and bar when the style has them. */
   private readonly framed: FramedParts | undefined;
   /** The entry line's field and text, made only where the runtime has a chat line. */
   private readonly entry: readonly [field: Frame, text: Frame] | undefined;
@@ -143,20 +153,25 @@ export class ChatPanel {
     if (frame !== undefined) {
       const panel = this.backdropFrame(`${style.name}FramedPanel`, frame.panelTexture, style.level);
       setFrameAlpha(panel, style.panelAlpha);
-      const title = this.textFrame(`${style.name}Title`, frame.titleFontSize, style.level + 2);
-      setFrameText(title, frame.title);
       const track = this.backdropFrame(`${style.name}Track`, frame.barTexture, style.level + 1);
       setFrameAlpha(track, TRACK_ALPHA);
       const thumb = this.backdropFrame(`${style.name}Thumb`, frame.barTexture, style.level + 2);
       setFrameAlpha(thumb, THUMB_ALPHA);
-      const titleBar = frame.titleTexture === undefined ? undefined : this.backdropFrame(`${style.name}TitleBar`, frame.titleTexture, style.level + 1);
-      if (titleBar !== undefined) setFrameAlpha(titleBar, frame.titleAlpha);
-      this.framed = { panel, title, track, thumb, titleBar };
+      this.framed = { panel, track, thumb, title: frame.title === undefined ? undefined : this.titleParts(frame.title) };
     }
     if (!hasChatEntry()) return;
     const field = this.backdropFrame(`${style.name}EntryField`, frame?.fieldTexture ?? style.panelTexture, style.level + 1);
     setFrameAlpha(field, FIELD_ALPHA);
     this.entry = [field, this.textFrame(`${style.name}EntryText`, style.fontSize, style.level + 2)];
+  }
+
+  private titleParts(title: ChatTitleStyle): TitleParts {
+    const name = this.style.name;
+    const text = this.textFrame(`${name}Title`, title.fontSize, this.style.level + 2);
+    setFrameText(text, title.text);
+    const bar = title.texture === undefined ? undefined : this.backdropFrame(`${name}TitleBar`, title.texture, this.style.level + 1);
+    if (bar !== undefined) setFrameAlpha(bar, title.alpha);
+    return { text, bar };
   }
 
   private backdropFrame(name: string, texture: string, level: number): Frame {
@@ -264,7 +279,7 @@ export class ChatPanel {
     return this.rows;
   }
 
-  /** The framed box, always shown: the title bar, every kept line newest at the bottom with the scrollbar beside them, and the entry line under them where the runtime has one. */
+  /** The framed box, always shown: the title bar when the style has one, every kept line newest at the bottom with the scrollbar beside them, and the entry line under them where the runtime has one. */
   private drawFramed(slot: ChatSlot, typing: string | undefined): void {
     if (slot !== this.framedSlot || this.log.revision !== this.framedRevision) {
       const measures = this.measures();
@@ -291,16 +306,19 @@ export class ChatPanel {
 
   private measures(): ChatFrameMeasures {
     const rowHeight = this.style.rowHeight;
-    return { rowHeight, margin: this.style.margin, titleHeight: f32(rowHeight * TITLE_ROWS), barWidth: f32(rowHeight * BAR_ROWS), entryHeight: f32(rowHeight * ENTRY_ROWS) };
+    const titled = this.framed?.title !== undefined;
+    return { rowHeight, margin: this.style.margin, titleHeight: titled ? f32(rowHeight * TITLE_ROWS) : 0.0, barWidth: f32(rowHeight * BAR_ROWS), entryHeight: f32(rowHeight * ENTRY_ROWS) };
   }
 
   private placeFramed(slot: ChatSlot, layout: ChatFrameLayout): void {
     const parts = this.framed as FramedParts;
     setRect(parts.panel, slot);
-    setRect(parts.title, layout.title);
     setRect(parts.track, layout.track);
     setRect(parts.thumb, layout.thumb);
-    if (parts.titleBar !== undefined) setRect(parts.titleBar, layout.titleBar);
+    if (parts.title !== undefined && layout.title !== undefined) {
+      setRect(parts.title.text, layout.title.text);
+      if (parts.title.bar !== undefined) setRect(parts.title.bar, layout.title.bar);
+    }
     this.placeRows(layout.rows.left, layout.rows.bottom, layout.rows.width, layout.rowCount);
     if (layout.entry !== undefined) this.placeEntry(layout.entry, true);
   }
@@ -362,8 +380,7 @@ export class ChatPanel {
     this.partsShown = visible;
     const parts = this.framed;
     if (parts === undefined) return;
-    for (const part of [parts.panel, parts.title, parts.track, parts.thumb]) setFrameVisible(part, visible);
-    if (parts.titleBar !== undefined) setFrameVisible(parts.titleBar, visible);
+    for (const part of [parts.panel, parts.track, parts.thumb, parts.title?.text, parts.title?.bar]) if (part !== undefined) setFrameVisible(part, visible);
   }
 
   /** The entry line: the typed text with a blinking caret while the player types, the placeholder in a framed box while they do not, and nothing otherwise. */

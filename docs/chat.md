@@ -54,8 +54,8 @@ is tested by wisp:src/ui/chat.tests.ts.
 
 ## The framed box
 
-A style with `frame` (its own backdrop texture, title, title font size, an optional title bar texture and
-its alpha, the scrollbar's and the entry field's textures, and the entry's
+A style with `frame` (its own backdrop texture, an optional `title` bar with its text, font size, optional
+texture and alpha, the scrollbar's and the entry field's textures, and the entry's
 placeholder and its colour) draws a framed box when `update` is given a
 `ChatSlot` (`{ left, bottom, width, height }`) instead of a `ChatBox`:
 
@@ -65,7 +65,7 @@ chat.update(FRAME_SECONDS, { left, bottom, width, rows });   // a ChatBox: the r
 ```
 
 - It fills the slot and is always shown: the panel texture as its backdrop, the
-  title bar along the top, every kept line at full opacity, newest at the bottom,
+  title bar along the top (only when the style gives a `title`; without one the lines fill that space), every kept line at full opacity, newest at the bottom,
   as many rows as fit (at most `historyRows`), with a scrollbar beside them whose
   thumb is the shown rows' share of the rows the history wraps to.
 - Its lines come from the chat event, so in Warcraft what a player types in the
