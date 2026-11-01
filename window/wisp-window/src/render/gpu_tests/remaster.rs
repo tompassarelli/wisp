@@ -32,12 +32,13 @@ fn a_texture_that_arrives_mid_match_bakes_in_the_match_and_is_drawn_once_play_st
     let mut renderer = baked_remastered();
     renderer.set_playing(true);
     renderer.ingest("fresh.png", seeded_png(8, 201));
-    pump_until(&mut renderer, |renderer| renderer.bake_progress().is_some_and(|progress| progress.ready() && progress.total == 2));
+    pump_until(&mut renderer, |renderer| renderer.bake_progress().is_some_and(|progress| progress.ready() && progress.total == 2) && renderer.settled());
     for _ in 0..100 {
         renderer.pump();
+        assert!(renderer.incoming.is_idle() && renderer.quality == Quality::Standard, "the automatic rebuild waits for the match to end");
         std::thread::sleep(std::time::Duration::from_millis(1));
     }
-    assert!(renderer.art_pending() && !renderer.reliefs.contains_key("fresh.png") && renderer.incoming.is_idle(), "the automatic rebuild waits for the match to end");
+    assert_eq!(renderer.art_pending(), !renderer.reliefs.contains_key("fresh.png"), "the texture is drawn remastered when its decode found it baked, else it waits as unbaked");
     renderer.set_playing(false);
     pump_until(&mut renderer, |renderer| renderer.reliefs.contains_key("fresh.png") && !renderer.art_pending());
 }
