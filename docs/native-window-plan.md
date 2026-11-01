@@ -499,7 +499,11 @@ The native window takes over the page's whole job, not only its drawing
   as in Warcraft. A key already down is not pressed again, the queue keeps every
   event even when samples are dropped, and every held key is released when the
   window loses focus or the options screen opens. The pad mask is the pad's alone,
-  so a key never also presses a button.
+  so a key never also presses a button. A press also carries the character it
+  types on the player's layout (winit's text, from bit 13 of the packed event),
+  which the chat line takes: the window has no Enter box, so the key feed's
+  chat entry (`src/headless/chatEntry.ts`, see [Chat panel](chat.md)) opens on
+  Enter, takes the keys while open and sends the line as the player's chat event.
 - **Mouse.** winit's cursor and button events reach the window thread, which
   keeps the cursor in physical pixels, the buttons held and the presses and
   releases since the last sample (`pointer.rs`); the step clock reads them

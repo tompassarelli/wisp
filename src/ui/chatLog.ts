@@ -177,3 +177,10 @@ export function chatOpacity(age: number, seconds: number, fade: number): number 
   if (left >= fade) return 1.0;
   return left <= 0.0 ? 0.0 : f32(left / fade);
 }
+
+/** Rows every kept line wraps to at `width`: the history's whole height, which its scrollbar measures. */
+export function chatRowCount(log: Readonly<ChatLog>, width: number, widths: GlyphWidths): number {
+  let count = 0;
+  for (const line of log.lines) count += chatRows(line, width, widths).length;
+  return count;
+}

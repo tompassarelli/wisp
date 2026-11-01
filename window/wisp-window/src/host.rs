@@ -129,7 +129,8 @@ impl ApplicationHandler<Command> for App {
             WindowEvent::MouseInput { state, button, .. } => self.shared.pointer.button(button, state == ElementState::Pressed),
             WindowEvent::KeyboardInput { event, .. } if !event.repeat => {
                 if let PhysicalKey::Code(code) = event.physical_key {
-                    self.shared.menu.key(&self.shared.keys, code, event.state == ElementState::Pressed);
+                    let typed = event.text.as_deref().and_then(|text| text.chars().next());
+                    self.shared.menu.key(&self.shared.keys, code, event.state == ElementState::Pressed, typed);
                 }
             }
             _ => {}

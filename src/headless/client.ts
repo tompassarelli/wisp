@@ -21,6 +21,7 @@ import { effectNatives, lightningNatives, textTagNatives } from "./natives/effec
 import { frameNatives, type FrameContext, inputNatives } from "./natives/frames";
 import { mathNatives } from "./natives/math";
 import { Playing } from "./natives/playing";
+import { ChatEntry } from "./chatEntry";
 import { playerNatives } from "./natives/players";
 import { Players } from "../game/native/playerStore";
 import { Input } from "../game/native/inputStore";
@@ -101,6 +102,8 @@ export const WISP_LOCAL_NATIVES: LocalNatives = {
   BlzGetLocalSpecialEffectX: "the scene report reads an effect's local position",
   BlzGetLocalSpecialEffectY: "the scene report reads an effect's local position",
   BlzGetLocalSpecialEffectZ: "the scene report reads an effect's local position",
+  WispChatEntryText: "the native window's chat line, which only this client types into",
+  WispSetChatEntryArea: "where this client draws its chat line",
 };
 
 export class HeadlessClient {
@@ -152,6 +155,7 @@ export class HeadlessClient {
 
   missedLookups = 0;
   readonly playing = new Playing();
+  readonly chatEntry = new ChatEntry();
   readonly natives: Record<string, unknown> = {};
 
   frame = 0;
@@ -321,6 +325,7 @@ export class HeadlessClient {
       ...effectNatives(this.effects),
       ...mathNatives(),
       ...this.playing.behaviors(),
+      ...this.chatEntry.behaviors(),
     };
   }
 

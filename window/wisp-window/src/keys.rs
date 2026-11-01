@@ -148,18 +148,23 @@ fn modifier(key: u8) -> u8 {
     }
 }
 
-/// One key going down or up, as `BlzTriggerRegisterPlayerKeyEvent` names it: the `oskeytype`, and the `METAKEY_*` mask of the other modifiers held at that moment.
+/// One key going down or up, as `BlzTriggerRegisterPlayerKeyEvent` names it: the `oskeytype`, and the `METAKEY_*` mask of the other modifiers held at that moment. A press also carries the character it types on the player's layout, which the native window's chat entry takes.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct KeyEvent {
     pub key: u8,
     pub meta: u8,
     pub down: bool,
+    pub typed: Option<char>,
 }
 
+/// The highest code point the packed event holds, in its 19 bits from bit 13.
+const MAX_TYPED: u32 = (1 << 19) - 1;
+
 impl KeyEvent {
-    /// The event in one number for the game's thread: the key in bits 0 to 7, the meta mask in 8 to 11, down in bit 12.
+    /// The event in one number for the game's thread: the key in bits 0 to 7, the meta mask in 8 to 11, down in bit 12, and the typed character's code point from bit 13, 0 for none or one past the 19 bits.
     pub fn packed(self) -> u32 {
-        self.key as u32 | (self.meta as u32) << 8 | (self.down as u32) << 12
+        let typed = self.typed.map_or(0, u32::from);
+        self.key as u32 | (self.meta as u32) << 8 | (self.down as u32) << 12 | if typed <= MAX_TYPED { typed << 13 } else { 0 }
     }
 }
 
@@ -188,17 +193,18 @@ pub struct Keys {
 }
 
 impl Keys {
-    pub fn press(&self, code: KeyCode, down: bool) {
+    /// A key going down or up; `typed` is the printable character a press types on the player's layout, if any.
+    pub fn press(&self, code: KeyCode, down: bool, typed: Option<char>) {
         let Some(key) = oskey(code) else { return };
         let mut state = lock(&self.state);
         if down {
             if state.held.insert(key) {
                 let meta = state.meta_without(key);
-                state.push(KeyEvent { key, meta, down });
+                state.push(KeyEvent { key, meta, down, typed: typed.filter(|typed| !typed.is_control()) });
             }
         } else if state.held.remove(&key) {
             let meta = state.meta_without(key);
-            state.push(KeyEvent { key, meta, down });
+            state.push(KeyEvent { key, meta, down, typed: None });
         }
     }
 
@@ -207,7 +213,7 @@ impl Keys {
         let mut state = lock(&self.state);
         for key in std::mem::take(&mut state.held).into_iter().rev() {
             let meta = state.meta_without(key);
-            state.push(KeyEvent { key, meta, down: false });
+            state.push(KeyEvent { key, meta, down: false, typed: None });
         }
     }
 
@@ -224,7 +230,7 @@ mod tests {
     use super::*;
 
     fn event(key: u8, meta: u8, down: bool) -> KeyEvent {
-        KeyEvent { key, meta, down }
+        KeyEvent { key, meta, down, typed: None }
     }
 
     #[test]
@@ -281,17 +287,17 @@ mod tests {
     fn a_key_with_no_oskey_is_not_heard() {
         assert_eq!(oskey(KeyCode::MediaPlayPause), None);
         let keys = Keys::default();
-        keys.press(KeyCode::MediaPlayPause, true);
+        keys.press(KeyCode::MediaPlayPause, true, None);
         assert!(keys.take(8).is_empty());
     }
 
     #[test]
     fn a_press_and_release_are_two_events_in_order_and_a_repeat_is_none() {
         let keys = Keys::default();
-        keys.press(KeyCode::KeyN, true);
-        keys.press(KeyCode::KeyN, true);
-        keys.press(KeyCode::KeyN, false);
-        keys.press(KeyCode::KeyN, false);
+        keys.press(KeyCode::KeyN, true, None);
+        keys.press(KeyCode::KeyN, true, None);
+        keys.press(KeyCode::KeyN, false, None);
+        keys.press(KeyCode::KeyN, false, None);
         assert_eq!(keys.take(8), [event(0x4e, 0, true), event(0x4e, 0, false)]);
         assert!(keys.take(8).is_empty());
     }
@@ -299,12 +305,12 @@ mod tests {
     #[test]
     fn meta_is_the_other_modifiers_held() {
         let keys = Keys::default();
-        keys.press(KeyCode::ShiftLeft, true);
-        keys.press(KeyCode::KeyQ, true);
-        keys.press(KeyCode::ControlRight, true);
-        keys.press(KeyCode::KeyQ, false);
-        keys.press(KeyCode::ControlRight, false);
-        keys.press(KeyCode::ShiftLeft, false);
+        keys.press(KeyCode::ShiftLeft, true, None);
+        keys.press(KeyCode::KeyQ, true, None);
+        keys.press(KeyCode::ControlRight, true, None);
+        keys.press(KeyCode::KeyQ, false, None);
+        keys.press(KeyCode::ControlRight, false, None);
+        keys.press(KeyCode::ShiftLeft, false, None);
         assert_eq!(
             keys.take(16),
             [
@@ -321,11 +327,11 @@ mod tests {
     #[test]
     fn release_all_lets_go_of_every_key_held() {
         let keys = Keys::default();
-        keys.press(KeyCode::KeyA, true);
-        keys.press(KeyCode::KeyB, true);
+        keys.press(KeyCode::KeyA, true, None);
+        keys.press(KeyCode::KeyB, true, None);
         keys.take(8);
         keys.release_all();
-        keys.press(KeyCode::KeyA, false);
+        keys.press(KeyCode::KeyA, false, None);
         assert_eq!(keys.take(8), [event(0x42, 0, false), event(0x41, 0, false)]);
     }
 
@@ -333,7 +339,7 @@ mod tests {
     fn take_stops_at_its_limit_and_keeps_the_rest() {
         let keys = Keys::default();
         for code in [KeyCode::KeyA, KeyCode::KeyB, KeyCode::KeyC] {
-            keys.press(code, true);
+            keys.press(code, true, None);
         }
         assert_eq!(keys.take(2).len(), 2);
         assert_eq!(keys.take(2), [event(0x43, 0, true)]);
@@ -343,5 +349,25 @@ mod tests {
     fn packed_puts_key_meta_and_direction_in_one_number() {
         assert_eq!(event(0x51, META_SHIFT, true).packed(), 0x1151);
         assert_eq!(event(0xde, 0, false).packed(), 0xde);
+    }
+
+    #[test]
+    fn a_press_carries_the_printable_character_it_types_and_a_release_none() {
+        let keys = Keys::default();
+        keys.press(KeyCode::ShiftLeft, true, None);
+        keys.press(KeyCode::KeyQ, true, Some('Q'));
+        keys.press(KeyCode::KeyQ, false, None);
+        keys.press(KeyCode::Enter, true, Some('\r'));
+        let typed: Vec<Option<char>> = keys.take(8).iter().map(|event| event.typed).collect();
+        assert_eq!(typed, [None, Some('Q'), None, None]);
+    }
+
+    #[test]
+    fn packed_carries_the_typed_code_point_from_bit_13() {
+        let typed = |typed: char| KeyEvent { key: 0x41, meta: META_SHIFT, down: true, typed: Some(typed) }.packed();
+        assert_eq!(typed('A'), 0x1141 | 0x41 << 13);
+        assert_eq!(typed('\u{e9}') >> 13, 0xe9);
+        assert_eq!(typed('\u{1f600}') >> 13, 0x1f600);
+        assert_eq!(typed('\u{10ffff}') >> 13, 0);
     }
 }

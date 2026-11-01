@@ -3,7 +3,8 @@ import { join } from "node:path";
 import { type FFIFunction, type Library as FfiLibrary, type Pointer, dlopen } from "bun:ffi";
 import { Effect } from "effect";
 import type { PointerReading } from "../../src/headless/pointer";
-import { type KeyTransition, unpackKey } from "../../src/headless/keyInput";
+import type { KeyTransition } from "../../src/headless/keyInput";
+import { unpackKey } from "./keyEvents";
 import { buildWindowLibrary, cachedWindowLibrary, sourceHash } from "./library";
 
 const root = join(import.meta.dir, "../..");

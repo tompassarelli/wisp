@@ -4,7 +4,8 @@
 its own, above the map's menus, so the map can hide Warcraft's chat frame and
 show no line twice. It is presentation only: it reads the chat event and writes
 its own frames, and it never touches simulation, rollback or synchronized state.
-Typing stays in Warcraft's Enter box.
+In Warcraft typing stays in Warcraft's Enter box; the native window has none, so
+Wisp gives it a chat line of its own (see Typing in the native window).
 
 Why not move Warcraft's chat frame: changing its level or position has crashed
 the game, the level at game end with chat on screen. A map that hides it
@@ -50,3 +51,51 @@ chat.update(FRAME_SECONDS, box);   // box: { left, bottom, width, rows }, or und
 
 The pure part (`ChatLog`, wrapping, expiry, fade) is wisp:src/ui/chatLog.ts and
 is tested by wisp:src/ui/chat.tests.ts.
+
+## The framed box
+
+A style with `frame` (its own backdrop texture, title, title font size, an optional title bar texture and
+its alpha, the scrollbar's and the entry field's textures, and the entry's
+placeholder and its colour) draws a framed box when `update` is given a
+`ChatSlot` (`{ left, bottom, width, height }`) instead of a `ChatBox`:
+
+```ts
+chat.update(FRAME_SECONDS, { left, bottom, width, height }); // a ChatSlot: the framed box
+chat.update(FRAME_SECONDS, { left, bottom, width, rows });   // a ChatBox: the recent view
+```
+
+- It fills the slot and is always shown: the panel texture as its backdrop, the
+  title bar along the top, every kept line at full opacity, newest at the bottom,
+  as many rows as fit (at most `historyRows`), with a scrollbar beside them whose
+  thumb is the shown rows' share of the rows the history wraps to.
+- Its lines come from the chat event, so in Warcraft what a player types in the
+  Enter box shows here, and in the native window what they type in the box's
+  entry line; both builds show lines through that one path. The box has no
+  scrolling input: the newest rows show.
+- The layout is wisp:src/ui/chatFrame.ts, a pure function tested with the rest
+  of the chat code.
+
+## Typing in the native window
+
+Warcraft has an Enter box and the native window does not, so Wisp's runtime
+keeps a chat line per client (wisp:src/headless/chatEntry.ts), the window's
+stand-in for it:
+
+- Enter opens it, and so does a left click where the map draws it; each typed
+  character goes in (the window sends the character a press types on the
+  player's layout), Backspace takes the last one back, Enter sends it and
+  Escape closes it unsent. An empty line sends nothing.
+- While it is open the game hears no key the player presses; the release of a
+  key pressed before it opened still reaches the game, so no key stays held.
+- Sending is the player's chat event on every client, through the lockstep like
+  a key, so `registerChatEvents`, the panel and the map's own chat commands
+  (such as Smashcraft's `-dev` lines) run as they do for Warcraft's Enter box.
+- The line is local and never synchronized. The map reads it with
+  `WispChatEntryText()` (the text while open, undefined while closed) and tells
+  the runtime where it draws it with `WispSetChatEntryArea(left, bottom, width,
+  height)`; both are Wisp's own natives, absent in Warcraft, so `ChatPanel`
+  makes its entry line only when `typeof WispChatEntryText === "function"`.
+- `ChatPanel` draws the line: in the framed box it is the bottom line, showing
+  the placeholder until the player types, then the text with a blinking caret;
+  in the recent view it appears at the box's bottom only while the player types,
+  with every kept line above it.

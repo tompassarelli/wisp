@@ -47,7 +47,7 @@ pub struct Input {
 }
 
 impl Input {
-    pub fn key(&self, keys: &Keys, code: KeyCode, pressed: bool) {
+    pub fn key(&self, keys: &Keys, code: KeyCode, pressed: bool, typed: Option<char>) {
         let open = self.open.load(Ordering::Acquire);
         let sent = if pressed && code == TOGGLE {
             Some(if open { Event::Close } else { Event::Open })
@@ -68,7 +68,7 @@ impl Input {
                 }
                 lock(&self.events).push(event);
             }
-            None if !open || !pressed => keys.press(code, pressed),
+            None if !open || !pressed => keys.press(code, pressed, typed),
             None => {}
         }
     }

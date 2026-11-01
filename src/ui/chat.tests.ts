@@ -5,6 +5,7 @@ import {
   advanceChat,
   chatName,
   chatOpacity,
+  chatRowCount,
   colourCode,
   createChatLog,
   FRIZ_QUADRATA_WIDTHS,
@@ -14,6 +15,7 @@ import {
   visibleChatRows,
   wrapChat,
 } from "./chatLog";
+import { chatFrameLayout } from "./chatFrame";
 
 const EVEN: GlyphWidths = { space: 1.0, narrow: 1.0, short: 1.0, lower: 1.0, wideLower: 1.0, upper: 1.0, wideUpper: 1.0, other: 1.0 };
 
@@ -83,4 +85,26 @@ test("[reference] chat: opacity holds then ramps down over the fade", () => {
   assertEquals(chatOpacity(9.0, 10.0, 2.0), 0.5);
   assertEquals(chatOpacity(10.0, 10.0, 2.0), 0.0);
   assertEquals(chatOpacity(500.0, -1.0, 2.0), 1.0);
+});
+
+test("[reference] chat: the framed box fills its slot with the title bar on top, the entry line along the bottom and as many rows as fit between them, and the scrollbar's thumb shows the rows' share of the history", () => {
+  const measures = { rowHeight: 0.0078125, margin: 0.00390625, titleHeight: 0.015625, barWidth: 0.00390625, entryHeight: 0.01171875 };
+  const slot = { left: 0.03125, bottom: 0.25, width: 0.25, height: 0.0859375 };
+  const typed = chatFrameLayout(slot, measures, true, 8, 16);
+  assertEquals(typed.entry?.bottom, 0.25390625);
+  assertEquals(typed.rows.bottom, 0.26953125);
+  assertEquals(typed.titleBar.bottom, 0.31640625);
+  assertEquals(typed.rowCount, 5);
+  assertEquals(typed.thumb.height, 0.0244140625);
+  assertEquals(typed.rows.width, 0.23046875);
+  const shown = chatFrameLayout(slot, measures, false, 2, 16);
+  assertEquals(shown.entry, undefined);
+  assertEquals(shown.rows.bottom, 0.25390625);
+  assertEquals(shown.rowCount, 7);
+  assertEquals(shown.thumb.height, shown.track.height);
+  assertEquals(chatFrameLayout(slot, measures, false, 2, 3).rowCount, 3);
+  const log = createChatLog(10);
+  addChatLine(log, 0, "Al", "one two three four five six seven eight");
+  addChatLine(log, 0, "Bo", "hi");
+  assertEquals(chatRowCount(log, 20.0, EVEN), 4);
 });

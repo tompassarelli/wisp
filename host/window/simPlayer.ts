@@ -19,7 +19,7 @@ const WORKER_EXIT_MS = 2000;
 /** Ends the worker once it has ended its own run, which it does as soon as the window stops (`wisp_window_stop` wakes it), so it is never stopped inside a window or sound library call; one still running after 2 s is ended outright. */
 const endWorker = (thread: Worker, exited: Promise<void>) => Effect.promise(() => exited).pipe(Effect.timeoutOption(WORKER_EXIT_MS), Effect.andThen(Effect.sync(() => thread.terminate())));
 
-const NATIVE_HELP = "Arrows / WASD move · J attack · K special · Space jump · L grab · Shift shield · Enter pause";
+const NATIVE_HELP = "Arrows / WASD move · J attack · K special · Space jump · L grab · Shift shield · Esc pause · Enter chat";
 
 /**
  * Opens the native window with a worker thread that owns the frame loop: the worker blocks in the window's `next_event`, steps the game,

@@ -3425,6 +3425,10 @@ declare function BlzFrameGetAlpha(frame: framehandle): number;
 declare function BlzFrameSetSpriteAnimate(frame: framehandle, primaryProp: number, flags: number): void;
 declare function WispFrameSetSpriteTime(frame: framehandle, seconds: number): void;
 declare function WispSetPlaying(playing: boolean): void;
+/** Wisp's own: the native window's chat line, its text while the player types into it and undefined while it is closed. Warcraft III has its Enter box instead and no such call, so a map guards it with `typeof`. */
+declare function WispChatEntryText(): string | undefined;
+/** Wisp's own: where the map draws the native window's chat line, in UI coordinates; a left click there opens the line, and a width or height of 0 is none. Warcraft III has no such call, so a map guards it with `typeof`. */
+declare function WispSetChatEntryArea(left: number, bottom: number, width: number, height: number): void;
 declare function BlzFrameSetTexture(frame: framehandle, texFile: string, flag: number, blend: boolean): void;
 declare function BlzFrameSetScale(frame: framehandle, scale: number): void;
 declare function BlzFrameSetTooltip(frame: framehandle, tooltip: framehandle): void;
