@@ -18,7 +18,7 @@ fn shade_under_a_caster(features: crate::settings::Features) -> Option<(f32, f32
     let floor = flat_quad(&mut vertices, &mut indices, 4000.0, 0.0);
     let caster = flat_quad(&mut vertices, &mut indices, 60.0, 200.0);
     let part = |(first_index, index_count)| model::Part { color_slot: 0, first_index, index_count, layers: vec![model::Layer { paint: Paint::Texture("grey".into()), filter: Filter::Opaque, color_slot: 1, unshaded: false, two_sided: true }] };
-    renderer.add_model("stage", ModelData { vertices, indices, parts: vec![part(floor), part(caster)], rig: Box::new(FlatRig::new([1.0; 4])), emitters: Vec::new() });
+    renderer.add_model("stage", ModelData { vertices, indices, parts: vec![part(floor), part(caster)], rig: Box::new(FlatRig::new([1.0; 4])), emitters: Vec::new(), ribbons: Vec::new(), spawners: Vec::new() });
     let mut scene = Scene { frame: 0, clear: BACKGROUND, ..Scene::default() };
     scene.camera = scene::Camera { view: translation(0.0, 0.0, -500.0), eye: [0.0, 0.0, 500.0], tangent: 1.0, near: 1.0, far: 10_000.0, sky_far: 10_000.0, rise: 0.0, reach: 2000.0 };
     let slant = std::f32::consts::FRAC_1_SQRT_2;
@@ -76,7 +76,7 @@ fn box_on_floor(features: crate::settings::Features, half: [f32; 3], centre: [f3
     let floor = flat_quad(&mut vertices, &mut indices, 6000.0, 0.0);
     let solid = box_of(&mut vertices, &mut indices, half, centre);
     let part = |(first_index, index_count)| model::Part { color_slot: 0, first_index, index_count, layers: vec![model::Layer { paint: Paint::Texture("grey".into()), filter: Filter::Opaque, color_slot: 1, unshaded: false, two_sided: true }] };
-    renderer.add_model("stage", ModelData { vertices, indices, parts: vec![part(floor), part(solid)], rig: Box::new(FlatRig::new([1.0; 4])), emitters: Vec::new() });
+    renderer.add_model("stage", ModelData { vertices, indices, parts: vec![part(floor), part(solid)], rig: Box::new(FlatRig::new([1.0; 4])), emitters: Vec::new(), ribbons: Vec::new(), spawners: Vec::new() });
     let mut scene = Scene { frame: 0, clear: BACKGROUND, ..Scene::default() };
     let slant = std::f32::consts::FRAC_1_SQRT_2;
     scene.light = Some(scene::Light { toward: [slant, 0.0, slant], key: [0.7; 3], ambient: [0.4; 3] });

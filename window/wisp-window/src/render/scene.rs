@@ -87,6 +87,13 @@ pub struct Pose {
     pub unit: bool,
 }
 
+/// A strip the map lays itself this scene: its edges in order, each the world points above and below and the edge's alpha, and one colour 0 to 1; it adds with a soft falloff across and no texture.
+#[derive(Deserialize)]
+pub struct StripPose {
+    pub edges: Vec<[f32; 7]>,
+    pub color: [f32; 3],
+}
+
 /// A weather the map added: the four letters of its id in Warcraft's weather table and the rect it covers (min x, min y, max x, max y).
 #[derive(Deserialize)]
 pub struct WeatherPose {
@@ -119,6 +126,7 @@ pub struct Bolt {
 #[serde(default)]
 pub struct Scene {
     pub lightnings: Vec<Bolt>,
+    pub strips: Vec<StripPose>,
     pub weathers: Vec<WeatherPose>,
     pub camera: Camera,
     pub fog: Option<Fog>,

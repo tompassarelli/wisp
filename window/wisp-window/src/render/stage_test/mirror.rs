@@ -38,7 +38,7 @@ fn the_scene_is_mirrored_in_the_widest_liquid_surface_at_its_own_height() {
 fn banner(two_sided: bool) -> ModelData {
     let corner = |x: f32, z: f32| vertex([x, 0.0, z], [0.0, -1.0, 0.0]);
     let vertices = vec![corner(-50.0, 40.0), corner(50.0, 40.0), corner(50.0, 180.0), corner(-50.0, 180.0)];
-    ModelData { vertices, indices: vec![0, 1, 2, 0, 2, 3], parts: vec![Part { color_slot: 0, first_index: 0, index_count: 6, layers: vec![Layer { paint: Paint::None, filter: Filter::Opaque, color_slot: 1, unshaded: false, two_sided }] }], emitters: Vec::new(), rig: Box::new(Still) }
+    ModelData { vertices, indices: vec![0, 1, 2, 0, 2, 3], parts: vec![Part { color_slot: 0, first_index: 0, index_count: 6, layers: vec![Layer { paint: Paint::None, filter: Filter::Opaque, color_slot: 1, unshaded: false, two_sided }] }], emitters: Vec::new(), ribbons: Vec::new(), spawners: Vec::new(), rig: Box::new(Still) }
 }
 
 fn drawn_with(sheet: Option<bool>) -> Option<(Vec<u8>, (u32, u32))> {

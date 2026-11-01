@@ -11,11 +11,15 @@ mod assets;
 mod gpu;
 mod groups;
 pub mod model;
+mod effects;
+mod emission;
 mod emitters;
 mod frame;
 mod lightning;
 mod weather;
 mod particles;
+mod ribbons;
+mod spawned;
 mod passes;
 mod pipelines;
 mod ripples;
@@ -45,12 +49,13 @@ use math::{multiply, Mat4, IDENTITY};
 use gpu::{bone_storage, frame_group, FrameBuffers, frame_uniform_buffer, instance_storage, color_storage, repeat_sampler, upload, uv_storage, white};
 use {lightning::Lightning, weather::Weather};
 use frame::Viewport;
-use model::{Filter, ModelData, ModelEmitter, Paint, Vertex};
+use model::{Filter, ModelData, ModelEmitter, ModelRibbon, ModelSpawner, Paint, Vertex};
 use groups::Group;
 use {shadow::Shadow, targets::{samples_of, Targets}};
 use uniforms::{lighting_of, FrameUniform, Instance, LayerUniform, Lit, SceneFrame};
 use {liquid::{Glow, WaterSettings}, water::Water};
 use particles::{ParticleFrame, Particles, Slot};
+use effects::Effects;
 use scene::{Pose, Scene};
 use resolution::Resolution;
 use crate::post::{Post, Tuning, TUNING};
@@ -91,6 +96,8 @@ struct GpuModel {
     bones: usize,
     skin: sprite::Skin,
     emitters: Vec<(ModelEmitter, Option<Slot>)>,
+    ribbons: Vec<(ModelRibbon, usize)>,
+    spawners: Vec<ModelSpawner>,
     /// The liquid its water layers are drawn as and where their surface lies, for a model that has them.
     liquid: Option<(liquid::Preset, surface::Surface)>,
     /// The model's box when it has a layer that writes depth, which is what makes it a body that disturbs water.
@@ -180,6 +187,7 @@ pub struct Renderer {
     samples: u32,
     offered_samples: u32,
     particles: Particles,
+    effects: Effects,
     lightning: Lightning,
     weather: Weather,
     pub problems: Vec<String>,
@@ -202,7 +210,7 @@ impl Renderer {
         let [main, sky, mirror, mirror_sky] = ["main frame", "sky frame", "mirrored frame", "mirrored sky frame"].map(|label| FrameSet::new(&device, &frame_layout, label, storage, shadow.bound(), &fighters.view));
         let (water, post) = (Water::new(&device, HDR, &frame_layout, samples), Post::new(&device, &queue, format, HDR, DEPTH, samples));
         let particles = Particles::new(&device, HDR, samples);
-        let (lightning, weather) = (Lightning::new(&device, HDR, &particles, samples), Weather::new(&device, HDR, &particles, samples));
+        let (effects, lightning, weather) = (Effects::new(&device, HDR, &particles, samples, &features), Lightning::new(&device, HDR, &particles, samples), Weather::new(&device, HDR, &particles, samples));
         Self {
             white: upload(&device, &queue, &white()),
             sampler: repeat_sampler(&device),
@@ -264,6 +272,7 @@ impl Renderer {
             samples,
             offered_samples,
             particles,
+            effects,
             lightning,
             weather,
             problems: Vec::new(),
@@ -295,9 +304,10 @@ impl Renderer {
         let liquid = surface::Surface::of_water(&data, &falling_parts).map(|surface| (liquid::Preset::of_model(path), surface));
         let body = if solid { ripples::extent_of(data.vertices.iter().map(|vertex| vertex.position)) } else { None };
         let emitters = self.register_emitters(path, data.emitters);
+        let ribbons = self.register_ribbons(path, data.ribbons);
         let bones = data.rig.bone_count().max(1);
         self.model_ids.insert(path.to_string(), self.models.len());
-        self.models.push(GpuModel { vertices, indices, draws, opaque_first, skin: sprite::Skin::new(data.vertices, data.indices, &data.parts), rig: data.rig, bones, emitters, liquid, body });
+        self.models.push(GpuModel { vertices, indices, draws, opaque_first, skin: sprite::Skin::new(data.vertices, data.indices, &data.parts), rig: data.rig, bones, emitters, ribbons, spawners: data.spawners, liquid, body });
         self.counts.extend([0; groups::KEYS_PER_MODEL]);
     }
 
@@ -338,12 +348,12 @@ impl Renderer {
     }
 
     /// Lays every resident pose out by model: bone matrices into the scratch, instances grouped so each model's are contiguous.
-    fn layout(&mut self, poses: &[Pose], view: &Mat4) {
+    fn layout<'p>(&mut self, poses: impl Iterator<Item = &'p Pose> + Clone, view: &Mat4) {
         self.counts.iter_mut().for_each(|count| *count = 0);
         self.order.clear();
         self.water_level = None;
         let mut widest = 0.0;
-        for pose in poses {
+        for pose in poses.clone() {
             if let Some(&id) = self.model_ids.get(pose.model.as_str()) {
                 if let Some((liquid, surface)) = self.models[id].liquid {
                     let (height, area) = surface.placed(&pose.matrix);
@@ -393,13 +403,16 @@ impl Renderer {
                     let Some(bone) = self.bone_scratch.get(base + emitter.spec.node) else { continue };
                     self.particles.emit((pose.id, index), slot, emitter, sample, &multiply(&pose.matrix, bone), pose.alpha);
                 }
+                self.effects.emit(model, &self.bone_scratch[base..], pose);
             }
         }
     }
 
     /// Poses the sky, grows the storage buffers that outgrew their capacity, uploads the scene's per-frame data and stages its particles and bolts, and says which shadow maps the frame draws.
     fn prepare(&mut self, scene: &Scene, aspect: f32, window: f32, size: (u32, u32)) -> Maps {
-        self.layout(&scene.poses, &scene.camera.view);
+        let spawned = self.effects.fly(&self.model_ids, &self.models);
+        self.layout(scene.poses.iter().chain(spawned.iter()), &scene.camera.view);
+        self.effects.restore(spawned);
         let sky = scene.sky.as_ref().and_then(|pose| self.model_ids.get(pose.model.as_str()).map(|&id| (id, pose)));
         let sky_base = self.bone_scratch.len();
         let sky_color_base = self.color_scratch.len();
@@ -457,6 +470,7 @@ impl Renderer {
             &self.queue,
             &ParticleFrame { base: main.base, right: [view[0], view[4], view[8], 0.0], up: [view[1], view[5], view[9], 0.0], eye_and_now: [eye[0], eye[1], eye[2], 0.0] },
         );
+        self.effects.finish(&self.device, &self.queue, &scene.strips, &self.white, &self.sampler, &mut self.problems);
         self.problems.append(&mut self.particles.problems);
         self.problems.extend(self.lightning.stage(lightning::Art { device: &self.device, queue: &self.queue, textures: &self.textures, white: &self.white, sampler: &self.sampler, settled: self.decoding.is_empty() }, &scene.lightnings));
         self.weather.stage(&self.queue, &scene.camera, &scene.weathers, &self.features);

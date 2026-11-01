@@ -18,6 +18,11 @@ pub(super) fn device() -> Option<(wgpu::Device, wgpu::Queue)> {
     crate::test_gpu::device()
 }
 
+/// The tick of a scene at `frame` one frame after the last, for emitters run by hand between draws.
+pub(super) fn stepped(frame: u32) -> emission::Tick {
+    emission::Tick { now: frame as f32 / 60.0, step: 1.0 / 60.0, restarted: false }
+}
+
 fn translation(x: f32, y: f32, z: f32) -> Mat4 {
     let mut matrix = IDENTITY;
     matrix[12..15].copy_from_slice(&[x, y, z]);
@@ -109,7 +114,7 @@ fn a_particle_and_a_bolt_reach_the_screen() {
     let mut scene = Scene { frame: 0, ..Scene::default() };
     scene.camera = scene::Camera { view: IDENTITY, eye: [0.0; 3], tangent: 1.0, near: 1.0, far: 10_000.0, sky_far: 10_000.0, rise: 0.0, reach: 0.0 };
     let _ = render(&mut renderer, &device, &queue, &scene);
-    renderer.particles.begin(1);
+    renderer.particles.begin(stepped(1));
     let sample = EmitterSample { visible: true, rate: 120.0, ..EmitterSample::default() };
     renderer.particles.emit((1, 0), slot, &emitter, &sample, &translation(0.0, 0.0, -100.0), 1.0);
     scene.frame = 1;
@@ -141,7 +146,7 @@ fn each_preset_draws_the_scene_with_its_post_effects_on_or_off() {
         scene.frame = round as u32 * 2;
         let _ = render(&mut renderer, &device, &queue, &scene);
         scene.frame += 1;
-        renderer.particles.begin(scene.frame);
+        renderer.particles.begin(stepped(scene.frame));
         let sample = EmitterSample { visible: true, rate: 120.0, ..EmitterSample::default() };
         renderer.particles.emit((1, 0), slot, &emitter, &sample, &translation(0.0, 0.0, -100.0), 1.0);
         let image = render(&mut renderer, &device, &queue, &scene);
@@ -247,7 +252,7 @@ fn centre_of_pose(sheets: &[Sheet], geoset: [f32; 4], alpha: f32) -> [f32; 3] {
         };
         parts.push(model::Part { color_slot: 0, first_index, index_count: 6, layers: vec![model::Layer { paint, filter: sheet.filter, color_slot: 1, unshaded: false, two_sided: true }] });
     }
-    renderer.add_model("sheets", ModelData { vertices, indices, parts, rig: Box::new(FlatRig::new(geoset)), emitters: Vec::new() });
+    renderer.add_model("sheets", ModelData { vertices, indices, parts, rig: Box::new(FlatRig::new(geoset)), emitters: Vec::new(), ribbons: Vec::new(), spawners: Vec::new() });
     let mut scene = Scene { frame: 0, clear: BACKGROUND, ..Scene::default() };
     scene.camera = scene::Camera { view: IDENTITY, eye: [0.0; 3], tangent: 1.0, near: 1.0, far: 10_000.0, sky_far: 10_000.0, rise: 0.0, reach: 0.0 };
     scene.poses = vec![scene::Pose { id: 0, model: "sheets".into(), matrix: IDENTITY, sequence: 0, frame: 0.0, clock: 0.0, alpha, color: [1.0; 3], team: TEAM, unit: false }];
@@ -395,7 +400,7 @@ fn a_rig_is_posed_with_the_scene_clock_in_seconds() {
     let seen = std::sync::Arc::new(std::sync::Mutex::new(-1.0));
     let draw = model::Part { color_slot: 0, first_index: 0, index_count: 3, layers: vec![model::Layer { paint: Paint::None, filter: Filter::Opaque, color_slot: 1, unshaded: false, two_sided: true }] };
     let vertices = vec![Vertex { position: [0.0; 3], normal: [0.0, 0.0, 1.0], uv: [0.0; 2], bones: [0; 4], weights: [1.0, 0.0, 0.0, 0.0] }; 3];
-    renderer.add_model("clock", ModelData { vertices, indices: vec![0, 1, 2], parts: vec![draw], rig: Box::new(ClockRig(seen.clone())), emitters: Vec::new() });
+    renderer.add_model("clock", ModelData { vertices, indices: vec![0, 1, 2], parts: vec![draw], rig: Box::new(ClockRig(seen.clone())), emitters: Vec::new(), ribbons: Vec::new(), spawners: Vec::new() });
     let mut scene = Scene::default();
     scene.camera = scene::Camera { view: IDENTITY, eye: [0.0; 3], tangent: 1.0, near: 1.0, far: 10_000.0, sky_far: 10_000.0, rise: 0.0, reach: 0.0 };
     scene.poses = vec![scene::Pose { id: 0, model: "clock".into(), matrix: IDENTITY, sequence: 0, frame: 0.0, clock: 2.5, alpha: 1.0, color: [1.0; 3], team: TEAM, unit: false }];
@@ -409,7 +414,7 @@ fn a_model_drawn_into_a_sprite_frame_binds_the_current_scene_uniform() {
     let mut renderer = Renderer::new(device.clone(), queue.clone(), FORMAT, crate::remaster::Quality::Off, crate::settings::Preset::High.features());
     let draw = model::Part { color_slot: 0, first_index: 0, index_count: 3, layers: vec![model::Layer { paint: Paint::None, filter: Filter::Opaque, color_slot: 1, unshaded: false, two_sided: true }] };
     let corner = |x: f32, y: f32| Vertex { position: [x, y, 0.0], normal: [0.0, 0.0, 1.0], uv: [0.0; 2], bones: [0; 4], weights: [1.0, 0.0, 0.0, 0.0] };
-    renderer.add_model("fighter", ModelData { vertices: vec![corner(-40.0, 0.0), corner(40.0, 0.0), corner(0.0, 120.0)], indices: vec![0, 1, 2], parts: vec![draw], rig: Box::new(FlatRig::new([1.0; 4])), emitters: Vec::new() });
+    renderer.add_model("fighter", ModelData { vertices: vec![corner(-40.0, 0.0), corner(40.0, 0.0), corner(0.0, 120.0)], indices: vec![0, 1, 2], parts: vec![draw], rig: Box::new(FlatRig::new([1.0; 4])), emitters: Vec::new(), ribbons: Vec::new(), spawners: Vec::new() });
     let shot = sprite::Shot { model: "fighter".into(), sequence: 0, frame: 0.0, clock: 0.0, bounds: [-40.0, 0.0, 0.0, 40.0, 0.0, 120.0], team: [1.0; 3] };
     let scope = device.push_error_scope(wgpu::ErrorFilter::Validation);
     let mut encoder = device.create_command_encoder(&Default::default());
@@ -422,4 +427,5 @@ fn a_model_drawn_into_a_sprite_frame_binds_the_current_scene_uniform() {
 }
 
 mod particles;
+mod ribbons;
 mod skin;

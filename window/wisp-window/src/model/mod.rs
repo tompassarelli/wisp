@@ -12,7 +12,7 @@ use std::fmt;
 
 pub use pose::{Facing, Mat4, Playhead, Pose};
 pub use skin::{skin_position, Blends, SkinVertex};
-pub use emitter::{Emitter2, Scalar, LINE_EMITTER, XY_QUAD};
+pub use emitter::{Emitter1, Emitter2, Ribbon, Scalar, EMITTER_USES_MDL, LINE_EMITTER, XY_QUAD};
 pub use track::{global_sequence_frame, rotate, sample, Key, LineType, Track};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -134,6 +134,8 @@ pub struct Model {
     pub materials: Vec<Material>,
     pub textures: Vec<Texture>,
     pub emitters: Vec<Emitter2>,
+    pub ribbons: Vec<Ribbon>,
+    pub emitters1: Vec<Emitter1>,
     pub geoset_anims: Vec<GeosetAnim>,
     pub texture_anims: Vec<TextureAnim>,
 }
@@ -183,6 +185,17 @@ impl Model {
             node.pivot = pivots.get(node.object_id).copied().unwrap_or_default();
         }
         for emitter in &mut self.emitters {
+            if let Some(node) = self.nodes.get(emitter.node).and_then(Option::as_ref) {
+                emitter.flags = node.flags;
+                emitter.pivot = node.pivot;
+            }
+        }
+        for ribbon in &mut self.ribbons {
+            if let Some(node) = self.nodes.get(ribbon.node).and_then(Option::as_ref) {
+                ribbon.pivot = node.pivot;
+            }
+        }
+        for emitter in &mut self.emitters1 {
             if let Some(node) = self.nodes.get(emitter.node).and_then(Option::as_ref) {
                 emitter.flags = node.flags;
                 emitter.pivot = node.pivot;

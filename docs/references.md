@@ -117,6 +117,8 @@ Read for method only (2026-10-31). Neither states a licence, so no code, shader 
 - Alex Tardif, "Water Walkthrough", https://alextardif.com/Water.html. Gerstner waves with edge dampening, two scrolling normal layers combined in tangent space, noise-broken specular glints, reflections blended by Fresnel falloff, normal-driven refraction with an above-surface rejection test, depth-softened contact alpha, crest and shore foam.
 - keobkeig, "Realistic Water Tutorial", https://keobkeig.dev/tutorials/realistic-water-tutorial. Reoriented normal blending of the scrolling layers, Fresnel with F0 0.02, projected caustics from two scrolling layers combined with min, Beer-Lambert depth absorption, and the rule that the Gerstner sum of steepness, wavenumber and amplitude stays under 1.
 
+- mdx-m3-viewer (Chananya Freiman, MIT), https://github.com/flowtsohg/mdx-m3-viewer, read 2026-11-01 for how ribbon and version-1 emitters behave (`src/viewer/handlers/mdx/ribbon.ts`, `ribbonemitter.ts`, `particle.ts`); the facts are recorded in [native-window-plan.md](native-window-plan.md) ("Ribbons", "Version-1 emitters") and no code is copied.
+
 ## Tools
 
 - PresentMon (Intel, MIT), https://github.com/GameTechDev/PresentMon. Run

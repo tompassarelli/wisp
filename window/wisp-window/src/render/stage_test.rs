@@ -80,7 +80,7 @@ fn block(low: [f32; 3], high: [f32; 3]) -> (Vec<Vertex>, Vec<u32>) {
 
 fn model((vertices, indices): (Vec<Vertex>, Vec<u32>), paint: Paint, filter: Filter) -> ModelData {
     let count = indices.len() as u32;
-    ModelData { vertices, indices, parts: vec![Part { color_slot: 0, first_index: 0, index_count: count, layers: vec![Layer { paint, filter, color_slot: 1, unshaded: false, two_sided: true }] }], emitters: Vec::new(), rig: Box::new(Still) }
+    ModelData { vertices, indices, parts: vec![Part { color_slot: 0, first_index: 0, index_count: count, layers: vec![Layer { paint, filter, color_slot: 1, unshaded: false, two_sided: true }] }], emitters: Vec::new(), ribbons: Vec::new(), spawners: Vec::new(), rig: Box::new(Still) }
 }
 
 /// A bed that rises from deep water in front to the shore at the back, so the water has a shallow end to read against.
@@ -362,7 +362,7 @@ fn a_pose_hands_the_rig_its_clock_in_seconds_so_global_sequences_run_at_game_spe
     renderer.add_model("clocked", data);
     let mut pose = placed("clocked", 0.0, 0.0, 0.0, [1.0; 3]);
     pose.clock = 2.5;
-    renderer.layout(&[pose], &IDENTITY);
+    renderer.layout([pose].iter(), &IDENTITY);
     assert_eq!(f32::from_bits(seen.load(std::sync::atomic::Ordering::Relaxed)), 2.5);
 }
 

@@ -82,6 +82,18 @@ pub trait Rig: Send {
     fn uv_rows(&self) -> &[[f32; 4]];
     /// What each of the model's particle emitters is doing at the pose the last `pose` call wrote.
     fn emitters(&self) -> &[EmitterSample];
+    /// What each of the model's ribbon emitters is doing at that pose.
+    fn ribbons(&self) -> &[RibbonSample] {
+        &[]
+    }
+    /// What each of the model's version-1 emitters is doing at that pose.
+    fn spawners(&self) -> &[SpawnerSample] {
+        &[]
+    }
+    /// The first and last frame of `sequence`, for a model drawn by a version-1 emitter, which plays its first sequence.
+    fn interval(&self, _sequence: usize) -> Option<[u32; 2]> {
+        None
+    }
 }
 
 /// An emitter's animated values at one pose.
@@ -99,6 +111,48 @@ pub struct EmitterSample {
     pub gravity: f32,
 }
 
+/// A ribbon emitter's animated values at one pose: it lays edges only while `visible`, and its whole strip takes the current colour, alpha and texture cell.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct RibbonSample {
+    pub visible: bool,
+    pub above: f32,
+    pub below: f32,
+    pub color: [f32; 3],
+    pub alpha: f32,
+    pub slot: u32,
+}
+
+/// A version-1 emitter's animated values at one pose.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct SpawnerSample {
+    pub visible: bool,
+    pub rate: f32,
+    pub speed: f32,
+    pub latitude: f32,
+    pub gravity: f32,
+    pub life: f32,
+}
+
+/// One ribbon emitter of a model: where it sits and what it paints with, from its material's first layer.
+pub struct ModelRibbon {
+    pub node: usize,
+    pub pivot: [f32; 3],
+    pub life_span: f32,
+    pub emission_rate: f32,
+    pub gravity: f32,
+    pub rows: u32,
+    pub columns: u32,
+    pub paint: Paint,
+    pub filter: Filter,
+}
+
+/// One version-1 emitter of a model: the node it flings from and the model it flings.
+pub struct ModelSpawner {
+    pub node: usize,
+    pub pivot: [f32; 3],
+    pub path: String,
+}
+
 /// One particle emitter of a model and what it is painted with.
 pub struct ModelEmitter {
     pub spec: Emitter2,
@@ -111,6 +165,8 @@ pub struct ModelData {
     pub parts: Vec<Part>,
     pub rig: Box<dyn Rig>,
     pub emitters: Vec<ModelEmitter>,
+    pub ribbons: Vec<ModelRibbon>,
+    pub spawners: Vec<ModelSpawner>,
 }
 
 #[cfg(test)]

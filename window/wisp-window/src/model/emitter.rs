@@ -1,4 +1,5 @@
 use super::pose::Playhead;
+use super::Color;
 use super::track::{Key, Track};
 
 /// A number the file stores either fixed or as an animation track; a track with no key in the shown sequence reads as `default`.
@@ -63,3 +64,43 @@ pub struct Emitter2 {
 
 pub const LINE_EMITTER: u32 = 131_072;
 pub const XY_QUAD: u32 = 1_048_576;
+
+/// A ribbon emitter (`RIBB`): a strip laid behind its node, one edge per emission, from `height_above` to `height_below` along the node's Y axis.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Ribbon {
+    pub node: usize,
+    pub pivot: [f32; 3],
+    pub height_above: Scalar,
+    pub height_below: Scalar,
+    pub alpha: Scalar,
+    pub color: Color,
+    pub life_span: f32,
+    /// The cell of the material's texture, counted along rows of `columns`, that the strip shows.
+    pub texture_slot: Scalar,
+    pub emission_rate: f32,
+    pub rows: u32,
+    pub columns: u32,
+    pub material_id: i32,
+    pub gravity: f32,
+    pub visibility: Scalar,
+}
+
+/// A version-1 particle emitter (`PREM`): each particle is a copy of the model at `path`, flung from the node and pulled down by gravity.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Emitter1 {
+    pub node: usize,
+    pub flags: u32,
+    pub pivot: [f32; 3],
+    pub emission_rate: Scalar,
+    pub gravity: Scalar,
+    pub longitude: Scalar,
+    /// Radians, unlike a version-2 emitter's degrees.
+    pub latitude: Scalar,
+    pub path: String,
+    pub life_span: Scalar,
+    pub speed: Scalar,
+    pub visibility: Scalar,
+}
+
+/// The node flag of a version-1 emitter whose particles are models; an emitter without it names an image, which Classic models do not use.
+pub const EMITTER_USES_MDL: u32 = 32_768;

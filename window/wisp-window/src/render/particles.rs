@@ -9,6 +9,7 @@ use std::mem::size_of;
 
 use bytemuck::{Pod, Zeroable};
 
+use super::emission::Tick;
 use super::math::Mat4;
 use super::model::{EmitterSample, Filter, ModelEmitter};
 use super::pipelines::{blend_of, entry};
@@ -18,8 +19,6 @@ use crate::model::{LINE_EMITTER, XY_QUAD};
 const RING: usize = 16 * 1024;
 const SPECS: usize = 1024;
 const BORN_PER_STEP: u32 = 256;
-const FRAMES_PER_SECOND: f32 = 60.0;
-const LONGEST_STEP: f32 = 0.25;
 const HEAD: u32 = 1;
 const TAIL: u32 = 2;
 const FLAT: u32 = 4;
@@ -94,7 +93,6 @@ pub(super) struct Particles {
     ring_ids: HashMap<(String, usize, bool), usize>,
     running: HashMap<(u32, u32), Running>,
     generation: u64,
-    frame: Option<u32>,
     now: f32,
     step: f32,
     random: u64,
@@ -173,7 +171,6 @@ impl Particles {
             ring_ids: HashMap::new(),
             running: HashMap::new(),
             generation: 0,
-            frame: None,
             now: 0.0,
             step: 0.0,
             random: 0x9E37_79B9_7F4A_7C15,
@@ -231,24 +228,18 @@ impl Particles {
         &self.frame_group
     }
 
-    /// Starts a scene: time is the scene's game frame at 60 per second, so a scene drawn twice births nothing twice and a jump back clears the sky.
-    pub(super) fn begin(&mut self, frame: u32) {
-        let seconds = frame as f32 / FRAMES_PER_SECOND;
+    /// Starts a scene at `tick`; a restarted clock clears the sky.
+    pub(super) fn begin(&mut self, tick: Tick) {
         self.generation += 1;
-        self.step = match self.frame {
-            Some(last) if frame >= last && seconds - self.now <= LONGEST_STEP => seconds - self.now,
-            Some(_) => {
-                self.running.clear();
-                for ring in &mut self.rings {
-                    ring.live = 0;
-                    ring.staged.clear();
-                }
-                0.0
+        if tick.restarted {
+            self.running.clear();
+            for ring in &mut self.rings {
+                ring.live = 0;
+                ring.staged.clear();
             }
-            None => 0.0,
-        };
-        self.frame = Some(frame);
-        self.now = seconds;
+        }
+        self.step = tick.step;
+        self.now = tick.now;
     }
 
     fn random(&mut self, low: f32, high: f32) -> f32 {

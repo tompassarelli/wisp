@@ -135,6 +135,7 @@ export function createModelLibrary(read: AssetReader, sink: AssetSink, report: (
     await Promise.all(painted.filter((texture) => !isWaterFrame(texture.Image)).map((texture) => push(texture.Image)));
     if (painted.some((texture) => isWaterFrame(texture.Image))) await pushWaterFrames();
     sink.asset(path, parsable);
+    for (const emitter of model.ParticleEmitters) if (/\.md[lx]$/i.test(emitter.Path)) sequences(emitter.Path);
     const box = (low: ArrayLike<number> | null | undefined, high: ArrayLike<number> | null | undefined): Extent | undefined =>
       low && high && (high[0] ?? 0) > (low[0] ?? 0) ? [low[0] ?? 0, low[1] ?? 0, low[2] ?? 0, high[0] ?? 0, high[1] ?? 0, high[2] ?? 0] : undefined;
     const whole = box(model.Info.MinimumExtent, model.Info.MaximumExtent) ?? [-50, -50, 0, 50, 50, 100];
@@ -145,6 +146,16 @@ export function createModelLibrary(read: AssetReader, sink: AssetSink, report: (
     };
   };
   let reading = 0;
+  const sequences = (path: string): readonly AnimationSequence[] | undefined => {
+    const known = entries.get(path);
+    if (known === undefined) {
+      entries.set(path, "loading");
+      reading++;
+      load(path).then((loaded) => { entries.set(path, loaded); reading--; }, (cause: unknown) => { entries.set(path, "failed"); reading--; report(`${path}: ${cause instanceof Error ? cause.message : String(cause)}`); });
+      return undefined;
+    }
+    return typeof known === "string" ? undefined : known.sequences;
+  };
   return {
     loading: () => reading + lights.loading() + lightnings.loading(),
     show(paths: readonly string[]): void {
@@ -157,16 +168,7 @@ export function createModelLibrary(read: AssetReader, sink: AssetSink, report: (
     light: lights.light,
     lightning: lightnings.look,
     controlSkin: controls.skin,
-    sequences(path: string): readonly AnimationSequence[] | undefined {
-      const known = entries.get(path);
-      if (known === undefined) {
-        entries.set(path, "loading");
-        reading++;
-        load(path).then((loaded) => { entries.set(path, loaded); reading--; }, (cause: unknown) => { entries.set(path, "failed"); reading--; report(`${path}: ${cause instanceof Error ? cause.message : String(cause)}`); });
-        return undefined;
-      }
-      return typeof known === "string" ? undefined : known.sequences;
-    },
+    sequences,
     extent(path: string, sequence: number): Extent | undefined {
       const known = entries.get(path);
       return known === undefined || typeof known === "string" ? undefined : known.extents[sequence] ?? known.extent;

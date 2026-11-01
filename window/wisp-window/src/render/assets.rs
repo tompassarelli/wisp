@@ -327,6 +327,7 @@ impl Renderer {
     pub fn set_features(&mut self, features: Features) {
         self.features = features;
         self.resolution.set(features.render_scale);
+        self.effects.ribbons.density = f32::from(features.ribbon_percent) / 100.0;
         self.set_shadow_side(match features.shadows { Shadows::Off => 0, Shadows::Map(side) => side });
         self.set_fighter_side(features.fighter_shadows);
         self.set_post_tuning(tuning_of(features, self.tuning));

@@ -155,7 +155,7 @@ impl Renderer {
     /// `draw`, with each pass writing its stamps through `timer`.
     pub fn draw_timed(&mut self, encoder: &mut wgpu::CommandEncoder, timer: &mut PassTimer, target: &wgpu::TextureView, window_size: (u32, u32), aspect: f32, scene: &Scene) {
         let size = self.fit_targets(window_size);
-        self.particles.begin(scene.frame);
+        self.particles.begin(self.effects.begin(scene.frame));
         let window = size.0 as f32 / size.1.max(1) as f32;
         let maps = self.prepare(scene, aspect, window, size);
         if maps.sun && !self.groups.is_empty() {
@@ -212,6 +212,7 @@ impl Renderer {
             pass.set_bind_group(0, &self.main.group, &[]);
             self.draw_both(&mut pass, &self.groups, Stage::Soft, None);
             self.particles.draw(&mut pass, false);
+            self.effects.draw(&mut pass, &self.particles);
             self.lightning.draw(&mut pass, &self.particles);
             self.weather.draw(&mut pass, &self.particles);
             drop(pass);
@@ -223,6 +224,7 @@ impl Renderer {
             pass.set_bind_group(0, &self.main.group, &[]);
             self.draw_both(&mut pass, &self.groups, Stage::Soft, None);
             self.particles.draw(&mut pass, false);
+            self.effects.draw(&mut pass, &self.particles);
             self.lightning.draw(&mut pass, &self.particles);
             self.weather.draw(&mut pass, &self.particles);
             drop(pass);

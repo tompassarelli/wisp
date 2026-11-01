@@ -26,11 +26,11 @@ fn fighter_on_floor(features: Features, unit: bool, overhead: Overhead) -> Optio
     if overhead == Overhead::Plate {
         parts.push(part(box_of(&mut vertices, &mut indices, [50.0, 100.0, 2.0], [300.0, 0.0, 400.0])));
     }
-    renderer.add_model("stage", ModelData { vertices, indices, parts, rig: Box::new(FlatRig::new([1.0; 4])), emitters: Vec::new() });
+    renderer.add_model("stage", ModelData { vertices, indices, parts, rig: Box::new(FlatRig::new([1.0; 4])), emitters: Vec::new(), ribbons: Vec::new(), spawners: Vec::new() });
     let (mut vertices, mut indices) = (Vec::new(), Vec::new());
     let body = box_of(&mut vertices, &mut indices, [60.0, 60.0, 20.0], [0.0, 0.0, 20.0]);
     let pillar = box_of(&mut vertices, &mut indices, [10.0, 60.0, 60.0], [70.0, 0.0, 60.0]);
-    renderer.add_model("fighter", ModelData { vertices, indices, parts: vec![part(body), part(pillar)], rig: Box::new(FlatRig::new([1.0; 4])), emitters: Vec::new() });
+    renderer.add_model("fighter", ModelData { vertices, indices, parts: vec![part(body), part(pillar)], rig: Box::new(FlatRig::new([1.0; 4])), emitters: Vec::new(), ribbons: Vec::new(), spawners: Vec::new() });
     let mut scene = Scene { frame: 0, clear: BACKGROUND, ..Scene::default() };
     let slant = std::f32::consts::FRAC_1_SQRT_2;
     scene.light = Some(scene::Light { toward: [slant, 0.0, slant], key: [0.7; 3], ambient: [0.4; 3] });

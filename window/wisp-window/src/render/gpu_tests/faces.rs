@@ -11,7 +11,7 @@ fn sheet_shows(winding: [u32; 6], two_sided: bool) -> Option<bool> {
     let mut renderer = Renderer::new(device.clone(), queue.clone(), FORMAT, crate::remaster::Quality::Off, crate::settings::Preset::Low.features());
     let vertices = [(-60.0, -60.0), (60.0, -60.0), (60.0, 60.0), (-60.0, 60.0)].map(|(x, y)| Vertex { position: [x, y, 0.0], normal: [0.0, 0.0, 1.0], uv: [0.0; 2], bones: [0; 4], weights: [1.0, 0.0, 0.0, 0.0] }).to_vec();
     let layer = model::Layer { paint: Paint::None, filter: Filter::Opaque, color_slot: 1, unshaded: true, two_sided };
-    renderer.add_model("sheet", ModelData { vertices, indices: winding.to_vec(), parts: vec![model::Part { color_slot: 0, first_index: 0, index_count: 6, layers: vec![layer] }], rig: Box::new(FlatRig::new([1.0; 4])), emitters: Vec::new() });
+    renderer.add_model("sheet", ModelData { vertices, indices: winding.to_vec(), parts: vec![model::Part { color_slot: 0, first_index: 0, index_count: 6, layers: vec![layer] }], rig: Box::new(FlatRig::new([1.0; 4])), emitters: Vec::new(), ribbons: Vec::new(), spawners: Vec::new() });
     let mut scene = Scene { frame: 0, clear: BACKGROUND, ..Scene::default() };
     scene.camera = scene::Camera { view: translation(0.0, 0.0, -500.0), eye: [0.0, 0.0, 500.0], tangent: 1.0, near: 1.0, far: 10_000.0, sky_far: 10_000.0, rise: 0.0, reach: 0.0 };
     let empty = render(&mut renderer, &device, &queue, &scene);

@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import type { AnimationSequence } from "../../src/game/native/animation";
 import { createModelLibrary, drawScene, preloadAssets } from "../../host/window/drawScene";
 import type { RenderScene } from "../../host/render/renderScene";
+import { generateMDX, parseMDL } from "../../vendor/war3-model.mjs";
 
 const until = async (check: () => boolean) => {
   for (const deadline = Date.now() + 5000; !check() && Date.now() < deadline;) await Bun.sleep(1);
@@ -156,4 +157,32 @@ test("[boundary] drawScene sends each ribbon as a strip of its edges and colour"
   const ribbons = [{ id: 0, edges: [[1, 2, 3, 4, 5, 6, 0], [7, 8, 9, 10, 11, 12, 0.85]], color: [0.35, 1, 0.2] }];
   const drawn = drawScene({ ...scene, effects: [], ribbons } as unknown as RenderScene, { sequences: () => undefined, show: () => undefined, loading: () => 0, light: () => undefined, lightning: () => undefined });
   expect(drawn.strips).toEqual([{ edges: [[1, 2, 3, 4, 5, 6, 0], [7, 8, 9, 10, 11, 12, 0.85]], color: [0.35, 1, 0.2] }]);
+});
+
+test("modelLibrary_reads_and_pushes_the_model_a_version_one_emitter_flings", async () => {
+  const mdl = `Version { FormatVersion 800, }
+Model "Tree" { BlendTime 150, MinimumExtent { -1, -1, -1 }, MaximumExtent { 1, 1, 1 }, }
+Sequences 1 { Anim "Stand" { Interval { 0, 1000 }, MinimumExtent { -1, -1, -1 }, MaximumExtent { 1, 1, 1 }, } }
+ParticleEmitter "Leaves" {
+  ObjectId 0,
+  EmitterUsesMDL,
+  static EmissionRate 10,
+  static Gravity 0,
+  static Longitude 0,
+  static Latitude 0,
+  Particle {
+    static LifeSpan 1,
+    static InitVelocity 10,
+    Path "Shared\\Leaf.mdl",
+  }
+}
+PivotPoints 1 { { 0, 0, 0 }, }
+`;
+  const tree = new Uint8Array(generateMDX(parseMDL(mdl)));
+  const read: string[] = [], pushed: string[] = [];
+  const library = createModelLibrary(async (path) => { read.push(path); return path === "tree.mdx" ? tree : undefined; }, { asset: (path) => { pushed.push(path); } }, () => undefined);
+  library.sequences("tree.mdx");
+  await until(() => read.includes("Shared\\Leaf.mdl") && library.loading() === 0);
+  expect(pushed).toEqual(["tree.mdx"]);
+  expect(read).toEqual(["tree.mdx", "Shared\\Leaf.mdl"]);
 });

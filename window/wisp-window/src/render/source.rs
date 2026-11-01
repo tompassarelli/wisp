@@ -5,7 +5,7 @@ use crate::model::{self, global_sequence_frame, Facing, Playhead, Pose};
 use super::math::Mat4;
 use crate::remaster::Quality;
 
-use super::model::{EmitterSample, Filter, Layer, ModelData, ModelEmitter, Paint, Part, Rig, Vertex};
+use super::model::{EmitterSample, Filter, Layer, ModelData, ModelEmitter, ModelRibbon, ModelSpawner, Paint, Part, RibbonSample, Rig, SpawnerSample, Vertex};
 use super::tessellate::tessellate;
 
 const TEAM_COLOR: u32 = 1;
@@ -23,6 +23,8 @@ struct MdxRig {
     playhead: Playhead,
     pose: Pose<'static>,
     samples: Vec<EmitterSample>,
+    ribbons: Vec<RibbonSample>,
+    spawners: Vec<SpawnerSample>,
     colors: Vec<[f32; 4]>,
     slots: Vec<LayerSlot>,
     uv_rows: Vec<[f32; 4]>,
@@ -83,6 +85,23 @@ impl Rig for MdxRig {
                 gravity: emitter.gravity.at(head, 0.0),
             };
         }
+        let head = &self.playhead;
+        for (ribbon, sample) in self.model.ribbons.iter().zip(&mut self.ribbons) {
+            let at = |value: &model::Scalar| value.at(head, value.fixed);
+            let alpha = at(&ribbon.alpha);
+            *sample = RibbonSample {
+                visible: alpha > 0.0 && ribbon.visibility.at(head, 1.0) > 0.0,
+                above: at(&ribbon.height_above),
+                below: at(&ribbon.height_below),
+                color: ribbon.color.track.as_ref().and_then(|track| track.vector(head)).unwrap_or(ribbon.color.fixed),
+                alpha,
+                slot: at(&ribbon.texture_slot).round().max(0.0) as u32,
+            };
+        }
+        for (emitter, sample) in self.model.emitters1.iter().zip(&mut self.spawners) {
+            let at = |value: &model::Scalar| value.at(head, value.fixed);
+            *sample = SpawnerSample { visible: emitter.visibility.at(head, 1.0) > 0.0, rate: at(&emitter.emission_rate), speed: at(&emitter.speed), latitude: at(&emitter.latitude), gravity: at(&emitter.gravity), life: at(&emitter.life_span) };
+        }
     }
 
     fn colors(&self) -> &[[f32; 4]] {
@@ -95,6 +114,18 @@ impl Rig for MdxRig {
 
     fn emitters(&self) -> &[EmitterSample] {
         &self.samples
+    }
+
+    fn ribbons(&self) -> &[RibbonSample] {
+        &self.ribbons
+    }
+
+    fn spawners(&self) -> &[SpawnerSample] {
+        &self.spawners
+    }
+
+    fn interval(&self, sequence: usize) -> Option<[u32; 2]> {
+        self.model.sequences.get(sequence).map(|found| found.interval)
     }
 }
 
@@ -138,6 +169,13 @@ fn without_stand_in(mut layers: Vec<Layer>) -> Vec<Layer> {
         layers.drain(..water);
     }
     layers
+}
+
+/// A ribbon paints with its material's first layer: its texture and its filter mode.
+fn ribbon_of(model: &model::Model, ribbon: &model::Ribbon) -> ModelRibbon {
+    let layer = usize::try_from(ribbon.material_id).ok().and_then(|index| model.materials.get(index)).and_then(|material| material.layers.first());
+    let (paint, filter) = layer.map_or((Paint::None, Filter::Blend), |layer| (paint(model, layer.texture_id), Filter::from_index(layer.filter_mode)));
+    ModelRibbon { node: ribbon.node, pivot: ribbon.pivot, life_span: ribbon.life_span, emission_rate: ribbon.emission_rate, gravity: ribbon.gravity, rows: ribbon.rows, columns: ribbon.columns, paint, filter }
 }
 
 pub fn model(bytes: &[u8], quality: Quality) -> Result<ModelData, String> {
@@ -192,18 +230,22 @@ pub(super) fn build(parsed: model::Model, quality: Quality) -> Result<ModelData,
         parts.push(Part { color_slot: geoset_index as u32, first_index, index_count: indices.len() as u32 - first_index, layers });
     }
     let emitters = model.emitters.iter().map(|emitter| ModelEmitter { spec: emitter.clone(), paint: paint(model, emitter.texture_id) }).collect();
-    let placed: Vec<usize> = model.emitters.iter().map(|emitter| emitter.node).collect();
+    let ribbons = model.ribbons.iter().map(|ribbon| ribbon_of(model, ribbon)).collect();
+    let spawners = model.emitters1.iter().filter(|emitter| emitter.flags & model::EMITTER_USES_MDL != 0 && !emitter.path.is_empty()).map(|emitter| ModelSpawner { node: emitter.node, pivot: emitter.pivot, path: emitter.path.clone() }).collect();
+    let placed: Vec<usize> = model.emitters.iter().map(|emitter| emitter.node).chain(model.ribbons.iter().map(|ribbon| ribbon.node)).chain(model.emitters1.iter().map(|emitter| emitter.node)).collect();
     let pose = Pose::new(model, &placed).map_err(|error| error.to_string())?;
     let rig = MdxRig {
         model,
         playhead: Playhead::new(model),
         pose,
         samples: vec![EmitterSample::default(); model.emitters.len()],
+        ribbons: vec![RibbonSample::default(); model.ribbons.len()],
+        spawners: vec![SpawnerSample::default(); model.emitters1.len()],
         colors: vec![[1.0; 4]; next_slot as usize],
         slots,
         uv_rows: vec![[[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0]]; next_slot as usize].into_iter().flatten().collect(),
     };
-    let mut data = ModelData { vertices, indices, parts, rig: Box::new(rig), emitters };
+    let mut data = ModelData { vertices, indices, parts, rig: Box::new(rig), emitters, ribbons, spawners };
     tessellate(&mut data, quality.tessellation_levels());
     Ok(data)
 }
