@@ -314,6 +314,8 @@ Leave `WISP_WINDOW_PRESENT` unset there. Under `Fifo` a window that is not on sc
 
 Press F10 in the window for the options screen: a Low, Medium, High or Ultra graphics preset and an Original or Remastered art choice (Remastered sharpens textures and rounds silhouettes, see [Remaster at load](native-window-plan.md#remaster-at-load)), saved per player and applied at once; see [Graphics settings](native-window-plan.md#graphics-settings). `WISP_REMASTER=off|standard|high` is a developer override of the art choice.
 
+Press F12 in the window to save what is on screen with the scene behind it, for a glitch a player sees once. Each press makes a folder `window-snapshot-YYYY-MM-DDTHH-MM-SSZ` (UTC) holding `picture.png` (the frame as drawn), `scene.json` (the scene the game sent for that frame: every pose with its model, matrix, sequence, frame, alpha, colour and team colour, and the lightning, ribbon strips, weather, fog, light and UI) and `window.json` (adapter, backend, present mode, graphics preset, art, size, game frame and window source hash). The folder goes under `openNativeWindow`'s `snapshots`, else `WISP_WINDOW_SNAPSHOTS`, else `$XDG_STATE_HOME/wisp/snapshots`; the game never hears F12, so a map must not bind it.
+
 A SPRITE frame (`BlzCreateFrameByType("SPRITE", ...)` with `BlzFrameSetModel` and
 `BlzFrameSetSpriteAnimate`) shows its model in the native window: the model is drawn into a
 target the size of the frame's rectangle in screen pixels, with four-sample antialiasing,

@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { type FFIFunction, type Library as FfiLibrary, type Pointer, dlopen } from "bun:ffi";
 import { Effect } from "effect";
@@ -58,6 +59,7 @@ const symbols = {
   wisp_window_select_pad: { args: ["ptr", "i32"], returns: "void" },
   wisp_window_set_present: { args: ["ptr", "u32"], returns: "void" },
   wisp_window_set_fullscreen: { args: ["ptr", "u32"], returns: "void" },
+  wisp_window_set_snapshots: { args: ["ptr", "ptr", "usize"], returns: "void" },
   wisp_window_metric: { args: ["ptr", "u32", "ptr", "usize"], returns: "usize" },
   wisp_window_info: { args: ["ptr", "ptr", "usize"], returns: "usize" },
   wisp_window_error: { args: ["ptr", "ptr", "usize"], returns: "usize" },
@@ -83,6 +85,8 @@ export interface NativeWindowOptions {
   readonly present?: PresentMode | undefined;
   /** Opens borderless fullscreen; `WISP_WINDOW_FULLSCREEN=1` when unset. */
   readonly fullscreen?: boolean | undefined;
+  /** The folder F12 saves each snapshot (picture, scene and window facts) into; `WISP_WINDOW_SNAPSHOTS` when unset, else `$XDG_STATE_HOME/wisp/snapshots`. */
+  readonly snapshots?: string | undefined;
 }
 
 /** The next thing a thread that steps the game hears from the window. */
@@ -256,6 +260,8 @@ export function openNativeWindow(options: NativeWindowOptions): NativeWindow {
   const present = options.present ?? PRESENT_MODES.find((mode) => mode === process.env.WISP_WINDOW_PRESENT);
   if (present !== undefined) view.setPresent(present);
   if (options.fullscreen ?? process.env.WISP_WINDOW_FULLSCREEN === "1") view.setFullscreen(true);
+  const snapshots = Buffer.from(options.snapshots ?? process.env.WISP_WINDOW_SNAPSHOTS ?? join(process.env.XDG_STATE_HOME ?? join(homedir(), ".local", "state"), "wisp", "snapshots"));
+  call.wisp_window_set_snapshots(handle, snapshots, snapshots.length);
   return {
     ...view,
     lend: () => call.wisp_window_attach(handle as Pointer) as number,

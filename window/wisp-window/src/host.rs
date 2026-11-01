@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64, AtomicU8, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
@@ -52,6 +53,7 @@ struct Shared {
     assets: Mutex<Vec<(String, Vec<u8>)>>,
     assets_in: AtomicU64,
     assets_done: AtomicU64,
+    snapshots: Mutex<Option<PathBuf>>,
 }
 
 impl Shared {
@@ -199,6 +201,7 @@ impl Host {
             assets: Mutex::new(Vec::new()),
             assets_in: AtomicU64::new(0),
             assets_done: AtomicU64::new(0),
+            snapshots: Mutex::new(None),
             menu: menu::Input::default(),
         });
         let (proxy_in, proxy_out) = mpsc::channel();
@@ -259,6 +262,11 @@ impl Host {
     /// Asks for a present mode; the render thread applies it at its next frame, and the surface's offer decides whether it holds.
     pub fn set_present(&self, code: u8) {
         self.shared.present.store(code, Ordering::Release);
+    }
+
+    /// Where F12 saves its snapshots (`draw/picture.rs`); none are saved until a folder is set.
+    pub fn set_snapshots(&self, directory: PathBuf) {
+        *lock(&self.shared.snapshots) = Some(directory);
     }
 
     pub fn set_fullscreen(&self, on: bool) {
@@ -378,6 +386,10 @@ impl Surface for WindowSurface {
     fn draw(&mut self, image: &Self::Image, step: u64) {
         self.gpu.menu_events(self.shared.menu.drain());
         self.gpu.draw(image, step);
+        if self.shared.menu.take_snapshot() {
+            let (directory, info) = (lock(&self.shared.snapshots).clone(), lock(&self.shared.info).clone());
+            self.gpu.report_snapshot(image, directory.as_deref(), &info);
+        }
         let shown = self.gpu.cursor_shown();
         if shown != self.cursor_shown {
             self.cursor_shown = shown;

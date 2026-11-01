@@ -26,6 +26,9 @@ pub enum Event {
 /// The key that opens and closes the screen; the game uses none of it.
 pub const TOGGLE: KeyCode = KeyCode::F10;
 
+/// The key that saves the frame on screen with its scene (`draw/picture.rs`); the game never hears it.
+pub const SNAPSHOT: KeyCode = KeyCode::F12;
+
 /// The event a key sends while the screen is open.
 pub fn event_of(code: KeyCode) -> Option<Event> {
     match code {
@@ -39,15 +42,22 @@ pub fn event_of(code: KeyCode) -> Option<Event> {
     }
 }
 
-/// What the window thread hears of the keys, sorted into the options screen's and the game's: F10 opens and closes the screen; while it is open its keys go to it and the game sees none pressed, but releases still reach the game so no key stays held.
+/// What the window thread hears of the keys, sorted into the options screen's and the game's: F10 opens and closes the screen; while it is open its keys go to it and the game sees none pressed, but releases still reach the game so no key stays held. F12 asks for a snapshot and reaches the game neither pressed nor released.
 #[derive(Default)]
 pub struct Input {
     open: AtomicBool,
+    snapshot: AtomicBool,
     events: Mutex<Vec<Event>>,
 }
 
 impl Input {
     pub fn key(&self, keys: &Keys, code: KeyCode, pressed: bool, typed: Option<char>) {
+        if code == SNAPSHOT {
+            if pressed {
+                self.snapshot.store(true, Ordering::Release);
+            }
+            return;
+        }
         let open = self.open.load(Ordering::Acquire);
         let sent = if pressed && code == TOGGLE {
             Some(if open { Event::Close } else { Event::Open })
@@ -71,6 +81,11 @@ impl Input {
             None if !open || !pressed => keys.press(code, pressed, typed),
             None => {}
         }
+    }
+
+    /// Whether F12 was pressed since the last call.
+    pub fn take_snapshot(&self) -> bool {
+        self.snapshot.swap(false, Ordering::AcqRel)
     }
 
     /// The events since the last call, in order.
@@ -217,6 +232,18 @@ mod tests {
         assert_eq!(settings.art, Art::Remastered);
         assert!(menu.handle(Event::Right, &mut settings));
         assert_eq!(settings.art, Art::Original);
+    }
+
+    #[test]
+    fn f12_asks_for_one_snapshot_and_the_game_never_hears_it() {
+        let (input, keys) = (Input::default(), Keys::default());
+        input.key(&keys, SNAPSHOT, true, None);
+        input.key(&keys, SNAPSHOT, false, None);
+        input.key(&keys, KeyCode::KeyA, true, Some('a'));
+        assert!(input.take_snapshot());
+        assert!(!input.take_snapshot(), "one press is one snapshot");
+        let heard: Vec<u8> = keys.take(8).iter().map(|event| event.key).collect();
+        assert_eq!(heard, vec![0x41], "only the A reaches the game");
     }
 
     #[test]

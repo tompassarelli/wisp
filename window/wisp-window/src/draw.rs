@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::time::Instant;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashSet;
@@ -7,7 +7,6 @@ use std::sync::Arc;
 
 use winit::window::Window;
 
-use crate::capture;
 use crate::gpu_time::{GpuClock, Pass, PassTimer};
 use crate::metrics::Timings;
 use crate::menu::{self, Menu};
@@ -18,6 +17,9 @@ use crate::render::{DrawScene, Renderer};
 use crate::ui::{is_font, UiRenderer};
 
 mod cursor;
+mod picture;
+
+use picture::Capture;
 
 
 const COUNTER_BITS: usize = 24;
@@ -61,23 +63,6 @@ fn counter_vertices(step: u64) -> Vec<Vertex> {
     vertices
 }
 
-/// `WISP_WINDOW_CAPTURE=FILE.png` saves the window's image at the first scene from game frame `WISP_WINDOW_CAPTURE_AFTER` (default 30) on that has every model it names;
-/// `WISP_WINDOW_CAPTURE_FRAMES=N` saves that frame and the N - 1 drawn after it as FILE-0000.png on, for flickers a single image misses.
-struct Capture {
-    path: PathBuf,
-    after: u32,
-    frames: u32,
-    taken: u32,
-}
-
-impl Capture {
-    fn from_environment() -> Option<Self> {
-        let path = PathBuf::from(std::env::var_os("WISP_WINDOW_CAPTURE")?);
-        let after = std::env::var("WISP_WINDOW_CAPTURE_AFTER").ok().and_then(|value| value.parse().ok()).unwrap_or(30);
-        let frames = std::env::var("WISP_WINDOW_CAPTURE_FRAMES").ok().and_then(|value| value.parse().ok()).unwrap_or(1);
-        Some(Self { path, after, frames, taken: 0 })
-    }
-}
 
 /// `WISP_WINDOW_PRESET_SWEEP=DIR` opens the options screen once the scene is ready and, at each preset in turn, draws `SWEEP_FRAMES` frames timed to the GPU finishing them, prints their frame times and saves `DIR/options-PRESET.png`. The player's saved settings are restored afterwards.
 struct Sweep {
@@ -123,6 +108,7 @@ pub struct Gpu {
     menu: Menu,
     sweep: Option<Sweep>,
     images: HashSet<u64>,
+    scene_bytes: Vec<u8>,
     clock: Result<GpuClock, String>,
     encode_ms: Option<f64>,
     pub adapter: String,
@@ -152,7 +138,7 @@ impl Gpu {
         let store = Store::open();
         let settings = store.as_ref().map(Store::load).unwrap_or_default();
         let sweep = Sweep::from_environment(settings);
-        if capture.is_some() || sweep.is_some() {
+        if surface.get_capabilities(&adapter).usages.contains(wgpu::TextureUsages::COPY_SRC) {
             config.usage |= wgpu::TextureUsages::COPY_SRC;
         }
         let present = PresentSetting::Fifo;
@@ -195,7 +181,7 @@ impl Gpu {
         renderer.set_quality(settings.quality(settings::developer_quality()));
         let ui = UiRenderer::new(device.clone(), queue.clone(), config.format);
         let clock = GpuClock::new(&device, &queue);
-        Ok(Self { surface, config, device, queue, pipeline, vertices, renderer, ui, aspect, scene: None, capture, adapter_handle: adapter, present, settings, store, menu: Menu::default(), sweep, images: HashSet::new(), clock, encode_ms: None, adapter: info.name, backend: format!("{:?}", info.backend) })
+        Ok(Self { surface, config, device, queue, pipeline, vertices, renderer, ui, aspect, scene: None, capture, adapter_handle: adapter, present, settings, store, menu: Menu::default(), sweep, images: HashSet::new(), scene_bytes: Vec::new(), clock, encode_ms: None, adapter: info.name, backend: format!("{:?}", info.backend) })
     }
 
     /// Applies what the player did at the options screen since the last frame, saving a change.
@@ -296,6 +282,8 @@ impl Gpu {
     /// Keeps the scene to draw.
     pub fn load_scene(&mut self, bytes: &[u8]) -> Result<(), String> {
         let scene = DrawScene::parse(bytes)?;
+        self.scene_bytes.clear();
+        self.scene_bytes.extend_from_slice(bytes);
         self.renderer.set_playing(scene.playing);
         self.scene = Some(scene);
         self.ui.load_scene(bytes)
@@ -426,41 +414,6 @@ impl Gpu {
     }
 }
 
-impl Gpu {
-    fn save_capture(&mut self, texture: &wgpu::Texture) {
-        let Some(capture) = self.capture.as_mut() else { return };
-        if capture.taken >= capture.frames {
-            return;
-        }
-        let path = if capture.frames == 1 { capture.path.clone() } else { capture.path.with_file_name(format!("{}-{:04}.png", capture.path.file_stem().unwrap_or_default().to_string_lossy(), capture.taken)) };
-        capture.taken += 1;
-        self.write_picture(texture, &path);
-    }
-
-    fn write_picture(&self, texture: &wgpu::Texture, path: &Path) {
-        let (width, height) = (self.config.width, self.config.height);
-        let row = (width * 4).next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
-        let buffer = self.device.create_buffer(&wgpu::BufferDescriptor { label: Some("capture"), size: (row * height) as u64, usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ, mapped_at_creation: false });
-        let mut encoder = self.device.create_command_encoder(&Default::default());
-        encoder.copy_texture_to_buffer(
-            texture.as_image_copy(),
-            wgpu::TexelCopyBufferInfo { buffer: &buffer, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(row), rows_per_image: Some(height) } },
-            wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
-        );
-        self.queue.submit([encoder.finish()]);
-        buffer.slice(..).map_async(wgpu::MapMode::Read, |_| ());
-        let _ = self.device.poll(wgpu::PollType::wait_indefinitely());
-        let Ok(mapped) = buffer.slice(..).get_mapped_range() else { return };
-        let bgra = matches!(self.config.format, wgpu::TextureFormat::Bgra8Unorm | wgpu::TextureFormat::Bgra8UnormSrgb);
-        let mut rgba = Vec::with_capacity((width * height * 4) as usize);
-        for line in mapped.chunks(row as usize).take(height as usize) {
-            for pixel in line[..(width * 4) as usize].chunks(4) {
-                rgba.extend_from_slice(&if bgra { [pixel[2], pixel[1], pixel[0], 255] } else { [pixel[0], pixel[1], pixel[2], 255] });
-            }
-        }
-        let _ = capture::write(path, width, height, &rgba);
-    }
-}
 
 /// Resolves the frame's stamps, finishes and submits its commands, and returns the milliseconds from `began` to the finished command buffer, the frame's encode time.
 fn submit(clock: &mut Result<GpuClock, String>, queue: &wgpu::Queue, mut encoder: wgpu::CommandEncoder, timer: PassTimer, began: Instant) -> f64 {

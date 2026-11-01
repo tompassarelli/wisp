@@ -236,6 +236,19 @@ pub unsafe extern "C" fn wisp_window_set_present(handle: *mut c_void, mode: u32)
     })
 }
 
+/// Sets the folder F12 saves snapshots into, `directory` being `directory_length` bytes of UTF-8.
+///
+/// # Safety
+/// `handle` is live and `directory` points to `directory_length` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn wisp_window_set_snapshots(handle: *mut c_void, directory: *const c_char, directory_length: usize) {
+    guard((), || {
+        if let Some(host) = host(handle) {
+            host.set_snapshots(std::path::PathBuf::from(text(directory, directory_length)));
+        }
+    })
+}
+
 /// Turns borderless fullscreen on or off.
 ///
 /// # Safety
