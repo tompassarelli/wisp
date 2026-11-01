@@ -1,5 +1,6 @@
 import { Effect, Option, Schema } from "effect";
 import type { LockstepLink } from "../../src/headless/lockstep";
+import { RoundTrips } from "../../src/headless/roundTrips";
 import { TurnLedger, type TurnPacket } from "../../src/headless/turnLedger";
 import { FRAME_MS } from "../../src/game/native/frameRate";
 import { NetFailure } from "./failure";
@@ -139,18 +140,23 @@ export const runNetPeer = (game: NetGame, options: NetPeerOptions, log: (line: s
   const inbox: { readonly from: number; readonly datagram: Datagram }[] = [];
   const pongs = new Map<number, number[]>();
   const heard = new Map<number, number>();
+  const roundTrips = new RoundTrips(wallClock);
   let received = 0, sent = 0;
+  let slot = hosting ? 0 : 1;
 
   const receive = (payload: Uint8Array, from: number) => {
     const decoded = decodeDatagram(payload);
     if (Option.isNone(decoded) || (decoded.value.t === "turns" && decoded.value.from !== from)) return;
     received++;
     heard.set(from, wallClock());
-    if (decoded.value.t === "pong") pongs.set(from, [...pongs.get(from) ?? [], wallClock() - decoded.value.at / 1000]);
+    if (decoded.value.t === "pong") {
+      if (decoded.value.to !== slot) return;
+      pongs.set(from, [...pongs.get(from) ?? [], wallClock() - decoded.value.at / 1000]);
+      roundTrips.pong(from, decoded.value.at / 1000);
+    }
     else inbox.push({ from, datagram: decoded.value });
   };
   let link: Link;
-  let slot = hosting ? 0 : 1;
   let humans = options.humans ?? 2;
   if (role.kind === "relayHost" || role.kind === "relayJoin") {
     const relayed = yield* openRelayLink({ relay: role.relay, opening: role.kind === "relayHost" ? { create: true, players: humans } : { join: role.room }, receive });
@@ -180,7 +186,7 @@ export const runNetPeer = (game: NetGame, options: NetPeerOptions, log: (line: s
   }
   const where = role.kind === "join" ? `${role.to.address}:${role.to.port}` : role.kind === "relayJoin" ? `relay ${role.relay.address}:${role.relay.port}` : "";
   const peers = Array.from({ length: humans }, (_, member) => member).filter((member) => member !== slot);
-  const ledger = new TurnLedger(slot, peers, wallClock);
+  const ledger = new TurnLedger(slot, peers, wallClock, roundTrips);
   const startHeard = wallClock();
   for (const peer of peers) heard.set(peer, startHeard);
 
@@ -257,7 +263,7 @@ export const runNetPeer = (game: NetGame, options: NetPeerOptions, log: (line: s
       for (const { from, datagram } of inbox.splice(0)) {
         if (from !== 0) continue;
         if (datagram.t === "refuse") return yield* new NetFailure({ problem: `the host refused: ${datagram.problem}` });
-        if (datagram.t === "ping") yield* send({ t: "pong", id: datagram.id, at: datagram.at });
+        if (datagram.t === "ping") yield* send({ t: "pong", id: datagram.id, at: datagram.at, to: from });
         if (datagram.t === "delay" && !agreed) {
           agreed = true;
           rttMs = Math.max(...datagram.rtts);
@@ -328,10 +334,12 @@ export const runNetPeer = (game: NetGame, options: NetPeerOptions, log: (line: s
           departed.add(from);
           ledger.depart(from);
         }
-        else if (datagram.t === "ping" && from === 0) yield* send({ t: "pong", id: datagram.id, at: datagram.at });
+        else if (datagram.t === "ping") yield* send({ t: "pong", id: datagram.id, at: datagram.at, to: from });
       }
       if (ledger.mismatch !== undefined) return yield* new NetDesync(ledger.mismatch);
       const now = wallClock();
+      const ping = roundTrips.ping();
+      if (ping !== undefined) yield* send({ t: "ping", id: ping.id, at: Math.round(ping.atMs * 1000) });
       if (session.frame() !== pacedFrame && ledger.remoteFrontier > 0) {
         pacedFrame = session.frame();
         const shift = paceShift({ scheduleFrame: (now - startAt) / FRAME_MS, executed: session.frame(), remoteExecuted: ledger.remoteFrontier - ledger.delay, sinceRemoteMs: now - remoteSeenAt, oneWayMs: rttMs / 2 });

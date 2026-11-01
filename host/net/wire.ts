@@ -11,7 +11,7 @@ const Control = Schema.Union([
   Schema.Struct({ t: Schema.Literal("hello"), game: Schema.String }),
   Schema.Struct({ t: Schema.Literal("refuse"), problem: Schema.String }),
   Schema.Struct({ t: Schema.Literal("ping"), id: Whole, at: Whole }),
-  Schema.Struct({ t: Schema.Literal("pong"), id: Whole, at: Whole }),
+  Schema.Struct({ t: Schema.Literal("pong"), id: Whole, at: Whole, to: Whole }),
   Schema.Struct({ t: Schema.Literal("delay"), delay: Whole, rtts: Schema.Array(Whole) }),
   Schema.Struct({ t: Schema.Literal("ready") }),
   Schema.Struct({ t: Schema.Literal("go"), inMs: Whole }),

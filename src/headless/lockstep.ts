@@ -12,6 +12,7 @@ import type { Warcraft3InventoryFixtures } from "./warcraft3Inventory";
 import type { AbilityObjectFixtures } from "./warcraft3Abilities";
 import { type CallbackTiming, stampWallTime, turnStart } from "../game/native/frameRate";
 import { applyLinkEvent, type LinkEvent } from "./linkEvent";
+import { linkRoundTrips } from "./roundTrips";
 
 export interface LockstepOptions {
   readonly abilityObjects?: AbilityObjectFixtures;
@@ -70,6 +71,7 @@ export interface LockstepLink {
   readonly delay: number;
   sent(this: void, frame: number, event: LinkEvent): void;
   due(this: void, frame: number): readonly LinkEvent[];
+  roundTripMs?(this: void, slot: number): number;
 }
 
 interface InFlight {
@@ -124,6 +126,7 @@ export class Lockstep {
         ...(options.intentionalNoops === undefined ? {} : { intentionalNoops: options.intentionalNoops }),
         standaloneProfile: options.standaloneProfile,
         network: this.network,
+        roundTripMs: linkRoundTrips(options.link, slot),
 
         screen: options.screen ?? { width: 1920 + 640 * index, height: 1080 },
         ...(options.scope === undefined ? {} : { scope: options.scope }),

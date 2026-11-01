@@ -45,6 +45,12 @@ export function playerName(player: Player): string {
   return world.players.name(slotOf(player));
 }
 
+export function connectionRoundTripMs(player: Player): number {
+  const world = boundWorld();
+  world.log?.("ConnectionRoundTripMs", [player]);
+  return world.players.roundTripMs(slotOf(player));
+}
+
 export function setPlayerColor(player: Player, color: number): void {
   const world = boundWorld();
   world.log?.("ConvertPlayerColor", [color]);

@@ -23,6 +23,8 @@ export declare function eventPlayer(): Player;
 export declare function playerControl(player: Player): PlayerControl;
 export declare function playerSlotState(player: Player): PlayerSlotState;
 export declare function playerName(player: Player): string;
+/** @local */
+export declare function connectionRoundTripMs(player: Player): number;
 export declare function setPlayerColor(player: Player, color: number): void;
 /** The colour index `setPlayerColor` set, or the player's own slot when none was set. */
 export declare function playerColor(player: Player): number;

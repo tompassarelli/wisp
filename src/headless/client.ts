@@ -71,6 +71,7 @@ export interface ClientOptions {
   readonly intentionalNoops?: IntentionalNoops;
   readonly standaloneProfile?: StandaloneProfile | undefined;
   readonly network: SyncMessage[];
+  readonly roundTripMs?: (this: void, slot: number) => number;
   /** Pixels `BlzGetLocalClientWidth/Height`, `BlzPixelToFrame*` and `BlzFrameToPixel*` read; unset, 1920 x 1080, what a lockstep's first client reports. */
   readonly screen?: { readonly width: number; readonly height: number };
   readonly scope?: ClientScope;
@@ -105,6 +106,7 @@ export const WISP_LOCAL_NATIVES: LocalNatives = {
   BlzGetLocalSpecialEffectZ: "the scene report reads an effect's local position",
   WispChatEntryText: "the native window's chat line, which only this client types into",
   WispSetChatEntryArea: "where this client draws its chat line",
+  ConnectionRoundTripMs: "this client's round trip to a player, which only it measures; the HUD shows it",
 };
 
 export class HeadlessClient {
@@ -210,7 +212,7 @@ export class HeadlessClient {
       messages: this.messages, errors: this.errors, missed: () => { this.missedLookups++; } });
     this.frameUi = new FrameUi(() => this.frames, handle, () => this.constants.ORIGIN_FRAME_GAME_UI, this.screen);
     this.quests = new Quests(handle);
-    this.players = new Players({ slot: options.slot, humans: options.humans, names: options.playerNames, forces: this.units });
+    this.players = new Players({ slot: options.slot, humans: options.humans, names: options.playerNames, forces: this.units, roundTripMs: options.roundTripMs });
     this.clock = new Clock(handle);
     this.sync = new Sync(options.slot, options.network);
     const behaviors = this.behaviors();

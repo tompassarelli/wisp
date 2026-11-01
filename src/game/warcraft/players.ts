@@ -8,6 +8,7 @@ export const players: Lowering = {
   playerControl: "GetPlayerController($1)",
   playerSlotState: "GetPlayerSlotState($1)",
   playerName: "GetPlayerName($1)",
+  connectionRoundTripMs: "BlzBitOr(-1, GetPlayerId($1))",
   setPlayerColor: "SetPlayerColor($1, ConvertPlayerColor($2))",
   playerColor: "GetHandleId(GetPlayerColor($1))",
   addLeaveEvent: "TriggerRegisterPlayerEvent($1, $2, EVENT_PLAYER_LEAVE)",

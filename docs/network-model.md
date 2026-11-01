@@ -230,6 +230,22 @@ relay measure the relayed path and set the turn delay. The same round trip goes 
 can't read from its own sync echoes, which under lockstep are a whole number of turns
 (wisp:host/net/peer.ts, wisp:src/netcode/delay.ts, wisp:docs/relay.md, "Regions").
 
+**Connection round trip.** During the match every side pings every other
+side four times a second over the same link that carries its turns (direct
+UDP or the relay's peer room, so a relayed ping crosses the relay both ways).
+The ping carries the sender's clock in microseconds; any side answers with a
+pong naming the pinger's slot, and only the pinger takes it, so no clock is
+ever compared with another. Each echo moves that peer's round trip 1/8 of the
+way to the new sample (the first sets it), and the host's handshake pings count
+too (wisp:src/headless/roundTrips.ts, `TurnLedger.roundTripMs`). A map reads it
+with `connectionRoundTripMs(player)` from `wisp/game/players`, in whole ms, or -1
+for its own player, a computer or empty slot, a peer not yet echoed, any
+match without a link and the Warcraft backend. It is a local read
+(`ConnectionRoundTripMs` in `WISP_LOCAL_NATIVES`): it sends no synchronized
+data, and a map that lets it reach its simulation desyncs, as with
+`GetLocalPlayer`. Pings and pongs are not synchronized events, so the
+checksum is the same whether the map reads it every frame or never.
+
 **Wire.** A `turns` packet is binary (wisp:host/net/wire.ts): varints for the
 frames, acknowledgements and counts, each turn's frame as the step from the
 turn before, its time as microseconds from the turn before (the first as a
@@ -239,7 +255,7 @@ A packet never passes 1200 bytes (`MAX_DATAGRAM`, a relay's cap and under a
 typical path MTU): when the turns after the acknowledgement don't fit, the
 newest wait for a later packet and the frontier stops one frame before the
 first of them, so the peer never takes a frame as complete that it was not
-sent. Handshake messages (hello, ping, delay, ready, go, bye) stay JSON behind
+sent. Handshake and control messages (hello, ping, pong, delay, ready, go, bye) stay JSON behind
 a tag byte. The link under the packets is direct UDP or a relay's peer room
 (wisp:docs/relay.md, "Peer room"); a relayed datagram carries 11 more bytes.
 
