@@ -172,7 +172,7 @@ impl Renderer {
         self.post.prepare(&look);
         if self.water_level.is_some() && self.water.ready() {
             self.water.fit(&self.device, super::HDR, size);
-            let seconds = self.started.elapsed().as_secs_f32();
+            let seconds = self.clock.seconds();
             let plane = self.water_level.unwrap_or(0.0);
             self.ripples.follow(scene.poses.iter().map(|pose| Placement { id: pose.id, model: &pose.model, matrix: pose.matrix, alpha: pose.alpha }), |model| self.model_ids.get(model).and_then(|&id| self.models[id].body), plane, scene.frame, seconds);
             self.water.write(&self.queue, &WaterSettings::of(self.water.liquid), seconds, &self.ripples.sources(), self.water_level);

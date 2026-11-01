@@ -6,6 +6,7 @@
 //! with no new model allocates nothing on this thread beyond the scene's own parse.
 
 mod math;
+mod clock;
 mod assets;
 mod gpu;
 mod groups;
@@ -151,7 +152,7 @@ pub struct Renderer {
     mirror: FrameSet,
     mirror_sky: FrameSet,
     water: Water,
-    started: Instant,
+    clock: clock::SceneClock,
     water_level: Option<f32>,
     ripples: ripples::Ripples,
     targets: Option<Targets>,
@@ -236,7 +237,7 @@ impl Renderer {
             mirror,
             mirror_sky,
             water,
-            started: Instant::now(),
+            clock: clock::SceneClock::Since(Instant::now()),
             water_level: None,
             ripples: ripples::Ripples::default(),
             targets: None,
@@ -433,7 +434,7 @@ impl Renderer {
         self.queue.write_buffer(&self.uv_buffer, 0, bytemuck::cast_slice(&self.uv_scratch));
         self.queue.write_buffer(&self.instance_buffer, 0, bytemuck::cast_slice(&self.instance_scratch));
         let plane = self.water_level.filter(|_| self.water.ready()).unwrap_or(0.0);
-        let seconds = self.started.elapsed().as_secs_f32();
+        let seconds = self.clock.seconds();
         let glow = if self.water_level.is_some() && self.water.ready() { WaterSettings::of(self.water.liquid).glow(plane, seconds) } else { Glow::NONE };
         let sun = scene.light.as_ref().filter(|light| light.key.iter().any(|&channel| channel > 0.0)).filter(|_| self.shadow.side > 0).and_then(|light| scene.camera.sun_corners(aspect).map(|corners| shadow::sun(corners, light.toward, self.shadow.side)));
         let fighters = sun.as_ref().and_then(|_| self.fighter_sun(scene));

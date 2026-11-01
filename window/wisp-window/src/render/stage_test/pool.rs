@@ -1,7 +1,7 @@
 //! A lava pool lying over a deck, seen as the match camera sees Blackrock's: its crust colour, its edge and its flow.
 
 use std::path::PathBuf;
-use std::time::{Duration, Instant};
+use super::super::clock::SceneClock;
 
 use super::{pixel, Stage};
 use crate::capture;
@@ -10,7 +10,7 @@ use crate::capture;
 fn pooled(label: &str, seconds: f32) -> Option<(Vec<u8>, (u32, u32))> {
     let size = (960, 540);
     let mut stage = Stage::new(size)?;
-    stage.renderer.started = if seconds > 0.0 { Instant::now() - Duration::from_secs_f32(seconds) } else { Instant::now() + Duration::from_secs(3600) };
+    stage.renderer.clock = SceneClock::At(seconds.max(0.0));
     stage.draw(&Stage::pool_scene());
     assert!(stage.renderer.problems.is_empty(), "{:?}", stage.renderer.problems);
     let rgba = stage.read();

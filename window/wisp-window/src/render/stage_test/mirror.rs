@@ -1,6 +1,7 @@
 //! The water's reflection: the scene is mirrored in the widest liquid surface, the far sea shows the sky, and a one-sided layer keeps the faces the camera's own picture keeps, since the mirrored pass reverses every triangle's winding on screen.
 
 use super::*;
+use super::super::clock::SceneClock;
 
 #[test]
 fn the_far_sea_mirrors_the_sky_and_not_the_clear_colour() {
@@ -48,7 +49,7 @@ fn drawn_with(sheet: Option<bool>) -> Option<(Vec<u8>, (u32, u32))> {
         stage.renderer.add_model("banner", banner(two_sided));
         scene.poses.push(placed("banner", 0.0, -600.0, 0.0, [0.95, 0.9, 0.2]));
     }
-    stage.renderer.started = std::time::Instant::now() + std::time::Duration::from_secs(3600);
+    stage.renderer.clock = SceneClock::At(0.0);
     stage.draw(&scene);
     assert!(stage.renderer.problems.is_empty(), "{:?}", stage.renderer.problems);
     let rgba = stage.read();

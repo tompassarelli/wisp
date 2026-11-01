@@ -1,6 +1,6 @@
 //! A fall standing behind the stand-in sea: told from standing water by its faces, it keeps off the sea's plane and runs its streaks down at the fall's speed.
 
-use std::time::Duration;
+use super::super::clock::SceneClock;
 
 use super::*;
 use super::super::passes::Bind;
@@ -31,7 +31,7 @@ fn grey(rgba: &[u8], x: u32, y: u32) -> f32 {
 }
 
 fn drawn_at(stage: &mut Stage, scene: &Scene, seconds: f32) -> Vec<u8> {
-    stage.renderer.started = Instant::now() - Duration::from_secs_f32(seconds);
+    stage.renderer.clock = SceneClock::At(seconds);
     stage.draw(scene);
     let rgba = stage.read();
     if let Ok(dir) = std::env::var("WISP_WATER_CAPTURE_DIR") {
