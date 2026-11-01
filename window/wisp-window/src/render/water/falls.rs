@@ -7,7 +7,7 @@ use crate::render::model::{ModelData, Paint, Part, Vertex};
 pub const FALL_NORMAL_Z: f32 = 0.5;
 
 /// Rows of the uniform a fall fills.
-pub const ROWS: usize = 5;
+pub const ROWS: usize = 2;
 
 /// World units to a metre, taken from a fighter standing about 1.8 m tall.
 const UNITS_PER_METRE: f32 = 70.0;
@@ -23,21 +23,16 @@ pub struct Fall {
     pub aeration: f32,
     /// How high the foam and mist stand above the surface the fall meets, in world units.
     pub mist: f32,
-    /// The colours of its body, its darker troughs and its foam, in sRGB: a fall keeps its own, since its streaks need a contrast the sea's muted palette leaves out.
-    pub body: [f32; 3],
-    pub deep: [f32; 3],
-    pub foam: [f32; 3],
 }
 
 impl Fall {
     /// Streaks run down at 4 m/s: a sheet that has dropped about 0.8 m is going that fast (v = sqrt(2 g h)), the slowest speed at which water reads as falling at all;
     /// the surface of a taller fall is faster, but a streak that crosses a fighter's height in under half a second smears into noise at 60 frames a second.
-    pub const WATERFALL: Self = Self { speed: 4.0 * UNITS_PER_METRE, width: 11.0, aeration: 0.7, mist: 150.0, body: [0.10, 0.40, 0.38], deep: [0.012, 0.085, 0.10], foam: [0.93, 0.97, 1.0] };
+    pub const WATERFALL: Self = Self { speed: 4.0 * UNITS_PER_METRE, width: 11.0, aeration: 0.7, mist: 150.0 };
 
-    /// The uniform rows the water shader reads: the look, the height of the surface below the fall (the lowest float when the scene has none), then its body, trough and foam colours made linear by `linear`.
-    pub fn rows(&self, plane: Option<f32>, linear: impl Fn([f32; 3]) -> [f32; 3]) -> [[f32; 4]; ROWS] {
-        let colour = |srgb: [f32; 3]| { let [r, g, b] = linear(srgb); [r, g, b, 0.0] };
-        [[self.speed, self.width, self.aeration, self.mist], [plane.unwrap_or(f32::MIN), 0.0, 0.0, 0.0], colour(self.body), colour(self.deep), colour(self.foam)]
+    /// The uniform rows the water shader reads: the look, then the height of the surface below the fall (the lowest float when the scene has none). A fall takes the colours of the liquid it falls into.
+    pub fn rows(&self, plane: Option<f32>) -> [[f32; 4]; ROWS] {
+        [[self.speed, self.width, self.aeration, self.mist], [plane.unwrap_or(f32::MIN), 0.0, 0.0, 0.0]]
     }
 }
 

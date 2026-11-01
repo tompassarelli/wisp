@@ -61,6 +61,12 @@ pub struct WaterSettings {
     pub mid: [f32; 3],
     /// How far the liquid takes the muted look, 0 to 1: three-stop ramp, no caustic web, no crest foam, a dimmed reflection and foam capped soft and translucent.
     pub muted: f32,
+    /// Fine wind-driven chop over the whole surface in place of the water frames' finer layer: its slope, 0 for none, and the size of its waves (1 sets crests about 80 units apart across the view).
+    pub chop: f32,
+    pub chop_size: f32,
+    /// How far the chop's crests lighten toward the crest colour where the sun catches them, and how bright the soft glint path of a sun low behind the water runs over the near surface.
+    pub crest_light: f32,
+    pub glint: f32,
 }
 
 impl Default for WaterSettings {
@@ -100,6 +106,10 @@ impl Default for WaterSettings {
             haze_lift: 0.6,
             mid: [0.0; 3],
             muted: 0.0,
+            chop: 0.0,
+            chop_size: 1.0,
+            crest_light: 0.0,
+            glint: 0.0,
         }
     }
 }
@@ -128,7 +138,7 @@ impl WaterSettings {
         }
     }
 
-    /// A calm muted sea after World of Warcraft Forever: a three-stop ramp from depth, fine low ripples, no caustic web, no swell, no glitter, a dim reflection and soft foam only where the water meets something.
+    /// A calm muted sea after World of Warcraft Forever: a three-stop ramp from depth, fine wind chop whose crests catch the light, a soft glint path near the camera, no caustic web or swell, a dim reflection and soft foam only where the water meets something.
     fn sea() -> Self {
         Self {
             shallow: [0.259, 0.396, 0.369],
@@ -139,6 +149,7 @@ impl WaterSettings {
             depth_rate: 0.004,
             foam_width: 40.0,
             normal_strength: 0.3,
+            specular_power: 200.0,
             specular: 0.0,
             caustics: 0.0,
             reflection: 0.45,
@@ -149,6 +160,10 @@ impl WaterSettings {
             sparkle_cover: 0.3,
             haze_lift: 0.35,
             muted: 1.0,
+            chop: 1.0,
+            chop_size: 0.6,
+            crest_light: 0.06,
+            glint: 0.07,
             ..Self::default()
         }
     }
@@ -209,7 +224,7 @@ impl WaterSettings {
             glow_reach: 340.0,
             glow_light: 0.95,
             opacity: 1.0,
-            crust: 0.62,
+            crust: 0.55,
             shimmer: 0.7,
             bubbles: 0.8,
             embers: 0.7,

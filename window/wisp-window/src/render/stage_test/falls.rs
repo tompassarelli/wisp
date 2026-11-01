@@ -5,10 +5,10 @@ use std::time::Duration;
 use super::*;
 use super::super::passes::Bind;
 
-const FALL: &str = "war3mapImported\\StageFall.mdx";
+pub(super) const FALL: &str = "war3mapImported\\StageFall.mdx";
 const SIZE: (u32, u32) = (960, 640);
 
-fn wall() -> (Vec<Vertex>, Vec<u32>) {
+pub(super) fn wall() -> (Vec<Vertex>, Vec<u32>) {
     let corner = |x: f32, z: f32| vertex([x, 0.0, z], [0.0, -1.0, 0.0]);
     (vec![corner(-250.0, -400.0), corner(250.0, -400.0), corner(250.0, 900.0), corner(-250.0, 900.0)], vec![0, 1, 2, 0, 2, 3])
 }
@@ -19,7 +19,7 @@ fn stage_with_fall() -> Option<Stage> {
     Some(stage)
 }
 
-fn scene_with_fall() -> Scene {
+pub(super) fn scene_with_fall() -> Scene {
     let mut scene = Stage::scene(1.0, Preset::Water);
     scene.poses.insert(0, placed(FALL, 450.0, 1200.0, 0.0, [1.0; 3]));
     scene
@@ -42,7 +42,7 @@ fn drawn_at(stage: &mut Stage, scene: &Scene, seconds: f32) -> Vec<u8> {
 }
 
 /// Where the fall's upper body sits on screen: world x 200 to 700 and z 400 to 800 at the wall's depth.
-const BODY: (std::ops::Range<u32>, std::ops::Range<u32>) = (500..640, 70..170);
+pub(super) const BODY: (std::ops::Range<u32>, std::ops::Range<u32>) = (500..640, 70..170);
 
 #[test]
 fn a_fall_is_told_by_its_faces_and_never_sets_the_seas_plane() {

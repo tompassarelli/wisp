@@ -14,6 +14,7 @@ use crate::remaster::Quality;
 use crate::texture::Image;
 
 mod falls;
+mod liquids;
 mod low;
 mod mirror;
 mod pool;
@@ -346,29 +347,6 @@ fn poison_is_green_and_lava_is_bright_and_warm_with_fighters_in_front() {
         let left = &rendered[1];
         assert_ne!(rgba, left, "both facings should draw");
     }
-}
-
-fn longest_dark_run(rgba: &[u8], width: u32, rows: std::ops::Range<u32>) -> u32 {
-    let mut longest = 0;
-    for row in rows {
-        let mut run = 0;
-        for column in 0..width {
-            let at = pixel(rgba, width, column, row);
-            run = if at.iter().all(|&channel| channel < 135) { run + 1 } else { 0 };
-            longest = longest.max(run);
-        }
-    }
-    longest
-}
-
-#[test]
-fn lava_is_one_molten_surface_and_not_flat_plates_between_cracks() {
-    let Some((rendered, size)) = drawn(Preset::Lava, "lava-plates") else { return };
-    let rgba = &rendered[0];
-    let run = longest_dark_run(rgba, size.0, 440..640);
-    assert!(run < 100, "crust never lies as flat plates 100 px wide or more, longest dark run {run}");
-    let molten = mean(rgba, size.0, 0..size.0, 440..640);
-    assert!(molten[0] > molten[2] * 1.5, "the surface stays warm, got {molten:?}");
 }
 
 #[test]
