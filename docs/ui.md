@@ -108,7 +108,7 @@ definition with `type: "SIMPLEFRAME"` has `textures` instead of `children`:
 ```
 
 A texture is `{ key, layer, file?, texCoord?, alphaMode?, width?, height?,
-anchor? }`: `layer` is `BACKGROUND`, `BORDER`, `ARTWORK` or `OVERLAY`;
+anchor? }`: `layer` is `BACKGROUND` or `ARTWORK`;
 `texCoord` is `[left, right, top, bottom]` as shares of the file, each 0..1;
 `alphaMode` is `BLEND` or `ALPHAKEY`; `anchor` is `{ point, x, y }` on the
 frame. With no `width`, `height` or `anchor` the texture fills the frame
@@ -122,10 +122,18 @@ texture handle changes its file and keeps its `texCoord`; `setFrameSize`,
 `setFrameAbsPoint`, `setFramePoint`, `setFrameVisible` and
 `setFrameAlpha` on the root move, size, hide and fade its textures.
 
+Warcraft draws only those two layers. In the Classic 3.0.0.24268 client on
+2 November 2026 (smashcraft's HUD race frames, one variant per race in one
+map), a frame with a `BORDER` or `OVERLAY` block drew its first `BACKGROUND`
+texture and nothing else: not the textures in that block, not those in a
+later `ARTWORK` block, and not a second `BACKGROUND` texture whose file the
+script set. The same textures all drew in one `BACKGROUND` block, in
+`BACKGROUND` and `ARTWORK` blocks, and with no `Layer` blocks at all. The
+generator therefore refuses any other layer name.
+
 Draw order, as Warcraft does it: every SIMPLEFRAME and its textures draw
 beneath every other frame, whatever the levels. Inside one simple frame the
-textures draw by layer (`BACKGROUND` under `BORDER` under `ARTWORK` under
-`OVERLAY`), then in definition order. Headless clients report that order in
+textures draw by layer (`BACKGROUND` under `ARTWORK`), then in definition order. Headless clients report that order in
 each frame's `level`, and a texture's `uv` is `[u0, v0, u1, v1]` from the top
 left of its file (TexCoord `0.5, 1, 0, 0.5` is `[0.5, 0, 1, 0.5]`). The
 native window samples only that sub-rectangle, and `uiReport` and

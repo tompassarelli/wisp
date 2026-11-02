@@ -5,8 +5,9 @@ import type { ArchiveEntry } from "./mapBuild";
 const FRAME_TYPES = ["FRAME", "BACKDROP", "TEXT", "GLUETEXTBUTTON"] as const;
 type FrameType = (typeof FRAME_TYPES)[number];
 
-const SIMPLE_LAYERS = ["BACKGROUND", "BORDER", "ARTWORK", "OVERLAY"] as const;
-type SimpleLayer = (typeof SIMPLE_LAYERS)[number];
+// Engine: Warcraft 3.0.0.24268 draws only these SIMPLEFRAME layers; a BORDER or OVERLAY block also loses the frame's other textures.
+const SIMPLE_LAYERS = ["BACKGROUND", "ARTWORK"] as const;
+export type SimpleLayer = (typeof SIMPLE_LAYERS)[number];
 const ALPHA_MODES = ["BLEND", "ALPHAKEY"] as const;
 
 const FRAME_POINTS = ["TOPLEFT", "TOP", "TOPRIGHT", "LEFT", "CENTER", "RIGHT", "BOTTOMLEFT", "BOTTOM", "BOTTOMRIGHT"] as const;
@@ -103,7 +104,7 @@ const flatten = (nodes: readonly FrameNode[]): FrameNode[] => nodes.flatMap((nod
 function textureProblems(texture: SimpleTexture): string[] {
   const owner = `"${texture.key}"`;
   const problems: string[] = [];
-  if (!SIMPLE_LAYERS.includes(texture.layer)) problems.push(`${owner}: unknown layer "${texture.layer}"`);
+  if (!SIMPLE_LAYERS.includes(texture.layer)) problems.push(`${owner}: unknown layer "${texture.layer}"; Warcraft draws only ${SIMPLE_LAYERS.join(" and ")}`);
   if (texture.alphaMode !== undefined && !ALPHA_MODES.includes(texture.alphaMode)) problems.push(`${owner}: unknown alpha mode "${texture.alphaMode}"`);
   if (texture.file !== undefined && /["\r\n]/.test(texture.file)) problems.push(`${owner}: file contains a quote or line break`);
   if (texture.texCoord !== undefined && (texture.texCoord.length !== 4 || texture.texCoord.some((value) => !(value >= 0 && value <= 1)))) problems.push(`${owner}: texCoord needs left, right, top and bottom within 0..1`);

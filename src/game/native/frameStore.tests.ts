@@ -9,10 +9,10 @@ function world() {
   frames.define([{
     name: "Arch", type: "SIMPLEFRAME", width: 0.25, height: 0.125,
     textures: [
-      { key: "over", layer: "OVERLAY", file: "over.blp" },
       { key: "tile", layer: "BACKGROUND", file: "tile.blp", texCoord: [0.5, 1, 0, 0.5] },
       { key: "first", layer: "ARTWORK", file: "first.blp" },
       { key: "second", layer: "ARTWORK", file: "second.blp", width: 0.0625, height: 0.0625, anchor: { point: "TOPLEFT", x: 0.0625, y: -0.0625 } },
+      { key: "over", layer: "ARTWORK", file: "over.blp" },
     ],
   }]);
   let id = 0;
@@ -48,7 +48,7 @@ test("[scenario] a simple frame's textures keep their texCoord through SetTextur
   assertLessThan(row("ArchOver").level, row("Hud").level);
   assertLessThan(row("ArchTile").level, row("ArchFirst").level);
   assertEquals(row("ArchFirst").level, row("ArchSecond").level);
-  assertLessThan(row("ArchSecond").level, row("ArchOver").level);
+  assertEquals(row("ArchSecond").level, row("ArchOver").level);
 
   ui.setSize(arch, 0.5, 0.25);
   assertEquals(box(row("ArchTile")), "0.25,0.75,0.75,0.5");

@@ -88,7 +88,7 @@ interface TemplateTexture {
 }
 
 const SIMPLE_FLOOR = -1073741824;
-const SIMPLE_LAYERS: readonly string[] = ["BACKGROUND", "BORDER", "ARTWORK", "OVERLAY"];
+const SIMPLE_LAYERS: readonly string[] = ["BACKGROUND", "ARTWORK"];
 
 // A simple texture fades with its simple frame.
 function shownAlpha(frame: Frame): number {
