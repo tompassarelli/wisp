@@ -122,18 +122,25 @@ texture handle changes its file and keeps its `texCoord`; `setFrameSize`,
 `setFrameAbsPoint`, `setFramePoint`, `setFrameVisible` and
 `setFrameAlpha` on the root move, size, hide and fade its textures.
 
-Warcraft draws only those two layers. In the Classic 3.0.0.24268 client on
-2 November 2026 (smashcraft's HUD race frames, one variant per race in one
-map), a frame with a `BORDER` or `OVERLAY` block drew its first `BACKGROUND`
-texture and nothing else: not the textures in that block, not those in a
-later `ARTWORK` block, and not a second `BACKGROUND` texture whose file the
-script set. The same textures all drew in one `BACKGROUND` block, in
-`BACKGROUND` and `ARTWORK` blocks, and with no `Layer` blocks at all. The
-generator therefore refuses any other layer name.
+Measured in the Classic 3.0.0.24268 client on 2 November 2026 with
+Smashcraft's HUD race frames (an opaque backing, a bust the script sets and a
+three-part arch over them), one FDF variant per race, each on a fresh pair:
+
+- A frame with a `BORDER` or `OVERLAY` block drew none of that block's
+  textures, and a `BORDER` block lost a later `ARTWORK` block's textures too.
+  The generator therefore refuses any layer but `BACKGROUND` and `ARTWORK`.
+- `ARTWORK` drew over `BACKGROUND` every time.
+- Within one layer the order did not follow the definition. With the backing
+  listed before the bust, Thrall's bust drew over it and Illidan's under it,
+  on either player's plate. With the backing listed after Thrall's bust, the
+  bust still drew over it. With no `Layer` blocks, the busts and backing drew
+  over the arch. The generator therefore refuses two textures of one layer
+  whose rectangles overlap; textures that only meet at an edge, such as the
+  arch's three parts, may share a layer.
 
 Draw order, as Warcraft does it: every SIMPLEFRAME and its textures draw
 beneath every other frame, whatever the levels. Inside one simple frame the
-textures draw by layer (`BACKGROUND` under `ARTWORK`), then in definition order. Headless clients report that order in
+textures draw by layer (`BACKGROUND` under `ARTWORK`); within a layer they never overlap. Headless clients report that order in
 each frame's `level`, and a texture's `uv` is `[u0, v0, u1, v1]` from the top
 left of its file (TexCoord `0.5, 1, 0, 0.5` is `[0.5, 0, 1, 0.5]`). The
 native window samples only that sub-rectangle, and `uiReport` and
@@ -146,7 +153,7 @@ draws every texture whole.
 `frameDefinitionProblems` returns them. It reports a definition name or key
 that is not an identifier, a reserved key (`root`, `toc`), a duplicate key or
 frame name, an unknown frame type or point, an anchor to a frame the
-definition does not have, an unknown template, a SIMPLEFRAME texture with an unknown layer or alpha mode, a `texCoord` outside 0..1 or a texture key that repeats, a quote or line break in a
+definition does not have, an unknown template, a SIMPLEFRAME texture with an unknown layer or alpha mode, a `texCoord` outside 0..1, a texture key that repeats, two textures of one layer whose rectangles overlap, a quote or line break in a
 string the FDF would carry, a `TEXT` with neither font nor template, and a
 text, font or texture on a frame type that cannot show it.
 

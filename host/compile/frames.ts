@@ -112,6 +112,35 @@ function textureProblems(texture: SimpleTexture): string[] {
   return problems;
 }
 
+const POINT_SHARE: Readonly<Record<FramePoint, readonly [number, number]>> = {
+  TOPLEFT: [0, 1], TOP: [0.5, 1], TOPRIGHT: [1, 1], LEFT: [0, 0.5], CENTER: [0.5, 0.5], RIGHT: [1, 0.5], BOTTOMLEFT: [0, 0], BOTTOM: [0.5, 0], BOTTOMRIGHT: [1, 0],
+};
+
+function textureBox(definition: FrameDefinition, texture: SimpleTexture): readonly [left: number, bottom: number, right: number, top: number] {
+  const width = texture.width ?? definition.width, height = texture.height ?? definition.height;
+  if (texture.anchor === undefined) return [0, 0, width, height];
+  const [shareX, shareY] = POINT_SHARE[texture.anchor.point] ?? [0, 0];
+  const left = shareX * definition.width + texture.anchor.x - shareX * width, bottom = shareY * definition.height + texture.anchor.y - shareY * height;
+  return [left, bottom, left + width, bottom + height];
+}
+
+// Engine: Warcraft 3.0.0.24268 draws one layer's textures in no fixed order, so overlapping textures need different layers.
+function overlapProblems(definition: FrameDefinition): string[] {
+  const textures = definition.textures ?? [];
+  const problems: string[] = [];
+  textures.forEach((texture, index) => {
+    const [left, bottom, right, top] = textureBox(definition, texture);
+    for (const other of textures.slice(index + 1)) {
+      if (other.layer !== texture.layer) continue;
+      const [otherLeft, otherBottom, otherRight, otherTop] = textureBox(definition, other);
+      if (Math.min(right, otherRight) - Math.max(left, otherLeft) > 1e-6 && Math.min(top, otherTop) - Math.max(bottom, otherBottom) > 1e-6) {
+        problems.push(`"${texture.key}" and "${other.key}": overlap in layer ${texture.layer}, where Warcraft keeps no draw order`);
+      }
+    }
+  });
+  return problems;
+}
+
 function simpleProblems(definition: FrameDefinition, children: number): string[] {
   const problems: string[] = [];
   if (children > 0) problems.push(`root: a SIMPLEFRAME has textures, not children`);
@@ -129,6 +158,7 @@ function simpleProblems(definition: FrameDefinition, children: number): string[]
     keys.add(texture.key);
     problems.push(...textureProblems(texture));
   }
+  problems.push(...overlapProblems(definition));
   return problems;
 }
 

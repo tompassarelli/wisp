@@ -11,11 +11,11 @@ const arch: FrameDefinition = {
   textures: [
     { key: "overlay", layer: "ARTWORK", file: "UI\\Glow.blp", alphaMode: "BLEND", width: 0.03125, height: 0.03125, anchor: { point: "TOPRIGHT", x: -0.0078125, y: -0.0078125 } },
     { key: "tile", layer: "BACKGROUND", file: "UI\\Console\\Human\\HumanUITile01.blp", texCoord: [0.5, 1, 0, 0.5], alphaMode: "ALPHAKEY" },
-    { key: "empty", layer: "ARTWORK" },
+    { key: "empty", layer: "ARTWORK", width: 0.03125, height: 0.03125, anchor: { point: "BOTTOMLEFT", x: 0, y: 0 } },
   ],
 };
 
-test("[scenario] a SIMPLEFRAME definition generates its FDF by layer with TexCoord and bindings that create it and fetch each texture, and bad layers, coordinates and key collisions are named", () => {
+test("[scenario] a SIMPLEFRAME definition generates its FDF by layer with TexCoord and bindings that create it and fetch each texture, and bad layers, coordinates, key collisions and textures overlapping in one layer are named", () => {
   const generated = generateFrames(arch);
   expect(generated.fdf).toBe([
     'Frame "SIMPLEFRAME" "RaceArch" {',
@@ -38,7 +38,9 @@ test("[scenario] a SIMPLEFRAME definition generates its FDF by layer with TexCoo
     "            Anchor TOPRIGHT, -0.007813, -0.007813,",
     "        }",
     '        Texture "RaceArchEmpty" {',
-    "            SetAllPoints,",
+    "            Width 0.03125,",
+    "            Height 0.03125,",
+    "            Anchor BOTTOMLEFT, 0, 0,",
     "        }",
     "    }",
     "}",
@@ -59,6 +61,7 @@ test("[scenario] a SIMPLEFRAME definition generates its FDF by layer with TexCoo
     { key: "overlay", layer: "OVERLAY" as never },
     { key: "tile", layer: "ARTWORK" as const, texCoord: [0, 1.5, 0, 1] as const },
     { key: "wide", layer: "ARTWORK" as const, texCoord: [-0.25, 1, 0, 1] as const },
+    { key: "cover", layer: "ARTWORK" as const, width: 0.03125, height: 0.0625, anchor: { point: "TOPLEFT" as const, x: 0.015625, y: 0 } },
   ] };
   expect(frameDefinitionProblems(bad)).toEqual([
     '"tile": unknown layer "MIDDLE"; Warcraft draws only BACKGROUND and ARTWORK',
@@ -67,7 +70,15 @@ test("[scenario] a SIMPLEFRAME definition generates its FDF by layer with TexCoo
     '"tile": duplicate key',
     '"tile": texCoord needs left, right, top and bottom within 0..1',
     '"wide": texCoord needs left, right, top and bottom within 0..1',
+    '"tile" and "wide": overlap in layer ARTWORK, where Warcraft keeps no draw order',
+    '"tile" and "cover": overlap in layer ARTWORK, where Warcraft keeps no draw order',
+    '"wide" and "cover": overlap in layer ARTWORK, where Warcraft keeps no draw order',
   ]);
+  expect(frameDefinitionProblems({ ...arch, textures: [
+    { key: "left", layer: "ARTWORK", width: 0.03125, height: 0.125, anchor: { point: "TOPLEFT", x: 0, y: 0 } },
+    { key: "right", layer: "ARTWORK", width: 0.03125, height: 0.125, anchor: { point: "TOPRIGHT", x: 0, y: 0 } },
+    { key: "under", layer: "BACKGROUND" },
+  ] })).toEqual([]);
   expect(() => generateFrames(bad)).toThrow('unknown layer "MIDDLE"');
 });
 
