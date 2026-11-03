@@ -674,6 +674,9 @@ client's War3Preferences `[Video]`, `[Misc]` and `[Sound]` at launch:
   profile. Retain that metadata and the saved preferences with captures.
 - `capture-classic-1080` is `capture-classic` in a 1920×1080 window, the
   resolution native silhouette captures compare at (wisp#2).
+- `capture-classic-3x2` is `capture-classic` in a 2880×1920 window, a 3:2
+  laptop screen, where stock console frames reach further across the bottom
+  of the screen than at 16:9 (makgora#1047).
 
 A profile's size is the game's client area. The window is 4 px wider and
 taller, because Wine draws a 2 px frame on each side, so a pool client's game

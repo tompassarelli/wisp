@@ -34,6 +34,7 @@ export const PROFILES: Readonly<Record<string, Profile>> = {
   visual: { ...VISUAL, graphicsMode: "classic" },
   "capture-classic": CAPTURE_PROFILES["capture-classic"],
   "capture-classic-1080": { ...CAPTURE_PROFILES["capture-classic"], name: "capture-classic-1080", width: 1920, height: 1080 },
+  "capture-classic-3x2": { ...CAPTURE_PROFILES["capture-classic"], name: "capture-classic-3x2", width: 2880, height: 1920 },
 };
 
 function profileSections(profile: Profile, windowX: number): Record<string, Record<string, number>> {
