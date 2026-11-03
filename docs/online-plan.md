@@ -3,7 +3,7 @@
 Status: planned, 30 October 2026, and revised once after an adversarial
 review. This page plans only; each box at the end is its own issue.
 
-Online Smashcraft runs in Wisp's own window (`wisp play --standalone`, with
+Online Mak'gora runs in Wisp's own window (`wisp play --standalone`, with
 art read from each player's Warcraft install), not on Battle.net and not
 through an in-game LAN switch. Tom set this direction on 30 October 2026, for
 reasons recorded in earlier decisions:
@@ -15,12 +15,12 @@ reasons recorded in earlier decisions:
   3.0.1 game was blocked (wisp#21).
 
 He also asked for the rollback to live in Wisp, which reverses the
-26 October call that Smashcraft keeps its own copy.
+26 October call that Mak'gora keeps its own copy.
 
 The plan has four parts, in order:
 
-1. Smashcraft's netcode moves onto Wisp's.
-2. Smashcraft plays online in the standalone window at parity with the
+1. Mak'gora's netcode moves onto Wisp's.
+2. Mak'gora plays online in the standalone window at parity with the
    Warcraft build.
 3. Standalone play goes through Wisp's relay, with a region the player picks.
 4. A ladder stub.
@@ -39,7 +39,7 @@ The plan has four parts, in order:
   frames). It finds a misprediction by comparing each arriving row with the
   row it ran (`receive`). Battlecraft's `main.ts` and `rollback.tests.ts` use
   it.
-- **Smashcraft's own netcode**, in smashcraft:ts/src/game/netcode/: 1754
+- **Mak'gora's own netcode**, in makgora:ts/src/game/netcode/: 1754
   lines with the companion journal. Its parts:
   - `InputLedger`, which admits against the common frontier K and has epochs,
     a participant mask, retained history (64 + 2 × 128 frames),
@@ -56,12 +56,12 @@ The plan has four parts, in order:
   Its world is mutable. Speculative and confirmed play run in two worlds.
   A late row is found by `takeLowestAccepted` together with reconciliation
   against the accepted-packet count (`ShadowInputPlayback`), and a
-  correction restores a replay snapshot (smashcraft:ts/src/game/replay/). It
+  correction restores a replay snapshot (makgora:ts/src/game/replay/). It
   can also repair only the fighters a late row touched (`scopedRepair`). The
-  loop that drives all of this is smashcraft:ts/src/host/loop/rollback.ts
+  loop that drives all of this is makgora:ts/src/host/loop/rollback.ts
   and netDelay.ts.
 - **Both games pin Wisp.** Each installs Wisp from a vendored tarball:
-  Smashcraft at 1cbe2513 (smashcraft:ts/package.json, refreshed with
+  Mak'gora at 1cbe2513 (makgora:ts/package.json, refreshed with
   `bun run update:wisp`) and Battlecraft at 1684927e (battlecraft:wisp.lock).
   A Wisp change reaches a game only when that game bumps its pin.
 - **Standalone host and join** (wisp:docs/play.md, "Host and join";
@@ -76,14 +76,14 @@ The plan has four parts, in order:
   - Each datagram is JSON. A `turns` packet repeats every turn since the
     peer's last acknowledgement, along with four checksums.
   - The map's own rollback runs on top. Local input reaches the map on the
-    next frame (wisp#112). Smashcraft's own RTT estimate comes from the echo
+    next frame (wisp#112). Mak'gora's own RTT estimate comes from the echo
     of its own sync rows (netDelay.ts), not from peer.ts's pings.
 
-  Smashcraft already plays this way: `play --standalone --host/--join`,
+  Mak'gora already plays this way: `play --standalone --host/--join`,
   `net pair` and `net-accept`. The last runs 20 three-stock matches at 0, 60
   and 120 ms with 1% loss. It fails on a missed result, any checksum
   mismatch or a p99 rollback depth past the window
-  (smashcraft:docs/commands/play.md).
+  (makgora:docs/commands/play.md).
 - **Wisp's relay** (wisp:docs/relay.md, wisp:relay/). It is Rust, built for
   Warcraft turns: it clocks turns and feeds the agent's W3GS host. Its
   packets are at most 1200 bytes (relay-proto `MAX_PACKET`). It is deployed
@@ -94,9 +94,9 @@ The plan has four parts, in order:
   clock (relay:src/room.rs, game_room.rs), so a room without a clock is new
   code.
 
-## 1. Smashcraft's netcode on Wisp's core
+## 1. Mak'gora's netcode on Wisp's core
 
-**Gain.** One rollback core for every Wisp game. Smashcraft's fixes, such as
+**Gain.** One rollback core for every Wisp game. Mak'gora's fixes, such as
 its ledger's common future limit (#60) and the echo stall (#233), reach
 Battlecraft, and the ping-based delay becomes something any game opts into.
 **Cost.** Four boxes, about 1000 lines moved, and two pin bumps per game. The
@@ -104,13 +104,13 @@ risk is in one place: Wisp's `session` gets rebuilt over the schedule layer.
 That changes Battlecraft's admission at the edges, and Battlecraft's native
 proof (battlecraft#3) then holds only through its tests and its golden.
 
-### Why the session doesn't fit Smashcraft as it is
+### Why the session doesn't fit Mak'gora as it is
 
-Wisp's `session` owns the stepping and keeps immutable states. Smashcraft
+Wisp's `session` owns the stepping and keeps immutable states. Mak'gora
 can't take that over without keeping a whole copy of its world for every
 frame. Today it changes one world in place and restores a snapshot only when
 a correction comes. The same goes for its two-world design and its scoped
-repair. The generic part of Smashcraft's netcode is the layer below the
+repair. The generic part of Mak'gora's netcode is the layer below the
 stepping: the ledger plus the speculative/confirmed cursor schedule. That
 layer moves into Wisp. Wisp's `session` is rebuilt as a thin driver over it
 for games with immutable state (Battlecraft), so both games share one
@@ -118,24 +118,24 @@ admission and prediction core.
 
 ### Generic (moves into wisp:src/netcode/)
 
-- **`ledger`**: Smashcraft's admission rules made generic over `RowCodec`.
+- **`ledger`**: Mak'gora's admission rules made generic over `RowCodec`.
   That means admission against K, epochs, a participant mask, retained
   history with `discardThrough`, `takeLowestAccepted` and the receipts
   `wrongEpoch` and `storageFull`. Wisp's `leave`/`goneAfter` stays. A packet
   of N rows is all or nothing.
 - **`frameRing`**: Wisp's functional ring gains `vacant`, `release` and
-  `clear`; Smashcraft's class goes.
+  `clear`; Mak'gora's class goes.
 - **`schedule`**: `Capture`, `FixedInputSchedule` and `ShadowInputSchedule`
   written over `RowCodec`. That covers capture and `captureLocalAt`, both
   cursors, `rewindSpeculative`, `remoteThrough`/`othersThrough`,
   `awaitedSlots` and `mayAdvanceSpeculative` with its future-limit check
-  (#233). Prediction calls `RowCodec.hold`, which is Smashcraft's
+  (#233). Prediction calls `RowCodec.hold`, which is Mak'gora's
   `predictInto`. The bound `REPLAY_MAX_CORRECTION_FRAMES` (24) becomes a
   schedule setting, and `REPLAY_HISTORY_CAPACITY` (64) becomes the history
   length.
 - **Late-row detection**: `takeLowestAccepted` becomes the one way the
   schedule reports the first frame a sender's new rows touch. Wisp's
-  `session` and Smashcraft's playback both compare from there.
+  `session` and Mak'gora's playback both compare from there.
 - **`delay`**: these move from `delayPolicy` with their integer-only rule:
   - the RTT estimate (an EWMA in eighths);
   - `oneWayFrames` (RTT × 0.03, rounded up);
@@ -149,37 +149,37 @@ admission and prediction core.
   Its tests move with it.
 - **`rate`**: `machineRate`'s slow-machine detection (under 55 fps with at
   least 750 ms busy, sustained for 2 s). The player-facing text stays in
-  Smashcraft.
+  Mak'gora.
 - **`session`**: rebuilt over `schedule`. It keeps today's API (`tick`,
   `receive`, `leave`, `NET_SETTINGS`).
 
-### Smashcraft-only (stays in smashcraft)
+### Mak'gora-only (stays in makgora)
 
 - `InputRow`, its codec, `participants` and the packet wire in
-  smashcraft:ts/src/game/input/wire.ts. These are fighter rows with analog
+  makgora:ts/src/game/input/wire.ts. These are fighter rows with analog
   axes, SDI and throw fields. The row's codec becomes a `RowCodec<InputRow>`.
 - `ReplayHistory`, `ShadowInputPlayback`, snapshots, `scopedRepair` and
   `fourFighterRollback`. These are the stepping and repair that sit on
   Wisp's schedule.
 - The journal transport: editbox, carrier keys and the companion journal's
-  files. They are Warcraft and smashcraft-client protocol.
+  files. They are Warcraft and makgora-client protocol.
 - netDelay.ts's HUD, its `SC_DY` proposal messages and the host's manual
   delay. These are UI and message names on top of Wisp's `delay`.
 - `InputBatch` (1–2 row packets) for now. Moving to Wisp's 64-frame
   messages is a wire change, so it waits for its own measured box (Deferred,
   below).
 
-### Migration with no behaviour change for Smashcraft
+### Migration with no behaviour change for Mak'gora
 
 1. **N1, golden records first, on main before any move.** Two kinds:
    - **A packet-level golden** for each game drives its ledger and schedule
-     (Smashcraft) or session (Battlecraft) through seeded sequences. The
+     (Mak'gora) or session (Battlecraft) through seeded sequences. The
      sequences include in-order, late, duplicate and conflicting rows, rows
      past the future limit and out of history, epoch changes, a leave, and a
      prediction window held long enough to hit #233's stall. For every
      input it records the receipt, the Capture result, the cursors, K,
      held/stall counts and the first late frame.
-   - **A match golden** builds on smashcraft:ts/test/online-rollback.test.ts,
+   - **A match golden** builds on makgora:ts/test/online-rollback.test.ts,
      which runs two headless clients with Battle.net-measured delivery and
      no loss. It adds seeded 1% loss and a four-human case, and records
      every 60th frame's confirmed checksum and each rollback's from-frame
@@ -192,18 +192,18 @@ admission and prediction core.
    K-based admission. Its packet golden changes at the edges and is
    re-recorded in its own commit with the reason. Its match golden's
    confirmed checksums must not change.
-3. **N3.** `delay` and `rate` move to Wisp. Smashcraft bumps its pin and
+3. **N3.** `delay` and `rate` move to Wisp. Mak'gora bumps its pin and
    imports them, and both of its goldens are unchanged.
-4. **N4.** Smashcraft bumps its pin, deletes
+4. **N4.** Mak'gora bumps its pin, deletes
    `game/netcode/{ledger,frameRing,capture,fixedSchedule,shadowSchedule}.ts`
    and imports Wisp's. Both goldens must match byte for byte, and
    net-accept must still pass.
 
-   "No behaviour change" means Smashcraft's fixtures are unchanged. A
+   "No behaviour change" means Mak'gora's fixtures are unchanged. A
    deliberate change re-records a fixture in its own commit, with the
    reason.
 
-## 2. Smashcraft online in the standalone window
+## 2. Mak'gora online in the standalone window
 
 **Gain.** Players play online without Battle.net. That is what parts 3 and
 4 are for. **Cost.** Five boxes. Most of the work is an audit, a peer.ts
@@ -214,7 +214,7 @@ two-player online play already exist.
 
 Measured facts first, then the parts the audit must settle:
 
-- **Players.** The transport plays two slots. Smashcraft online in Warcraft
+- **Players.** The transport plays two slots. Mak'gora online in Warcraft
   plays up to four humans. Four needs a peer.ts rewrite (P4):
   - a handshake with every peer;
   - a turn delay set from the largest round trip;
@@ -223,7 +223,7 @@ Measured facts first, then the parts the audit must settle:
 
   It follows the relay link, because a relay room is the natural hub.
 - **Getting it.** The window runs from a source checkout. It needs Bun,
-  Chrome and Smashcraft's private asset store. Players have none of these.
+  Chrome and Mak'gora's private asset store. Players have none of these.
   - Map imports should come from the Hive map file the player already
     downloads. Stock art should come from their Warcraft install (P3).
   - `runStandalone` refuses a headless, scripted or capturing run without a GPU
@@ -236,12 +236,12 @@ Measured facts first, then the parts the audit must settle:
   [native-window-plan.md](native-window-plan.md); the player build (P5) ships
   that window, not Chrome.
 - **Simulation.** It must match the Warcraft build exactly. The native corpus
-  (smashcraft:docs/commands/parity.md) already holds native replays whose
+  (makgora:docs/commands/parity.md) already holds native replays whose
   frames carry fighter digests, and `parity corpus` replays them in Bun and
   Lua32. The standalone window's own path is not covered yet: its pad and
   input feed, and the presentation profile. Scripts default to `native`
   presentation, but live play defaults to `pool-predicted`
-  (smashcraft:docs/play.md). P2 compares a standalone run's digests with a
+  (makgora:docs/play.md). P2 compares a standalone run's digests with a
   native corpus recording of the same pad, under both profiles.
 - **Rendering, menus, sound and input.** These are judged by the audit (P1),
   surface by surface, with Wisp's existing checks:
@@ -323,7 +323,7 @@ Method (wisp:host/play/pressLatency.ts, wisp:host/play/xtest.ts):
   (`private-desktop-development`), the Warcraft client on LAN pair 0's lan0a
   in a single-player game (`lan solo`). Chrome runs on Xwayland
   (`--ozone-platform=x11`), so both take the same XTEST input.
-- The same Smashcraft source on both sides (smashcraft 8fb714ee1e): the
+- The same Mak'gora source on both sides (makgora 8fb714ee1e): the
   standalone with `-dev quick training` in place of its computer match, and the
   `native-input` map with the same chat command. Illidan, standing, taps
   attack (a 50 ms press): J in the browser's keys, N in the map's WASD preset.
@@ -380,7 +380,7 @@ Chrome; the gpu class, which scopes to one CPU, ran the same match at about a
 quarter of real time. A native window should be held to this table and to no
 held display frames.
 
-Smashcraft defects the run found, left for Smashcraft:
+Mak'gora defects the run found, left for Mak'gora:
 
 - `--four-fighters` picks Rifleman, who no longer ships in the map
   (`shipsInMap`), so the run fails on a missing model; the measurement put
@@ -394,7 +394,7 @@ Smashcraft defects the run found, left for Smashcraft:
 
 **Gain.** A join works through any NAT, CGNAT included, with no port
 forward, which the direct join can't do. A region list replaces guesswork
-about where to host. **Cost.** Five boxes in Wisp and Smashcraft, plus a
+about where to host. **Cost.** Five boxes in Wisp and Mak'gora, plus a
 second server that Tom decides on.
 
 ### Shape
@@ -432,7 +432,7 @@ both `cargo test` and `bun test`, keeps the two byte-identical.
   that region before joining.
 - **Delay from measured ping.** peer.ts's eight pings run end to end, so
   through a relay they measure the relayed path, and the transport's turn
-  delay follows from them. Smashcraft's map today estimates RTT from the
+  delay follows from them. Mak'gora's map today estimates RTT from the
   echo of its own sync rows, and under the lockstep link that echo is a
   whole number of turns, so it can only see d. L3 hands peer.ts's measured
   RTT to the map, and Wisp's `delay` sets the map's delay from it. Both
@@ -464,7 +464,7 @@ EU relay comes after that, when measured players call for one. A player's
 own consumer route can be worse than the backbone path, and L4's real-path
 run measures how often that happens.
 
-At about 170 ms, Smashcraft's policy gives one-way 6 frames. Minus the
+At about 170 ms, Mak'gora's policy gives one-way 6 frames. Minus the
 rollback budget of 4 that leaves 2, which is the floor delay of 2 frames.
 The remaining 4 frames are rollback, which equals the budget.
 
@@ -516,12 +516,12 @@ decision on accounts.
 
 ## Deferred
 
-- Smashcraft on Wisp's 64-frame batched messages instead of its 1–2 row
+- Mak'gora on Wisp's 64-frame batched messages instead of its 1–2 row
   packets. That is a wire change, so it re-records the golden and must pass
   net-accept.
 - A transport that doesn't wait on the peer each frame, so that rollback
   alone covers a late packet rather than the turn delay. The lockstep link
-  keeps every client's sync events on the same frame, which Smashcraft's
+  keeps every client's sync events on the same frame, which Mak'gora's
   ledger relies on today, and net-accept passes on it at 120 ms. Revisit if
   L4's real-path run shows stalls.
 - Choosing the region automatically from both players' pings.
@@ -538,48 +538,48 @@ Order:
 Command flags and test files named in a Done when that don't exist yet are
 created by that box.
 
-- **N1 Golden rollback records for Smashcraft and Battlecraft** ([smashcraft#802](https://github.com/tompassarelli/smashcraft/issues/802); smashcraft,
+- **N1 Golden rollback records for Mak'gora and Battlecraft** ([makgora#802](https://github.com/tompassarelli/makgora/issues/802); makgora,
   battlecraft). A packet-level golden per game, and a match golden for
-  Smashcraft (2 and 4 humans; 0, 60 and 120 ms; 1% loss), recorded on main
+  Mak'gora (2 and 4 humans; 0, 60 and 120 ms; 1% loss), recorded on main
   and run in Bun and 32-bit Lua. Done when:
-  `cd ~/code/smashcraft/main/ts && bun test test/netcode-golden.test.ts test/online-golden.test.ts && cd ~/code/battlecraft/main && bun test test/rollback-golden.test.ts`
+  `cd ~/code/makgora/main/ts && bun test test/netcode-golden.test.ts test/online-golden.test.ts && cd ~/code/battlecraft/main && bun test test/rollback-golden.test.ts`
 - **N2 Wisp's schedule layer, with the session rebuilt on it** ([wisp#96](https://github.com/tompassarelli/wisp/issues/96); wisp,
   battlecraft). Generic `ledger`, `frameRing` and `schedule`, with `session`
   over them. Battlecraft's pin is bumped, and its re-recorded packet golden
   lands in its own commit. Done when:
   `cd ~/code/wisp/main && bun test test/netcode.test.ts test/runtime.test.ts && cd ~/code/battlecraft/main && grep -q "$(git -C ~/code/wisp/main rev-parse origin/main)" wisp.lock && bun test test/rollback-golden.test.ts`
-- **N3 Ping-based delay and machine rate in Wisp** ([wisp#97](https://github.com/tompassarelli/wisp/issues/97); wisp, smashcraft).
-  `delay` and `rate` with their tests; Smashcraft bumps its pin and imports
+- **N3 Ping-based delay and machine rate in Wisp** ([wisp#97](https://github.com/tompassarelli/wisp/issues/97); wisp, makgora).
+  `delay` and `rate` with their tests; Mak'gora bumps its pin and imports
   them. Done when:
-  `cd ~/code/wisp/main && bun test test/netcode.test.ts && cd ~/code/smashcraft/main/ts && test ! -e src/game/netcode/delayPolicy.ts && bun test test/netcode-golden.test.ts test/online-golden.test.ts`
-- **N4 Smashcraft runs on Wisp's netcode** ([smashcraft#803](https://github.com/tompassarelli/smashcraft/issues/803); smashcraft). It bumps its pin and
+  `cd ~/code/wisp/main && bun test test/netcode.test.ts && cd ~/code/makgora/main/ts && test ! -e src/game/netcode/delayPolicy.ts && bun test test/netcode-golden.test.ts test/online-golden.test.ts`
+- **N4 Mak'gora runs on Wisp's netcode** ([makgora#803](https://github.com/tompassarelli/makgora/issues/803); makgora). It bumps its pin and
   deletes its ledger, frameRing, capture, fixedSchedule and shadowSchedule;
   both goldens stay unchanged in Bun and Lua32. Done when:
-  `cd ~/code/smashcraft/main/ts && test ! -e src/game/netcode/shadowSchedule.ts && git diff --exit-code origin/main~1 -- test/fixtures/netcode-golden test/fixtures/online-golden && bun test test/netcode-golden.test.ts test/online-golden.test.ts && bun wisp net-accept --out build/net-accept-n4`
-- **P1 Standalone parity audit** ([smashcraft#804](https://github.com/tompassarelli/smashcraft/issues/804); smashcraft). One line per surface
+  `cd ~/code/makgora/main/ts && test ! -e src/game/netcode/shadowSchedule.ts && git diff --exit-code origin/main~1 -- test/fixtures/netcode-golden test/fixtures/online-golden && bun test test/netcode-golden.test.ts test/online-golden.test.ts && bun wisp net-accept --out build/net-accept-n4`
+- **P1 Standalone parity audit** ([makgora#804](https://github.com/tompassarelli/makgora/issues/804); makgora). One line per surface
   (rendering, menus and HUD, sound, input, frame time), each with its check
-  and a box or a reason. It is written to smashcraft:docs/standalone-parity.md.
-  Done when: `test "$(grep -c '^- \*\*' ~/code/smashcraft/main/docs/standalone-parity.md)" -ge 5`
-- **P2 Standalone and native agree frame for frame** ([smashcraft#806](https://github.com/tompassarelli/smashcraft/issues/806); smashcraft). A
+  and a box or a reason. It is written to makgora:docs/standalone-parity.md.
+  Done when: `test "$(grep -c '^- \*\*' ~/code/makgora/main/docs/standalone-parity.md)" -ge 5`
+- **P2 Standalone and native agree frame for frame** ([makgora#806](https://github.com/tompassarelli/makgora/issues/806); makgora). A
   scripted standalone run of `cpu-expert.pad`, under both `native` and
   `pool-predicted` presentation, carries the same per-frame fighter digests
   as a native corpus recording of that pad. Done when:
-  `cd ~/code/smashcraft/main/ts && bun wisp parity standalone test/native/pads/cpu-expert.pad --presentation native,pool-predicted`
-- **P3 Assets from the player's own files** ([wisp#98](https://github.com/tompassarelli/wisp/issues/98); wisp, smashcraft). The window
+  `cd ~/code/makgora/main/ts && bun wisp parity standalone test/native/pads/cpu-expert.pad --presentation native,pool-predicted`
+- **P3 Assets from the player's own files** ([wisp#98](https://github.com/tompassarelli/wisp/issues/98); wisp, makgora). The window
   reads map imports from a given `.w3x` and stock art from the Warcraft
   install, with no private asset store and no GPU lease. Done when:
-  `cd ~/code/smashcraft/main/ts && bun wisp play --standalone --map build/release/Smashcraft.w3x --player-assets-only --script test/native/pads/cpu-expert.pad --headless --frames 1070 --out build/p3`
+  `cd ~/code/makgora/main/ts && bun wisp play --standalone --map build/release/Makgora.w3x --player-assets-only --script test/native/pads/cpu-expert.pad --headless --frames 1070 --out build/p3`
   exits 0.
-- **P4 Four humans in a standalone match** ([wisp#99](https://github.com/tompassarelli/wisp/issues/99); wisp, smashcraft). peer.ts and
+- **P4 Four humans in a standalone match** ([wisp#99](https://github.com/tompassarelli/wisp/issues/99); wisp, makgora). peer.ts and
   TurnLedger take N peers through a peer room: a handshake per peer, a turn
   delay from the largest round trip and one remote per peer. Done when:
-  `cd ~/code/smashcraft/main/ts && bun wisp net pair --humans 4 --relay local --script test/native/pads/cpu-expert.pad --frames 3600`
+  `cd ~/code/makgora/main/ts && bun wisp net pair --humans 4 --relay local --script test/native/pads/cpu-expert.pad --frames 3600`
   reports matching checksums on all four.
-- **P5 Player build of the standalone window** ([smashcraft#807](https://github.com/tompassarelli/smashcraft/issues/807); cost and publication: Tom
+- **P5 Player build of the standalone window** ([makgora#807](https://github.com/tompassarelli/makgora/issues/807); cost and publication: Tom
   decides). A packaged player download that needs no source tree, Bun or
   lease. It ships the native window, with no Chrome
   ([native-window-plan.md](native-window-plan.md), "Player build"). Done when:
-  `smashcraft-play --version` runs on a clean Windows runner.
+  `makgora-play --version` runs on a clean Windows runner.
 - **L1 Relay peer room** ([wisp#100](https://github.com/tompassarelli/wisp/issues/100); wisp relay/). A clockless room kind that forwards
   opaque datagrams among 2 to 4 handshaken members under the existing
   limits, with the control messages' test vectors shared with TypeScript.
@@ -592,18 +592,18 @@ created by that box.
   plays two peers through a local relay binary behind `net proxy --rtt 170`
   with matching checksums, no packet over 1200 bytes, and the measured bytes
   per match printed.
-- **L3 Region list, ping display and ping-set delay** ([wisp#102](https://github.com/tompassarelli/wisp/issues/102); wisp, smashcraft). It
+- **L3 Region list, ping display and ping-set delay** ([wisp#102](https://github.com/tompassarelli/wisp/issues/102); wisp, makgora). It
   pings each region before hosting; the host picks and the nearest is the
   default; peer.ts's RTT sets the map's delay through Wisp's `delay`; both
   delays are shown before the match. Done when:
   `cd ~/code/wisp/main && bun wisp net regions` prints each region with its
   measured round trip, and
-  `cd ~/code/smashcraft/main/ts && bun test test/pingDelay.test.ts` passes.
-- **L4 Smashcraft net-accept through the relay** ([smashcraft#808](https://github.com/tompassarelli/smashcraft/issues/808); smashcraft). It runs
+  `cd ~/code/makgora/main/ts && bun test test/pingDelay.test.ts` passes.
+- **L4 Mak'gora net-accept through the relay** ([makgora#808](https://github.com/tompassarelli/makgora/issues/808); makgora). It runs
   net-accept's cells through a local relay, plus one real-path match from the
   laptop to gex45 through Nexus with its stall and depth figures recorded.
   Done when:
-  `cd ~/code/smashcraft/main/ts && bun wisp net-accept --relay local --out build/net-accept-relay`
+  `cd ~/code/makgora/main/ts && bun wisp net-accept --relay local --out build/net-accept-relay`
 - **L5 US-West relay** ([wisp#103](https://github.com/tompassarelli/wisp/issues/103); waits until there are US-to-US matches; the server is then Tom's cost call, Hetzner
   Hillsboro CPX11 at €17.99 a month on 30 October 2026). A second region
   with the same service as Nexus. Nothing is bought now: Tom plays from

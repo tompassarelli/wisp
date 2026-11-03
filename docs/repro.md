@@ -290,7 +290,7 @@ The current offline Wisp19 native fixture imported 6,241 turns and 2,392 actions
 against the same host's 2,392 records with zero differences. The matching
 packet log also compared 2,293 original player blocks byte for byte, with zero
 differences. Its `SC_GP` I5
-inputs decoded through Smashcraft's existing `decodeTransport`: 1,240 input
+inputs decoded through Mak'gora's existing `decodeTransport`: 1,240 input
 rows over frames 361–980 reproduced the original `424399:834377` checksum
 in both headless clients. This supported 174 actions; 2,218 others were retained.
 The private adapter and replay remain in `~/.local/state/wisp/replay47/`;

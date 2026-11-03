@@ -19,9 +19,9 @@ consumer reapplies its declared values with supported native setters during
 synchronized `install()`. Wisp does not own those game-specific declarations
 or automatically apply them.
 
-Smashcraft is a consumer example: its [object-data declaration documentation](https://github.com/tompassarelli/smashcraft/blob/main/docs/typescript.md#build-the-map)
-(smashcraft:docs/typescript.md) describes the game-owned build inputs;
-[its runtime-field reload work](https://github.com/tompassarelli/smashcraft/issues/40)
+Mak'gora is a consumer example: its [object-data declaration documentation](https://github.com/tompassarelli/makgora/blob/main/docs/typescript.md#build-the-map)
+(makgora:docs/typescript.md) describes the game-owned build inputs;
+[its runtime-field reload work](https://github.com/tompassarelli/makgora/issues/40)
 covers updating fields on retained handles without rehosting.
 
 ## Map integration
@@ -139,7 +139,7 @@ Each module loads as the chunk `hot-KEY`, KEY its hash, and the host keeps its
 source map under that key, so an error report names TypeScript lines as a
 whole bundle's did.
 
-Measured on Smashcraft (168 modules) on 6 October 2026, a one-line edit of a
+Measured on Mak'gora (168 modules) on 6 October 2026, a one-line edit of a
 12 KB module:
 
 | | Full payload | Delta |
@@ -162,7 +162,7 @@ See [runtime](../src/map/hotReload.ts) and
 
 A client polls for a manifest that does not exist until a reload is
 published. Under Wine, a lookup of a missing file reads the folder that should
-hold it, and when that folder is missing too, its parent. Smashcraft 0.0.44
+hold it, and when that folder is missing too, its parent. Mak'gora 0.0.44
 measured one lookup at 32-35 ms in a CustomMapData of 94,057 files with no hot
 folder; 32 lookups a second asked for about 1.1 s of work per second of game,
 and Warcraft stalled for minutes. The reloader bounds that
@@ -183,7 +183,7 @@ never restarted: a client's timer state must not depend on what its own
 files hold. Only whether a poll looks changes.
 
 The bound left reload latency once a client has seen a host unchanged:
-Smashcraft's native median was 0.841 s and the sample's 0.298 s (both measured
+Mak'gora's native median was 0.841 s and the sample's 0.298 s (both measured
 with every poll looking, while every reload sent the whole bundle). A client
 that has seen neither the marker nor a manifest when the first reload is
 published finds one within a second, so that first reload is up to 1 s slower;

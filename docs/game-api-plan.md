@@ -13,7 +13,7 @@ natives. The API has two backends, chosen at build time:
 - **Native.** On Bun, the same imports resolve to Wisp's own implementation in
   TypeScript, which feeds the Rust window (docs/native-window-plan.md).
 
-Smashcraft moves onto the API one family at a time, with both backends green
+Mak'gora moves onto the API one family at a time, with both backends green
 after each family. No family moves in the same change as another.
 
 ## Why
@@ -36,12 +36,12 @@ semantics that it documents itself.
 
 ## What exists
 
-**Smashcraft's native calls.** Counted at smashcraft 6782827367 with the
+**Mak'gora's native calls.** Counted at makgora 6782827367 with the
 script under "Survey". It matches every call expression `Name(` whose name
-`src/natives/warcraft.d.ts` declares, in `smashcraft/ts/src/**/*.ts`:
+`src/natives/warcraft.d.ts` declares, in `makgora/ts/src/**/*.ts`:
 
 ```text
-$ bun family.ts natives.txt ~/code/smashcraft/main/ts/src
+$ bun family.ts natives.txt ~/code/makgora/main/ts/src
 UI frames               natives 48  sites 714  files 48
 effects                 natives 34  sites 623  files 44
 strings and math        natives 8   sites 242  files 35
@@ -75,7 +75,7 @@ over all of `ts/`). Host scripts never run in the map, so they do not migrate.
 `presentation`, `lobby`, `roster`, `session`, `classic` and `menu` call no
 native at all (0 sites).
 
-**Where Smashcraft reads Warcraft state today.** The simulation reads nothing
+**Where Mak'gora reads Warcraft state today.** The simulation reads nothing
 from Warcraft. Every read is in the shell (`host/loop`, `platform`) or in
 presentation:
 
@@ -211,7 +211,7 @@ module contract. So the Warcraft backend is a TSTL plugin,
 - It rewrites each call of an imported function as the lowering table's
   template, with arguments substituted in place. Most templates are one
   native call, with the arguments in the same order.
-- A template may name several natives only where every Smashcraft site
+- A template may name several natives only where every Mak'gora site
   already makes those calls together, as in `eventKey`, which is
   `GetHandleId(BlzGetTriggerPlayerKey())` at all 6 sites. A template is one
   expression, because a call has no statements to expand into, and each
@@ -230,7 +230,7 @@ module contract. So the Warcraft backend is a TSTL plugin,
   which wrap natives by name in the globals table.
 - The lowering table names natives only as they appear in
   `src/natives/warcraft.d.ts`, the generated declarations, and composes them
-  only as Smashcraft's own code does. It holds interface facts, like the
+  only as Mak'gora's own code does. It holds interface facts, like the
   declarations. G1 adds a line saying so to [clean-room.md](clean-room.md).
 
 **The Lua cost rule.** On the Warcraft backend a migrated call costs exactly
@@ -243,7 +243,7 @@ Warcraft goes to the native backend, where it is checked in every headless
 Bun test, instead of into the lowering.
 
 **The measurement that proves it,** run for the first family (G1) and again
-for every later family, in `smashcraft/ts`:
+for every later family, in `makgora/ts`:
 
 1. The pin update that brings the family's Wisp side lands alone first,
    because Wisp's own runtime is compiled into the bundle. On that commit:
@@ -257,7 +257,7 @@ for every later family, in `smashcraft/ts`:
 3. Normalize both bundles and diff them; the result prints nothing:
    `sed -E 's/(SOURCE_STAMP = )"[0-9a-f]{12}"/\1"STAMP"/; s/("src\/[^"]*\.ts):[0-9]+"/\1:N"/g'`.
    Two fields legitimately change. The source stamp is a hash of every
-   `ts/src` file (smashcraft:ts/plugins/source-version.ts). Each `throw`'s
+   `ts/src` file (makgora:ts/plugins/source-version.ts). Each `throw`'s
    `file:line` (wisp:plugins/warcraft-numbers.ts) moves when the codemod adds
    import lines. The codemod is one to one, so apart from those two fields
    lowering must reproduce the old script byte for byte. A non-empty diff
@@ -274,8 +274,8 @@ codemod puts the one TypeScriptToLua hoist difference at
 4 reads as an improvement.
 
 Steps 3 and 4 are the evidence the box reports. Step 3 is the stronger check.
-Step 4 shows the same result in the units that Smashcraft's frame budget is
-written in: the map's own work at p99 ≤ 10 ms (smashcraft AGENTS.md).
+Step 4 shows the same result in the units that Mak'gora's frame budget is
+written in: the map's own work at p99 ≤ 10 ms (makgora AGENTS.md).
 
 ## Native backend
 
@@ -331,7 +331,7 @@ rule, with its reason:
 
 ## Determinism and lockstep
 
-The simulation is Smashcraft's own code and calls no native today. The API
+The simulation is Mak'gora's own code and calls no native today. The API
 keeps lockstep determinism by changing none of its inputs:
 
 - **Input rows.** On Warcraft they arrive through the sync family. On native
@@ -357,7 +357,7 @@ keeps lockstep determinism by changing none of its inputs:
 
 For each family: its Wisp calls, the Warcraft mapping (every call lowers to
 the native shown, or to the sequence shown), the owner of the native backend,
-and the Smashcraft call sites that move (counted above).
+and the Mak'gora call sites that move (counted above).
 
 - **Effects** (`wisp/game/effects`). 623 sites in 44 files, 34 natives.
   - Calls: `createEffect(model, x, y)`, `destroyEffect`, `setEffectPosition`,
@@ -472,7 +472,7 @@ and the Smashcraft call sites that move (counted above).
   - Calls: `player(slot)`, `playerSlot`, `localPlayer`, `eventPlayer`,
     `playerControl(player)`, `playerSlotState(player)`, `playerName`,
     `setPlayerColor(player, color)`, `addLeaveEvent(events, player)`. The
-    pair stays two calls: Smashcraft holds `Player(slot)` in a local and tests
+    pair stays two calls: Mak'gora holds `Player(slot)` in a local and tests
     the pair for humans and for computers, and `playerFiles.ts:91` tests the
     slot state alone.
   - Warcraft: `Player`, `GetPlayerId`, `GetLocalPlayer`,
@@ -560,10 +560,10 @@ and the Smashcraft call sites that move (counted above).
 
 ## Migration order
 
-Each step lands in Wisp first and is then picked up by Smashcraft's pin
+Each step lands in Wisp first and is then picked up by Mak'gora's pin
 update and codemod. Both backends are green after each step:
 
-- **Warcraft backend green:** Smashcraft's suite (sim, headless Bun, Lua32),
+- **Warcraft backend green:** Mak'gora's suite (sim, headless Bun, Lua32),
   the empty bundle diff and `perf compare --threshold 0`.
 - **Native backend green:** `wisp play --standalone --window native`
   scripted run with `--emulated-calls FILE`, which writes the headless
@@ -573,7 +573,7 @@ update and codemod. Both backends are green after each step:
   needs `--frames N`; `--start match`, `--start select` or `--start results`
   chooses the screen it begins on.
 
-Per Smashcraft's policy, the step lands on those checks and takes its
+Per Mak'gora's policy, the step lands on those checks and takes its
 native capture on main's build afterwards.
 
 1. **G1 effects** (623 sites). It is first because it carries the plugin's
@@ -607,7 +607,7 @@ native capture on main's build afterwards.
 
 ## Boxes
 
-Placement: every box is code-only work on public repos (wisp, smashcraft), so
+Placement: every box is code-only work on public repos (wisp, makgora), so
 it goes to the cloud lane while the credit lasts.
 
 **What can run in parallel.** A box starts once the boxes it names have landed:
@@ -630,7 +630,7 @@ it goes to the cloud lane while the credit lasts.
   origin/main, then rerun the pin update and the script. Never merge pin files.
 - G2 and G3 both take from `jassFormat.ts`. The second to land moves its half
   from wherever the first left it.
-- Each box's list comes from the survey at smashcraft e611550e48, and its counts
+- Each box's list comes from the survey at makgora e611550e48, and its counts
   are what its `rg` printed there. `ConvertPlayerColor` is in G7a's list and
   `TriggerRegisterPlayerEvent` in G4c's, because a site of each outlasts G4a.
 
@@ -662,19 +662,19 @@ First, before the codemod, check two things. Lower one call
 byte-identical to the native call. Then check that two headless clients keep
 separate effects.
 
-Smashcraft lands two commits: the pin update alone, then a codemod of the 34
+Mak'gora lands two commits: the pin update alone, then a codemod of the 34
 effect natives to `wisp/game/effects`. `platform/soakHandles.ts` keeps raw
 natives, because it uses them as values.
 
 Done when:
 
-1. In smashcraft `ts/`, `rg -o '\b(AddLightningEx|AddSpecialEffect|BlzGetLocalSpecialEffectX|BlzGetLocalSpecialEffectY|BlzGetLocalSpecialEffectZ|BlzGetSpecialEffectScale|BlzPlaySpecialEffect|BlzResetSpecialEffectMatrix|BlzSetSpecialEffectAlpha|BlzSetSpecialEffectAnimation|BlzSetSpecialEffectAnimationBlendTime|BlzSetSpecialEffectColor|BlzSetSpecialEffectColorByPlayer|BlzSetSpecialEffectMatrixScale|BlzSetSpecialEffectOrientation|BlzSetSpecialEffectPitch|BlzSetSpecialEffectPosition|BlzSetSpecialEffectRoll|BlzSetSpecialEffectScale|BlzSetSpecialEffectTime|BlzSetSpecialEffectTimeScale|BlzSetSpecialEffectYaw|BlzSetSpecialEffectZ|BlzSpecialEffectClearSubAnimations|CreateTextTag|DestroyEffect|DestroyLightning|MoveLightningEx|SetLightningColor|SetTextTagColor|SetTextTagPermanent|SetTextTagPos|SetTextTagText|SetTextTagVisibility)\(' src | wc -l` prints
+1. In makgora `ts/`, `rg -o '\b(AddLightningEx|AddSpecialEffect|BlzGetLocalSpecialEffectX|BlzGetLocalSpecialEffectY|BlzGetLocalSpecialEffectZ|BlzGetSpecialEffectScale|BlzPlaySpecialEffect|BlzResetSpecialEffectMatrix|BlzSetSpecialEffectAlpha|BlzSetSpecialEffectAnimation|BlzSetSpecialEffectAnimationBlendTime|BlzSetSpecialEffectColor|BlzSetSpecialEffectColorByPlayer|BlzSetSpecialEffectMatrixScale|BlzSetSpecialEffectOrientation|BlzSetSpecialEffectPitch|BlzSetSpecialEffectPosition|BlzSetSpecialEffectRoll|BlzSetSpecialEffectScale|BlzSetSpecialEffectTime|BlzSetSpecialEffectTimeScale|BlzSetSpecialEffectYaw|BlzSetSpecialEffectZ|BlzSpecialEffectClearSubAnimations|CreateTextTag|DestroyEffect|DestroyLightning|MoveLightningEx|SetLightningColor|SetTextTagColor|SetTextTagPermanent|SetTextTagPos|SetTextTagText|SetTextTagVisibility)\(' src | wc -l` prints
    `0`. It prints 623 at 6782827367.
 2. The normalized diff of `build/before.lua` and `build/after.lua` (step 3
    of the measurement) prints nothing.
 3. `bun wisp perf compare build/before.perf build/after.perf --threshold 0`
    exits 0.
-4. Smashcraft's `bun run test` passes in Bun and Lua32, with Bun/Lua parity
+4. Mak'gora's `bun run test` passes in Bun and Lua32, with Bun/Lua parity
    checksums equal on playable-human-four.
 5. The native window's scripted standalone run (`--start match --emulated-calls
    FILE`) draws the match's effects, and the file counts zero emulated calls of
@@ -698,7 +698,7 @@ Wisp:
 - The native backend's duplicate-registration check.
 - The frames and events section of `docs/game-api.md`.
 
-Smashcraft lands two commits: the pin update alone, then a codemod. The
+Mak'gora lands two commits: the pin update alone, then a codemod. The
 codemod moves the 48 UI natives in `game/ui`, `game/render`, `host/loop`,
 `host/entries` and `platform/` (`BlzSetAbilityTooltip` goes to bodies and
 `BlzEnableCursor` to input), the 51 event sites, and the 2 frame-id
@@ -707,13 +707,13 @@ codemod moves the 48 UI natives in `game/ui`, `game/render`, `host/loop`,
 
 Done when:
 
-1. In smashcraft `ts/`, `rg -o '\b(BJDebugMsg|BlzConvertColor|BlzCreateFrame|BlzCreateFrameByType|BlzDestroyFrame|BlzFrameClearAllPoints|BlzFrameGetChild|BlzFrameGetChildrenCount|BlzFrameGetEnable|BlzFrameGetName|BlzFrameGetText|BlzFrameGetTextSizeLimit|BlzFrameIsVisible|BlzFrameSetAbsPoint|BlzFrameSetAlpha|BlzFrameSetEnable|BlzFrameSetFocus|BlzFrameSetFont|BlzFrameSetLevel|BlzFrameSetModel|BlzFrameSetPoint|BlzFrameSetScale|BlzFrameSetSize|BlzFrameSetSpriteAnimate|BlzFrameSetText|BlzFrameSetTextAlignment|BlzFrameSetTextSizeLimit|BlzFrameSetTexture|BlzFrameSetVertexColor|BlzFrameSetVisible|BlzGetFrameByName|BlzGetLocalClientHeight|BlzGetLocalClientWidth|BlzGetOriginFrame|BlzGetTriggerFrame|BlzGetTriggerFrameEvent|BlzGetTriggerFrameText|BlzHideOriginFrames|BlzLoadTOCFile|BlzTriggerRegisterFrameEvent|ClearTextMessages|CreateQuest|DisplayTextToPlayer|DisplayTimedTextToPlayer|QuestSetCompleted|QuestSetDescription|QuestSetDiscovered|QuestSetIconPath|QuestSetRequired|QuestSetTitle|WispFrameSetSpriteTime|CreateTrigger|TriggerAddAction|DestroyTrigger)\(' src | wc -l`
+1. In makgora `ts/`, `rg -o '\b(BJDebugMsg|BlzConvertColor|BlzCreateFrame|BlzCreateFrameByType|BlzDestroyFrame|BlzFrameClearAllPoints|BlzFrameGetChild|BlzFrameGetChildrenCount|BlzFrameGetEnable|BlzFrameGetName|BlzFrameGetText|BlzFrameGetTextSizeLimit|BlzFrameIsVisible|BlzFrameSetAbsPoint|BlzFrameSetAlpha|BlzFrameSetEnable|BlzFrameSetFocus|BlzFrameSetFont|BlzFrameSetLevel|BlzFrameSetModel|BlzFrameSetPoint|BlzFrameSetScale|BlzFrameSetSize|BlzFrameSetSpriteAnimate|BlzFrameSetText|BlzFrameSetTextAlignment|BlzFrameSetTextSizeLimit|BlzFrameSetTexture|BlzFrameSetVertexColor|BlzFrameSetVisible|BlzGetFrameByName|BlzGetLocalClientHeight|BlzGetLocalClientWidth|BlzGetOriginFrame|BlzGetTriggerFrame|BlzGetTriggerFrameEvent|BlzGetTriggerFrameText|BlzHideOriginFrames|BlzLoadTOCFile|BlzTriggerRegisterFrameEvent|ClearTextMessages|CreateQuest|DisplayTextToPlayer|DisplayTimedTextToPlayer|QuestSetCompleted|QuestSetDescription|QuestSetDiscovered|QuestSetIconPath|QuestSetRequired|QuestSetTitle|WispFrameSetSpriteTime|CreateTrigger|TriggerAddAction|DestroyTrigger)\(' src | wc -l`
    prints `0`. It prints 765 at 6782827367 with the 48 names the pattern held then, and 775 with the three model and sprite names (`BlzFrameSetModel`, `BlzFrameSetSpriteAnimate`, `WispFrameSetSpriteTime`, all in `game/ui/liveCard.ts`) at 5cff2f5fad.
 2. The normalized bundle diff prints nothing, apart from the hoist at
    `SettingsPanel.showNameBox` named under the measurement (allowed).
 3. `bun wisp perf compare build/before.perf build/after.perf --threshold 0`
    exits 0.
-4. Smashcraft's `bun run test` passes in Bun and Lua32, with parity
+4. Mak'gora's `bun run test` passes in Bun and Lua32, with parity
    checksums equal.
 5. The native window's scripted standalone run (`--emulated-calls FILE`, on
    `--start select` and on `--start match`) shows character select and the
@@ -723,7 +723,7 @@ Done when:
    `src/ui`: `BlzGetOriginFrame` 1, `BlzCreateFrameByType` 17, `BlzFrameSetLevel` 17,
    `BlzFrameSetEnable` 17, `BlzFrameSetVisible` 17, `BlzFrameSetTexture` 1,
    `BlzFrameSetFont` 16 and `BlzFrameSetTextAlignment` 16 (measured on gex45 at
-   smashcraft 9007174a6a, `--start select` and `--start match`).
+   makgora 9007174a6a, `--start select` and `--start match`).
 
 Not required:
 
@@ -744,17 +744,17 @@ Wisp:
 - The rules in `docs/game-api.md`: `formatReal` keeps `R2S`'s binary32 text
   with ties away from zero, because replays are text.
 
-Smashcraft lands two commits: the pin update alone, then a codemod of the 8
+Mak'gora lands two commits: the pin update alone, then a codemod of the 8
 natives. Every call is one to one, so the lowering needs nothing beyond G1's
 template format.
 
 Done when:
 
-1. In smashcraft `ts/`, `rg -o '\b(I2R|I2S|R2I|R2S|R2SW|S2I|S2R|StringLength)\(' src | wc -l` prints `0`. It prints 235 at e611550e48.
+1. In makgora `ts/`, `rg -o '\b(I2R|I2S|R2I|R2S|R2SW|S2I|S2R|StringLength)\(' src | wc -l` prints `0`. It prints 235 at e611550e48.
 2. The normalized bundle diff prints nothing, and
    `bun wisp perf compare build/before.perf build/after.perf --threshold 0`
    exits 0.
-3. Smashcraft's `bun run test` passes in Bun and Lua32, with parity checksums
+3. Mak'gora's `bun run test` passes in Bun and Lua32, with parity checksums
    equal on playable-human-four.
 4. A Bun test and a Lua32 test of `src/game/native/text.ts` give the same text
    for the same table of values, ties included.
@@ -765,7 +765,7 @@ Done when:
 Not required:
 
 - lowering `toReal` to nothing;
-- `SubString`, `SquareRoot`, `Atan2` and the bit natives, which Smashcraft does
+- `SubString`, `SquareRoot`, `Atan2` and the bit natives, which Mak'gora does
   not call;
 - any other family.
 
@@ -785,20 +785,20 @@ Wisp:
   moves here from `effects.d.ts`.
 - Headless binds each client's slots into its world.
 
-Smashcraft lands two commits: the pin update alone, then a codemod. The second
+Mak'gora lands two commits: the pin update alone, then a codemod. The second
 also makes `ts/scripts/wisp/perfLua.ts` fail a run when `clients.firstDivergence()`
 is set, because no perf run checks that today. `ConvertPlayerColor` at `SetUnitColor` moves with bodies (G7a) and the
 mouse-move `TriggerRegisterPlayerEvent` with input (G4c).
 
 Done when:
 
-1. In smashcraft `ts/`, `rg -o '\b(GetLocalPlayer|GetPlayerController|GetPlayerId|GetPlayerName|GetPlayerSlotState|GetTriggerPlayer|Player|SetPlayerColor)\(' src | wc -l` prints `0`, and
+1. In makgora `ts/`, `rg -o '\b(GetLocalPlayer|GetPlayerController|GetPlayerId|GetPlayerName|GetPlayerSlotState|GetTriggerPlayer|Player|SetPlayerColor)\(' src | wc -l` prints `0`, and
    `rg -c EVENT_PLAYER_LEAVE src` prints nothing. The first prints
    164 at e611550e48.
 2. The normalized bundle diff prints nothing, and
    `bun wisp perf compare build/before.perf build/after.perf --threshold 0`
    exits 0.
-3. Smashcraft's `bun run test` passes in Bun and Lua32, with parity checksums
+3. Mak'gora's `bun run test` passes in Bun and Lua32, with parity checksums
    equal on playable-human-four.
 4. `bun wisp perf playable-human-four` exits 0 with its four clients undiverged,
    and `bun wisp net pair --humans 4 --relay local --script
@@ -827,16 +827,16 @@ Wisp:
   a 255-character limit. The native backend throws on a longer message, which
   headless Bun tests catch.
 
-Smashcraft lands two commits: the pin update alone, then a codemod of the 4
+Mak'gora lands two commits: the pin update alone, then a codemod of the 4
 natives.
 
 Done when:
 
-1. In smashcraft `ts/`, `rg -o '\b(BlzGetTriggerSyncData|BlzGetTriggerSyncPrefix|BlzSendSyncData|BlzTriggerRegisterPlayerSyncEvent)\(' src | wc -l` prints `0`. It prints 39 at e611550e48.
+1. In makgora `ts/`, `rg -o '\b(BlzGetTriggerSyncData|BlzGetTriggerSyncPrefix|BlzSendSyncData|BlzTriggerRegisterPlayerSyncEvent)\(' src | wc -l` prints `0`. It prints 39 at e611550e48.
 2. The normalized bundle diff prints nothing, and
    `bun wisp perf compare build/before.perf build/after.perf --threshold 0`
    exits 0.
-3. Smashcraft's `bun run test` passes in Bun and Lua32, with parity checksums
+3. Mak'gora's `bun run test` passes in Bun and Lua32, with parity checksums
    equal on playable-human-four.
 4. `bun wisp perf playable-human-four` exits 0 with its four clients undiverged,
    and `bun wisp net pair --humans 4 --relay local --script
@@ -865,16 +865,16 @@ Wisp:
   because `platform/osKeys.ts` caches its result and `addKeyEvent` takes that
   value.
 
-Smashcraft lands two commits: the pin update alone, then a codemod of the 17
+Mak'gora lands two commits: the pin update alone, then a codemod of the 17
 natives, which takes the 6 key `GetHandleId` sites with them.
 
 Done when:
 
-1. In smashcraft `ts/`, `rg -o '\b(BlzEnableCursor|BlzEnableSelections|BlzGetMouseScreenPosX|BlzGetMouseScreenPosY|BlzGetTriggerPlayerKey|BlzGetTriggerPlayerMouseX|BlzGetTriggerPlayerMouseY|BlzIsKeyPressed|BlzIsLocalClientActive|BlzIsMouseButtonPressed|BlzSetMousePos|BlzTriggerRegisterPlayerKeyEvent|ConvertOsKeyType|EnableUserControl|GetEventPlayerChatString|TriggerRegisterPlayerChatEvent|TriggerRegisterPlayerEvent)\(' src | wc -l` prints `0`. It prints 50 at e611550e48.
+1. In makgora `ts/`, `rg -o '\b(BlzEnableCursor|BlzEnableSelections|BlzGetMouseScreenPosX|BlzGetMouseScreenPosY|BlzGetTriggerPlayerKey|BlzGetTriggerPlayerMouseX|BlzGetTriggerPlayerMouseY|BlzIsKeyPressed|BlzIsLocalClientActive|BlzIsMouseButtonPressed|BlzSetMousePos|BlzTriggerRegisterPlayerKeyEvent|ConvertOsKeyType|EnableUserControl|GetEventPlayerChatString|TriggerRegisterPlayerChatEvent|TriggerRegisterPlayerEvent)\(' src | wc -l` prints `0`. It prints 50 at e611550e48.
 2. The normalized bundle diff prints nothing, and
    `bun wisp perf compare build/before.perf build/after.perf --threshold 0`
    exits 0.
-3. Smashcraft's `bun run test` passes in Bun and Lua32, with parity checksums
+3. Mak'gora's `bun run test` passes in Bun and Lua32, with parity checksums
    equal on playable-human-four.
 4. `bun wisp perf playable-human-four` exits 0 with its four clients undiverged,
    and `bun wisp net pair --humans 4 --relay local --script
@@ -904,16 +904,16 @@ Wisp:
   changes a parity checksum, the map's period changes; the native clock gains
   no rounding.
 
-Smashcraft lands two commits: the pin update alone, then a codemod of the 9
+Mak'gora lands two commits: the pin update alone, then a codemod of the 9
 natives. `TimerGetElapsed` becomes `localElapsed`.
 
 Done when:
 
-1. In smashcraft `ts/`, `rg -o '\b(CreateTimer|DestroyTimer|GetGameSpeed|PauseTimer|RestartGame|SetGameSpeed|SetMapFlag|TimerGetElapsed|TimerStart)\(' src | wc -l` prints `0`. It prints 61 at e611550e48.
+1. In makgora `ts/`, `rg -o '\b(CreateTimer|DestroyTimer|GetGameSpeed|PauseTimer|RestartGame|SetGameSpeed|SetMapFlag|TimerGetElapsed|TimerStart)\(' src | wc -l` prints `0`. It prints 61 at e611550e48.
 2. The normalized bundle diff prints nothing, and
    `bun wisp perf compare build/before.perf build/after.perf --threshold 0`
    exits 0.
-3. Smashcraft's `bun run test` passes in Bun and Lua32, with parity checksums
+3. Mak'gora's `bun run test` passes in Bun and Lua32, with parity checksums
    equal on playable-human-four.
 4. `bun wisp perf playable-human-four` exits 0 with its four clients undiverged,
    and `bun wisp net pair --humans 4 --relay local --script
@@ -939,16 +939,16 @@ Wisp:
   `src/game/native/sound.ts`, from `src/headless/natives/sound.ts`. The cues
   still reach `host/window/soundPlayer.ts`.
 
-Smashcraft lands two commits: the pin update alone, then a codemod of the 19
+Mak'gora lands two commits: the pin update alone, then a codemod of the 19
 natives, all one to one.
 
 Done when:
 
-1. In smashcraft `ts/`, `rg -o '\b(ClearMapMusic|CreateSound|CreateSoundFromLabel|EndThematicMusic|GetSoundFileDuration|KillSoundWhenDone|PlayMusic|PlayThematicMusic|SetSoundDistanceCutoff|SetSoundDistances|SetSoundDuration|SetSoundPitch|SetSoundPosition|SetSoundVolume|StartSound|StopMusic|StopSound|VolumeGroupReset|VolumeGroupSetVolume)\(' src | wc -l` prints `0`. It prints 78 at e611550e48.
+1. In makgora `ts/`, `rg -o '\b(ClearMapMusic|CreateSound|CreateSoundFromLabel|EndThematicMusic|GetSoundFileDuration|KillSoundWhenDone|PlayMusic|PlayThematicMusic|SetSoundDistanceCutoff|SetSoundDistances|SetSoundDuration|SetSoundPitch|SetSoundPosition|SetSoundVolume|StartSound|StopMusic|StopSound|VolumeGroupReset|VolumeGroupSetVolume)\(' src | wc -l` prints `0`. It prints 78 at e611550e48.
 2. The normalized bundle diff prints nothing, and
    `bun wisp perf compare build/before.perf build/after.perf --threshold 0`
    exits 0.
-3. Smashcraft's `bun run test` passes in Bun and Lua32, with parity checksums
+3. Mak'gora's `bun run test` passes in Bun and Lua32, with parity checksums
    equal on playable-human-four.
 4. `bun wisp headless --sound-cues FILE --json` lists the same cues before and
    after the codemod.
@@ -974,18 +974,18 @@ Wisp:
 - One call per native, so `GetCameraTargetPositionX/Y/Z` and
   `GetCameraEyePositionX/Y/Z` are six local reads.
 
-Smashcraft lands two commits: the pin update alone, then a codemod of the 35
+Mak'gora lands two commits: the pin update alone, then a codemod of the 35
 natives. `WispSetSkyLook` and `WispResetSkyLook` stay as they are: they are
 Wisp's own window hooks, guarded by `typeof`, and an API call has no value to
 guard.
 
 Done when:
 
-1. In smashcraft `ts/`, `rg -o '\b(BlzSetMinShadowCastingPointLightCount|BlzSetTerrainFogDrawOverSky|BlzSetTerrainFogMaxLinearDensity|BlzShowSkyBox|BlzShowTerrain|CameraSetSmoothingFactor|DisplayCineFilter|FogEnable|FogMaskEnable|GetCameraEyePositionX|GetCameraEyePositionY|GetCameraEyePositionZ|GetCameraField|GetCameraTargetPositionX|GetCameraTargetPositionY|GetCameraTargetPositionZ|PanCameraToTimed|ResetTerrainFog|SetCameraBounds|SetCameraField|SetCameraPosition|SetCineFilterBlendMode|SetCineFilterDuration|SetCineFilterEndColor|SetCineFilterEndUV|SetCineFilterStartColor|SetCineFilterStartUV|SetCineFilterTexMapFlags|SetCineFilterTexture|SetDayNightModels|SetSkyModel|SetTerrainFogEx|SetTerrainFogExV|SetTimeOfDay|SetTimeOfDayScale)\(' src | wc -l` prints `0`. It prints 80 at e611550e48.
+1. In makgora `ts/`, `rg -o '\b(BlzSetMinShadowCastingPointLightCount|BlzSetTerrainFogDrawOverSky|BlzSetTerrainFogMaxLinearDensity|BlzShowSkyBox|BlzShowTerrain|CameraSetSmoothingFactor|DisplayCineFilter|FogEnable|FogMaskEnable|GetCameraEyePositionX|GetCameraEyePositionY|GetCameraEyePositionZ|GetCameraField|GetCameraTargetPositionX|GetCameraTargetPositionY|GetCameraTargetPositionZ|PanCameraToTimed|ResetTerrainFog|SetCameraBounds|SetCameraField|SetCameraPosition|SetCineFilterBlendMode|SetCineFilterDuration|SetCineFilterEndColor|SetCineFilterEndUV|SetCineFilterStartColor|SetCineFilterStartUV|SetCineFilterTexMapFlags|SetCineFilterTexture|SetDayNightModels|SetSkyModel|SetTerrainFogEx|SetTerrainFogExV|SetTimeOfDay|SetTimeOfDayScale)\(' src | wc -l` prints `0`. It prints 80 at e611550e48.
 2. The normalized bundle diff prints nothing, and
    `bun wisp perf compare build/before.perf build/after.perf --threshold 0`
    exits 0.
-3. Smashcraft's `bun run test` passes in Bun and Lua32, with parity checksums
+3. Mak'gora's `bun run test` passes in Bun and Lua32, with parity checksums
    equal on playable-human-four.
 4. The native window's scripted standalone run (`--emulated-calls FILE`) frames a
    match with the same camera pose as before the codemod, and the file counts
@@ -1011,17 +1011,17 @@ Wisp:
 - Calls that only set up Warcraft's unit are no-ops on the native backend,
   declared as such.
 
-Smashcraft lands two commits: the pin update alone, then a codemod of the 34
+Mak'gora lands two commits: the pin update alone, then a codemod of the 34
 natives and the last `ConvertPlayerColor`. Its `worldOrigin` in
 `host/loop/shell.ts` stays a local function over the parts.
 
 Done when:
 
-1. In smashcraft `ts/`, `rg -o '\b(BlzGetUnitAttackCooldown|BlzSetAbilityTooltip|BlzSetUnitAttackCooldown|BlzSetUnitFacingEx|BlzSetUnitName|BlzSetUnitRealField|BlzShowUnitTeamGlow|ConvertPlayerColor|CreateUnit|GetLocationX|GetLocationY|GetPlayableMapRect|GetRectCenter|GetUnitMoveSpeed|GetUnitTypeId|IsUnitHidden|PauseUnit|RemoveLocation|RemoveUnit|SetUnitAnimation|SetUnitAnimationByIndex|SetUnitBlendTime|SetUnitColor|SetUnitFlyHeight|SetUnitInvulnerable|SetUnitMoveSpeed|SetUnitPathing|SetUnitScale|SetUnitTimeScale|SetUnitVertexColor|SetUnitX|SetUnitY|ShowUnit|UnitAddAbility|UnitRemoveAbility)\(' src | wc -l` prints `0`. It prints 56 at e611550e48.
+1. In makgora `ts/`, `rg -o '\b(BlzGetUnitAttackCooldown|BlzSetAbilityTooltip|BlzSetUnitAttackCooldown|BlzSetUnitFacingEx|BlzSetUnitName|BlzSetUnitRealField|BlzShowUnitTeamGlow|ConvertPlayerColor|CreateUnit|GetLocationX|GetLocationY|GetPlayableMapRect|GetRectCenter|GetUnitMoveSpeed|GetUnitTypeId|IsUnitHidden|PauseUnit|RemoveLocation|RemoveUnit|SetUnitAnimation|SetUnitAnimationByIndex|SetUnitBlendTime|SetUnitColor|SetUnitFlyHeight|SetUnitInvulnerable|SetUnitMoveSpeed|SetUnitPathing|SetUnitScale|SetUnitTimeScale|SetUnitVertexColor|SetUnitX|SetUnitY|ShowUnit|UnitAddAbility|UnitRemoveAbility)\(' src | wc -l` prints `0`. It prints 56 at e611550e48.
 2. The normalized bundle diff prints nothing, and
    `bun wisp perf compare build/before.perf build/after.perf --threshold 0`
    exits 0.
-3. Smashcraft's `bun run test` passes in Bun and Lua32, with parity checksums
+3. Mak'gora's `bun run test` passes in Bun and Lua32, with parity checksums
    equal on playable-human-four.
 4. The native window's scripted standalone run (`--emulated-calls FILE`) draws the
    fighters in their team colours, and the file counts zero emulated calls of
@@ -1042,16 +1042,16 @@ Wisp:
   `src/game/native/files.ts`: the host's file I/O in the game's data folder.
   Preload's 259-byte cut stays in `src/headless/natives/preloadText.ts`.
 
-Smashcraft lands two commits: the pin update alone, then a codemod of the 4
+Mak'gora lands two commits: the pin update alone, then a codemod of the 4
 natives.
 
 Done when:
 
-1. In smashcraft `ts/`, `rg -o '\b(Preload|PreloadGenClear|PreloadGenEnd|PreloadGenStart)\(' src | wc -l` prints `0`. It prints 33 at e611550e48.
+1. In makgora `ts/`, `rg -o '\b(Preload|PreloadGenClear|PreloadGenEnd|PreloadGenStart)\(' src | wc -l` prints `0`. It prints 33 at e611550e48.
 2. The normalized bundle diff prints nothing, and
    `bun wisp perf compare build/before.perf build/after.perf --threshold 0`
    exits 0.
-3. Smashcraft's `bun run test` passes in Bun and Lua32, with parity checksums
+3. Mak'gora's `bun run test` passes in Bun and Lua32, with parity checksums
    equal on playable-human-four.
 4. A Wisp test writes a 300-byte line on the native backend and reads all 300
    bytes back, and its headless client counts zero emulated calls of those 4
@@ -1071,12 +1071,12 @@ Wisp:
 - `plugins/game-api.ts` lowers a family constant (`EffectAnimation.attack`) to
   the global the native expects, the same global read as today. G1 added no
   constants, and the plugin has no form for them yet.
-- Each family's `.d.ts` declares the constants Smashcraft uses, and the native
+- Each family's `.d.ts` declares the constants Mak'gora uses, and the native
   backend gives them Wisp's own values. Until this box they are Warcraft's raw
   globals, so a family's codemod leaves them in place.
 - Every `export type X = <warcraft type>` in `src/game/*.d.ts` becomes opaque.
 
-Smashcraft lands two commits: the pin update alone, then a codemod of the
+Mak'gora lands two commits: the pin update alone, then a codemod of the
 constants and of the handle type names. `platform/soakHandles.ts`,
 `host/loop/sessionRates.ts`, `host/loop/handleLedger.ts` and
 `host/loop/objectData.ts` hold the only casts to a Warcraft type, for
@@ -1084,16 +1084,16 @@ constants and of the handle type names. `platform/soakHandles.ts`,
 
 Done when:
 
-1. In smashcraft `ts/`, after
+1. In makgora `ts/`, after
    `grep -oE '^declare (const|var|let) [A-Za-z0-9_]+' node_modules/wisp/src/natives/warcraft.d.ts | awk '{print $3}' > /tmp/constants.txt`,
    `rg -o -w -f /tmp/constants.txt src | wc -l` prints `0`. It prints 233 at
    e611550e48.
 2. In wisp, `rg -n '^export type \w+ = [a-z]' src/game/*.d.ts | wc -l` prints
-   `0`, and smashcraft's `bun run check` passes.
+   `0`, and makgora's `bun run check` passes.
 3. The normalized bundle diff prints nothing, and
    `bun wisp perf compare build/before.perf build/after.perf --threshold 0`
    exits 0.
-4. Smashcraft's `bun run test` passes in Bun and Lua32, with parity checksums
+4. Mak'gora's `bun run test` passes in Bun and Lua32, with parity checksums
    equal on playable-human-four.
 
 Not required:
@@ -1118,11 +1118,11 @@ Done when:
    `src/map/fileio.ts`, prints `total natives 0 sites 0`.
 2. `examples/sample`'s compiled bundle diffs empty before and after, with the
    same normalizing `sed`.
-3. Wisp's `bun test` passes in Bun and Lua32, and smashcraft's `bun run test`
+3. Wisp's `bun test` passes in Bun and Lua32, and makgora's `bun run test`
    passes on a pin of this commit.
 4. `examples/sample` runs in the native window's scripted standalone run, whose
    `--emulated-calls FILE` lists no emulated call of any native.
-5. A Smashcraft `--start select` and `--start match` run with `--emulated-calls
+5. A Mak'gora `--start select` and `--start match` run with `--emulated-calls
    FILE` counts zero of the 8 frame natives that `ChatPanel` called at G2.
 
 Not required:
@@ -1143,7 +1143,7 @@ Wisp:
 - Headless Bun/Lua parity still holds: Bun logs each call's lowering row, and
   Lua logs the same native.
 
-Smashcraft:
+Mak'gora:
 
 - `platform/soakHandles.ts`, `host/loop/sessionRates.ts` and
   `host/loop/handleLedger.ts` wrap natives by name, so they install nothing on
@@ -1155,10 +1155,10 @@ Done when:
 
 1. On Bun, a headless client's `emulatedCalls` sums to 0 over
    playable-human-four.
-2. In smashcraft `ts/`, the survey script over `src`, skipping those three
+2. In makgora `ts/`, the survey script over `src`, skipping those three
    files, `host/loop/objectData.ts` and the `Wisp*` hooks, prints `total
    natives 0 sites 0`.
-3. Smashcraft's `bun run test` passes in Bun and Lua32, with parity checksums
+3. Mak'gora's `bun run test` passes in Bun and Lua32, with parity checksums
    equal on playable-human-four.
 4. The normalized bundle diff prints nothing, and
    `bun wisp perf compare build/before.perf build/after.perf --threshold 0`
@@ -1190,7 +1190,7 @@ Done when:
 
 1. `rg -n 'warcraftNatives' src host test | wc -l` prints `0`.
 2. `rg -l 'timerDeadline|preloadText' src/game | wc -l` prints `0`.
-3. Wisp's `bun test` passes in Bun and Lua32, and smashcraft's `bun run test`
+3. Wisp's `bun test` passes in Bun and Lua32, and makgora's `bun run test`
    passes on a pin of this commit.
 4. The normalized bundle diff prints nothing, and
    `bun wisp perf compare build/before.perf build/after.perf --threshold 0`
@@ -1209,7 +1209,7 @@ Research, 31 October 2026. Warcraft III extension engines are years of map
 makers asking for what the stock game cannot do. This section classifies
 those requests against the families above. It ranks them by how much each one
 speeds up making a game in Wisp (hot reload, fast iteration, fewer
-workarounds) and by what Smashcraft and later Wisp games need. Only facts
+workarounds) and by what Mak'gora and later Wisp games need. Only facts
 about the APIs and the requests are recorded. No source licenses its code to
 Wisp (W3CE has no licence, YDWE is GPL-3.0, and the KKAPI and JAPI docs are
 platform documentation), so nothing here is copied from them.
@@ -1296,7 +1296,7 @@ rest from the release and the Hive page:
   that trust again. Wisp touches no Warcraft process. The Warcraft backend is
   a plain map, and the native backend is Wisp's own program, so it has nothing
   to hide from a scanner. Keep it that way: sign the player build
-  (smashcraft#807), store no credentials Wisp does not need, and never
+  (makgora#807), store no credentials Wisp does not need, and never
   inject.
 - **Save and load with extended state.** W3CE cannot save because its
   additions keep state outside the game's save format. A Wisp family has to
@@ -1324,24 +1324,24 @@ proposed boxes below.
 
 | Request | Source | What it does | Family | Status | Rank |
 | --- | --- | --- | --- | --- | --- |
-| Create and change doodads at run time | [W3CE#61](https://github.com/Warcraft-III-Community-Edition/W3CE/issues/61), JAPI doodad API | Place, move, rotate, scale, recolour and remove scenery without editor preplacement | new: scenery (`wisp/game/scenery`) | missing (Smashcraft lists about 400 scenery pieces in `game/presentation/*Scenery.ts`, places them as effects in `host/loop/stageScenery.ts`, and moves the matrix stretch into the scale because Warcraft culls by scale) | 1 |
+| Create and change doodads at run time | [W3CE#61](https://github.com/Warcraft-III-Community-Edition/W3CE/issues/61), JAPI doodad API | Place, move, rotate, scale, recolour and remove scenery without editor preplacement | new: scenery (`wisp/game/scenery`) | missing (Mak'gora lists about 400 scenery pieces in `game/presentation/*Scenery.ts`, places them as effects in `host/loop/stageScenery.ts`, and moves the matrix stretch into the scale because Warcraft culls by scale) | 1 |
 | Model texture swap | `CeSetModelTexturePath`/`CeGetModelTexturePath`/`CeGetModelTextureCount`, `CeSetWar3ImageTexturePath`, [W3CE#55](https://github.com/Warcraft-III-Community-Edition/W3CE/issues/55) (still broken), JAPI unit texture | Replace one texture of a placed model by index | effects and bodies | missing (Reforged declares no texture-swap native, so the Warcraft backend lowers at compile time to a model variant per literal pair) | 2 |
 | Model swap and attachments | `CeSetModelPath`, `CeAddModelAttachment`/`CeSetModelAttachment` ([W3CE#53](https://github.com/Warcraft-III-Community-Edition/W3CE/issues/53)), JAPI bind effect, unit model and portrait | Change a placed model's file, and pin a model to another's attachment point | effects and bodies | missing (Warcraft: `AddSpecialEffectTarget`, `BlzSetUnitSkin`) | 2 |
 | Queue and index animations | `CeQueueModelAnimation`, `CeSetModelAnimationByIndex`, `...WithRarity` | Play animations in sequence or by index without a timer | effects and bodies | planned in part (`playEffectAnimation`, `setBodyAnimation`); queue is missing | 2 |
 | Full keyboard events | `CeTriggerRegisterPlayerKeyEvent` with a meta mask, `CeGetTriggerPlayerChar`, keys held in another window (fixed in 0.3.0) | Modifier-exact keys, the typed character, and no keys from unfocused windows | input | covered for keys with modifiers and focus (`addKeyEvent`, `windowFocused`); the typed character is missing | 3 |
 | Mouse and cursor | `CeGetMouseX/Y`, `CeGetMouseRelativeX/Y` ([W3CE#57](https://github.com/Warcraft-III-Community-Edition/W3CE/issues/57)), `CeSetMouseState`, `CeFrameCageMouse` | Relative motion, cursor icon and confining the cursor | input | covered for position, buttons, set and show; relative motion, cursor icon and cage are missing | 3 |
-| What is under the pointer | `CeGetMouseHoveredFrame` and hovered or targeted unit, item and destructable, JAPI hovered unit and world-to-screen | Pick a frame or a body under the cursor, and convert between world and screen | input, view | missing (Smashcraft's character select hit-tests the pointer against its roster grid by hand, `tileAt` in `game/menu/selectionDrag.ts`) | 3 |
+| What is under the pointer | `CeGetMouseHoveredFrame` and hovered or targeted unit, item and destructable, JAPI hovered unit and world-to-screen | Pick a frame or a body under the cursor, and convert between world and screen | input, view | missing (Mak'gora's character select hit-tests the pointer against its roster grid by hand, `tileAt` in `game/menu/selectionDrag.ts`) | 3 |
 | Cliffs at run time | [W3CE#64](https://github.com/Warcraft-III-Community-Edition/W3CE/issues/64) | Generate cliffs procedurally in game | new: world (`wisp/game/world`) | missing (the Warcraft backend lowers to `war3map.w3e` at build time through `terrainAuthor`; the native window draws terrain in W4) | 4 |
 | Map bounds at run time | [W3CE#65](https://github.com/Warcraft-III-Community-Edition/W3CE/issues/65) | Grow or shrink the playable map in game | world | missing | 4 |
 | Terrain tiles and height | `SetTerrainType`, `TerrainDeform*`, and more than 16 tiles (0.3.0) | Paint and deform ground while playing | world | missing | 4 |
 | More model formats | [W3CE#50](https://github.com/Warcraft-III-Community-Edition/W3CE/issues/50) (W3CE declined it), SD models up to version 1100 | Load FBX, OBJ and Blend models | effects and bodies (asset build) | missing (the native renderer reads MDX; glTF converted to MDX at build time serves both backends) | 5 |
 | Fonts | [W3CE#45](https://github.com/Warcraft-III-Community-Edition/W3CE/issues/45) | Use more fonts than the install's seven | frames | covered (`setFont`; the native window rasterizes any TTF with fontdue) | 6 |
-| Text outline and per-state colour | `CeSetFrameTextColorEx`, `CeFrameAddText` | Colour text per button state and append text | frames | missing (Smashcraft draws an outline from four text copies in `game/ui/textOutline.ts`, while the native window already draws stroke) | 6 |
+| Text outline and per-state colour | `CeSetFrameTextColorEx`, `CeFrameAddText` | Colour text per button state and append text | frames | missing (Mak'gora draws an outline from four text copies in `game/ui/textOutline.ts`, while the native window already draws stroke) | 6 |
 | Frame geometry reads and texture coordinates | `CeGetFrameX/Y`, `CeFrameGetWidth/Height`, `CeFrameGet/SetParent`, `CeSetFrameTexCoord`, `CeGetFrameScale` | Read layout back, reparent, and draw part of a texture | frames | missing (G2 reads visibility, text, name and children only) | 7 |
 | Frame widgets | `CeFrameSetValue`/`MinMax`/`StepSize`, `CeFrameSetTooltip`, `CeFrameClick`, `CeFrameSetModel`/`CeGetFrameModel`, backdrop border, tile and alpha mode | Sliders, tooltips, scripted clicks, and models in UI | frames | missing | 7 |
 | Hotkeys defined in FDF | [W3CE#32](https://github.com/Warcraft-III-Community-Edition/W3CE/issues/32) | Buttons fire from their declared hotkey | frames, input | missing | 7 |
 | Save and load with extended state | Hive known issues, Discord (31 October) | Save games whose script or UI state is outside the engine's save | files, clock | missing (a simulation snapshot plus input, which also lets hot reload jump to a saved moment) | 8 |
-| Unlimited command buttons | [W3CE#62](https://github.com/Warcraft-III-Community-Edition/W3CE/issues/62), `CeGetCommandButtonData`, command-button effects | More ability slots than the 12-button card | new: command card, built from frames | missing (Smashcraft has no command card; the native backend builds one from frames and input) | 9 |
+| Unlimited command buttons | [W3CE#62](https://github.com/Warcraft-III-Community-Edition/W3CE/issues/62), `CeGetCommandButtonData`, command-button effects | More ability slots than the 12-button card | new: command card, built from frames | missing (Mak'gora has no command card; the native backend builds one from frames and input) | 9 |
 | Grid hotkeys | [W3CE#63](https://github.com/Warcraft-III-Community-Edition/W3CE/issues/63) | Keys by grid position, not by letter | command card, input | missing | 9 |
 | Build and target mode reads | `CeGetBuildMode*`, `CeGetTargetMode*`, `CeGetCurrentInputMode` | Know what the player is placing or aiming | command card | missing | 10 |
 | Switch maps in multiplayer | [W3CE#38](https://github.com/Warcraft-III-Community-Edition/W3CE/issues/38) | Change level without leaving the lobby | clock (`restartMatch`), players | missing (the native session owns its levels) | 11 |
@@ -1356,14 +1356,14 @@ proposed boxes below.
 | Jass operation limit | [W3CE#36](https://github.com/Warcraft-III-Community-Edition/W3CE/issues/36) | Raise or remove the op limit | none | not needed (Wisp compiles to Lua, which has no op limit, and the native backend runs on Bun) | 17 |
 | Lua, WASM and deterministic Lua | Hive features, `war3map.l64` (0.3.0), [W3CE#21](https://github.com/Warcraft-III-Community-Edition/W3CE/issues/21) | Modern scripting with deterministic numbers | the contract | covered (TypeScript to Lua, binary32 helpers, Bun) | 17 |
 | Unlocked frame rate and an FPS readout | JAPI; "models animate at your frame rate" (0.3.0) | Draw above the game's tick rate | native window | planned (render thread and present path, native-window-plan.md) | 17 |
-| Attack missile model, arc and speed | JAPI | Restyle attack missiles | effects | covered (Smashcraft's projectiles are effects it moves itself) | 17 |
+| Attack missile model, arc and speed | JAPI | Restyle attack missiles | effects | covered (Mak'gora's projectiles are effects it moves itself) | 17 |
 | Selection control | `CeSetWidgetSelectable`, `CeSetUnitLocalSelectable` | Make units unselectable, or unselectable for one player | input (`lockWarcraftControls`) | covered (no selection exists on native) | 17 |
 | Depth of field and minimap icons | `CameraSetDepthOfFieldScale`, `CameraSetFocalDistance`, `CreateMinimapIcon*` | Focus blur, and icons on the minimap | view | missing | 18 |
 
 ### Proposed boxes for the next families
 
 Each box becomes its own issue in the same shape as G1 and G2: a Wisp module
-for each backend, a Smashcraft codemod where one applies, and both backends
+for each backend, a Mak'gora codemod where one applies, and both backends
 green. The lowering rule stays the same. Where Warcraft has no runtime native,
 the call lowers at compile time to data the map already carries, such as a
 model variant, `war3map.w3e` or object data, or the contract declares it
@@ -1373,7 +1373,7 @@ native-only.
    z, yaw, scale, matrixScale, colour)`, `moveScenery` and `removeScenery`, plus
    a stage's static list, which the native backend draws as one batch.
    Warcraft lowers to effects and owns the scale-for-culling rule.
-   Done when: Smashcraft's `host/loop/stageScenery.ts` places its pieces
+   Done when: Mak'gora's `host/loop/stageScenery.ts` places its pieces
    through the family, so `rg -o 'wisp/game/effects|\b(AddSpecialEffect|DestroyEffect|BlzSetSpecialEffect\w+)\(' ts/src/host/loop/stageScenery.ts | wc -l`
    prints 0 (20 effect natives today); the normalized bundle diff is empty;
    and editing a scenery list hot-reloads into a running native window
@@ -1389,7 +1389,7 @@ native-only.
    to compile on the Warcraft backend with a message naming the rule.
 3. **Input completion.** Calls are the typed character, relative pointer
    motion, the cursor icon and cage, the frame under the pointer, and a
-   world-to-screen and screen-to-world pair in view. Done when: Smashcraft's
+   world-to-screen and screen-to-world pair in view. Done when: Mak'gora's
    character select takes the hovered roster tile from the family's
    frame-under-pointer call instead of `tileAt`; a headless Bun test drives
    each call; and the four-client playable journey shows no divergence.
@@ -1416,7 +1416,7 @@ Not planned yet (Tom, 31 October 2026); no boxes.
 - **Model swaps.** A replacement model works only when it keeps the
   skeleton and sequence names of the model it replaces, as HD remakes of
   the same Classic units do (for example LongbowMan's Warcraft 3 Classic
-  HD). Smashcraft authors its own fighter motion on Classic bones, so an HD
+  HD). Mak'gora authors its own fighter motion on Classic bones, so an HD
   fighter model must match those bones. Art overrides are client-local and
   cosmetic: the sim never reads them, so players with different art stay in
   sync. Wisp would redistribute no pack.
@@ -1526,9 +1526,9 @@ The reviewer confirmed these claims as they stood:
 - `perf compare --threshold 0`, which passes an equal run;
 - `wisp play --standalone --window native`, `playable-human-four` and the
   native window plan's labels;
-- that Smashcraft's sim reads no native, and the line citations.
+- that Mak'gora's sim reads no native, and the line citations.
 
-Writing boxes G3 to G8 against Smashcraft's call sites and G1's lowering format
+Writing boxes G3 to G8 against Mak'gora's call sites and G1's lowering format
 corrected the first draft of the families:
 
 - `isHuman(slot)`, `worldOrigin`, `placeBody`, `holdGameSpeed`,

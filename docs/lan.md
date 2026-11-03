@@ -20,7 +20,7 @@ sample checks/hour, calculated from each batch, versus 150/hour at the native
 24-second check baseline. The process loaded the map once before each batch;
 end-to-end command times including loading and JSON output were 1.180 s and
 0.595 s. These are sample-map Wisp measurements, not a native LAN measurement
-or the duration of Smashcraft's full parity batch. No frames are drawn and
+or the duration of Mak'gora's full parity batch. No frames are drawn and
 no wall-clock waits or engine memory writes are used.
 
 `wisp lan` runs Warcraft III clients that never sign in to Battle.net. The
@@ -130,8 +130,8 @@ three signed-in clients running:
 | Map | Clients | `lan solo` to game UI |
 | --- | --- | --- |
 | Booty Bay (stock, through the menu socket by hand) | lan0b | 13 s |
-| SmashcraftBC (177 MB) | lan1a, lan1b | 35 s, 24 s |
-| Smashcraft render40-single | lan0a, lan0b | 43 s, 48 s, then both crashed |
+| MakgoraBC (177 MB) | lan1a, lan1b | 35 s, 24 s |
+| Mak'gora render40-single | lan0a, lan0b | 43 s, 48 s, then both crashed |
 
 Playing the sample map at the parity profile, the two solo clients of pair 0
 used 1.07 and 0.97 cores (measured from /proc over about 10 s). From the
@@ -145,11 +145,11 @@ to the menus up to 180 s. Both render40-single clients crashed about 8 s into th
 with the same read of address 0x54. Clone-a crashed hosting that map too, so
 the map is the cause, not the solo path.
 
-**One game per launch.** After `EndGame` returned both SmashcraftBC
+**One game per launch.** After `EndGame` returned both MakgoraBC
 clients to their menus, `lan solo` with another map crashed both while
 loading (a null read), and a second solo game on a pair already in one ended
 the first and then stalled client a on its score screen or crashed both
-(smashcraft#542). So `lan solo` relaunches each client that has played a game
+(makgora#542). So `lan solo` relaunches each client that has played a game
 since its launch, waits for its login doors, and only then copies MAP and
 hosts.
 
@@ -162,7 +162,7 @@ of Tom's working Steam/Proton prefix
 (`~/.local/share/Steam/steamapps/compatdata/3516115571`), as decided in
 [#53](https://github.com/tompassarelli/wisp/issues/53). Historically, on 8 October 2026
 both reached the main menu on 3.0.1.24342, hosted and joined a private
-passworded Smashcraft game, and `archer-neutral.pad` passed parity there.
+passworded Mak'gora game, and `archer-neutral.pad` passed parity there.
 They run GE-Proton11-7 (wine-staging 11.0) and Steam Linux Runtime 4, as the
 pool does.
 
@@ -215,7 +215,7 @@ clone-c: `launch.sh d RUN_DIR`, no yielding to Tom. Sign it in once with
 Clone-a and clone-d made the second two-client lane until clone-d moved to
 gex45 (24 October). Its clients file named
 them `clone-a` and `clone-d`, so doctor starts each through `launch.sh`
-(smashcraft:ts/host/doctor/doctor.ts) and types no account:
+(makgora:ts/host/doctor/doctor.ts) and types no account:
 
 ```json
 { "clients": [
@@ -296,7 +296,7 @@ as `lan pool` does for its clients. Without one, the first client takes the
 sound device and the second starts with "Unable to initialize audio device":
 its `GetSoundFileDuration` reads 0 and a map that reads it desyncs (wisp#60).
 
-A full session, from smashcraft:ts/:
+A full session, from makgora:ts/:
 
 1. Point a clients file at the clones (names `a` and `b`, the clone's
    `Documents/Warcraft III` and its port) and run `bun wisp client start
@@ -312,7 +312,7 @@ A full session, from smashcraft:ts/:
 3. Run `bun wisp client start --clients-file FILE` again: doctor presses Play
    and it waits for the main menu (83 s and 118 s on 8 October).
 4. Pass the same file to `pad` and `fresh`, which leave
-   `~/.local/state/smashcraft/clients.json` alone:
+   `~/.local/state/makgora/clients.json` alone:
    `bun wisp fresh MAP --no-quick --clients-file FILE` hosts the private
    passworded game (56 s to fighter selection), and
    `bun wisp pad SCRIPT --helper H --build typescript-integrity --out NATIVE --app-id a=steam_app_3775098022 --app-id b=steam_app_3775098022 --map MAP --clients-file FILE`
@@ -322,7 +322,7 @@ A full session, from smashcraft:ts/:
    their frames and passed: 10 native checksums replayed equal, 376 frames of
    rows, 39 fighter lines and 11 expectations.
 
-The copied launcher logs and `smashcraft-*` receipts from Tom's install can
+The copied launcher logs and `makgora-*` receipts from Tom's install can
 stay: doctor reads only launcher logs written since the running launcher
 started, and the pad runner ignores receipts written before its session began.
 
@@ -625,7 +625,7 @@ parity clients used 0.8–1.4 GB resident memory. This sizes admission and
 pairs while the helper admits them, in present and away mode. Each pair's
 session declares both of its clients (`--new-clients 2`, or 1 for a
 `--network` pair), so a pair is never half-started and torn down when the
-host has room for only one more client (smashcraft#585). It passes
+host has room for only one more client (makgora#585). It passes
 `--wait-seconds` (`--wait`, default 1800) and waits in the helper's
 arrival-order native queue, so a later pair, client launch or GPU job cannot
 take the slot it waits for; the pool prints each new reason the helper gives
@@ -694,7 +694,7 @@ Warcraft **3.0.1.24342**'s installed `webui/GlueManager.js` maps
 choice as `[Misc] hd`. The pool profiles all write Classic (`hd=0`); a signed-in client's `visual`
 writes Reforged (`hd=1`). Audio checks therefore use Classic
 sounds. The capture profiles set Ambient Occlusion on (`assao=1`); the other profiles set it off (`assao=0`). All omit
-`bloom`, `portraitBloom`, `particles` and `spellfilter`. Smashcraft play explicitly chooses Reforged (`hd=1`) and Ambient Occlusion off too.
+`bloom`, `portraitBloom`, `particles` and `spellfilter`. Mak'gora play explicitly chooses Reforged (`hd=1`) and Ambient Occlusion off too.
 
 The others cap the game at 60 frames a second, focused or not. A cap below
 the turn rate (40 turns a second at 25 ms) is untested.
@@ -709,7 +709,7 @@ and game time keeps pace with wall time; reduced rendering can delay input
 even when the LAN turn rate is lower than the cap. A different cap applies
 when that pair starts, through the normal capacity admission path.
 
-**Cost at parity** (7 October, two clients in a match on Smashcraft
+**Cost at parity** (7 October, two clients in a match on Mak'gora
 bisect-588610b7, measured over 10 s from /proc):
 
 | | lan0a | lan0b |
@@ -871,11 +871,11 @@ virtual clock whose wakes run late by up to 0.9 of a turn, for 25, 30 and
 17/17/16 cycles at speeds 1 to 16, and checks that every turn goes out within
 one wake of the wall time its summed game milliseconds reach.
 
-Measured on 24 October 2026 (Smashcraft integrity build, 3.0.0.24268, LAN
+Measured on 24 October 2026 (Mak'gora integrity build, 3.0.0.24268, LAN
 pair 0), the default ran 39.94 turns a second of exactly 25 ms at game pace
 0.998, and `--turn-ms 17,17,16` ran 60.00 turns a second at game pace 1.000
 with one callback per turn, light and heavy input alike, with no desync
-(smashcraft:docs/warcraft-api-netcode-findings.md, "Input sampling against the
+(makgora:docs/warcraft-api-netcode-findings.md, "Input sampling against the
 LAN host's turn interval").
 
 ### Faster turn delivery

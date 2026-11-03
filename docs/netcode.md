@@ -71,5 +71,5 @@ player who leaves while holding a key is idle after their last accepted row.
 `test/netcode.test.ts` runs them in Bun, and `test/lua/index.ts` in 32-bit Lua
 (`test/runtime.test.ts`, a farm test).
 
-Battlecraft keeps its `InputRow`, its codec and its simulation. Smashcraft
+Battlecraft keeps its `InputRow`, its codec and its simulation. Mak'gora
 keeps its own netcode until the migration planned in [online-plan.md](online-plan.md) lands.

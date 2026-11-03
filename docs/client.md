@@ -59,13 +59,13 @@ BASE again. LAN pool clients share their source's storage the same way through
 ## Remote native runs
 
 `bun wisp native remote` stages a native run on an SSH host and copies its
-results to `~/.local/state/smashcraft/RUN/`. The VM already has the game's
+results to `~/.local/state/makgora/RUN/`. The VM already has the game's
 project, Bun, Wisp, its private inputs and ready clients. Use an SSH alias
 configured with its existing key and port; the runner uses batch authentication.
 Its clients file must name paths and services on the VM.
 
 ```sh
-bun wisp native remote --host warcraft-vm --project /home/tom/code/smashcraft/ts \
+bun wisp native remote --host warcraft-vm --project /home/tom/code/makgora/ts \
   --map build/map.w3x --pads pads --clients-file clients-vm.json --run ko-001 \
   --dry-run -- pad pads/ko-bottom.pad --map build/map.w3x \
   --clients-file clients-vm.json --out '{out}'

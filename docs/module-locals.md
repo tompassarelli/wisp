@@ -2,7 +2,7 @@
 
 Lua allows 200 local variables per function, and each bundled module is one
 function. A module that passed 200 stopped the map loading
-([wisp#117](https://github.com/tompassarelli/wisp/issues/117), smashcraft#399).
+([wisp#117](https://github.com/tompassarelli/wisp/issues/117), makgora#399).
 
 The numeric plugin (wisp:plugins/warcraft-numbers.ts) therefore:
 

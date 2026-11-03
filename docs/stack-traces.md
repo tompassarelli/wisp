@@ -24,7 +24,7 @@ Paths are relative to the compiling tsconfig's directory; the installed
 package's own throws read `wisp/src/...`, such as `at()`'s
 `wisp/src/sim/at.ts:4`. A rethrow of the latest thrown value keeps its
 first site. Only the throwing branch runs the recording, so ordinary frames
-cost the same: seven paired Lua32 runs of Smashcraft's frame-cost workload
+cost the same: seven paired Lua32 runs of Mak'gora's frame-cost workload
 (4,096 frames each) measured a median ratio of **0.9999** (0.912–1.015), with
 equal final checksums. With the stack plugin, the innermost frame gives the
 throw line instead.
@@ -74,7 +74,7 @@ run so old reports remain resolvable.
 ## Cost and scope
 
 Instrumentation adds bookkeeping at function entry, source statements and
-returns. Five paired runs of Smashcraft's production frame-cost workload in
+returns. Five paired runs of Mak'gora's production frame-cost workload in
 Lua32, 4,096 frames per run, measured a median **1.404× CPU time** (ratios
 1.378–1.460×). Emitted Lua grew from **667,313 to 1,372,708 bytes**, about
 **2.06×**. All paired initial checksums and complete final replay states matched.

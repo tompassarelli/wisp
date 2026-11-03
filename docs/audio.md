@@ -63,11 +63,11 @@ should follow the player's setting reads 1 at `--music-volume 1` and 0 at
 
 ## Game acceptance
 
-From Smashcraft's `ts/`, after updating its Wisp pin:
+From Mak'gora's `ts/`, after updating its Wisp pin:
 
 ```sh
-bun wisp headless frozen-throne --sound-cues /tmp/smashcraft-stage-music.json --json
-bun wisp headless quick-match --sound-cues /tmp/smashcraft-audio.json --json
+bun wisp headless frozen-throne --sound-cues /tmp/makgora-stage-music.json --json
+bun wisp headless quick-match --sound-cues /tmp/makgora-audio.json --json
 ```
 
 The existing `frozen-throne` journey selects its stage through the map's

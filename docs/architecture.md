@@ -51,6 +51,6 @@ A module may import only the modules in its "may use" column. `src/` never impor
 
 - Declared `exports` (box 18): `wisp/num/*`, `wisp/runtime/*`, `wisp/testing`, `wisp/map/*`, `wisp/natives`, `wisp/headless/*`, `wisp/cli`, `wisp/host/*`, `wisp/commands/*`, `wisp/lan`, `wisp/net`, `wisp/os`, `wisp/render`, `wisp/build`, `wisp/plugins/*`. Anything under `*/internal/` is not importable; a consumer importing an unexported path fails to resolve.
 - `src/{num,natives,runtime,map,headless}`; `host/{cli,os,toolchain,lan,net,render,commands,headless,dev,testing,soak,repro,perf,client,tune,play}` (the build module is `host/toolchain/` because `.gitignore` ignores every `build/`).
-- Game-specific behaviour (Shadow Strike, fighter/stage soak axes, Smashcraft paths) leaves Wisp: games register abilities and supply labels (W-game).
+- Game-specific behaviour (Shadow Strike, fighter/stage soak axes, Mak'gora paths) leaves Wisp: games register abilities and supply labels (W-game).
 - Order: box 18 alone; then W-cli, box 23, W-num; then boxes 19-22 in parallel; then W-game; then box 24 alone; then box 25 alone.
 - Game API (planned, [game-api-plan.md](game-api-plan.md)): games call Wisp's `wisp/game/<family>` modules instead of Warcraft natives; module `game` (`src/game/`) and its structure.toml entry land in box G1.

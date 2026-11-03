@@ -20,7 +20,7 @@ leaked debug symbols, by its author's own account, so a fact here may derive
 from the game's internals ([clean room](clean-room.md)). The page is closed
 to additions; a row leaves its hypothesis status only by a native-confirmed
 result with the fixture and build that measured it. On 31 October 2026 no
-open Wisp, Smashcraft or North issue named Warsmash or this page; the rows
+open Wisp, Mak'gora or North issue named Warsmash or this page; the rows
 marked source-researched in [Native confirmations still queued](#native-confirmations-still-queued)
 are the open hypotheses, and any plan that would rest on one waits for its
 fixture.
@@ -80,7 +80,7 @@ Five matched Wisp at once; the rules below fixed the rest. A second run of the
 same map with eight more rows (8 October, 14:09) repeated all twelve and
 confirmed the corpse and removal rules. A third run (client A, Classic graphics,
 8 October) wrote all twenty-four rows of `UnitStates44c.w3x` to
-`~/.local/state/smashcraft/native-corpus70-20261008/unit44/unit-states-p0.txt`.
+`~/.local/state/makgora/native-corpus70-20261008/unit44/unit-states-p0.txt`.
 Those rows match Wisp in Bun and emitted Lua32.
 
 | Behavior | Wisp before | Native 3.0.1 | Verdict |
@@ -211,14 +211,14 @@ inventory supplied by #50 uses direct body/effect positioning and timers;
 engine movement orders, queued unit animations and attachment natives are
 outside that inventory.
 
-### Smashcraft use and current Wisp verdicts
+### Mak'gora use and current Wisp verdicts
 
-The consumer inventory is Smashcraft **992ec9d3**: 179 distinct native names
+The consumer inventory is Mak'gora **992ec9d3**: 179 distinct native names
 in authored `ts/src/` excluding `*.tests.ts`, including optional diagnostic
 entries. Wisp's imported FileIO, reload and scene code adds the file, sync and
 effect getter operations described below. The runtime comparison is Wisp
 **211b899**, its `src/headless/client.ts`, frame implementation, and
-Smashcraft's `scripts/wisp/headlessNatives.ts` declarations. A source match
+Mak'gora's `scripts/wisp/headlessNatives.ts` declarations. A source match
 means the stated operation agrees with the researched behavior; it is not a
 Warcraft 3.0.1 confirmation. An unavailable Warsmash native cannot establish
 either a native match or a native mismatch.
@@ -229,7 +229,7 @@ either a native match or a native mismatch.
 | Equal-deadline callbacks and callbacks scheduling other timers | Registration order, callback threads after due-timer notification | Deadline order, then `TimerStart` order; a timer started inside a callback is timed from its deadline and fires in the same frame when due | Changed by wisp#56; see [Timers and frame stepping](#timers-and-frame-stepping). |
 | `TimerGetElapsed`, `PauseTimer`: trace periods, timeout reads, optional smooth drawing | Elapsed capped at timeout, repeating timer rescheduled; paused elapsed still uses its advancing clock | Elapsed restarts each period; expired reads the timeout; paused stays frozen | Changed by wisp#56; see [Timers and frame stepping](#timers-and-frame-stepping). |
 | `SetUnitX/Y`, `SetUnitFlyHeight(..., 0)`, `BlzSetUnitFacingEx`: fighter body placement each draw | Direct coordinate/height writes; immediate facing; normal body rendering can lag position | Immediate stored position, height and facing in snapshots | **Match for direct state writes and 0/180-degree facing**; rendered position lag remains unmeasured for the paused Locust bodies. #40's same-frame body capture decides the visible contract. |
-| `CreateUnit`, `RemoveUnit`, type/handle/owner, `ShowUnit`, scale, vertex color, move speed and attack cooldown: bodies and object-data readback | Object/state facts, separate visibility and rendering, with the life caveats above | Retained unit fields and snapshots; type becomes zero on removal | **Partial source match**. #44/#45's existing native fixture owns state/object-data confirmation. Life/death thresholds are outside Smashcraft's scripted fighting damage. |
+| `CreateUnit`, `RemoveUnit`, type/handle/owner, `ShowUnit`, scale, vertex color, move speed and attack cooldown: bodies and object-data readback | Object/state facts, separate visibility and rendering, with the life caveats above | Retained unit fields and snapshots; type becomes zero on removal | **Partial source match**. #44/#45's existing native fixture owns state/object-data confirmation. Life/death thresholds are outside Mak'gora's scripted fighting damage. |
 | `SetUnitPathing(false)`, `PauseUnit(true)`, Locust and Crow Form, invulnerability: disable ordinary engine interaction | Direct writes do not reject a paused unit; missing `SetUnitPathing` registration gives no disabled-pathing rule | Consumer explicitly ignores these flags because all fighting motion and damage are scripted | **Match for absence of engine movement in the headless journey**; native paused-body placement still requires #40. Engine collision/pathfinding is not called by this map. |
 | `SetUnitAnimation/ByIndex`, `SetUnitTimeScale`, `SetUnitBlendTime`: fallback bodies | Sequence clocks advance by elapsed time × speed; blend uses saved old pose and current pose | Stores selection, resets animation elapsed, advances at 60 Hz; consumer ignores unit blend time | Changed by wisp#58; see [Animation playback](#animation-playback). |
 | `BlzSetSpecialEffectAnimation`, `BlzPlaySpecialEffect`, `BlzSetSpecialEffectTime/TimeScale/AnimationBlendTime`: fighter/effect playback | These modern native contracts are absent; internal model clock/blend rules are recorded above | Selected clip and seek time retained; blend-time call is an explicit consumer no-op; renderer samples model tracks | Changed by wisp#58; see [Animation playback](#animation-playback). The seek's native contract stays unresolved. |
@@ -238,7 +238,7 @@ either a native match or a native mismatch.
 | `CreateSound/FromLabel`, `StartSound`: hit, summon, selection and match cues | Creation loads; start requests playback during the call | Creation and each start produce separate frame-tagged cues | **Match for request order**. A create alone is not a start. Audible onset needs the same native capture; cue-log equality does not measure speaker timing. |
 | Sound position, pitch, volume, duration, stop and `KillSoundWhenDone` | Setters are missing or no-ops in the researched revision | Position/pitch/volume retained at start; completion/attenuation ignored by consumer; stop and lifetime are not represented in the cue log | See [Sound start, stop and channel limits](#sound-start-stop-and-channel-limits) (wisp#60) for each rule. #48 owns audible playback; #51 owns the 3.0.1 OGG playback capture. |
 | Music play/stop/theme and file duration: round, victory and stage music | Request forwarding only | Consumer ignores background playback and decoding; explicit sound starts are retained | **Mismatch in observable audio coverage**; soundtrack playback is not represented by the headless cue report. |
-| Engine order queues and `QueueUnitAnimation` | Queued orders begin in insertion order; immediate orders cancel or replace pending orders | No movement/order/animation-queue model | **Not used**: no engine order or queue native appears in Smashcraft's source. Fighter input buffers are map simulation data, already replayed by the checksum check. |
+| Engine order queues and `QueueUnitAnimation` | Queued orders begin in insertion order; immediate orders cancel or replace pending orders | No movement/order/animation-queue model | **Not used**: no engine order or queue native appears in Mak'gora's source. Fighter input buffers are map simulation data, already replayed by the checksum check. |
 | Sync send/delivery and trigger callbacks: journal rows, frame UI, chat and key events | Due timers precede tick triggers and script threads; no current Battle.net latency measurements | Ordered triggers; configured sync delivery uses native-measured 25 ms turns and 60 Hz callbacks | **Intentional mismatch with emulator timing**; [network model](network-model.md) records the native basis. Three 3.0.1 online pad runs must match saved checksums. |
 | UI creation/destruction, named frame lookup, parent/child visibility, size/anchors/text/texture, level, focus, enable and text limit | No researched current `BlzFrame*` native contract in this page | Retained frame tree, layout, text input and events; font rasterization/alignment/scale are consumer no-ops | **Native verdict unresolved** for pixels; existing frame-state tests cover the Wisp contract and #40 covers matched UI captures. |
 | Local keyboard/mouse/focus/window dimensions and player slot/controller/name | No current client-input rule researched here | Scripted key state and frame typing; fixed client dimensions; consumer returns no mouse input and a configured slot roster | **Mismatch with a physical client**, an intentional input source substitution. Pad runs use the actual helper and compare its delivered frames; they do not validate physical mouse input. |
@@ -259,7 +259,7 @@ private game can supply #44 and #50 observations together. Build with
 files must be collected from each client. The earlier #44 fixture stays
 available for comparison.
 
-The replay surface at Smashcraft 992ec9d3 is **413 runnable `.pad` files**:
+The replay surface at Mak'gora 992ec9d3 is **413 runnable `.pad` files**:
 54 at the root, 160 under `180/`, and 199 across the other 24 folders.
 Every script names a match and exports a View-held moment. The JSON file
 under `233/` configures a helper interruption and is not a pad script.
@@ -276,7 +276,7 @@ next timer-processing phase. A zero timeout or positive timeout below
 50 ms can therefore fire on the next simulation step; a repeating timer
 in that range fires at most once per step, not at 60 Hz. Elapsed time is
 **min(T, elapsed turns × 0.05)**. These emulator values cannot resolve
-Smashcraft's 60 Hz shell, faster drawing timer, or native substep timing.
+Mak'gora's 60 Hz shell, faster drawing timer, or native substep timing.
 [Timer clock](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/timers/CTimer.java#L33-L77),
 [registration and due timers](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/CSimulation.java#L568-L597).
 
@@ -338,7 +338,7 @@ be established from that missing native or from direct X/Y writes alone.
 
 ### Unit position and facing
 
-Owner: wisp#57. Smashcraft **main** (`ts/src/`, excluding tests) moves units
+Owner: wisp#57. Mak'gora **main** (`ts/src/`, excluding tests) moves units
 only in `platform/shell/fighterBody.ts`: each draw calls `SetUnitX`,
 `SetUnitY`, `SetUnitFlyHeight(..., 0)` and `BlzSetUnitFacingEx` with 0 or
 180 on a body created with pathing off, Crow Form added and removed, Locust
@@ -349,17 +349,17 @@ they explain a verdict. Fixture: `test/unit-motion57/` (position, height,
 exact facing reads and a dash, Bun and 32-bit Lua in
 `test/headless-unit-motion.test.ts`, native map via its `build.ts`).
 
-| Behavior Smashcraft relies on | Warsmash rule | Wisp before #57 | Verdict |
+| Behavior Mak'gora relies on | Warsmash rule | Wisp before #57 | Verdict |
 | --- | --- | --- | --- |
 | `SetUnitX`/`SetUnitY` value | Argument narrowed to binary32 and stored | Stored the argument unrounded; Bun kept doubles that Lua32 rounds | **Mismatch, fixed**: stored as binary32 |
 | Read after a position write in the same callback | The setter writes the field the getter reads; no deferral | Immediate | **Match**; fixture case `position-read-in-same-call` |
-| Orders on a position write | `setX`/`setY` touch only coordinates, collision bookkeeping and region events, never the order queue | No orders | **Match**; Smashcraft's bodies are paused and never ordered |
-| Pathing or collision side effects | No pathability search or push for X/Y writes; collision entry is translated by the delta. Only `SetUnitPosition` runs an unstuck search | No collision | **Match** for X/Y; case `overlapping-bodies-held` reads two overlapping bodies 0.25 s later unmoved. Region events: no region in Smashcraft |
+| Orders on a position write | `setX`/`setY` touch only coordinates, collision bookkeeping and region events, never the order queue | No orders | **Match**; Mak'gora's bodies are paused and never ordered |
+| Pathing or collision side effects | No pathability search or push for X/Y writes; collision entry is translated by the delta. Only `SetUnitPosition` runs an unstuck search | No collision | **Match** for X/Y; case `overlapping-bodies-held` reads two overlapping bodies 0.25 s later unmoved. Region events: no region in Mak'gora |
 | `SetUnitFlyHeight(u, h, 0)` | Height narrowed to binary32 and assigned; rate ignored in this revision | Stored unrounded, rate ignored | **Mismatch, fixed**: stored as binary32. A nonzero rate (real game interpolates) is unused |
-| `BlzSetUnitFacingEx` | Sets simulation and rendered facing at once, normalized as `((f mod 360) + 360) mod 360` in binary32 | Stored the argument unchanged | **Mismatch, fixed; now matches 3.0.1**: the radian rule below. 0 reads 0 and 180 reads 179.99998; Smashcraft never reads facing back |
+| `BlzSetUnitFacingEx` | Sets simulation and rendered facing at once, normalized as `((f mod 360) + 360) mod 360` in binary32 | Stored the argument unchanged | **Mismatch, fixed; now matches 3.0.1**: the radian rule below. 0 reads 0 and 180 reads 179.99998; Mak'gora never reads facing back |
 | `CreateUnit` facing | Same normalization | Stored the argument unchanged | **Mismatch, fixed**: the same rule; the 8 `facing-created-exact-*` rows equal the `BlzSetUnitFacingEx` reads |
-| `SetUnitFacing` turn-rate interpolation | Sets simulation facing immediately; only the renderer turns at the turn rate | Immediate | **Not relied on**: Smashcraft uses `BlzSetUnitFacingEx`. Wisp's `SetUnitFacing` shares the rule |
-| Displayed body position | Renderer closes a gap larger than move speed × elapsed seconds by at most that distance per update | Snapshots show the stored position | **Unresolved, renderer only**: 3.0.1's `BlzGetLocalSpecialEffectX/Y` read an effect attached to the dashing body at 0, 0 on all 90 ticks, so no map read sees where a unit is drawn. Smashcraft reads no drawn position |
+| `SetUnitFacing` turn-rate interpolation | Sets simulation facing immediately; only the renderer turns at the turn rate | Immediate | **Not relied on**: Mak'gora uses `BlzSetUnitFacingEx`. Wisp's `SetUnitFacing` shares the rule |
+| Displayed body position | Renderer closes a gap larger than move speed × elapsed seconds by at most that distance per update | Snapshots show the stored position | **Unresolved, renderer only**: 3.0.1's `BlzGetLocalSpecialEffectX/Y` read an effect attached to the dashing body at 0, 0 on all 90 ticks, so no map read sees where a unit is drawn. Mak'gora reads no drawn position |
 
 **The 3.0.1 facing rule.** Warsmash keeps degrees; 3.0.1 keeps radians, and
 every product rounds toward zero, as its raw `*` does
@@ -413,7 +413,7 @@ once with two clients and compare `unit-motion-p0.txt` and
 
 ### Effects: attachment, scale and lifetime
 
-Owner: wisp#59. Smashcraft **main** at db050997 (`ts/src/`, excluding tests)
+Owner: wisp#59. Mak'gora **main** at db050997 (`ts/src/`, excluding tests)
 calls `AddSpecialEffect` (55 sites), `DestroyEffect` (32) and these setters:
 `Scale` (40), `TimeScale` (35), `Time` (32), `Position` (29), `Alpha` (27),
 `Animation` (23), `Color` (18), `Yaw` (17), `AnimationBlendTime` (14),
@@ -431,7 +431,7 @@ effects belong to wisp#58 and are not repeated here. Fixture:
 `test/effects59/` (seven cases and a Death timeline, Bun and 32-bit Lua in
 `test/headless-effects.test.ts`, native map via its `build.ts`).
 
-| Behavior Smashcraft relies on | Warsmash rule | Wisp before #59 | Verdict |
+| Behavior Mak'gora relies on | Warsmash rule | Wisp before #59 | Verdict |
 | --- | --- | --- | --- |
 | `AddSpecialEffect` start point | X and Y narrowed to binary32; Z is the higher of walkable surface and ground height; yaw 0 | X and Y stored unrounded; Z 0 (headless has flat ground at 0); yaw 0 | **Mismatch, fixed**: X and Y stored as binary32. Z and yaw **match** on headless's flat ground; case `created-at-point` |
 | `BlzSetSpecialEffectPosition`/`X`/`Y`/`Z` and read-back | Not registered in this revision; every effect real is a binary32 `real` argument | Stored unrounded; Bun kept doubles that Lua32 rounds; read back at once | **Mismatch, fixed**: stored as binary32. Axis setters change only their axis (case `axis-setters-independent`); reads in the same callback see the write (`position-read-in-same-call`) |
@@ -440,8 +440,8 @@ effects belong to wisp#58 and are not repeated here. Fixture:
 | `BlzSetSpecialEffectMatrixScale` compounding | Not registered, nor is `BlzResetSpecialEffectMatrix`; no rule | Each call multiplies the current matrix scale until `BlzResetSpecialEffectMatrix`; `BlzSetSpecialEffectYaw`, `Pitch`, `Roll` or `Orientation` after it also resets it to 1 (wisp#118; 3.0.0.24268 Classic capture, 11 Oct) | **Match** (3.0.1, 8 Oct ruler capture: X doubled once, twice, and twice with a reset between drew the global marker at 352, 704 and 352). So `-dev backdrop on` (`showBackdrop`), which reapplies it to existing scenery, widens that scenery again |
 | Position held between frames, frozen (time scale 0) or playing | Effects are placed once; only attached effects follow a parent | Position changes only through setters | **Match**: case `held-after-quarter-second` reads both 0.25 s later unmoved |
 | `DestroyEffect` lifetime | The drawn instance stops looping, plays the model's Death sequence, then is removed; without one it is removed when its current sequence ends. Warsmash's engine-side removals (buffs, missiles) start Death at once; its `DestroyEffect` native first lets the current loop finish | Removed from the scene at once; later setters and reads on the handle do nothing | **Mismatch, fixed against 3.0.1**: setters do nothing, while position reads return the dying effect's last position. Death starts immediately: the retained ruler capture's three destruction times agree with the reference within 61 ms, excluding the proposed 750 ms Stand-loop delay. Without Death, the current animation is retained (`no-death-frozen` draws Stand at 500 ms). The default gameplay constant `EffectDeathTime` removes the effect five game seconds after destruction, independently of its sequence length. The renderer reads Death sequences from model files (`effectDeaths`) to select Death; the cleanup clock never uses their length. Bun and Lua32 test both frozen and playing effects at frames 299 and 300 |
-| `DestroyEffect` on an effect frozen at time scale 0 | An instance advances `dt × 1000 × speed` ms a frame and ends a non-looping sequence only when it reaches the sequence's last millisecond; destroying doesn't change the speed, so a frozen effect never ends and is never removed | Removed from the scene at once | **Mismatch, fixed against 3.0.1**: Death freezes at its first frame, but the independent five-second cleanup clock still removes it. The retained second capture shows it 2.88 s after destruction; the first capture shows it gone after about 9 s. Smashcraft's victory pose and light are hidden before destruction, so their waiting poses draw nothing |
-| `AddSpecialEffectTarget` attachment | Picks the shortest attachment name containing every requested token, `origin` when empty; falls back to the unit's position | Placed at the unit's X/Y, no attachment | **Not relied on**: no Smashcraft call. On 3.0.1 the local position getters read an origin attachment at 0, 0 however its unit moves (wisp#57's dash, 90 ticks), and Wisp now places it there |
+| `DestroyEffect` on an effect frozen at time scale 0 | An instance advances `dt × 1000 × speed` ms a frame and ends a non-looping sequence only when it reaches the sequence's last millisecond; destroying doesn't change the speed, so a frozen effect never ends and is never removed | Removed from the scene at once | **Mismatch, fixed against 3.0.1**: Death freezes at its first frame, but the independent five-second cleanup clock still removes it. The retained second capture shows it 2.88 s after destruction; the first capture shows it gone after about 9 s. Mak'gora's victory pose and light are hidden before destruction, so their waiting poses draw nothing |
+| `AddSpecialEffectTarget` attachment | Picks the shortest attachment name containing every requested token, `origin` when empty; falls back to the unit's position | Placed at the unit's X/Y, no attachment | **Not relied on**: no Mak'gora call. On 3.0.1 the local position getters read an origin attachment at 0, 0 however its unit moves (wisp#57's dash, 90 ticks), and Wisp now places it there |
 
 Wisp still creates point effects at Z 0 because headless has no terrain; a
 map that reads a fresh effect's Z on a non-flat map would see the real
@@ -452,7 +452,7 @@ ground height natively.
 [effect lifetime](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/rendersim/RenderSpellEffect.java),
 [sequence end and speed](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/mdx/MdxComplexInstance.java#L580-L637).
 
-**Native capture, 8 Oct 2026** (3.0.1.24342, two signed-in clients, Smashcraft's
+**Native capture, 8 Oct 2026** (3.0.1.24342, two signed-in clients, Mak'gora's
 base map): both clients wrote the seven rows; six matched and
 `destroyed-frozen-reads` read `-25600,0,0`, so reads of a destroyed effect
 still playing Death return its position, now `EXPECTED`. The two
@@ -468,7 +468,7 @@ gone), `death-frozen` (destroyed at time scale 0: Death's first frame until
 cleanup), `no-death-frozen` (a model without Death: its current frozen pose),
 `teardown-hidden` (collapsed to scale 0, then destroyed, as the victory pose
 is: nothing shown) and `matrix-scale-once`, `-twice`, `-reset`. They replace
-the Smashcraft session's teardown and backdrop checks: both depend only on
+the Mak'gora session's teardown and backdrop checks: both depend only on
 these rules.
 
 Its first capture (8 Oct) confirmed that matrix scale multiplies (row above)
@@ -490,7 +490,7 @@ five-second cutoff. `ruler-03` reads Death's reference needle at 151 units
 all three are gone, while rulers destroyed one and two seconds later remain.
 The 30 s Death and time scale 0 therefore share the same cleanup deadline;
 the model without Death keeps its frozen 500 ms Stand pose until that deadline.
-Evidence: `~/.local/state/smashcraft/native-corpus70-20261008/ruler59/`,
+Evidence: `~/.local/state/makgora/native-corpus70-20261008/ruler59/`,
 13 PNGs with the reader's `.read.txt` files. Seven readable effect rulers
 match before the deadline; the three matrix rules retain the first capture's
 352/704/352 measurements because their later global markers are off the board.
@@ -547,7 +547,7 @@ expand the required parity surface.
 
 ### Animation playback
 
-Owner: wisp#58. Smashcraft **main** (`ts/src/`, excluding tests) draws each
+Owner: wisp#58. Mak'gora **main** (`ts/src/`, excluding tests) draws each
 fighter from a pool of one-sequence clip models (`game/render/fighterPool.ts`):
 blend time 0, sequence `Stand`, time scale 0, and a `BlzSetSpecialEffectTime`
 seek every draw; the map crossfades clips itself by showing two effects. Other
@@ -560,27 +560,27 @@ Rules live in wisp:src/game/native/animation.ts, used by the headless runtime an
 the renderer; wisp:src/game/native/animation.tests.ts holds the rules the #58
 rulers (wisp:test/headless-animation.test.ts) leave unchecked, run in Bun (`test/animation.test.ts`) and 32-bit Lua (`test/runtime.test.ts`).
 
-| Behavior Smashcraft relies on | Warsmash rule | Wisp before #58 | Verdict |
+| Behavior Mak'gora relies on | Warsmash rule | Wisp before #58 | Verdict |
 | --- | --- | --- | --- |
 | Selecting by name | A name's leading words that are animation tags give one primary tag and a set of secondary tags; the first other word ends it (`Stand - 2` is stand). The sequence needs the primary tag and exactly that secondary set; failing that, the set sharing most requested tags; failing that, the primary tag's sequence with fewest tags (stand when the name has none). Effect sub-animations add tags | First sequence whose name contained every word, so `stand` could pick `Stand Hit` | **Mismatch, fixed** |
 | Equal variants | Drawn at random, weighted by rarity, on each client | First variant | **Unmatchable**: native picks differ per client. Wisp takes the first of the most common. Pool clip models have one sequence |
 | Selecting by index | An index outside the model selects no sequence; tracks take their defaults (identity pose) | Clamped to the last or first sequence | **Mismatch, fixed to 3.0.1, which differs from Warsmash**: an index the model lacks shows Stand (8 Oct capture: index 99 drew Stand's frame 0), as an unknown name does. On a model with no Stand both show its first sequence, the sequence an effect never told what to play shows there, never no sequence: with none, StormBoltMissile.mdx (Birth and Death only) asked for stand drew every track at its default, so the Death lens flare (lensflare1A, hidden by a zero geoset alpha key in Birth) showed as pale rings around the hammer for its whole flight (2026-11-01) |
 | Clock start on selection | Interval start; selecting again restarts | Restart immediately | **Mismatch, fixed to 3.0.1**: effects restart on the next drawn frame. A seek in the selection's callback is replaced by that restart; a seek after a drawn frame persists. Units restart immediately |
 | Time scale | Animation time advances by elapsed seconds × 1000 × scale; 0 freezes the clock, global sequences and blend | Clock matched; blend and global clock not modeled | **Match for the clock; the rest fixed** (rows below) |
-| Time scale across a selection | `SetUnitAnimation(ByIndex)` resets the speed to 1 | Keeps the set time scale | **Warsmash differs; no change**: Smashcraft sets the time scale after every selection, so both give the same result. The capture checks persistence |
+| Time scale across a selection | `SetUnitAnimation(ByIndex)` resets the speed to 1 | Keeps the set time scale | **Warsmash differs; no change**: Mak'gora sets the time scale after every selection, so both give the same result. The capture checks persistence |
 | Seek (`BlzSetSpecialEffectTime`) | No such native; the internal frame seek moves the sample time and spends no blend time | Set the elapsed time | **Match to 3.0.1**: seconds from interval start, with no blend time spent. Both captures drew the 0.4 s seek within the ruler's 1 ms read (399 and 400). A pending selection replaces a same-callback seek (row above) |
 | Sampled frame | Whole milliseconds; fractions kept in the clock | Fractional frame, then the floored millisecond | **Mismatch, fixed to 3.0.1**: the whole millisecond below the clock, so a clock on an exact millisecond draws the one before it. wisp#2's Warden timeline seeks to 237.535 and 237.585 s (binary32 237535 and 237585 ms, each on a key) match the native silhouette only one millisecond earlier, 9 px at the blade tip, while the fractional seeks beside them match as floored. The ruler capture can't resolve the 1 ms. The clocks are held as binary32, so Bun and 32-bit Lua take the same frame |
 | End of a looping sequence | On reaching interval end − 1 ms, restart at the start, dropping the overshoot | Wrapped modulo the interval length | **Match to 3.0.1, which differs from Warsmash**: wrapped by the interval length, keeping the overshoot, for play and seeks alike (8 Oct capture: 4.5 s of a 1002 ms loop drew 492; dropping the overshoot at 60 frames a second would give 433) |
 | End of a non-looping sequence | Hold at interval end − 1 ms | Held at the interval end | **Match to 3.0.1, which differs from Warsmash**: held on the interval end itself (8 Oct capture: the needle's last-millisecond jump showed) |
 | Effect with no selection | Plays Birth once, then Stand, which always loops; a unit shows Stand | Stand from creation | **Mismatch, fixed** |
-| Blend (`SetUnitBlendTime`, `BlzSetSpecialEffectAnimationBlendTime`) | On a selection with blend time > 0, after the instance has animated at least 1 ms, and with no blend running: save each node's local translation, rotation and scale. Each step spends the same animation time from the blend; the shown pose is new × (1 − r) + saved × r, rotation by shortest-arc slerp, r = remaining ÷ blend time. A selection during a blend leaves it running | Not modeled; `SetUnitBlendTime` was a consumer no-op | **Mismatch, fixed** in runtime and renderer. Wisp's unit blend time starts at 0 until set (Warcraft reads `uble`); effects start at 0. Smashcraft's pool sets 0, so its fighters are unchanged |
+| Blend (`SetUnitBlendTime`, `BlzSetSpecialEffectAnimationBlendTime`) | On a selection with blend time > 0, after the instance has animated at least 1 ms, and with no blend running: save each node's local translation, rotation and scale. Each step spends the same animation time from the blend; the shown pose is new × (1 − r) + saved × r, rotation by shortest-arc slerp, r = remaining ÷ blend time. A selection during a blend leaves it running | Not modeled; `SetUnitBlendTime` was a consumer no-op | **Mismatch, fixed** in runtime and renderer. Wisp's unit blend time starts at 0 until set (Warcraft reads `uble`); effects start at 0. Mak'gora's pool sets 0, so its fighters are unchanged |
 | Global sequences | Whole milliseconds of animation time since creation, modulo the length (0 for length 0); kept across selections; seeks do not move it | Advanced to the seek time only for models with emitters, else 0 | **Mismatch, fixed; 3.0.1 confirms clock deltas**. Effects in the same creating frame share a renderer starting phase; units start at zero. The ruler compares effect globals relative to `global-frozen`, which measures that phase without advancing. Wisp uses a zero phase for deterministic headless sampling |
 | Shown sequence | The selected index | war3-model's `setFrame` re-picked the first sequence whose interval held the frame | **Mismatch, fixed**: the renderer sets the frame on the selected sequence |
-| Queued animations | Played in order when a non-looping sequence ends | Recorded, never played | **Not used** by Smashcraft |
+| Queued animations | Played in order when a non-looping sequence ends | Recorded, never played | **Not used** by Mak'gora |
 
 Track sampling between keys is outside this family: Warsmash interpolates
 from the last key back to the first across the sequence when a frame lies
-outside a sequence's keys, war3-model holds the nearest key. Smashcraft's clip
+outside a sequence's keys, war3-model holds the nearest key. Mak'gora's clip
 models carry keys at both interval ends, so their poses do not depend on it.
 
 **Blademaster frame 262 is not explained by these rules.** Clip 48
@@ -637,7 +637,7 @@ and `~/.local/state/wisp/ruler58-v2-20261008/out/animation-p0.txt`.
 
 ### Collision, pathing and orders
 
-Owner: wisp#61. Smashcraft relies on very little here. Its **main**
+Owner: wisp#61. Mak'gora relies on very little here. Its **main**
 (`ts/src/`, excluding tests) issues no orders, enumerates no groups, never
 asks for a range or collision size, and calls no `SetUnitPosition`. The whole
 surface is the fighter body setup in `platform/shell/fighterBody.ts`
@@ -649,15 +649,15 @@ already settle that position writes cause no pathing push and leave orders
 alone. Fixture: `test/unit-movement61/` (two cases, Bun and 32-bit Lua in
 `test/headless-unit-movement.test.ts`, native map via its `build.ts`).
 
-| Behavior Smashcraft relies on | Real rule | Wisp before #61 | Verdict |
+| Behavior Mak'gora relies on | Real rule | Wisp before #61 | Verdict |
 | --- | --- | --- | --- |
-| Crow Form added and removed so `SetUnitFlyHeight` works on a ground body | Map practice says a ground unit ignores fly height writes until Crow Form (`Amrf`) or Storm Crow Form (`Arav`) has been added; Warsmash assigns height unconditionally. On 3.0.1 (8 Oct 2026, two clients) a footman set up as a fighter body (pathing off, Locust, paused) took a 300 height write without Crow Form: both bodies read 300 | Applied every height write | **Match**: every height write applies, as before #61. The native capture overturned the Crow Form gate briefly added for #61. Smashcraft still adds Crow Form, which costs nothing. Case `fly-height-needs-crow-form=38400,38400` |
-| `SetUnitMoveSpeed(u, 270)` then `GetUnitMoveSpeed` | Speed is a real; Warsmash narrows it to an integer, the real game stores it as a real clamped to the gameplay constants' range | Stored the argument unrounded, so Bun kept doubles that Lua32 rounds | **Mismatch, fixed**: stored as binary32. 270 is integral and in range under every rule, so Smashcraft's reading is unchanged; clamping and integer narrowing stay unmodeled. Case `move-speed-set-and-read` |
+| Crow Form added and removed so `SetUnitFlyHeight` works on a ground body | Map practice says a ground unit ignores fly height writes until Crow Form (`Amrf`) or Storm Crow Form (`Arav`) has been added; Warsmash assigns height unconditionally. On 3.0.1 (8 Oct 2026, two clients) a footman set up as a fighter body (pathing off, Locust, paused) took a 300 height write without Crow Form: both bodies read 300 | Applied every height write | **Match**: every height write applies, as before #61. The native capture overturned the Crow Form gate briefly added for #61. Mak'gora still adds Crow Form, which costs nothing. Case `fly-height-needs-crow-form=38400,38400` |
+| `SetUnitMoveSpeed(u, 270)` then `GetUnitMoveSpeed` | Speed is a real; Warsmash narrows it to an integer, the real game stores it as a real clamped to the gameplay constants' range | Stored the argument unrounded, so Bun kept doubles that Lua32 rounds | **Mismatch, fixed**: stored as binary32. 270 is integral and in range under every rule, so Mak'gora's reading is unchanged; clamping and integer narrowing stay unmodeled. Case `move-speed-set-and-read` |
 | `SetUnitPathing(false)`: bodies never pushed or pushing | Turns off the unit's pathing and collision with other units; position writes do no pathability search anyway | No pathing or collision at all | **Match**; #57's `overlapping-bodies-held` reads two overlapping bodies unmoved |
-| Locust: no collision, no selection | Locust removes the unit from collision, selection, targeting and range enumeration | No collision, selection or enumeration exists | **Match** for what Smashcraft uses. Smashcraft enumerates no groups, so Locust's enumeration exclusion is not relied on |
+| Locust: no collision, no selection | Locust removes the unit from collision, selection, targeting and range enumeration | No collision, selection or enumeration exists | **Match** for what Mak'gora uses. Mak'gora enumerates no groups, so Locust's enumeration exclusion is not relied on |
 | `PauseUnit(true)`: bodies never act on their own | A paused unit runs no orders, acquires no targets and does not move; direct position and facing writes still apply | No orders, AI or movement; the map declares `PauseUnit` a no-op | **Match** |
-| Order queues | See [order queues](#order-queues-outside-the-maps-relied-on-behavior) | No order model | **Not used**: no `Issue*Order` call in Smashcraft |
-| `CreateUnit` placement | A ground unit with collision is placed at the nearest free spot, so a second body at the same point can be displaced | Stores the requested point | **Not relied on**: Smashcraft overwrites X/Y in the same call (`placeFighterBody`) before anything reads them |
+| Order queues | See [order queues](#order-queues-outside-the-maps-relied-on-behavior) | No order model | **Not used**: no `Issue*Order` call in Mak'gora |
+| `CreateUnit` placement | A ground unit with collision is placed at the nearest free spot, so a second body at the same point can be displaced | Stores the requested point | **Not relied on**: Mak'gora overwrites X/Y in the same call (`placeFighterBody`) before anything reads them |
 
 [Move speed native](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/parsers/jass/Jass2.java#L3125-L3131),
 [speed field](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/CUnit.java#L1872-L1879),
@@ -673,13 +673,13 @@ played in a private game wrote `fly-height-needs-crow-form=38400,38400` and
 
 ### Every relied-on rule and its evidence
 
-Smashcraft **be990a4a** (`ts/src/`, excluding tests) calls 179 natives. Each
+Mak'gora **be990a4a** (`ts/src/`, excluding tests) calls 179 natives. Each
 belongs to one row below; the row names the files that call them, the test
 that pins headless's rule in Bun and 32-bit Lua, and the native evidence.
 The rule-family captures below are confirmed on 3.0.1; their issue links
 retain the exact maps, files and measured rows.
 
-| Rule | Smashcraft call sites | Headless test | Native evidence |
+| Rule | Mak'gora call sites | Headless test | Native evidence |
 | --- | --- | --- | --- |
 | Timer deadlines, equal-deadline order, elapsed, pause, destroy (`CreateTimer`, `TimerStart`, `GetExpiredTimer`, `TimerGetElapsed`, `PauseTimer`, `DestroyTimer`) | `platform/shell/{renderClock,betweenFrames,shell,trace,frameCost,responseProbe,rollback,analogPad}.ts` | `test/headless-timers.test.ts` (`test/timers56/`) | 3.0.1, 16 rows match (#56) |
 | Body position, fly height and facing writes (`SetUnitX/Y`, `SetUnitFlyHeight`, `BlzSetUnitFacingEx`) | `platform/shell/fighterBody.ts` | `test/headless-unit-motion.test.ts` (`test/unit-motion57/`) | 3.0.1, all 49 motion/facing rows match in Bun and both Lua32 modes ([#57](https://github.com/tompassarelli/wisp/issues/57#issuecomment-6053308287)) |
@@ -688,7 +688,7 @@ retain the exact maps, files and measured rows.
 | Animation selection, clock, seek and blend (`SetUnitAnimation(ByIndex)`, `SetUnitTimeScale`, `SetUnitBlendTime`, `BlzSetSpecialEffect{Animation,Time,TimeScale,AnimationBlendTime}`, `BlzPlaySpecialEffect`) | `game/render/fighterPool.ts`, `platform/shell/{view,preview,matchStart}.ts`, `game/render/placedObjectEffects.ts` | `test/animation.test.ts`, `test/runtime.test.ts` (`src/game/native/animation.tests.ts`) | 3.0.1, all 20 animation rulers match; 61/61 calibration marks ([#58](https://github.com/tompassarelli/wisp/issues/58#issuecomment-6055102913)) |
 | Effect create, place, scale, colour, orientation, destroy (`AddSpecialEffect`, `DestroyEffect`, `BlzSetSpecialEffect*`) | 38 + 26 sites under `game/render/` and `platform/shell/` | `test/headless-effects.test.ts` (`test/effects59/`, `test/animation58/`) | 3.0.1, 7 script rows and 10 effect rules match; five-second cleanup bracketed at 4.52–5.06 s (#59) |
 | Sound start, stop, kill-when-done, position, volume, pitch, duration (`CreateSound(FromLabel)`, `StartSound`, `StopSound`, `KillSoundWhenDone`, `SetSound*`, `GetSoundFileDuration`) | `game/render/{combatEffects,matchPresentation,specialEffects,modelSoundPresentation,bearFeedback}.ts` | `test/headless-sounds.test.ts` (`test/sounds60/`) | 3.0.1 rows match (#60); voice cap unresolved |
-| Music (`PlayMusic`, `StopMusic`, `ClearMapMusic`, `PlayThematicMusic`, `EndThematicMusic`) | `game/render/matchPresentation.ts` | Intentional no-ops (Smashcraft's `SMASHCRAFT_NOOPS`) | Audible only; not a simulation rule |
+| Music (`PlayMusic`, `StopMusic`, `ClearMapMusic`, `PlayThematicMusic`, `EndThematicMusic`) | `game/render/matchPresentation.ts` | Intentional no-ops (Mak'gora's `MAKGORA_NOOPS`) | Audible only; not a simulation rule |
 | Collision, pathing and engine orders | none: no `Issue*Order`, group, range or `SetUnitPosition` call | `overlapping-bodies-held` in `test/headless-unit-motion.test.ts` | Not used |
 | Number and text conversions (`R2S`, `R2SW`, `I2S`, `R2I`, `I2R`, `S2I`, `S2R`) | `S2I` of sync data in `game/ui/{stageUi,selectionUi}.ts`; chat arguments in `platform/shell/keys.ts`; `R2S`/`R2SW` in `platform/shell/{trace,view,diagnostics,frame,frameCost,renderClock}.ts` | `test/headless-script-rules.test.ts` rows `r2s` to `s2r` | 3.0.1, 7 rows match after the fixes below |
 | Synchronized messages: every client receives each one, the sender included, in each sender's order, with its sender and prefix; the size limit (`BlzSendSyncData`, `BlzTriggerRegisterPlayerSyncEvent`, `BlzGetTriggerSync{Data,Prefix}`, `GetTriggerPlayer`) | `platform/shell/{journal,rollback,playerFiles,stageLoad,journalPause,playtest}.ts`, `game/ui/{selectionUi,stageUi,frames}.ts` | `sync-*` rows in `test/headless-script-rules.test.ts`; latency in `test/sync-channel.test.ts` | Latency native-measured ([network model](network-model.md)); 3.0.1 order, sender and size rows match (size after the fix below) |
@@ -699,7 +699,7 @@ retain the exact maps, files and measured rows.
 | Files: `Preload` output and `Preloader`'s first read per path | Wisp's FileIO and reloader; `platform/shell/{frameCost,renderClock}.ts` | `test/headless-input.test.ts`, `src/headless/natives/preloadText.tests.ts` | Native-derived ([hot reload](hot-reload.md)); each `Preload` string cut to 259 bytes ([Preload line length](#preload-line-length-wisp77)) |
 | Handle ids (`GetHandleId`): key codes, frame lookup keys, a diagnostic unit id | `platform/shell/{keys,objectData}.ts`, `game/ui/frames.ts` | `ConvertOsKeyType` returns its code; frames keep one handle each | Key codes match by declaration; unit numbers differ per runtime and are diagnostic text only |
 | Scene and presentation: camera, fog, sky, terrain, day and night, lightning, text tags, on-screen messages, fonts | `platform/shell/{view,shell,stageScenery,keys}.ts`, `game/render/{hitAreaPresentation,bearFeedback}.ts` | Scene state in `test/scene.test.ts`; the rest are declared no-ops | Pixels only; #40 and #48 own them. Not a simulation rule |
-| Map origin (`GetPlayableMapRect`, `GetRectCenter`, `GetLocationX/Y/Z`, `RemoveLocation`) | `platform/shell/shell.ts` | Smashcraft supplies its authored (0, 0, 0) | Map data, not an engine rule |
+| Map origin (`GetPlayableMapRect`, `GetRectCenter`, `GetLocationX/Y/Z`, `RemoveLocation`) | `platform/shell/shell.ts` | Mak'gora supplies its authored (0, 0, 0) | Map data, not an engine rule |
 | `RestartGame`, `BJDebugMsg`, `BlzSetAbilityTooltip`, `BlzLoadTOCFile`, `BlzHideOriginFrames`, `BlzEnableSelections`, `EnableUserControl` | `platform/shell/{keys,shell}.ts`, probes | Declared no-ops or session actions | Not simulation rules |
 
 ### Script rules outside the six families
@@ -733,7 +733,7 @@ below.
 | `BlzFrameSetText` keeps only the first `limit` characters once a limit is set (limit 3, `"abcdef"` reads `"abc"`) | Kept whole | **Fixed**: cut to the limit | `frame-text-limit-on-set` |
 | A frame starts enabled; `BlzFrameGetText` reads what was set | Same | Unchanged | `frame-enabled-default`, `frame-text-read` |
 | Sync arrival: every client, sender included, each sender's order, triggers in registration order, the right sender and prefix | Same | Unchanged | `sync-order-from-p0/p1`, `sync-sender-mismatches` |
-| A sync message's data arrives cut to its first 255 characters, and the prefix doesn't count (four-letter prefix: 200, 251 and 252 arrive whole, 300 as 255); `BlzSendSyncData` still returns true. Smashcraft sends at most 200 data bytes (`MESSAGE_MAX_BYTES`) | No limit | **Fixed**: data cut to 255 characters | `sync-send-returns`, `sync-lengths-from-p0/p1` |
+| A sync message's data arrives cut to its first 255 characters, and the prefix doesn't count (four-letter prefix: 200, 251 and 252 arrive whole, 300 as 255); `BlzSendSyncData` still returns true. Mak'gora sends at most 200 data bytes (`MESSAGE_MAX_BYTES`) | No limit | **Fixed**: data cut to 255 characters | `sync-send-returns`, `sync-lengths-from-p0/p1` |
 | `DestroyTrigger` inside the trigger's own first action: its later actions still run; later events don't fire it | Same | Unchanged | `trigger-destroyed-in-own-action` |
 
 Not measured, so headless keeps its earlier choice: the sign of a negative
@@ -751,7 +751,7 @@ finding.
 
 ## Timers and frame stepping
 
-wisp#56 checks the timer behaviour Smashcraft relies on. Smashcraft
+wisp#56 checks the timer behaviour Mak'gora relies on. Mak'gora
 **db050997** calls `CreateTimer` (15 sites), `TimerStart` (14),
 `TimerGetElapsed` (12), `DestroyTimer` (6), `PauseTimer` (4) and
 `GetExpiredTimer` (1) in `ts/src/`. It calls no `TriggerSleepAction`,
@@ -762,9 +762,9 @@ trace clock read as whole periods plus `TimerGetElapsed`, the smooth-draw
 timer's fraction of a tick, and the development probes' 0.01 s, 1/1024 s and
 zero periods.
 
-Native evidence is Smashcraft's render-clock probe on Warcraft III
-3.0.0.24268 (smashcraft:docs/high-refresh.md; raw reports in
-`~/.local/state/smashcraft/accept/codex-native-render-clock-20261007/`). It
+Native evidence is Mak'gora's render-clock probe on Warcraft III
+3.0.0.24268 (makgora:docs/high-refresh.md; raw reports in
+`~/.local/state/makgora/accept/codex-native-render-clock-20261007/`). It
 started a 3,600 s reference timer, a zero-period timer, a 1/1024 s timer and a
 4 s stop timer in that order, and the stop timer paused the others. Three runs
 at different frame rates gave these counts:
@@ -785,7 +785,7 @@ behaviour before and after wisp#56, and a verdict. The row is the fixture line
 in `test/timers56/main.ts` that `test/headless-timers.test.ts` checks in Bun
 and 32-bit Lua, and that the native capture must reproduce.
 
-| Rule Smashcraft relies on | Warsmash rule | Wisp before | Wisp now | Verdict | Fixture row |
+| Rule Mak'gora relies on | Warsmash rule | Wisp before | Wisp now | Verdict | Fixture row |
 | --- | --- | --- | --- | --- | --- |
 | A 1/60 s periodic timer fires 60 times a game second, one callback per headless frame (the simulation tick) | 50 ms turns, at most one callback per turn | 60 a second | 60 a second | **Match** with the native count. Warsmash's 20 Hz is not followed. | `ticks-in-one-second=60` |
 | A period shorter than a frame catches up: the 1/1024 s timer fires 1,024 times a second | At most once per turn | Once per frame, 60 a second | 1,024 a second, 17 or 18 between two 1/60 s ticks | **Mismatch, fixed**, matching the native 4,096 in 4 s | `fast-in-one-second=1024`, `fast-between-ticks=17..18` |
@@ -799,7 +799,7 @@ and 32-bit Lua, and that the native capture must reproduce.
 | A periodic timer's elapsed time restarts each period (trace clock: periods × 1,000 s + elapsed) | Restarts at each period, capped at the period | Time since `TimerStart`, never reset: the trace clock would double-count after 1,000 s | Restarts each period | **Mismatch, fixed** | `periodic-between-ms=250`, `periodic-after-ms=250` |
 | `GetExpiredTimer` is the timer whose callback runs (shell start-up destroys it) | The callback's own timer | Same | Same | **Match** | (start-up path of every headless journey) |
 | `PauseTimer`/`DestroyTimer` stop later callbacks, including ones due later in the same step (render-clock stop) | Removed at the next timer phase; a callback already queued still runs | Stops at once | Stops at once | **Match** with the native counts, which show no callback after the stop | `zero-period-in-one-second`, `fast-in-one-second` |
-| An expired one-shot reads its timeout; a paused timer keeps its elapsed time | Capped at the timeout; a paused timer's reading keeps advancing | Time since start, uncapped, also when paused | Timeout; frozen at the pause | Not read by Smashcraft after expiry or pause. Wisp follows the common Warcraft behaviour, not Warsmash; the capture confirms. | `expired-after-ms=500`, `paused-at-pause-ms=750`, `paused-later-ms=750` |
+| An expired one-shot reads its timeout; a paused timer keeps its elapsed time | Capped at the timeout; a paused timer's reading keeps advancing | Time since start, uncapped, also when paused | Timeout; frozen at the pause | Not read by Mak'gora after expiry or pause. Wisp follows the common Warcraft behaviour, not Warsmash; the capture confirms. | `expired-after-ms=500`, `paused-at-pause-ms=750`, `paused-later-ms=750` |
 
 The clock behind these rules, from the native counts:
 
@@ -830,7 +830,7 @@ The clock behind these rules, from the native counts:
   rounded toward zero, so a long timer's readings fall on its own binary32
   spacing: the 3.0.0 probe's 3,600 s reference read in steps of 1/4096 s.
 
-Headless frames still end at whole 1/60 s (as binary32), as Smashcraft's
+Headless frames still end at whole 1/60 s (as binary32), as Mak'gora's
 netcode was measured against, and sync messages keep arriving before a
 frame's timers ([network model](network-model.md)). Past 1,024 s a 0.0001 s
 period is under the clock's spacing and the sum stops advancing; headless
@@ -866,7 +866,7 @@ files of 100.
 
 ## Sound start, stop and channel limits
 
-wisp#60 checks the sound behaviour Smashcraft relies on. Smashcraft
+wisp#60 checks the sound behaviour Mak'gora relies on. Mak'gora
 **98fcf4b** (`ts/src/`, excluding tests) calls `StartSound` (8 sites),
 `SetSoundPosition` (7), `KillSoundWhenDone` (6), `SetSoundVolume` (5),
 `StopSound` (5), `CreateSoundFromLabel` (5), `CreateSound` (4),
@@ -883,28 +883,28 @@ started when lit, stopped with a fade-out when it goes out, and released with
 `StopSound` plus `KillSoundWhenDone`. It never reads `GetSoundIsPlaying` or
 `GetSoundDuration`; it calls no `SetSoundChannel`, `AttachSoundToUnit`,
 `StartSoundEx` or volume groups. Music natives are listed as not modelled by
-Smashcraft's headless declarations and are outside this section.
+Mak'gora's headless declarations and are outside this section.
 
 Warsmash (the researched revision above) gives little here: `StartSound`
 asks the audio backend for a new voice on every call, with no check that the
 handle is already playing and no cap on voices per file, label or channel;
 `StopSound`, `KillSoundWhenDone` and `GetSoundIsPlaying` are not registered;
 pitch and volume setters do nothing. The Warcraft rules below are the ones map
-authors work around (Smashcraft's own `StopSound`-before-`StartSound` on kept
+authors work around (Mak'gora's own `StopSound`-before-`StartSound` on kept
 handles exists because of the first), recorded here for the capture to
 confirm. The fixture reads `GetSoundIsPlaying` only as a probe; each case
 samples it at a fraction of the file's length, away from the start and end.
 
-| Rule Smashcraft relies on | Warcraft rule | Warsmash rule | Wisp before | Wisp now | Verdict | Fixture row |
+| Rule Mak'gora relies on | Warcraft rule | Warsmash rule | Wisp before | Wisp now | Verdict | Fixture row |
 | --- | --- | --- | --- | --- | --- | --- |
 | `StartSound` on a handle that is still playing (Immolation re-lit; why hover and item cues stop first) | A handle has one voice: the call neither restarts it nor adds a voice | A new voice each call | A second start cue; the remaining time restarted | Ignored: no cue, the first playback ends on time | **Mismatch, fixed** | `start-while-playing-at-1.25=false` |
 | `StopSound(s, false, false)` then `StartSound(s)` in one call (hover, item cues) | Restarts from the beginning | Not registered | Restarts | Restarts | **Match** | `stop-then-start-at-1.25=true` |
-| `KillSoundWhenDone` right after `StartSound` (every one-shot cue) | The sound plays out, then the handle is released; from the call on, `GetSoundIsPlaying` reads false (3.0.1 capture, both clients) | Not registered | Plays out, then released; read as playing until it ends | Plays out, then released; read as not playing from the call | **Mismatch, fixed** from the native rows. Smashcraft never reads `GetSoundIsPlaying` | `kill-when-done-at-0.5=false` |
+| `KillSoundWhenDone` right after `StartSound` (every one-shot cue) | The sound plays out, then the handle is released; from the call on, `GetSoundIsPlaying` reads false (3.0.1 capture, both clients) | Not registered | Plays out, then released; read as playing until it ends | Plays out, then released; read as not playing from the call | **Mismatch, fixed** from the native rows. Mak'gora never reads `GetSoundIsPlaying` | `kill-when-done-at-0.5=false` |
 | `StopSound` on a handle set to be killed (voice cut-off, Immolation release) releases it; stopping or starting a released handle does nothing | Released by the stop; later calls on it are ignored | Not registered | Released; later calls ignored | Same | **Match** | `stopped-kill-when-done-restarted=false`, `released-handle-started=false` |
 | `SetSoundPitch` changes how long a cue plays (swing pitch per tier) | Pitch is a playback-rate factor: pitch 2 ends in half the time | Setter does nothing | Ends at duration ÷ pitch | Same | **Match** | `pitch-two-at-0.25=true`, `pitch-two-at-0.75=false` |
 | `SetSoundPitch` and `SetSoundPosition` values (cue log) | `real` arguments are binary32 | Position not registered; pitch ignored | Stored unrounded: Bun's cue log kept doubles that Lua32 rounds | Stored as binary32 | **Mismatch, fixed** | Bun-only case in `test/headless-sounds.test.ts` (no getter in the game) |
 | `StopSound(loop, false, true)` then a later `StartSound` (Immolation out, then lit again) | The fade-out ends the loop; a later start plays it again | Not registered | Stops at once; a later start plays | Same | **Match** for the later start. How long the fade lasts is audible only and stays with the capture | `fade-stopped-loop-at-1=false`, `fade-stopped-loop-restarted=true` |
-| Several new handles of one file or label started in one frame (a burst of hits and swings) | Each handle has its own voice; no per-file or per-channel cap is established. The engine's total voice count is finite and the quietest or lowest-priority voices may be dropped, which a script cannot see | No cap | No cap; each start is a cue | Same | **Native unresolved**: the fixture's 12 handles are set to be killed, so 3.0.1 reads all of them as not playing and the row can't count voices. Smashcraft can't observe a dropped voice either | `same-file-playing=0/12` |
+| Several new handles of one file or label started in one frame (a burst of hits and swings) | Each handle has its own voice; no per-file or per-channel cap is established. The engine's total voice count is finite and the quietest or lowest-priority voices may be dropped, which a script cannot see | No cap | No cap; each start is a cue | Same | **Native unresolved**: the fixture's 12 handles are set to be killed, so 3.0.1 reads all of them as not playing and the row can't count voices. Mak'gora can't observe a dropped voice either | `same-file-playing=0/12` |
 | `GetSoundFileDuration` feeding `SetSoundDuration` (announcer, voice, item and hover cues) | The file's length in milliseconds; 0 when missing | Decoded duration | Unmodelled: a map declares it or supplies it | Same; the fixture supplies 2,000 ms for its file | **Not applicable**: headless decodes no sound files, so a game supplies lengths through `natives` | (every case is timed from it) |
 
 A label sound with no `SetSoundDuration`, or a file whose length a game does
@@ -978,7 +978,7 @@ reproducing a captured pose, not infer it from the simulation step count.
 emitter, BlizParticle06: tail only, ModelSpace and Unshaded, additive,
 Speed 160, Latitude 0, TailLength 1, LifeSpan 0.7 s, EmissionRate 50,
 Width and Length 60, scaling 25.8, 14.7 and 0.4, Clouds8x8 cell 0 for its
-whole tail, and its pivot 47 units above the model's origin. Smashcraft's
+whole tail, and its pivot 47 units above the model's origin. Mak'gora's
 full-bar aura at c703df30e places it at scale 1, 2 units above each
 fighter's feet.
 
@@ -1019,8 +1019,8 @@ measured earlier (94 above, 4 below) were not the running effect.
   places that origin, after `BlzSetSpecialEffectAnimation` and a time seek
   as before them. The renderer already does this for every effect
   (`transform` in `host/render/screen.ts`). The reference above ran
-  Smashcraft c703df30e, which shows the aura at scale 1, 2 units above the
-  feet; the headless frames compared with it came from a later Smashcraft
+  Mak'gora c703df30e, which shows the aura at scale 1, 2 units above the
+  feet; the headless frames compared with it came from a later Mak'gora
   that sizes the aura to the fighter (scale 1.34 and an 18-unit lift on
   Jaina), which made it look as if Classic dropped both. Changing one
   call per build of c703df30e, same native method, ROI clipped above the
@@ -1063,7 +1063,7 @@ explicitly describes a signalling server for lobby departure notifications.
 | The inspected browser startup mounts `war3.mpq`, `war3local.mpq`, `war3x.mpq` and `war3xlocal.mpq`, with later archives taking precedence, and reads loose maps. It bypasses the older extracted-files boot screen. | The README's `.w3-ready` extraction wait and preload tuning describe another startup path. They should not be treated as proof that the current browser prepares all scene assets before play, or accepts current CASC installations. | [mounted archives and loose maps](https://github.com/ErikSom/WarsmashModEngine/blob/d69e772b4dede6fd3569f9949a3180cdfea4635b/html/src/com/etheller/warsmash/html/engineworker/EngineWorkerMain.java#L196-L278), [extraction-screen bypass](https://github.com/ErikSom/WarsmashModEngine/blob/d69e772b4dede6fd3569f9949a3180cdfea4635b/html/src/com/etheller/warsmash/html/engineworker/EngineWorkerMain.java#L294-L315), [older documented boot](https://github.com/ErikSom/WarsmashModEngine/blob/d69e772b4dede6fd3569f9949a3180cdfea4635b/html/README.md#asset-staging) |
 | A requested BLP texture is read and decoded during texture loading. Map initialization loads post-UI map content and schedules map script initialization before its first render. Later script-created content can still request resources during play. | Source inspection supplies no measured absence of first-use stalls after ready. The current #48 work should decide that from its own first-round intervals, including new effects. | [texture loading](https://github.com/ErikSom/WarsmashModEngine/blob/d69e772b4dede6fd3569f9949a3180cdfea4635b/core/src/com/etheller/warsmash/viewer5/handlers/blp/BlpGdxTexture.java#L32-L40), [map initialization](https://github.com/ErikSom/WarsmashModEngine/blob/d69e772b4dede6fd3569f9949a3180cdfea4635b/core/src/com/etheller/warsmash/WarsmashGdxMapScreen.java#L222-L230) |
 | Render elapsed time is the actual difference between successive worker `requestAnimationFrame` timestamps, expressed in seconds. The first frame has zero elapsed time. A late rendered frame therefore advances the render clock by its actual gap. | Render work duration and the interval between displayed frames are separate measurements. This helps explain why a work-time p95 can pass while interval p95 misses. | [frame scheduling](https://github.com/ErikSom/WarsmashModEngine/blob/d69e772b4dede6fd3569f9949a3180cdfea4635b/html/src/com/etheller/warsmash/html/engineworker/EngineWorkerMain.java#L579-L583), [elapsed time](https://github.com/ErikSom/WarsmashModEngine/blob/d69e772b4dede6fd3569f9949a3180cdfea4635b/html/src/com/etheller/warsmash/html/engineworker/WorkerGraphics.java#L72-L87) |
-| Simulation advances in **50 ms** steps from accumulated elapsed time. Multiple already-completed turns can advance during one rendered frame; the inspected timing path has no maximum catch-up count. When waiting for a completed network turn, accumulated delay is discarded only when it is strictly greater than **150 ms**. Rendering and animation also consume elapsed time independently of the simulation step count. | These are fork behaviors, not native Warcraft confirmation or pacing values to adopt in Smashcraft. Late-frame behavior must be judged against #48's declared pace check. | [step duration](https://github.com/ErikSom/WarsmashModEngine/blob/d69e772b4dede6fd3569f9949a3180cdfea4635b/core/src/com/etheller/warsmash/util/WarsmashConstants.java#L20), [render and simulation clocks](https://github.com/ErikSom/WarsmashModEngine/blob/d69e772b4dede6fd3569f9949a3180cdfea4635b/core/src/com/etheller/warsmash/viewer5/handlers/w3x/War3MapViewer.java#L1140-L1196) |
+| Simulation advances in **50 ms** steps from accumulated elapsed time. Multiple already-completed turns can advance during one rendered frame; the inspected timing path has no maximum catch-up count. When waiting for a completed network turn, accumulated delay is discarded only when it is strictly greater than **150 ms**. Rendering and animation also consume elapsed time independently of the simulation step count. | These are fork behaviors, not native Warcraft confirmation or pacing values to adopt in Mak'gora. Late-frame behavior must be judged against #48's declared pace check. | [step duration](https://github.com/ErikSom/WarsmashModEngine/blob/d69e772b4dede6fd3569f9949a3180cdfea4635b/core/src/com/etheller/warsmash/util/WarsmashConstants.java#L20), [render and simulation clocks](https://github.com/ErikSom/WarsmashModEngine/blob/d69e772b4dede6fd3569f9949a3180cdfea4635b/core/src/com/etheller/warsmash/viewer5/handlers/w3x/War3MapViewer.java#L1140-L1196) |
 
 The fork's [0.1.2 changelog](https://github.com/ErikSom/WarsmashModEngine/blob/d69e772b4dede6fd3569f9949a3180cdfea4635b/html/CHANGELOG.md#012--april-2026)
 attributes faster startup partly to disabling heavy first-tick AI
@@ -1088,7 +1088,7 @@ lines through `PreloadGenClear`, `Preload` and `PreloadGenEnd` and the
 - The cut applies to the string alone: the line keeps its `call Preload( "`
   prefix and its closing `" )` and CRLF.
 
-The earlier single observation from smashcraft#509 (a 334-character line read
+The earlier single observation from makgora#509 (a 334-character line read
 back as 263) did not reproduce under control: no probe line came back longer
 than 259 bytes.
 
@@ -1106,7 +1106,7 @@ hold the split byte, so a cut inside a character drops that character. The
 | Warcraft life threshold, clipping, corpse writes and removal | #44's [unit-state fixture](headless.md#unit-states): twelve cases measured, plus rows for the exact cutoff, low corpse writes and removal timing | All 24 rows match 3.0.1, Bun and Lua32 ([results](#native-results-for-44)); UnitStates44c pins the exact first-alive cutoff at `106169p-18`. |
 | Widget/unit/player death callback order and repeated kills | A callback log with before/inside/after life and event names | Source-researched only; not an additional #44 acceptance fixture. Defer until a consuming check needs this order. |
 | Blend setting, frozen clock and the pose discrepancy | #40's existing same-frame-262 capture, followed by the held-frame capture at least 250 ms later and recorded camera state | Retained comparison is 24 of 25 passing; the red-flag landmark differs vertically by 40.73 pixels. Diagnostic candidate `8aad61e8` has produced no new captures because of build 24342 startup. Cause unresolved; native coordinator owns execution. |
-| Sequence end/loop overshoot and queued animation timing | The ruler map of the [animation playback capture](#animation-playback) | All 20 animation rulers match the retained 3.0.1 capture ([results](#animation-playback)). Queued animations stay unused by Smashcraft. |
+| Sequence end/loop overshoot and queued animation timing | The ruler map of the [animation playback capture](#animation-playback) | All 20 animation rulers match the retained 3.0.1 capture ([results](#animation-playback)). Queued animations stay unused by Mak'gora. |
 
 The existing native executor owns clients and fixture scheduling. Research
 does not start another client. Unit and pose workers received the factual

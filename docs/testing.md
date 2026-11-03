@@ -91,7 +91,7 @@ Time outside tests (loading, `beforeAll`) is charged to the file.
   `test/x.test.ts: this test stepped 90000 headless frames, over the 80000-frame ceiling per test; shrink it or move it to the farm`.
 - No file's cost is compared with a baseline, and CPU and wall-clock budgets
   are judged only in timing tests and exclusive-lease perf measurements
-  (wisp#114, smashcraft#394).
+  (wisp#114, makgora#394).
 - Every run prints the five heaviest tests by CPU, Lua32 instructions and
   frames, and the suite's CPU, test count and CPU per test, without gating CPU:
 

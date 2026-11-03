@@ -7,7 +7,7 @@ headless clients in one process Warcraft's measured sync delays.
 By default the [headless runtime](headless.md) delivers a synchronized
 message before the frame after the one that sent it. Warcraft delivers it
 several frames later. `syncDelivery()` (wisp:src/headless/syncChannel.ts)
-gives headless clients the latency Smashcraft's native traces measured, so a
+gives headless clients the latency Mak'gora's native traces measured, so a
 map's rollback, prediction and timeout logic meets realistic delays in a
 second-long run.
 
@@ -30,9 +30,9 @@ a run repeat exactly; change it to sample other delays.
 | Order | Each sender's messages arrive in the order it sent them; arrivals land before that frame's callbacks. | |
 
 The latency is fitted to the 765 own echoes of both clients 1.5–9.5 s into
-the first match of Smashcraft's #26 runs r7 and r8 (Smashcraft 0.0.42,
+the first match of Mak'gora's #26 runs r7 and r8 (Mak'gora 0.0.42,
 5 October 2026, two clients on one host, before any backlog;
-smashcraft:evidence/input-integrity-0042-r7-20261005/ and -r8-). Chat and key
+makgora:evidence/input-integrity-0042-r7-20261005/ and -r8-). Chat and key
 events still arrive at once.
 
 Bun and the emitted 32-bit Lua give the same arrival frames for the same
@@ -77,7 +77,7 @@ merges the turns behind it into one longer burst. A fixed offset keeps the
 mean wall time on game time. Callback n belongs to turn ⌈n·16.7 / 25⌉.
 
 It is fitted to the largest callback gap of each second (`cbgap`, from
-`os.clock`) in 1,520 seconds of Smashcraft's Battle.net rates lines with
+`os.clock`) in 1,520 seconds of Mak'gora's Battle.net rates lines with
 55–65 callbacks (playable-0047, matches 793–801, 19 October 2026):
 
 | Longest gap in a second | p1 | p10 | p25 | p50 | p75 | p90 | p95 | p99 | 30–45 ms |
@@ -153,14 +153,14 @@ under load still land on the measured time. `arrivals` is read at every
 send, so a consumer can anchor the times to its own run, such as the moment
 its scripted Start press went in. A sender's messages still arrive in order.
 
-Smashcraft's `pad SCRIPT --headless --replay-arrivals NATIVE_DIR` measures
+Mak'gora's `pad SCRIPT --headless --replay-arrivals NATIVE_DIR` measures
 its pause and resume control messages from a native run's helper journals
 this way (wisp#86, [Pause and drawn-frame timing](headless.md#pause-and-drawn-frame-timing)).
 
 ## Limits
 
 **Saturation is not modeled.** In r7, r8 and the 6 October send-rate sweep
-(smashcraft:evidence/input-integrity-sendcap-20261006/), a client's own
+(makgora:evidence/input-integrity-sendcap-20261006/), a client's own
 echo grew to 1–2 s while input was dense and stayed there. A per-sender byte
 budget does not explain it, though fitted to r8 alone (450 bytes a second
 per sender) it reproduced r8's echo, stalls and opponent lateness. On the
@@ -179,7 +179,7 @@ real time sends late, so every client receives its messages late; its own
 echo and the others' prediction stalls follow. Why the client falls behind is not measured, so the model has
 no client lag and does not predict saturation.
 
-**Latency moves between sessions.** On the held-out sweep (Smashcraft's
+**Latency moves between sessions.** On the held-out sweep (Mak'gora's
 TypeScript map, 6 October), unsaturated echo was faster than the model for
 client B (p50 65–97 ms, p90 89–127 ms against the model's 114–124 and
 189–199) and about as fast for client A (p50 90–162 ms).
@@ -316,9 +316,9 @@ repository's sample or a game's (`repository`, `ref`, `directory`, `pair`).
   with `PeerSilent` "no packet for 3.0 s", also at 120 ms round trip and 1%
   loss; one that leaves (`--quit-at 300`) ends the host with `PeerLeft` 0.05 s
   later.
-- Smashcraft's `cpu-expert.pad`, one slot per process, 1,200 frames through
+- Mak'gora's `cpu-expert.pad`, one slot per process, 1,200 frames through
   `net proxy` with 1% loss (seed 5), each round trip on its own hosted runner
-  (wisp:.github/workflows/net-timing.yml run 37941062995, Smashcraft
+  (wisp:.github/workflows/net-timing.yml run 37941062995, Mak'gora
   97fd7bf20, Wisp 2783de3): 20 checksums compared per side, 0 mismatches at
   every setting. Delivery p50/p95/p99, host and joiner, against the bound of
   one way + 2 frames on p95:
@@ -333,6 +333,6 @@ repository's sample or a game's (`repository`, `ref`, `directory`, `pair`).
   96.3 ms (run 37940402704).
 
 The delivery time is the turn delay plus how late the receiving frame runs.
-Late frames come from the map's own slow frames (Smashcraft's step max was
+Late frames come from the map's own slow frames (Mak'gora's step max was
 60–190 ms, at its setup and while warming up) and from packets that arrive
 after their frame was due.

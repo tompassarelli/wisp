@@ -101,9 +101,9 @@ one job per shard and a merge job, talking through `farmShards.ts`:
 
 The merge job uploads `summary.json` as the artifact `farm-test-summary`;
 each shard uploads its `result.json` as `farm-test-result-SUITE-K`.
-Smashcraft's smashcraft:.github/workflows/farm-test.yml adds the Lua jobs.
+Mak'gora's makgora:.github/workflows/farm-test.yml adds the Lua jobs.
 
-A game adds its own farm jobs (Smashcraft's `farm balance`, `farm pads`,
+A game adds its own farm jobs (Mak'gora's `farm balance`, `farm pads`,
 `farm perf`, `farm memory`) from the same pieces in wisp:host/farm/farm.ts:
 `resolveRef` (run it inside `Effect.scoped`: closing the scope deletes the
 scratch branch, whatever ended the run), `dispatch`, `waitFor` and

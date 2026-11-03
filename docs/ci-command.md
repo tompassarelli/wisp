@@ -152,7 +152,7 @@ On a 4-core machine the determinism stages take about 1 s each, run at the
 same time, for Wisp's soak (8 matches of 600 frames, measured 11 Oct 2026);
 the whole `ci pre-merge --base HEAD~1` for a one-test change took 38 s there,
 31 s of it the 50 selected test files.
-For Smashcraft this is an estimate, not a measurement: its 200-match soak
+For Mak'gora this is an estimate, not a measurement: its 200-match soak
 used 241 CPU seconds (6 Oct 2026), about 1.2 s a match over its full length,
 which puts 8 capped matches under 10 s per mode, inside the 30 s budget.
 

@@ -66,8 +66,8 @@ module alone once every client has acknowledged a version from this `tune`.
 The first change of a session sends the full payload, as a restarted `hot`
 does.
 
-`tune` compiles the map once when it starts (about 7 s on Smashcraft), so a
-change waits only for the module it changes. Measured on Smashcraft (170
+`tune` compiles the map once when it starts (about 7 s on Mak'gora), so a
+change waits only for the module it changes. Measured on Mak'gora (170
 modules) on 6 October 2026, from the panel's request to both acknowledgements
 of two fake clients that acknowledge as soon as their files appear, ten
 changes of each of five tunables (run speed, jump squat frames, a Demon
@@ -81,7 +81,7 @@ its polling and synchronized answers, about 0.3 s on the
 Give a tunable declaration a type that doesn't name its value (`: number`, an
 interface): a `const` whose type is its literal (`export const GROWTH =
 100.0`) makes every importer type-check again on each change. It still
-sends only the declaration's module, but Smashcraft's knockback growth
+sends only the declaration's module, but Mak'gora's knockback growth
 compiled in 1.3 to 2.4 s that way, and in about 0.1 s typed `number`.
 
 A reload links every module again, so module-scope tables built from a
@@ -89,9 +89,9 @@ tunable take its new value. A value the game copied into match state, such
 as a record each fighter received when it was created, keeps the old value
 until the game's `install()` puts the new one there. `install()` runs on the
 same frame in every client, so the game reapplies such records there, as it
-reapplies [object data](hot-reload.md). Smashcraft gives every fighter its
+reapplies [object data](hot-reload.md). Mak'gora gives every fighter its
 authored tuning again, in the confirmed match, the speculative match and its
-rollback history (smashcraft:ts/src/map/shell/tuning.ts).
+rollback history (makgora:ts/src/map/shell/tuning.ts).
 
 A match started with a tuned value can't be replayed from its inputs alone:
 the inputs don't record the change.

@@ -23,7 +23,7 @@ packager change rebuilds it rather than reusing bytes the old packager wrote. A 
 replaced an existing entry compacts the archive before closing it (about 1 s
 for a 70 MB map), because StormLib leaves a replaced entry's old bytes in
 place: a cached asset archive patched build after build carried 4.4 MB of them
-into Smashcraft's 72 MB map (smashcraft#832). The build then
+into Mak'gora's 72 MB map (makgora#832). The build then
 extracts every entry the same way and compares it byte for byte with its
 source file.
 
@@ -48,7 +48,7 @@ and listen in the target client before replacing a game's sound family.
 The authored test tone is 440 Hz, mono, 48 kHz, 0.1 s, encoded with
 `ffmpeg -f lavfi -i sine=frequency=440:sample_rate=48000:duration=0.1 -c:a libvorbis -q:a 4 tone.ogg`.
 
-Smashcraft's 84 declared stock sound paths were measured on 8 Oct 2026:
+Mak'gora's 84 declared stock sound paths were measured on 8 Oct 2026:
 34,604,984 encoded source bytes versus 31,123,807 bytes after Vorbis quality 4
 conversion with the source sample rates and channels (10.06% smaller).
 Seventy sources already use OGG and fourteen use MP3; these are stock game
@@ -67,7 +67,7 @@ output alongside it; the file alone only records the sound native calls.
 
 ## Why packaging, not the asset bytes
 
-Measured on Smashcraft's private families (7 Oct 2026, aggregate numbers):
+Measured on Mak'gora's private families (7 Oct 2026, aggregate numbers):
 
 | Family | Files | Raw bytes | zlib bytes |
 | --- | --- | --- | --- |

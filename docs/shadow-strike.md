@@ -130,7 +130,7 @@ From the exact fixture commit, using the owner's private base map:
 
 ```sh
 bun test/shadow-strike94/build.ts \
-  ~/.local/share/smashcraft-build-inputs/physics-base.w3m \
+  ~/.local/share/makgora-build-inputs/physics-base.w3m \
   ~/.local/state/wisp/shadow-strike94/shadow-strike94.w3x
 bun wisp lan fresh ~/.local/state/wisp/shadow-strike94/shadow-strike94.w3x --pair K
 ```

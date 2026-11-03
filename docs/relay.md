@@ -6,7 +6,7 @@ cover, and R7's server and agent link run on UDP (Transport, "Built"); R7's
 netem cells and everything else are not. Each section names the box that
 builds or measures it.
 
-Smashcraft's online matches run on Battle.net's turns today. On 24 October
+Mak'gora's online matches run on Battle.net's turns today. On 24 October
 2026 Tom chose to build our own relay instead of depending on Battle.net's or
 W3Champions' turn settings. This page plans that relay: a server that clocks
 turns and an agent on each player's machine that hosts the game for the local
@@ -25,7 +25,7 @@ Measured facts, each with its source:
   17/17/16 over a paced 25 ms and kept Wisp's pool default at 25 ms, the grid
   Battle.net players get. With the earlier pacer, whose steps jittered,
   7–11% of taps were lost and spreads reached 2–5 frames
-  (smashcraft:docs/warcraft-api-netcode-findings.md, "Input sampling against
+  (makgora:docs/warcraft-api-netcode-findings.md, "Input sampling against
   the LAN host's turn interval").
 - **Turn length still sets a latency floor.** The host forwards an action at
   the next turn, so a turn of T ms adds 0 to T ms (T/2 on average) before any
@@ -35,14 +35,14 @@ Measured facts, each with its source:
   turns ran 125 a second at game pace 1.000 with no desync, no host wait,
   every tap seen and no more CPU than 17/17/16, and a light-input press
   reached the host in 5 ms at the median against 13–15 ms at 17/17/16
-  (smashcraft:docs/warcraft-api-netcode-findings.md, "Shorter turns"). The
+  (makgora:docs/warcraft-api-netcode-findings.md, "Shorter turns"). The
   relay is not the pool, so it takes the lower floor.
-- **Smashcraft's delay and rollback budget.** Smashcraft sets one input delay
+- **Mak'gora's delay and rollback budget.** Mak'gora sets one input delay
   for every player from its own sync-message echoes
-  (smashcraft:ts/src/host/loop/netDelay.ts), and those echoes will pass
+  (makgora:ts/src/host/loop/netDelay.ts), and those echoes will pass
   through the relay and the agents' buffers. The delay and the rollback
   budget (6 frames in a duel, 8 with three or more humans,
-  smashcraft:ts/src/game/netcode/delayPolicy.ts) change only outside a match.
+  makgora:ts/src/game/netcode/delayPolicy.ts) change only outside a match.
   So the agent's buffer depth must settle before a match starts, and depth
   added mid-match turns into rollback past the budget.
 - **The internet path is where turns get uneven.** W3Champions' FLO forwards
@@ -62,9 +62,9 @@ Measured facts, each with its source:
   3.0.1.24371, no outside route reaches LAN: the menus only build the
   loopback provider, and 3.0.1.24342 had no LAN provider left
   (wisp#21, 24 October). W3Champions' 3.0 path switches the provider inside
-  the running game. Smashcraft Servers, that kind of switch for players, was
+  the running game. Mak'gora Servers, that kind of switch for players, was
   approved on 25 October 2026 and stopped on 31 October 2026
-  (wisp:docs/clean-room.md, "Smashcraft Servers (stopped)"), so no player
+  (wisp:docs/clean-room.md, "Mak'gora Servers (stopped)"), so no player
   reaches the relay through Warcraft III.
 
 That last fact splits the plan in two:
@@ -99,9 +99,9 @@ with SIGINT, and the run was that session's first match: the standing
   latency and loss"). RTT and loss are round-trip figures; jitter 20 ms
   varies each send by ±10 ms and reorders packets; "bursts" is netem's
   Gilbert model with a mean burst of four sends at the same long-run loss.
-- **Map and probe.** Smashcraft's integrity build of 59824cc9b (the R3 map),
+- **Map and probe.** Mak'gora's integrity build of 59824cc9b (the R3 map),
   Rifleman quick match, and the turn-rate sweep's probe
-  (smashcraft:docs/warcraft-api-netcode-findings.md, "Input sampling against
+  (makgora:docs/warcraft-api-netcode-findings.md, "Input sampling against
   the LAN host's turn interval"): `-dev callback-clock 3600` stamps every
   60 Hz callback with `os.clock` and the raw `BlzIsKeyPressed` state of `c`;
   a host-side driver taps `c` on both clients every 280–520 ms for 50–90 ms
@@ -121,7 +121,7 @@ Columns: callback gap p50/p99/max over both clients (ms); taps seen, the
 probe presses the raw key state reported down, per client; press-to-sample
 spread, max minus min over the matched presses in ms, and in frames from
 p5 to p95; rollbacks per minute and the deepest rollback in frames, from
-Smashcraft's counters; longest stall, the longest run of consecutive
+Mak'gora's counters; longest stall, the longest run of consecutive
 callback gaps over two frames (33 ms) summed; host waits, how often the host
 held turns for a client more than 50 turns behind, with the longest hold in
 ms; desyncs from the host's checksum compare; pace, game seconds per wall
@@ -199,7 +199,7 @@ What the relay must beat, read from the table:
   gaps near 600 ms and up to 44 taps in 141 lost.
 
 Two findings from the earlier gex45 runs, which do not count
-(`~/.local/state/smashcraft/wisp-33/` on gex45):
+(`~/.local/state/makgora/wisp-33/` on gex45):
 
 - **Host load, not the path, made the big stalls.** The same cells taken
   earlier with up to 14 live clients on gex45 gave 18–441 host waits, pace
@@ -237,7 +237,7 @@ stopped with SIGINT.
   each client's TCP link to its own agent does not. Every counted run shows
   netem's packet counter rising through the probe (28,576–29,468 packets in
   the jitter cells, 50,350 in the burst cell, in `netem-stats.txt`).
-- **Map and probe.** The baseline's: Smashcraft 59824cc9b (`w32-echo.w3x`,
+- **Map and probe.** The baseline's: Mak'gora 59824cc9b (`w32-echo.w3x`,
   sha256 26b206e48e3f6b7b…), `-dev quick hero rifleman stocks 9`, then
   `-dev callback-clock 3600`, each sent from client a and confirmed by a new
   `Chat(` line in `relay.log` (every chat landed on its first send), and
@@ -256,7 +256,7 @@ stopped with SIGINT.
 
 Columns as in the first run (Before wisp#56), with one change: one callback
 per burst treats callbacks under 2.5 ms apart as one burst, since a gap of
-about 2 ms is two Smashcraft frames in one 16.7 ms drawn frame whether the
+about 2 ms is two Mak'gora frames in one 16.7 ms drawn frame whether the
 clock reads 1.998 or 2.000 ms (wisp-lead2's ruling of 25 October 2026 on
 wisp#38). The first run counted only gaps under 2 ms, and its runs give the
 same shares under either rule.
@@ -379,7 +379,7 @@ Notes:
 - **Five earlier runs are discarded** (`runs/discarded/wrong-setup`): their
   driver sent `-dev setup time 2;quick stage 2 pair rifleman / illidan`
   instead of the baseline's quick match, so stage and fighters differed, and
-  under heavy input the match ended 10–30 s into the probe (Smashcraft's
+  under heavy input the match ended 10–30 s into the probe (Mak'gora's
   frame counter stops while callbacks go on), which also produced 8–14%
   double callbacks on the end screen.
 - **Feed deviation sits on the kernel's 1 ms tick.** In the jitter cells
@@ -493,7 +493,7 @@ at 85.1 s on its clock, 12 by 86.2 s, and 6–7 from 86.3 s on.
   takes the actions that arrived since the last turn, numbers the turn and
   sends it to every agent. It compares the checksums agents forward and
   reports the first desync. It speaks only the relay protocol, never W3GS.
-- **Agent** (each player's machine, inside smashcraft-client). It is the
+- **Agent** (each player's machine, inside makgora-client). It is the
   host its own Warcraft III sees: it runs the lobby (slots, the other
   players, the map check, countdown and loading) and then writes turns to the
   game. It sends the game's actions, checksums, chat and leave to the relay.
@@ -811,13 +811,13 @@ path. The anchor comes from the arrivals themselves: it is a low percentile
 don't move it. Anchoring to time, not to the newest turn received, is what
 makes the late rate about p^D rather than about p.
 
-- **Choosing depth before the match.** Smashcraft fixes its input delay and
+- **Choosing depth before the match.** Mak'gora fixes its input delay and
   rollback budget for a whole match, so depth must settle before turns
   start. During the lobby and loading, the relay and agent exchange packets
   every turn period, and the agent measures loss, burst length and the
   spread of arrival(k) − relayTime(k). It picks the smallest D whose
   predicted late rate meets the bar: at 8 ms, D = 3 on a clean link and 5
-  at 5% loss (Protocol core and bench, below). Smashcraft's echo then
+  at 5% loss (Protocol core and bench, below). Mak'gora's echo then
   measures the delay players actually get.
 - **Underrun.** When turn k hasn't arrived by feed(k), the agent waits.
   Warcraft runs no turn. The agent keeps the depth the wait added, up to one
@@ -842,28 +842,28 @@ makes the late rate about p^D rather than about p.
   and ubuntu-latest and fails on a p99 above 1 ms. The loopback
   TCP to the game sets `TCP_NODELAY`.
 
-**How it meets Smashcraft's frame-stamped inputs and rollback.** Smashcraft
+**How it meets Mak'gora's frame-stamped inputs and rollback.** Mak'gora
 stamps each input row with the frame it was sampled on and applies a remote
 row at its stamp, rolling back when the row arrives late
-(smashcraft:docs/design/client.md, smashcraft:ts/src/host/loop/frame.ts).
+(makgora:docs/design/client.md, makgora:ts/src/host/loop/frame.ts).
 
 - **Opponent's view.** Player A's simulation runs about
   one-way-down(A) + D_A turns behind the relay clock. A row A stamps at frame
   f reaches the relay one-way-up(A) later and goes into the next turn. B runs
   that turn at frame k, where k − f ≈ (RTT(A) + D_A × 8 ms + the turn
   wait)/16.7 ms. So A's link and A's buffer set how far B must roll back for
-  A's inputs. Smashcraft's own input delay subtracts from that depth. At
+  A's inputs. Mak'gora's own input delay subtracts from that depth. At
   100 ms RTT and D = 2 that is about 7 frames before delay; at 200 ms and
-  D = 3 about 13.5. Smashcraft's echo-measured delay absorbs most of it,
+  D = 3 about 13.5. Mak'gora's echo-measured delay absorbs most of it,
   and the rest must fit the rollback budget. Depth is not cover beside the
   budget: every turn of D adds 8 ms to the age the budget must absorb.
-- **Shared budget (25 October 2026).** Smashcraft's rollback budget R is 6
-  on Battle.net. Relayed matches get R 7 (smashcraft#240), measured by
-  smashcraft#219 on `relayDelivery` with `MEASURED_RELAY`: 8 ms turns, 2 ms
+- **Shared budget (25 October 2026).** Mak'gora's rollback budget R is 6
+  on Battle.net. Relayed matches get R 7 (makgora#240), measured by
+  makgora#219 on `relayDelivery` with `MEASURED_RELAY`: 8 ms turns, 2 ms
   jitter, 2% loss, D = 4 turns (32 ms) on every link, with D added on each
   message's age after upstream and the turn wait. So R 7 holds for D ≤ 32 ms.
   The relay's depth bar allows up to 66.7 ms, and its bench picks 48–64 ms on
-  burst cells, about 2 frames more age at D = 8. smashcraft#240's headless
+  burst cells, about 2 frames more age at D = 8. makgora#240's headless
   box measures D = 4 and D = 8 and records the deepest D where R 7 holds;
   the map uses R 7 only up to that depth. wisp#53's choice for spiky paths
   is judged against the same model.
@@ -874,16 +874,16 @@ row at its stamp, rolling back when the row arrives late
 - **Local feel.** Held-key reads are local: neither RTT nor D delays a
   player's own key state. R3 measured it on a gex45 pool pair at
   deadline-paced 17/17/16 with netem at 0, 100 and 200 ms
-  (smashcraft:docs/warcraft-api-netcode-findings.md, "Held-key reads under
+  (makgora:docs/warcraft-api-netcode-findings.md, "Held-key reads under
   round-trip delay"). The press-to-first-held-sample median moved by under
   2 ms (4.0 and 5.7 ms at 0, 5.0 and 4.2 ms at 200, p5–p95 within −7 to
   17 ms throughout), less than one frame, while the synchronized key-down
   event moved by the full added round trip (26 ms to 227 ms after the held
   sample). `BlzIsKeyPressed` follows the client's own input pump, as
-  smashcraft#218 found. So D is priced by the opponent's view and rollback
+  makgora#218 found. So D is priced by the opponent's view and rollback
   depth above, not by local input delay, and R9 judges each cell by spread,
   late rate and rollback depth, not by press-to-sample delay.
-- **Taps.** Smashcraft#218 loses a tap when its press and release reach the
+- **Taps.** Mak'gora#218 loses a tap when its press and release reach the
   host in one turn. Separate packets don't prevent that: two packets less
   than a turn apart land in the same turn, and a stalled client sends both
   edges at once. The agent decodes its game's actions (as wisp:host/lan/actions.ts
@@ -1361,7 +1361,7 @@ depth itself never changes, and neither do the turns fed or the game's
 steps: only feed times move, which the property
 `the_raise_moves_feed_times_but_never_the_fed_turns` checks against the same
 packet stream with the raise on and off. The raise is
-`AgentConfig::raise_headroom_us` (Smashcraft's headroom, the depth that
+`AgentConfig::raise_headroom_us` (Mak'gora's headroom, the depth that
 keeps `connectionPoor` false), capped so that depth plus raise stays within
 `AgentConfig::max_total_depth_us` (100 ms by default), then rounded down to
 whole 8 ms steps; the agent computes it when it chooses its depth. Without a
@@ -1500,18 +1500,18 @@ and the lobby of remote players. No FLO code is copied.
 - **No relay mark.** A relayed match is not distinguishable by the map:
   every turn carries only the actions its players sent. wisp#52 led the
   first turn with a `BlzSendSyncData` action so a map could tell a relayed
-  match from Battle.net (smashcraft#240), but native runs (gex45, 25 October
+  match from Battle.net (makgora#240), but native runs (gex45, 25 October
   2026, wisp#37 and wisp#54) showed no carrier a map can read without
   changing what players see. A changed copy of a player's own action drops
   that player, an opponent's id desyncs, and an id no player holds never
-  reaches the map. On gate 48 the decision was neither carrier: Smashcraft
-  keeps rollback budget 6 for every match and parks smashcraft#240, so the
+  reaches the map. On gate 48 the decision was neither carrier: Mak'gora
+  keeps rollback budget 6 for every match and parks makgora#240, so the
   mark was removed (wisp#54).
 - **Conformance.** host.ts's `onPacket` hook records a pool session's bytes.
   The agent must produce the same lobby bytes for the same room. That
   transcript test keeps the two hosts from drifting.
 - **Expected map.** `HostConfig::expect_map_sha1` lets an embedder such as
-  smashcraft-client (smashcraft-client#26) name the map SHA-1 its player
+  makgora-client (makgora-client#26) name the map SHA-1 its player
   has. When the room's facts arrive with a different SHA-1, the AgentHost
   leaves the room and `run` returns an `InvalidData` error naming both
   SHA-1s in hex, before the game sees the room, so no countdown starts. The
@@ -1545,7 +1545,7 @@ Built for wisp#37 (code box), in `relay/`:
   IncomingAction when the jitter buffer feeds it. `keys` reads the game's
   key actions (0x79) and marks an action that releases a key whose press the
   relay has not yet acknowledged, so the relay places it a turn later
-  (smashcraft#218).
+  (makgora#218).
 - `cargo test -p relay-agent` replays
   `relay-agent/tests/fixtures/pool-lobby.packets`, a two-client pool lobby
   host.ts hosted on 24 October 2026, through two agents and the relay's
@@ -1634,10 +1634,10 @@ Built for wisp#37 (code box), in `relay/`:
   no loss, which no depth under the 100 ms ceiling covers (Protocol core and
   bench, "What the bench can't say").
 - **Joining.** The host's client asks the relay for a room and shows a code;
-  the joiner types it, as Smashcraft's Battle.net join codes work today
-  (smashcraft:docs/design/client.md, "Direct play"). The code names the relay
+  the joiner types it, as Mak'gora's Battle.net join codes work today
+  (makgora:docs/design/client.md, "Direct play"). The code names the relay
   and the room.
-- **Keyboard-only players.** The agent lives in smashcraft-client, so a relay
+- **Keyboard-only players.** The agent lives in makgora-client, so a relay
   match needs the client on both machines; a controller does not. Players
   with no client keep Battle.net join codes, which need no install. Both
   players in a match use the same transport.
@@ -1800,13 +1800,13 @@ Battle.net app options:
   instructions quoted by PC Games (pcgames.de, "Classic-Version von Warcraft
   3 ist endlich zurück"). Patch 3.0.0's notes (Liquipedia, "Patch 3.0.0") say
   LAN and offline play remain only through that Classic client. It is build
-  1.29, not 3.0.1, and has no Lua (Lua arrived in 1.31), so Smashcraft's map
+  1.29, not 3.0.1, and has no Lua (Lua arrived in 1.31), so Mak'gora's map
   cannot run on it.
 - W3Champions' 3.0 "Native LAN" switches the provider inside the running
   game (w3champions-issues #57 and #58). Its discovery, UDP 16000 or mDNS
   with `W3C_LAN_TRANSPORT=csdk`, runs on the LAN provider that switch puts in
-  place. Smashcraft Servers was that kind of switch and is stopped
-  (wisp:docs/clean-room.md, "Smashcraft Servers (stopped)").
+  place. Mak'gora Servers was that kind of switch and is stopped
+  (wisp:docs/clean-room.md, "Mak'gora Servers (stopped)").
 
 So no route from outside the game reaches a 127.0.0.1 host on 3.0.1.24371.
 Players reach the relay in Wisp's own window instead (Decisions, below). R0
@@ -1845,21 +1845,21 @@ wisp (epic wisp#28):
 - **R11** Headless delivery model for the relay's paced turns, so map tests
   meet relay timing as they meet Battle.net's today (wisp#40).
 
-smashcraft (Tom asked for it on 25 October):
+makgora (Tom asked for it on 25 October):
 
 - **S1** Rerun the rollback-budget correction-pop sweep under the relay's
   paced delivery, raise the duel budget to 7 or the group budget to 9–10 if
   they pass, and record why groups tolerate a larger budget than duels
-  (smashcraft#219).
+  (makgora#219).
 
-smashcraft-client (epic smashcraft-client#25):
+makgora-client (epic makgora-client#25):
 
 - **C1** Host and join a relay match from the client by code
-  (smashcraft-client#26).
+  (makgora-client#26).
 - **C2** The agent's feed schedule holds on Windows and Linux runners
-  (smashcraft-client#27).
-- **C3** Smashcraft Servers, the opt-in LAN switch beside Battle.net
-  (smashcraft-client#28): stopped on 31 October 2026 and removed from the
+  (makgora-client#27).
+- **C3** Mak'gora Servers, the opt-in LAN switch beside Battle.net
+  (makgora-client#28): stopped on 31 October 2026 and removed from the
   client (Decisions, below).
 
 Order: R0, R1, R5 and R6 start now. R2 and R3 follow R1; R4 follows R1 and
@@ -1872,7 +1872,7 @@ workspace at `relay/` with crates `relay-proto` (wire format and pure relay
 and agent cores), `relay` (server), `relay-agent` (sockets, W3GS host,
 pacer) and `relay-bench`. Rust was chosen because the agent was to ship
 inside the Rust client on players' Windows and Linux machines, with no Bun
-runtime; since Smashcraft Servers stopped, no player build runs the agent
+runtime; since Mak'gora Servers stopped, no player build runs the agent
 against Warcraft III, and players reach the relay through Wisp's own window.
 R11's headless model is TypeScript in wisp:src/headless/syncChannel.ts beside
 `syncDelivery()`, because the headless runtime is TypeScript.
@@ -1883,21 +1883,21 @@ R11's headless model is TypeScript in wisp:src/headless/syncChannel.ts beside
   route, the relay reached only our 3.0.0.24268 pool, and gate 41 asked what
   players get. Weighing W3Champions' years of running the same kind of
   in-game LAN switch for most active Reforged players without known bans,
-  Tom approved shipping it to players as an opt-in named Smashcraft Servers,
-  beside Battle.net, whose opt-in text says Smashcraft changes how Warcraft
+  Tom approved shipping it to players as an opt-in named Mak'gora Servers,
+  beside Battle.net, whose opt-in text says Mak'gora changes how Warcraft
   connects while it runs and that Blizzard has not approved it. He also
   approved scanning the live build, 3.0.1.24371, on our own offline pool
   clients to locate its LAN provider (gate 38, wisp#21). The limits are in
-  wisp:docs/clean-room.md, "Smashcraft Servers (stopped)".
-- **Smashcraft Servers stopped (Tom, 31 October 2026).** Tom withdrew the
+  wisp:docs/clean-room.md, "Mak'gora Servers (stopped)".
+- **Mak'gora Servers stopped (Tom, 31 October 2026).** Tom withdrew the
   25 October approval after an outside review named the in-game switch the
   project's one real legal exposure (the bnetd and Glider cases: a EULA's
   reverse-engineering ban and DMCA anti-circumvention). Warcraft III online
-  play is Battle.net's, in Warcraft's own menus; Smashcraft offers no online
+  play is Battle.net's, in Warcraft's own menus; Mak'gora offers no online
   play inside the Warcraft client; players play online in Wisp's own window
   over the relay. The private switch stays a test tool for our own offline
   clients with no Battle.net account. C3 is closed and the switch is removed
-  from smashcraft-client (smashcraft-client#28).
+  from makgora-client (makgora-client#28).
 - **Public port (Tom).** R10 asks before opening the relay's UDP port on
   Nexus or gex45.
 - **Settled here.** Raw UDP with redundancy, no QUIC, per Tom's direction.
@@ -1938,10 +1938,10 @@ bench, "Burst cover").
 
 ## Sources
 
-- smashcraft:docs/warcraft-api-netcode-findings.md, input sampling against
+- makgora:docs/warcraft-api-netcode-findings.md, input sampling against
   the LAN host's turn interval (24 October 2026).
-- smashcraft:docs/high-refresh.md, smashcraft:docs/design/client.md, and
-  smashcraft `e1ba7b0825` (rollback budget picked from correction pop).
+- makgora:docs/high-refresh.md, makgora:docs/design/client.md, and
+  makgora `e1ba7b0825` (rollback budget picked from correction pop).
 - wisp:docs/lan.md, wisp:docs/network-model.md, wisp:docs/play.md,
   wisp:docs/driving-warcraft.md, wisp:docs/prior-art.md, wisp#21.
 - FLO: github.com/BogdanW3/W3C-Flo at

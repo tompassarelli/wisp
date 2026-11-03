@@ -1,7 +1,7 @@
 # One command to a match: `wisp play`
 
 `play` takes the owner from their desktop to a match on their own display.
-It is the owner's normal playable path. A consumer such as Smashcraft resolves
+It is the owner's normal playable path. A consumer such as Mak'gora resolves
 current main and builds its matching map and controller helper before calling
 Wisp. Experimental candidates use `fresh`, captures or `accept`; they do not
 replace the owner's play declaration. Consumer-owned versioned map libraries
@@ -18,9 +18,9 @@ declare [standalone play](#standalone-window).
 3/7 Warcraft III: Battle.net started it
 3/7 Warcraft III: running (pid 2852), asked to go fullscreen
 4/7 Map: Warcraft III signed in and read its ladder maps (27 s); hosting the map
-4/7 Map: "Smashcraft" of Smashcraft 0.0.47 hosted through the menus (joining by name is case-sensitive)
+4/7 Map: "Mak'gora" of Mak'gora 0.0.47 hosted through the menus (joining by name is case-sensitive)
 4/7 Map: fighter selection 35 s after launch
-5/7 Controller helper: running (pid 41234), log ~/.local/state/smashcraft/play-helper.log
+5/7 Controller helper: running (pid 41234), log ~/.local/state/makgora/play-helper.log
 6/7 Match: computer as Player 3
 7/7 Fullscreen: Warcraft III is fullscreen and focused. Ready to fight.
 ```
@@ -163,8 +163,8 @@ export const play = makePlay({
   prefix: join(homedir(), ".local/share/Steam/steamapps/compatdata/3516115571/pfx"),
   display: ":0",
   shortcut: { appId: 3775098022, name: "Warcraft III (Battle.net)" },
-  map: { folder: "00-Smashcraft", file: "Smashcraft 0.0.47.w3x", title: "Smashcraft 0.0.47", source: BUILT_MAP },
-  gameName: "Smashcraft",
+  map: { folder: "00-Makgora", file: "Makgora 0.0.47.w3x", title: "Mak'gora 0.0.47", source: BUILT_MAP },
+  gameName: "Mak'gora",
   menuReportPort: 47124,
   prepare: (documents) => /* the map's request file in CustomMapData */,
   cleanup: (documents) => /* removes it when a run stops */,
@@ -246,7 +246,7 @@ The window a person plays opens without a lease, and `gpuLease: false` in `Stand
 `play --standalone` opens `wisp-window` (the Rust library in `window/`, planned
 in [native-window-plan.md](native-window-plan.md)), the default window.
 `--window chrome` opens the Chrome page instead, the fallback for the checks
-that do not run in the native window yet (frame captures, Smashcraft's
+that do not run in the native window yet (frame captures, Mak'gora's
 net-accept, render compare) until the native window passes them and Chrome is
 removed. A game reads the flag with `standaloneWindowArgument`, which gives
 `native` when the flag is absent, and passes `window` in the options of
@@ -278,7 +278,7 @@ scene-to-present time, the p99 lateness of the render thread's own wakes (at mos
 scene that has arrived and redraws the last one when none has, so a late game
 never makes a present miss its vblank; a scene that missed its deadline is
 counted in `lateScenes` and drawn on a later frame. Above 60 Hz the game still steps 60 times a second.
-The game steps on its own 60 Hz clock thread (`stepper.rs`; wisp:docs/native-window-plan.md, "The step clock"), never on the display, so a window the compositor throttles or hides keeps stepping at 60 a second. Offline it never takes more than 60 steps in any second: a step the clock wakes too late for, or one that falls due while the game still holds the sample before it, is dropped instead of run late beside the next. Every five seconds the window prints its presented frames per second with the frame time's p50 and p99, the game's ticks per second (the steps the clock gave it), the acquire and draw p99 and the late scenes and dropped samples (the steps the clock dropped) to standard error, so a slow window says which of them is short. A game linked against a Wisp from before this gate (Smashcraft's pin until it moves) steps once per display frame and runs at double speed on a 120 Hz panel.
+The game steps on its own 60 Hz clock thread (`stepper.rs`; wisp:docs/native-window-plan.md, "The step clock"), never on the display, so a window the compositor throttles or hides keeps stepping at 60 a second. Offline it never takes more than 60 steps in any second: a step the clock wakes too late for, or one that falls due while the game still holds the sample before it, is dropped instead of run late beside the next. Every five seconds the window prints its presented frames per second with the frame time's p50 and p99, the game's ticks per second (the steps the clock gave it), the acquire and draw p99 and the late scenes and dropped samples (the steps the clock dropped) to standard error, so a slow window says which of them is short. A game linked against a Wisp from before this gate (Mak'gora's pin until it moves) steps once per display frame and runs at double speed on a 120 Hz panel.
 
 `--emulated-calls FILE` (read with `standaloneEmulatedCallsArgument`, passed as `emulatedCalls` in `StandaloneOptions`) works in either window: when the run ends it writes the headless client's emulated-native call counts to FILE, a JSON object of Warcraft native name to count with the names in order and a native never called absent. A migrated game API family reads zero there ([game-api-plan.md](game-api-plan.md#warcraft-backend-lowering-and-the-lua-cost-rule)).
 
@@ -394,7 +394,7 @@ downloaded and stock art is their Warcraft install. `extractMapImports(map,
 packager)` (`wisp/scripts/wisp/mapImports`, wisp:host/play/mapImports.ts)
 unpacks every file the archive lists into `$XDG_CACHE_HOME/wisp/map-imports/<sha256 of the map>`
 once, with the map packager, and returns `{ entry, source }` rows a game's
-`readAsset` serves as map imports before it falls back to stock files. Smashcraft
+`readAsset` serves as map imports before it falls back to stock files. Mak'gora
 turns this on with `play --standalone --map MAP.w3x --player-assets-only`.
 The native window reads assets the same way, models, textures and sounds alike, because every one goes through the game's `readAsset`. A game that steps on the worker thread (`nativeGame`) exports a function from `arguments` to the game instead of the game, and passes the player's flags in `arguments`, so the worker's `readAsset` serves the map's imports first and the Warcraft install after, as the main thread's does; a sound the map imports then plays from the map.
 

@@ -79,7 +79,7 @@ is repository source, rather than an installed-package scaffold.
 
 Ran from a fresh Wisp worktree at `b516ed9`, with Bun 1.3.13 and no
 existing dependencies or build tools in that worktree. The private base was
-`~/.local/share/smashcraft-build-inputs/physics-base.w3m` (16,814 bytes), and
+`~/.local/share/makgora-build-inputs/physics-base.w3m` (16,814 bytes), and
 the output was `~/.local/state/wisp/editor-free/sample.w3x`.
 
 | Command above | Exit | Observed result |

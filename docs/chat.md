@@ -89,7 +89,7 @@ stand-in for it:
   key pressed before it opened still reaches the game, so no key stays held.
 - Sending is the player's chat event on every client, through the lockstep like
   a key, so `registerChatEvents`, the panel and the map's own chat commands
-  (such as Smashcraft's `-dev` lines) run as they do for Warcraft's Enter box.
+  (such as Mak'gora's `-dev` lines) run as they do for Warcraft's Enter box.
 - The line is local and never synchronized. The map reads it with
   `WispChatEntryText()` (the text while open, undefined while closed) and tells
   the runtime where it draws it with `WispSetChatEntryArea(left, bottom, width,

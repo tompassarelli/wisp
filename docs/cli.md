@@ -1,6 +1,6 @@
 # Command vocabulary
 
-Wisp's commands and the programs games compose from them (Smashcraft's
+Wisp's commands and the programs games compose from them (Mak'gora's
 `bun wisp`, the sample map's program) share one vocabulary, so a new
 capability lands as a verb or flag people already know instead of another
 bespoke command:
@@ -45,8 +45,8 @@ wait for client `b` to be in a match, for at most 60 seconds.
 
 Where commands are listed: Wisp's command factories need a row in the
 [feature index](index.md) (wisp:docs/index.md) and their verbs on the
-command's own page; Smashcraft's `bun wisp` commands need a line in
-smashcraft:AGENTS.md.
+command's own page; Mak'gora's `bun wisp` commands need a line in
+makgora:AGENTS.md.
 
 ## Nouns
 
@@ -217,7 +217,7 @@ Every flag a command's usage line shows is declared here with its one meaning.
 
 ## Inventory
 
-Every command and verb in Wisp's sample program and Smashcraft's `bun wisp`, grouped by noun.
+Every command and verb in Wisp's sample program and Mak'gora's `bun wisp`, grouped by noun.
 
 | Command | What it does |
 | --- | --- |

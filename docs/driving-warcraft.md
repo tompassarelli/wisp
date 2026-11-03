@@ -163,7 +163,7 @@ menus start | leave
   after the same socket's `hostLobby` was confirmed. On 7 Oct 2026,
   Warcraft III 3.0.0.24268 crashed while loading (a read of 0x500) in 6 of 6
   starts sent as soon as the lobby was confirmed, and in 0 of 11 sent about
-  2 s later (Smashcraft #119). No menu event is known to end that window.
+  2 s later (Mak'gora #119). No menu event is known to end that window.
 - `hostLobby` waits for `isHost:true`. A lobby-entry event requests
   `SendGameLobbySetup`; an earlier `isHost:false` setup does not mean creation
   failed. An explicit creation refusal still fails immediately.
@@ -267,7 +267,7 @@ decision.
   w3champions.com page that says it, so no link is given.
 - **Development and testing on your own offline clients and maps only.**
   Never switch a signed-in Battle.net client, and no player build carries the
-  switch ([clean-room.md](clean-room.md#smashcraft-servers-stopped)).
+  switch ([clean-room.md](clean-room.md#makgora-servers-stopped)).
   It isn't for cheating, or for touching anyone else's game.
 
 **How it works.** `wisp lan` ([lan.md](lan.md)) runs offline clients in pairs:
@@ -366,10 +366,10 @@ Wisp's menu page reports it instead.
 - That account risk is of a different kind from a UI file.
 - Wisp takes it only where no account exists: the offline pool clients of
   [section 2](#2-lan-hosting-offline-clients-and-wisps-host).
-- There is no exception for players: Smashcraft Servers, the opt-in LAN
-  switch Tom approved for smashcraft-client on 25 October 2026, was stopped
+- There is no exception for players: Mak'gora Servers, the opt-in LAN
+  switch Tom approved for makgora-client on 25 October 2026, was stopped
   on 31 October 2026
-  ([clean-room.md](clean-room.md#smashcraft-servers-stopped)). Players play
+  ([clean-room.md](clean-room.md#makgora-servers-stopped)). Players play
   online in Wisp's own window over the relay.
 
 ## Ranked recommendation

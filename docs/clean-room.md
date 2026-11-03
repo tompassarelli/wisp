@@ -83,18 +83,18 @@ and history. The short form is the README's
   never on the note.
 - Put "Warcraft" (or Blizzard art or logos) in a product name, icon or logo.
 
-## Smashcraft Servers (stopped)
+## Mak'gora Servers (stopped)
 
 Warcraft III's online play is Battle.net's, in Warcraft's own menus.
-Smashcraft and Wisp offer no online play inside the Warcraft client. Online
+Mak'gora and Wisp offer no online play inside the Warcraft client. Online
 play is Wisp's own window over Wisp's relay (wisp:docs/relay.md), with
-Warcraft III closed. On 25 October 2026 Tom approved Smashcraft Servers, an
-in-game LAN switch for players as an opt-in in smashcraft-client. On 31
+Warcraft III closed. On 25 October 2026 Tom approved Mak'gora Servers, an
+in-game LAN switch for players as an opt-in in makgora-client. On 31
 October 2026 he withdrew that approval: an outside review named the switch the
 project's one real legal exposure, because the bnetd and Glider cases turned
 on a EULA's reverse-engineering ban and on DMCA anti-circumvention, and
 Wisp's window now reaches the relay without touching Warcraft's memory
-(smashcraft-client#28). The rules:
+(makgora-client#28). The rules:
 
 - **No player build touches a running game.** No client we ship turns on
   Warcraft III's LAN network provider, writes into a running game, or drives
@@ -113,7 +113,7 @@ Nothing else is allowed: no other read or write of game memory, no reading
 hidden game state, no sending or changing match input, no anti-cheat evasion,
 nothing in ranked or ladder play, and no W3Champions code; their FLO is a
 reference for behaviour only. What the switch or the offline provider write
-shows never decides Wisp's or Smashcraft's behaviour. Their addresses,
+shows never decides Wisp's or Mak'gora's behaviour. Their addresses,
 offsets, byte patterns, procedures and call logs live in a private repository,
 never ship in any client and are never committed. Shipping any of them to
 players again needs a new decision from Tom.
@@ -125,7 +125,7 @@ own machines and test accounts: the LAN switch that lets our own test clients
 offer LAN games, and the desync debugger that inspects our own clients. They
 live outside every repository, under `~/.local/share/wisp-private/`, and never
 feed Wisp's implementation; no player build carries the LAN switch
-(Smashcraft Servers (stopped), above). The LAN switch loads through
+(Mak'gora Servers (stopped), above). The LAN switch loads through
 wisp:host/lan/plugin.ts; nothing else in Wisp imports private code.
 Their addresses, offsets, dumps, byte patterns and procedures are never
 committed, posted in issues or pull requests, or quoted in docs. What they show

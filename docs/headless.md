@@ -239,7 +239,7 @@ clock. A consumer's pad check must retain the native pause capture's helper
 acknowledgments and use this draw observation with its actual map and helper;
 callback pose equality alone cannot decide visible pose equality (#86).
 
-The native #86 reference is the Classic capture of Smashcraft
+The native #86 reference is the Classic capture of Mak'gora
 `0911b5dac` on Warcraft 3.0.1.24342, retained privately at
 `~/.local/state/wisp/ref-86-pause/` and linked from
 [the native result](https://github.com/tompassarelli/wisp/issues/86#issuecomment-6066025581).
@@ -266,7 +266,7 @@ begins on the next changed picture, 649. These video indices are pictures, not c
 numbers; the recording does not identify the exact callback of each picture.
 
 The existing real-helper headless run at
-`~/.local/state/smashcraft/wisp-pause86-current-helper/` matches PAUSE/RESUME
+`~/.local/state/makgora/wisp-pause86-current-helper/` matches PAUSE/RESUME
 168/168 and the first resumed fighter pose on both clients, but its measured
 Start-to-commit delay is 403.881069/405.436109 ms with `syncDelivery()`. The
 gap is in the control messages' delivery, not in the map or helper: natively
@@ -276,12 +276,12 @@ and the last PREPARE acknowledgment took 183–187 ms from client B's send to
 the PAUSE_COMMIT read against 107–108 ms headless. The capture's 585–588 ms is
 therefore not a universal pause delay.
 
-Smashcraft's `pad SCRIPT --headless --replay-arrivals NATIVE_DIR` replays the
+Mak'gora's `pad SCRIPT --headless --replay-arrivals NATIVE_DIR` replays the
 capture's measured arrivals, from each Start press, through the real map and
 helpers ([Replayed arrivals](network-model.md#replayed-arrivals)): the pause
 request at the first PREPARE read (+219.214 ms), both PREPARE acknowledgments
 at the first PAUSE_COMMIT read (+584.671 ms) and the resume request at the
-first RESUME read (+123.681 ms). Its run of Smashcraft's
+first RESUME read (+123.681 ms). Its run of Mak'gora's
 `test/native/pads/206/pause-dash.pad` with the reference's helper commits
 the pause 600.912/603.108 ms after Start (native 584.671/588.481, within one
 frame on both clients) and resumes 128.746 ms after the second Start (native
@@ -303,7 +303,7 @@ A long run keeps every native call unless the clients are made with
 `keepCalls`: then they compare their calls after every frame and keep only
 the last `keepCalls` of each, for a later desync's context; the first desync
 is kept with the frame it was found after, and the checksum and
-`callCount()` still cover every call. Without it, Smashcraft's two-client
+`callCount()` still cover every call. Without it, Mak'gora's two-client
 match grew the process by about 10 MB a second, measured on its development
 build.
 
@@ -378,10 +378,10 @@ native calls ([frame cost](frame-cost.md#headless)).
 
 Warcraft's Lua numbers are binary32, and its raw float `+`, `-`, `*` and
 `/`, and its decimal numerals, don't always round to nearest as Bun and a
-stock Lua32 do. In Smashcraft
+stock Lua32 do. In Mak'gora
 0.0.48 a product was the exact result truncated toward zero, and the native
 moments diverged from their headless replay from that ulp on
-(smashcraft#59). In Smashcraft's 7 October native
+(makgora#59). In Mak'gora's 7 October native
 match a camera quotient was an ulp above the nearest, and the numeral
 `0.016666667` read as the binary32 below the nearest. Toward zero is the
 nearest model found, not the exact rule: a Lua rounding so replayed one of
@@ -391,12 +391,12 @@ compiler emits as exact operations, and the compiler prints every
 non-integer literal as an exact hexadecimal float.
 
 Warcraft also flushes a subnormal binary32 result, one below 2^-126, to zero,
-keeping its sign. In Smashcraft 0.0.273 the match camera eased its x toward 0
+keeping its sign. In Mak'gora 0.0.273 the match camera eased its x toward 0
 by `f32(x + f32(f32(0 - x) * rate))`; natively x stopped at
 1.1940069608864212e-37, where the step's product fell below 2^-126, while Bun
 and Lua32 kept decaying through the subnormals, so three of four native
 matches missed their replay checkpoints for a few hundred frames after each
-down smash or down air (smashcraft#25). `f32()` and the exact helpers flush
+down smash or down air (makgora#25). `f32()` and the exact helpers flush
 such a result. Whether Warcraft also reads a subnormal operand as zero is not
 known.
 
@@ -544,7 +544,7 @@ the count, so hide or move the others first.
 Unit and effect alpha fades opaque material layers; alpha 140 blends the body with the background, as in a roll.
 Frame numbers are headless client frames after that frame's journey events.
 `--match-frames N...` in place of `--frames` names the map's own match frame
-instead: the frame its scene report's `frame()` returns (Smashcraft's
+instead: the frame its scene report's `frame()` returns (Mak'gora's
 `simulationFrame`, the counter its native captures stamp), captured on the
 first client frame that reads it, with images named `p0-match-N.png`. A
 journey that starts its match at client frame 30 reaches match frame 410 at
@@ -593,7 +593,7 @@ headless mode, with the GPU's ANGLE OpenGL backend, falling back to SwiftShader
 only if GPU initialization fails. No Warcraft client is opened.
 The renderer draws the map's sky model first, centred on the camera's eye with
 a far plane beyond any sky model, then clears depth, so the stage draws over it
-("Lighting, fog and sky" below). On Smashcraft's Durotar near camera
+("Lighting, fog and sky" below). On Mak'gora's Durotar near camera
 (Warcraft III 3.0.1.24342, Reforged) the drawn horizon sits 12 rows of 720
 above the native capture's.
 
@@ -831,14 +831,14 @@ saves them as the scene's `environment`.
   fogged only when the fog draws over the sky. `BlzShowSkyBox(false)` hides it.
 - **Far cull.** A model whose origin lies farther from the eye than the
   camera's `FARZ` is not drawn, even where part of it reaches nearer. At
-  Smashcraft's `FARZ` 8000, native captures show neither Nordrassil's World
+  Mak'gora's `FARZ` 8000, native captures show neither Nordrassil's World
   Tree (origin 8054 from the eye) nor the Frozen Throne landmark (8049-9300).
 - **Cinematic filter.** The client records the `SetCineFilter*` setters and
   `DisplayCineFilter`, and `captureScene` saves the filter showing at that
   frame as the scene's `filter`: its texture tinted by the start colour moved
   toward the end colour by the elapsed share of its duration. It draws over
   the world and under the UI in its blend mode; `BLEND_MODE_MODULATE_2X` is
-  twice the scene times the filter. Smashcraft's KO flash (#289, a white mask
+  twice the scene times the filter. Mak'gora's KO flash (#289, a white mask
   at grey 185-255) on Classic, 8 Oct, frames 300-367: the headless curve
   tracks the native one frame for frame, the flash on at KO, its peak at
   KO+1 and off at KO+37; at grey 185 native lifts the scene 1.42 times and
@@ -850,12 +850,12 @@ saves them as the scene's `environment`.
   flags hold 1 (`OUTLINE`). A frame made by `BlzCreateFrameByType` with no
   template draws at 0.0085 times its scale (1 when it has none)
   instead: Classic ignores the font height on such a frame (measured on
-  build 24268, scaled and unscaled), so Smashcraft's `sizeText` countdown, which sets a scale of
+  build 24268, scaled and unscaled), so Mak'gora's `sizeText` countdown, which sets a scale of
   `size / 0.0085` beside a font of `size`, is `size` tall in the Chrome window
   and the native window, not `size` squared over 0.0085 (`uiTextSize`,
   wisp:host/render/screen.ts; `font_size` in the native window's
   `ui/layout.rs`). A map declares a TEXT template from its own FDF in
-  its headless `frames`, such as Smashcraft's `SmashcraftDamage` (`MasterFont`,
+  its headless `frames`, such as Mak'gora's `MakgoraDamage` (`MasterFont`,
   0.036, `OUTLINE`). A `.ttf` or `.otf` file loads through the asset server;
   a font name such as `MasterFont` draws sans-serif. A frame with no font
   keeps the old 10-22 px, top-left text.
@@ -878,7 +878,7 @@ saves them as the scene's `environment`.
   units are not culled this way. The bounds run from the terrain's first
   point to its last: `columns - 1` and `rows - 1` cells of 128 from its
   origin, read from w3e versions 11 and 12 (wisp:host/terrain/terrain.ts).
-  Native Classic, Smashcraft 56fb5249 on a base ending at y 4,096, Stratholme
+  Native Classic, Mak'gora 56fb5249 on a base ending at y 4,096, Stratholme
   near view (8 Oct): the ruined cathedral at map y 5,944, 7,948 from the eye
   and in frame, isn't drawn, nor are Tomb's Temple of Tides and waterfall
   (y 5,344); the city gate at y 3,544 is.
@@ -973,7 +973,7 @@ saves them as the scene's `environment`.
   cells. Fog applies. Not drawn: shorelines,
   lighting, `SetWaterBaseColor` and per-tileset texture folders.
   `render.json` records `water` per frame, and `milliseconds` each frame took.
-  No native terrain-water reference exists yet; Smashcraft hides terrain and
+  No native terrain-water reference exists yet; Mak'gora hides terrain and
   draws its sea as a model.
 - **Sun shadows.** The day/night key light casts shadows: every
   drawn model's depth from the sun, an orthographic 4096² map over the
@@ -1039,10 +1039,10 @@ asking for an unsupported lever fails before drawing, naming each one
 classic"), so a check can't pass on a frame that lacks what it
 judges. `render.json` records the profile's levers and the `--look` list.
 
-#### Smashcraft's stage matrix
+#### Mak'gora's stage matrix
 
-The levers Smashcraft's stage plan asks for per stage
-(smashcraft:docs/design/visual-quality.md, "3.0.1 and Forsaken Kingdom"),
+The levers Mak'gora's stage plan asks for per stage
+(makgora:docs/design/visual-quality.md, "3.0.1 and Forsaken Kingdom"),
 plus its #170 rubric's day/night light, fog and sky and "record any change
 to shadows", for each of its 11 stages. Drawn levers are
 listed first, then absent ones, then unsupported ones in bold:
@@ -1063,9 +1063,9 @@ listed first, then absent ones, then unsupported ones in bold:
 
 #### Measured against Warcraft
 
-Rubric: smashcraft#170's stage-light check, "neither |ΔL| nor ΔE00 falls
+Rubric: makgora#170's stage-light check, "neither |ΔL| nor ΔE00 falls
 against stock", measured with `bun tools/stage/contrast.ts MASK STOCK STAGE`
-(Smashcraft) on a stock / mask / stage triple. Headless triples: Smashcraft
+(Mak'gora) on a stock / mask / stage triple. Headless triples: Mak'gora
 main fe3fc382 with Wisp 86d2e37, `-dev quick stage N`, `-dev view off`, then at
 frame 350 `-dev lighting stock`, `-dev lighting stock` with
 `-dev backdrop off`, or `-dev lighting stage`, each its own run and drawn at
@@ -1091,7 +1091,7 @@ renderer); the verdict is what is compared.
 | 14 Hellfire | no reference | — | 12.3, 32.8 → 15.1, 32.6 | fail |
 
 With sun shadows (wisp#79,
-9 Oct; Smashcraft b859da4f with this Wisp, the same journeys and frame 410),
+9 Oct; Mak'gora b859da4f with this Wisp, the same journeys and frame 410),
 the Classic triples on the six stages with a native reference, abs ΔL, ΔE00
 stock → stage: 2 Frozen Throne 2.0, 7.6 → 4.3, 8.2 pass; 3 Durotar 1.2, 31.6
 → 4.5, 31.3 fail; 4 Naxxramas 10.4, 16.9 → 13.1, 17.6 pass; 11 Gryphon Aerie
@@ -1171,7 +1171,7 @@ with products rounded toward zero, wrapped by its own rule, so 180 reads
 179.99998 and 360 reads 359.99997. An effect attached to a unit reads 0, 0
 from the local position getters, as on 3.0.1. `test/unit-motion57/cases.ts`
 authors the cases shared by Bun, Lua32 and a native measurement map, with
-bodies set up as Smashcraft's fighter bodies are (pathing off, Crow Form,
+bodies set up as Mak'gora's fighter bodies are (pathing off, Crow Form,
 Locust, paused): position, height, 43 exact facing reads
 (`facing-ex-exact-*` after `BlzSetUnitFacingEx`, `facing-created-exact-*`
 after `CreateUnit`) and a dash. All 49 rows equal the 3.0.1 capture. The
@@ -1199,7 +1199,7 @@ count is 26 and shows nothing about drawing.
 `SetUnitFlyHeight` applies to any unit, with or without Crow Form: on 3.0.1 a
 ground footman set up as a fighter body (pathing off, Locust, paused) took the
 write without it. `SetUnitMoveSpeed` stores the speed as binary32. `test/unit-movement61/cases.ts` authors the cases shared by
-Bun, Lua32 and a native measurement map; the rules, and why Smashcraft relies
+Bun, Lua32 and a native measurement map; the rules, and why Mak'gora relies
 on nothing else in collision, pathing or orders, are in
 [Warsmash notes](warsmash-notes.md#collision-pathing-and-orders).
 
@@ -1253,7 +1253,7 @@ all on a dark board. Its 30 rulers are wisp#58's animation playback cases
 (column three). Every case starts 3 game seconds after the map, clear of
 the first second, when 3.0.1 runs several timers in one frame before effects
 animate. The models are MDL text compiled to MDX with war3-model
-(`models.ts`), as Smashcraft's stage models are.
+(`models.ts`), as Mak'gora's stage models are.
 
 ```sh
 bun test test/headless-animation.test.ts
@@ -1351,7 +1351,7 @@ in sum with half-maximum radii 1 px wider, and every 24-level box edge within
 169.6 px higher than `camera()` places them and no wider, so the oracle is
 registered by the twin's centroid (`DX,DY` 0,-169.6).
 
-### Team-glow plane replicas and the real body at Smashcraft's camera
+### Team-glow plane replicas and the real body at Mak'gora's camera
 
 `test/glow6e/` ([#6](https://github.com/tompassarelli/wisp/issues/6)) holds
 W2's Warden forward-air frames 57, 58, 60 and 61 at the camera and place the
@@ -1462,12 +1462,12 @@ The reference files are private at
 `~/.local/state/wisp/table-order-35-20261008/client-{A,B}.txt`;
 [the native run](https://github.com/tompassarelli/wisp/issues/35#issuecomment-6064849160)
 records the session. The launcher reported a selection-screen timeout after
-the game started because this fixture has no Smashcraft selection screen;
+the game started because this fixture has no Mak'gora selection screen;
 both clients nevertheless completed the fixture and wrote their output.
 
 ## Effect visibility comparison (#72)
 
-Smashcraft's `f9d0fbf3` Classic batch on 8 October 2026 has 14 graded
+Mak'gora's `f9d0fbf3` Classic batch on 8 October 2026 has 14 graded
 cases and 42 held screenshots. The same revision's `82-effects.pad` was
 replayed through the native driver to obtain 42 headless scenes. Both images
 are 1920 × 1080. Counts below use the native rubric: changed RGB pixels in

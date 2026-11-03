@@ -40,7 +40,7 @@ emulation, no Warsmash code ([wisp#75](https://github.com/tompassarelli/wisp/iss
 new Warsmash-sourced facts and each decided by a native fixture: independently written
 life/death, animation/blending and map/model-format facts, separating source
 research from native confirmations for headless checks and a standalone player.
-They also map Smashcraft's relied-on behavior to Wisp and describe the shared
+They also map Mak'gora's relied-on behavior to Wisp and describe the shared
 unit/timer native fixture in `test/native-rules50/`, and the
 [timer and frame-stepping rules](warsmash-notes.md#timers-and-frame-stepping)
 the headless runtime follows, checked in Bun and Lua32 by `test/timers56/`,
@@ -77,7 +77,7 @@ Wisp's own game API (effects first, lowered to Warcraft natives at compile time)
 No Warcraft running? The [headless runtime](headless.md) (wisp:docs/headless.md)
 runs your map's real bundle in simulated clients, in Bun and in 32-bit Lua:
 desyncs between clients, error reports, hot reloads and what a player would see
-wrong, in under a second for Smashcraft's two-client, 600-frame quick match.
+wrong, in under a second for Mak'gora's two-client, 600-frame quick match.
 Local held-key polling is modeled separately from other players' key events,
 and a journey's mouse events move one player's pointer and left button on their
 client only ([Journeys](headless.md#journeys)), so a drag is journey data.
@@ -136,14 +136,14 @@ issue each closes, in as few fresh matches as their maps allow, and prints
 pass, fail, needs-look or skipped per check with its evidence folder and separate counts.
 
 Many scripted native checks? Never start a new game per check: in
-Smashcraft (7 Oct 2026) a new game cost 42 to 64 s against about 24 s for
+Mak'gora (7 Oct 2026) a new game cost 42 to 64 s against about 24 s for
 the check itself. Start one game per client pair, give the map a developer
-command that puts the match back exactly as the map started it (Smashcraft's
+command that puts the match back exactly as the map started it (Mak'gora's
 `-dev reset`, held by a test comparing the next match's checksums and saved
 moments with a new game's first match), run the headless side of every
-check alongside, and shard the checks over the offline LAN pool. Smashcraft's
+check alongside, and shard the checks over the offline LAN pool. Mak'gora's
 `bun wisp pad SCRIPT|DIR... [--pairs N]` does all four
-(smashcraft:docs/native-bot-session.md, "Many scripts in one game").
+(makgora:docs/native-bot-session.md, "Many scripts in one game").
 
 A client dropped from Battle.net, crashed, stuck on its login, loading
 screen or an old lobby, or sharing its prefix with a second runtime?
@@ -182,7 +182,7 @@ warcraft-vscode on the same map is measured in the
 | --- | --- | --- |
 | Distinguish reported dynamic-shop and Channel/AAns limits from native observations | [Engine gotchas](engine-gotchas.md), `bun test/dynamic-stock99/build.ts BASE.w3m OUT.w3x` | One `AddUnitToStock` Footman entry on 3.0.0.24268 lacked a displayed/working F hotkey and naturally restocked in about 30 s. Item hotkeys, cooldown control and Channel/AAns claims remain UNVERIFIED. Missing engine controls are requests to Blizzard; Wisp makes no implementation promise. |
 | Check map-declared unit model paths and scales while building | $1 | Missing paths name the unit; scales must be positive. `compareUnitModels` reports fields changed in supplied save observations. Separate from native texture resolution (#91) and graphics fidelity (#79); real World Editor save reference remains in #97. |
-| Read the lobby preview texture and diagnose an ignored custom preview | [Map preview](map.md), `wisp map preview MAP.w3x --out IMAGE.ppm [--assets DIR]` | Reads real map metadata and BLP/TGA texture bytes; draws start markers with the user's supplied icon. Calibrated to the 3.0.1 Smashcraft parchment lobby capture; the second custom-map reference remains in #85. |
+| Read the lobby preview texture and diagnose an ignored custom preview | [Map preview](map.md), `wisp map preview MAP.w3x --out IMAGE.ppm [--assets DIR]` | Reads real map metadata and BLP/TGA texture bytes; draws start markers with the user's supplied icon. Calibrated to the 3.0.1 Mak'gora parchment lobby capture; the second custom-map reference remains in #85. |
 | Keep Linux-specific code (`/proc`, cgroups, Wine, Proton, `nsenter`, `grim`, `xdotool`, `wlrctl`, systemd, PipeWire) out of the core so Windows and macOS consumers fit | [Platforms](platforms.md), the services in wisp:host/os/platform/services.ts and `platformLayer` (wisp:host/os/platform/layer.ts) | Only a Linux layer exists; elsewhere a capability fails with "… is not supported on this platform". The `windows` workflow runs the core on `windows-latest`. |
 | Write a host tool that starts processes, waits, retries or reads outside data, and have it stop everything it started on failure, Ctrl-C or SIGTERM | [Host tools](host-tools.md), `spawnLogged` and `pollUntil` (wisp:host/process/hostProcess.ts) and `runMainCli` (wisp:host/cli/cli.ts) | Effect's `ChildProcess` with `@effect/platform-bun` 4.0.2; children are killed as a process group when their scope closes. |
 | Check unit owner, facing, life, mana, killing and removal in Bun and Lua32 | [Unit states](headless.md#unit-states), `HeadlessMap.unitStates` and `LuaHeadlessMap.unitStates` | Declare object-data initial life, mana and maximums by type ID, or explicitly set them before reading. All 24 shared rows match Warcraft 3.0.1, including rounded state writes, fractional death, facing, writes after death and removal. Combat and revival stay outside this model. |
@@ -218,10 +218,10 @@ warcraft-vscode on the same map is measured in the
 | Build one map once for every worker on a host | [Map reuse](compile-cache.md#map-reuse) (wisp:docs/compile-cache.md, wisp:host/compile/mapReuse.ts) | Key the build by the hash of its inputs; later callers with the same key copy the stored map and log `reused map build KEY`. `WISP_MAP_REUSE_STORE` moves the store, `WISP_MAP_REUSE_GIB` caps it (oldest use first). |
 | Warn about unmatched location/group cleanup during normal map builds and count live handles in headless journeys | [Handle cleanup](handle-cleanup.md) (wisp:docs/handle-cleanup.md, wisp:host/toolchain/handleWarnings.ts, wisp:src/headless/client.ts) | Direct native allocation and standalone cleanup in the same function; escaped or conditional ownership reports UNKNOWN. Each headless client exposes `liveHandleCounts()` snapshots. |
 | Describe a menu panel as typed data; generate its FDF, TOC and a map module that creates it with native frame calls and returns typed handles, with bad names, templates and anchors reported at build time | [Declarative frames](ui.md), `generateFrames` and `writeFrames` (wisp:docs/ui.md, wisp:host/compile/frames.ts) | Game runs `writeFrames` before compiling and passes its entries to MapBuild's `imports`; FRAME, BACKDROP, TEXT, GLUETEXTBUTTON and a SIMPLEFRAME whose textures cut a sub-rectangle (`texCoord`) of a file ([SIMPLE frames](ui.md#simple-frames-a-sub-rectangle-of-a-texture)); the native window draws that region, the Chrome renderer the whole texture. Clicks, focus and per-client presentation stay in the game's script. |
-| Package hundreds of private imports quickly and losslessly: every import, base file and generated file goes in and is verified in one archive opening each | [Asset ingestion](asset-ingestion.md), `map-pack replace-list` and `extract-list` (wisp:docs/asset-ingestion.md, wisp:native/map-pack.c) | Automatic in `MapBuild.build`. Entries, including Warcraft 3.0 OGG sounds, are stored zlib-compressed byte for byte, never re-encoded; sources are only read. Measured 49 s to 12.2 s packaging and 23 s to 2.0 s extraction for Smashcraft's 1,108 clip and portrait imports. |
+| Package hundreds of private imports quickly and losslessly: every import, base file and generated file goes in and is verified in one archive opening each | [Asset ingestion](asset-ingestion.md), `map-pack replace-list` and `extract-list` (wisp:docs/asset-ingestion.md, wisp:native/map-pack.c) | Automatic in `MapBuild.build`. Entries, including Warcraft 3.0 OGG sounds, are stored zlib-compressed byte for byte, never re-encoded; sources are only read. Measured 49 s to 12.2 s packaging and 23 s to 2.0 s extraction for Mak'gora's 1,108 clip and portrait imports. |
 | Generate custom objects, including FileIO's ability | [Object data](../host/toolchain/objectData.ts) (wisp:host/toolchain/objectData.ts) | A build without its own war3map.w3a gets FileIO's ability; a map that writes war3map.w3a includes it with `abilityData()`. |
 | Read reports or write reload payloads | [GameFiles](../host/io/gameFiles.ts) (wisp:host/io/gameFiles.ts) | Host-side file transport; runtime and host must share file identities. |
-| Stage a map, pads and VM clients file over SSH, run the game's native command there and download its evidence | [`wisp native remote`](client.md#remote-native-runs) (wisp:host/commands/nativeRemote.ts) | Existing SSH alias, VM project and ready clients; `--dry-run` prints the exact commands. Results and stdout/stderr go to `~/.local/state/smashcraft/RUN/`, including when the remote command fails. |
+| Stage a map, pads and VM clients file over SSH, run the game's native command there and download its evidence | [`wisp native remote`](client.md#remote-native-runs) (wisp:host/commands/nativeRemote.ts) | Existing SSH alias, VM project and ready clients; `--dry-run` prints the exact commands. Results and stdout/stderr go to `~/.local/state/makgora/RUN/`, including when the remote command fails. |
 | Know what each client is doing (closed, launcher, signing in, signed in, menu screen, lobby, loading, in match, results, disconnected, crashed), its load errors and ladder scan, from the menus' socket, its log, crash reports, match receipts and processes; wait on a state | [`wisp client watch`](watch.md), `wisp client watch` and `wait` and [ClientWatch](../host/dev/watch.ts) (wisp:docs/watch.md, wisp:host/client/clientWatchCommand.ts, wisp:host/dev/watch.ts) | The clients file's `documents` (in a Wine prefix) and, for menu screens, `menuReportPort` with the current menu page installed; run where the host's processes are visible. `filePrefix` adds the map's match receipts. |
 | Control existing Warcraft clients | [Clients](../host/client/clients.ts) and the [client command](../host/commands/client.ts) (wisp:host/client/clients.ts, wisp:host/commands/client.ts) | Supply the clients file ([format](sample-map.md#play-it-and-change-it-while-it-runs)) and private desktop sessions; game-specific journeys belong to the consumer. Return and typed text go only to a client in a match with its menu page connected ([watch.md](watch.md#typing-only-into-a-match)). |
 | Gate native setup on observed chat entry and every selected client's new requested map receipt | [Chat setup](watch.md#confirmed-chat-setup), `openObservedChat` and `confirmedCommand` (wisp:host/client/chatSetup.ts) | Supply the map's chat observation and requested receipt predicate; input execution follows confirmation. A missed Return or receipt names the first boundary and client. |
@@ -268,8 +268,8 @@ The checkout's `bun run check`, `bun run test` and package-generation command
 are Wisp development commands. This package does not install a universal
 `wisp` executable: a project composes its own program from these services
 with `runCli`, as wisp:examples/sample/scripts/sample.ts does, naming its
-commands by the [command vocabulary](cli.md) (wisp:docs/cli.md). Smashcraft's
-concrete commands and game-specific policy live in smashcraft:docs/typescript.md.
+commands by the [command vocabulary](cli.md) (wisp:docs/cli.md). Mak'gora's
+concrete commands and game-specific policy live in makgora:docs/typescript.md.
 
 ## Machine-readable results
 

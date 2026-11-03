@@ -66,7 +66,7 @@ Doctor adds the client's Wine prefix:
   at least twice to the log's end, means the launcher lost its connection
   (client B, 3 Oct: every 46 s once its VPN address went away), which a
   restarted launcher reconnects
-  (smashcraft:docs/warcraft-authentication.md).
+  (makgora:docs/warcraft-authentication.md).
   Its sign-in form is read from its `[UnifiedAuth]` lines: `finished loading.
   statusCode=200 state=Login` is the account page, `state=LoginCredential`
   the password page, and `status changed: RequestingToken` a submitted page.
@@ -241,7 +241,7 @@ The game adds the command with `makeDoctor`
 
 ```ts
 export const doctor = makeDoctor({
-  clientsFile: join(homedir(), ".local/state/smashcraft/clients.json"),
+  clientsFile: join(homedir(), ".local/state/makgora/clients.json"),
   // How each client's Battle.net starts: a Steam shortcut, or a command on the client's own display.
   start: {
     a: { kind: "command", command: [/* steam-run ... proton waitforexitandrun .../Battle.net Launcher.exe */], log: "/state/client-a.log" },
@@ -251,7 +251,7 @@ export const doctor = makeDoctor({
   accounts: {
     b: { username: ["cat", "/run/secrets/bnet-b-username"], password: ["cat", "/run/secrets/bnet-b-password"] },
   },
-}, ClientWatch.layer({ filePrefix: "smashcraft" }));
+}, ClientWatch.layer({ filePrefix: "makgora" }));
 ```
 
 Each client's prefix is the folder its `documents` lives in

@@ -175,7 +175,7 @@ Checked 31 October 2026 for the UI frames family of the game API
 - **Not taken:** the component classes, composites, grid and theme. They are
   wrapper objects with methods, which put a table lookup or an allocation
   on each Lua call; the plan's Lua cost rule allows neither. Widgets are a
-  layer above the API that a game builds for itself (Smashcraft already has
+  layer above the API that a game builds for itself (Mak'gora already has
   its own layout code in `ts/src/game/ui/`). The theme object is marked
   deprecated in its own source.
 - **Obligations:** none, since no expression is copied. Copying code later

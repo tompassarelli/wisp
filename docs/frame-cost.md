@@ -32,8 +32,8 @@ The meter finds the clock's step at start: the smallest change two reads in
 a row show. Each frame's time is a sum of whole steps, so a frame's value is
 within about one step per callback, while a mean over a window is much
 finer. The overlay names the step. Warcraft's `os.clock` exists in the
-signed-in clients: Smashcraft's native frame-cost benchmarks of 5 October
-2026 timed with it (smashcraft:evidence/native-frame-cost-20261005), and
+signed-in clients: Mak'gora's native frame-cost benchmarks of 5 October
+2026 timed with it (makgora:evidence/native-frame-cost-20261005), and
 their totals were whole multiples of 1/1024 s, the spacing of binary32
 numbers between 8192 and 16384, so the step grows as the game's clock value
 does. Warcraft has no `debug` library, so the game counts no instructions;
@@ -220,7 +220,7 @@ one after it, such as a match's first:
   never to the map function that called the native. A fixture charging 50
   tables a frame is charged exactly 50 tables a frame, its caller nothing of
   its own, and an allocation-free function nothing (wisp:test/alloc-profile.test.ts).
-  A game's profiler maps the lines to names, as Smashcraft's
+  A game's profiler maps the lines to names, as Mak'gora's
   `perf profile RUN --alloc` does.
 - **Allocated KB**: the bytes the map's code asked for, which Wisp's Lua32
   counts (`collectgarbage("requested")`, [Lua32 builds](headless.md#raw-float-rounding)):
@@ -233,7 +233,7 @@ one after it, such as a match's first:
   what else the program holds nor on when the heap was last collected: an
   inert, never-called function moves no frame (wisp:test/requested-bytes.test.ts),
   where a heap delta once moved single frames by up to 8 KB at equal
-  instruction counts (smashcraft#26). Automatic collection stays stopped
+  instruction counts (makgora#26). Automatic collection stays stopped
   throughout profiling, including between client callbacks. Between callbacks
   it explicitly collects once the heap has doubled since the last collection,
   or grown 16 MB if that is more, so collection time follows allocation
@@ -249,7 +249,7 @@ one after it, such as a match's first:
 
 It prints a heading and, per client and value, the start (before the first
 frame), the total, and the median, 95th percentile, mean, maximum and top 1%
-mean (the mean of the worst 1% of frames, at least one) per frame, here one client of Smashcraft's native bot session's four-fighter
+mean (the mean of the worst 1% of frames, at least one) per frame, here one client of Mak'gora's native bot session's four-fighter
 match (`bun wisp perf bot-four`, 1800 frames), counted from its first frame:
 
 ```text
@@ -304,7 +304,7 @@ play and `samples` as its next arguments.
   95th percentile, or its typing stall at its top 1% mean; or when B's run
   found a problem. It prints every module's mean allocation per frame, A to
   B, and an allocation failure names the modules that grew most. No gate reads a single worst frame: which frame is worst
-  moves whenever a bot's choices change (smashcraft#394). A run written
+  moves whenever a bot's choices change (makgora#394). A run written
   before `top=` existed compares its maximum in its place. Each of these is made from counts, so the same code compares
   alike on any machine; Lua time is printed, not held to it.
 
@@ -324,7 +324,7 @@ Failures print a `failure` with `kind` (`error`, `check-fail`, or `budget`),
 unchanged when `--json` is absent.
 
 For CI, run `perf --out` on both versions and `perf compare` the two files.
-Smashcraft's 0.0.48 four-fighter match against 0.0.49's fails it on
+Mak'gora's 0.0.48 four-fighter match against 0.0.49's fails it on
 allocation, its mean up 273% and its 95th percentile 501%: 0.0.48's binary32
 arithmetic still allocated.
 
@@ -353,14 +353,14 @@ every run and every machine. `WARCRAFT_COST` holds the measured constants:
 
 | Term | Value | From |
 | --- | --- | --- |
-| Host 32-bit Lua | 18.2 µs per 1000 instructions | Smashcraft's four-fighter bot match on the development host (6 October 2026) |
-| Lua speed factor | 1.17 | Smashcraft's 4096-frame workload, Warcraft against the same host's Lua32 (smashcraft:evidence/native-frame-cost-20261005) |
-| Native call | 2 µs | fitted to Smashcraft 0.0.49's four-fighter overlay |
-| Collector | 2 µs per KB | fitted to the same, on allocation counts that still included the hook's 30 B per 100 instructions (Smashcraft's rollback-four median frame read 84 KB with it and reads 16 KB without); the host's own full collections cost 7 µs per KB |
-| Typing | 0.5 µs per character squared | 608 characters held a client about 180 ms (smashcraft#48) |
+| Host 32-bit Lua | 18.2 µs per 1000 instructions | Mak'gora's four-fighter bot match on the development host (6 October 2026) |
+| Lua speed factor | 1.17 | Mak'gora's 4096-frame workload, Warcraft against the same host's Lua32 (makgora:evidence/native-frame-cost-20261005) |
+| Native call | 2 µs | fitted to Mak'gora 0.0.49's four-fighter overlay |
+| Collector | 2 µs per KB | fitted to the same, on allocation counts that still included the hook's 30 B per 100 instructions (Mak'gora's rollback-four median frame read 84 KB with it and reads 16 KB without); the host's own full collections cost 7 µs per KB |
+| Typing | 0.5 µs per character squared | 608 characters held a client about 180 ms (makgora#48) |
 
 The collector term is not refitted yet. Against the native collector
-alone, Smashcraft's four-fighter rollback match collects for 10–16 ms
+alone, Mak'gora's four-fighter rollback match collects for 10–16 ms
 about once a minute while each client requests a mean 20 KB a frame
 (72 MB a minute at 60 frames a second): about 0.2 µs per KB amortized,
 a tenth of the fitted 2 µs. But Warcraft pays that cost in one frame, not
@@ -402,7 +402,7 @@ window's median, 95th percentile and maximum:
   readings without a 95th percentile can't pass. READINGS is JSON:
   `{clockStepMs?, windows: [{median, p95?, max}]}` in ms, or a game's
   session result holding `frame_cost_overlay.windows[].lua_ms`, such as
-  Smashcraft's `bot-result.json`. The clock step defaults to Warcraft's
+  Mak'gora's `bot-result.json`. The clock step defaults to Warcraft's
   0.977 ms. Run it from the source the native build was made from: the
   prediction comes from that source's frames.
 - `perf fit SAMPLES=READINGS ...` fits the native call and collector costs
@@ -426,7 +426,7 @@ candidate regresses beyond the comparison threshold (5% by default). Each
 check reads saved files and starts no Warcraft client. `--json` gives the
 measured comparisons and their pass/fail summaries for a saved report.
 
-Smashcraft's retained #19 references were recorded on 7 October 2026 at
+Mak'gora's retained #19 references were recorded on 7 October 2026 at
 `4ec5b823`, with Wisp's current cost constants, on a quiet machine. They cover
 the integrity build's solo bot and four-fighter bot workloads, player 0,
 1,800 callbacks each. The 57 windows compare callback p50/p95, using the native
@@ -434,7 +434,7 @@ clock steps; this calibration does not cover GPU/render time, native RSS,
 or native p99. A candidate's computed p99 and worst prediction remain useful
 diagnostics, but #19's 20% guarantee applies to p50 and p95 at this scope.
 
-From Smashcraft's `ts/`, first save the current candidate:
+From Mak'gora's `ts/`, first save the current candidate:
 
 ```sh
 bun wisp perf playable-bot-four --samples --out build/frame-cost-candidate.perf
@@ -443,7 +443,7 @@ bun wisp perf playable-bot-four --samples --out build/frame-cost-candidate.perf
 Then accept it against the published baseline and unchanged retained inputs:
 
 ```sh
-cost_refs="$HOME/.local/state/smashcraft/wisp19-20261007/4ec5b823"
+cost_refs="$HOME/.local/state/makgora/wisp19-20261007/4ec5b823"
 bun wisp perf native "$cost_refs/exclusive-1791383217845/bot-native-p0.txt" \
   --samples "$cost_refs/bot.perf" --json &&
 bun wisp perf native "$cost_refs/exclusive-1791383217845/bot-four-native-p0.txt" \
@@ -459,8 +459,8 @@ The references predict solo p50 7.00 ms against 8.00 ms (-12.5%), p95
 timing from headless event counts. Other workloads or hardware need their own
 matched reference before inheriting this calibration claim.
 
-The four-fighter overlays of Smashcraft 0.0.48 and 0.0.49 show only medians
-and maxima (smashcraft:evidence/cost-model-20261007). On the 1 ms clock,
+The four-fighter overlays of Mak'gora 0.0.48 and 0.0.49 show only medians
+and maxima (makgora:evidence/cost-model-20261007). On the 1 ms clock,
 their medians don't move with either cost, so the fit follows the maxima and
 drives both costs to 0. `WARCRAFT_COST` keeps 2 and 2 until readings with a
 95th percentile exist. Predicted median, native → predicted: 0.0.49 5.00 →
@@ -469,7 +469,7 @@ drives both costs to 0. `WARCRAFT_COST` keeps 2 and 2 until readings with a
 
 ## What it costs
 
-Measured on Smashcraft's development build (smashcraft 2f29ab3 with the meter
+Measured on Mak'gora's development build (makgora 2f29ab3 with the meter
 started, Wisp 7bf4c5d) in its 600-frame headless quick match in 32-bit Lua,
 three runs each, without other work on the machine. Instructions are each run's
 own count; times are the runs' range.

@@ -20,7 +20,7 @@ definition is in wisp:test/fixtures/frames/opponentSettings.ts.
 | w3ts `Frame` class | A TypeScript wrapper object per frame over the same natives (`new Frame(...)`, `Frame.fromName`) | Nicer call sites; the names and layout are still strings and code, and the wrapper allocates an object per frame. |
 | Wisp definitions (this page) | Typed host data generates the FDF, TOC and bindings | Names, templates and anchors are checked when the map builds; the map calls one create function. Only the FDF features listed below. |
 
-Smashcraft's menus (smashcraft#185) use the second approach: helpers such as
+Mak'gora's menus (makgora#185) use the second approach: helpers such as
 `createText`, `createBackdrop` and `placeTopLeft` in its frames module, and a
 `label`/`art`/`cpuButton` closure per panel. Its opponent-settings panel is
 14 frames placed by absolute points, with per-player name suffixes. Its one
@@ -123,7 +123,7 @@ texture handle changes its file and keeps its `texCoord`; `setFrameSize`,
 `setFrameAlpha` on the root move, size, hide and fade its textures.
 
 Measured in the Classic 3.0.0.24268 client on 2 November 2026 with
-Smashcraft's HUD race frames (an opaque backing, a bust the script sets and a
+Mak'gora's HUD race frames (an opaque backing, a bust the script sets and a
 three-part arch over them), one FDF variant per race, each on a fresh pair:
 
 - A frame with a `BORDER` or `OVERLAY` block drew none of that block's

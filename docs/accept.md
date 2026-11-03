@@ -8,11 +8,11 @@ check in as few fresh matches as their maps allow, keeps each check's
 evidence in a private folder and prints one verdict per check.
 
 ```text
-evidence: ~/.local/state/smashcraft/accept/20261006-213501
+evidence: ~/.local/state/makgora/accept/20261006-213501
 session 1/3: effects (shared), 15 checks
-NEEDS-LOOK 82-effects-12  smashcraft#82 box 2  look: a flash at stage centre, chest height  .../82-effects-12
+NEEDS-LOOK 82-effects-12  makgora#82 box 2  look: a flash at stage centre, chest height  .../82-effects-12
 ...
-FAIL       73-load  smashcraft#73 box 2  War3Log every client /^model creation failed/ since session <= 0: a 326 (first: ...)  .../73-load
+FAIL       73-load  makgora#73 box 2  War3Log every client /^model creation failed/ since session <= 0: a 326 (first: ...)  .../73-load
 17 checks: 1 pass, 1 fail, 15 needs-look
 ```
 
@@ -28,7 +28,7 @@ profiles, its checks and any frame measurements. A check is:
 
 | Field | Meaning |
 | --- | --- |
-| `id`, `closes` | The check's name and the issue box it answers, such as `smashcraft#82 box 2`. |
+| `id`, `closes` | The check's name and the issue box it answers, such as `makgora#82 box 2`. |
 | `map`, `session` | The map profile whose fresh match it runs in. Checks of one map share a match unless they name different sessions. |
 | `after` | A prerequisite check id declared earlier in the same map and session. The prerequisite must pass in this run; a failed, needs-look, skipped or unselected prerequisite makes this check SKIPPED without running its steps or captures. |
 | `setup` | Steps on the clients: `{ chat }` (a chat command such as `-dev effects 12`), `{ keys }` (or `{ keys, holdMs }` to hold each key for that many milliseconds), `{ waitMs }`, and `{ receipt }`, which waits for a receipt line written since the check began. |
@@ -68,7 +68,7 @@ folder per check with its frames, readings, `receipts-CLIENT.txt`,
 
 A game that has more than one set of clients (Wisp's offline LAN pool pairs)
 passes `shards` to `makeAccept`. When a run's arguments select two or more
-shards (Smashcraft: `--pairs N` or `--pair K` repeated), `accept` plans the
+shards (Mak'gora: `--pairs N` or `--pair K` repeated), `accept` plans the
 sessions, splits them over the shards (`shardSessions`: heaviest session onto
 the lightest shard, weighing a fresh match as four checks), runs the
 consumer's `prepare` once (a shared map build) and every shard's `run` at

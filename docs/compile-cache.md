@@ -23,13 +23,13 @@ into other packages, and of the data files TypeScriptToLua and source-map read
 at run time (the lualib and the source-map wasm); any change starts a new
 cache. Plugins resolve as TypeScriptToLua resolves them. The lockfile is
 not part of it, so a Wisp bump that changes only files the compiler never
-loads keeps the cache: on Smashcraft (23 Oct 2026) a bump touching only the
+loads keeps the cache: on Mak'gora (23 Oct 2026) a bump touching only the
 LAN pool built in 9.2 s instead of 30.8 s, and a bump touching a compiler file
 still compiled cold. Only modules that changed are written again, and the
 eight most recently used caches stay.
 
 The result equals a full TypeScriptToLua compile byte for byte, bundle and
-source map (wisp:test/compiler.test.ts). On Smashcraft (950 modules, 19 Oct
+source map (wisp:test/compiler.test.ts). On Mak'gora (950 modules, 19 Oct
 2026) a commit's build after another commit's cache compiled in 16.5 s instead
 of 29.3 s, and a one-file edit in 13 s; the bundle and source map matched the
 cold build.
@@ -51,7 +51,7 @@ new, and verifies those; with none it packs every entry into a copy of the
 container. Each build copies the archive, replaces only the
 generated files (script, map info, object data) and writes the header, then
 verifies those files' bytes and that every packed entry is listed. On
-Smashcraft packaging and verification fell from 8.4 s to 0.5 s, and every
+Mak'gora packaging and verification fell from 8.4 s to 0.5 s, and every
 one of the 743 entries and the header matched a full pack.
 
 ## Map reuse

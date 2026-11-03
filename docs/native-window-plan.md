@@ -54,7 +54,7 @@ the shell.
   [online-plan.md](online-plan.md) under "Input-to-display latency". Native
   Warcraft's press-to-display time has not been measured. What is measured is
   press to map read: 4 ms p50 at RTT 0
-  (smashcraft:docs/warcraft-api-netcode-findings.md).
+  (makgora:docs/warcraft-api-netcode-findings.md).
 
 ## Decisions
 
@@ -477,7 +477,7 @@ The native window takes over the page's whole job, not only its drawing
   today.
 - **`standalone.json`.** It keeps the same fields (`presentedMs`, `frameMs`,
   `intervalMs`, startup and prepared counts, adapter, audio counts), which
-  net-accept reads (smashcraft:ts/scripts/wisp/netAccept.ts). It adds the
+  net-accept reads (makgora:ts/scripts/wisp/netAccept.ts). It adds the
   present mode, the image count and the sample-to-present time.
 - **Window lifetime.** Closing the window closes the session.
 - **Captures and `--headless`.** Requested capture frames and `--headless`
@@ -495,7 +495,7 @@ The native window takes over the page's whole job, not only its drawing
   each sample (`InputSample.keys`, `StandaloneInput.keys`), and a session feeds
   it with `createKeyFeed` (`src/headless/keyInput.ts`) through the lockstep's
   `key`, which is `client.keyEvent` and so every `BlzTriggerRegisterPlayerKeyEvent`
-  trigger; the map's own bindings (Smashcraft's profile) decide what a key does,
+  trigger; the map's own bindings (Mak'gora's profile) decide what a key does,
   as in Warcraft. A key already down is not pressed again, the queue keeps every
   event even when samples are dropped, and every held key is released when the
   window loses focus or the options screen opens. The pad mask is the pad's alone,
@@ -569,9 +569,9 @@ The native window takes over the page's whole job, not only its drawing
   - left stick on `axisX`/`axisY`, with Y up.
 
   Axes pass through raw with no window deadzone, as the browser passes
-  `axes[0..1]`; the game applies its own threshold (Smashcraft's 0.28).
+  `axes[0..1]`; the game applies its own threshold (Mak'gora's 0.28).
   `gamepadIndex` keeps its meaning. The input type stays `{ buttons, axisX,
-  axisY }`. Analog shield pressure (smashcraft:docs/standalone-parity.md) is
+  axisY }`. Analog shield pressure (makgora:docs/standalone-parity.md) is
   later input design, not this plan.
 - **Platforms.** The targets are Linux on X11 and Wayland with Vulkan, and
   Windows 10 and 11 with DX12. macOS is out: winit needs its main thread
@@ -581,8 +581,8 @@ The native window takes over the page's whole job, not only its drawing
 
 The resolver tries `.flac`, `.wav`, `.mp3` and `.ogg` in that order
 (host/render/standaloneSound.ts). The files it has reached so far, in the stock
-read cache of the Smashcraft checkout (30 October 2026): 95 Ogg Vorbis, 3 MP3
-(the music) and no WAV; Smashcraft's own sounds are FLAC in the map. The decoders
+read cache of the Mak'gora checkout (30 October 2026): 95 Ogg Vorbis, 3 MP3
+(the music) and no WAV; Mak'gora's own sounds are FLAC in the map. The decoders
 are `lewton` for Vorbis, `nanomp3` for MP3, `claxon` for FLAC and `hound`
 for PCM and float WAV, all permissive and entered in references.md. The format
 is read from the file's first bytes, not its extension. A WAV in ADPCM, which
@@ -610,17 +610,17 @@ apart from the window's handle, so the wake and present path is untouched. The
 thread that steps the game takes each step's cues, resolves and loads them, and
 starts the sound when its file is ready, as the page's `sound` does.
 
-### Player build (smashcraft#807)
+### Player build (makgora#807)
 
-The player build is Bun's `bun build --compile` executable of Smashcraft's
+The player build is Bun's `bun build --compile` executable of Mak'gora's
 play command, with `wisp-window.dll` or `libwisp_window.so` beside it. The
 executable opens the library by path relative to `process.execPath`. It has
 no Chrome, no source tree and no GPU lease (`gpuLease: false` already
 exists). Wisp's CI builds the library for Windows and Linux as an artifact,
-and Smashcraft's player build takes it from there. Whether
+and Mak'gora's player build takes it from there. Whether
 `bun build --compile` can embed the library instead of shipping it beside the
 executable is checked in W7; shipping it beside is the default either way.
-Publishing remains Tom's call, made when smashcraft#807 is next.
+Publishing remains Tom's call, made when makgora#807 is next.
 
 ### Where a consumer gets the library (wisp#130)
 
@@ -640,13 +640,13 @@ On Windows cargo builds with the runner's toolchain and no runtime libraries are
 ### Migration order
 
 `--window native` was added beside the Chrome window, and on 2026-11-01 Tom
-made it the default ahead of the checks below, because Smashcraft's packaged
+made it the default ahead of the checks below, because Mak'gora's packaged
 player had played a 5400-frame relay match in it with no checksum mismatch
-(smashcraft#807). `--window chrome` keeps the Chrome window as the explicit
+(makgora#807). `--window chrome` keeps the Chrome window as the explicit
 fallback that the Chrome-only tools pass, until the native window passes the
 same checks the Chrome window holds:
 
-- Smashcraft's standalone parity (smashcraft#806);
+- Mak'gora's standalone parity (makgora#806);
 - net-accept with `presentedMs.p95` at most 16.7 ms;
 - render compare;
 - the latency target.
@@ -909,7 +909,7 @@ W1c makes `--window native` require `nativeGame`.
 
 - The main-thread paths reach the window only through the `JSCallback`, which
   W1c deletes.
-- Nothing calls them yet, because Smashcraft adopts the native window in W8.
+- Nothing calls them yet, because Mak'gora adopts the native window in W8.
 
 ### Networked play on the worker (wisp#198)
 
@@ -936,7 +936,7 @@ session's next local frame and draws the scene as it stands.
   game lists (`preloadAll`, host/window/drawScene.ts) and only then starts the
   peer, so the match's clock never runs against a thread busy with art. The
   reads finish together and their MDX parses run back to back: on gex45 the
-  447 models and 1593 files of Smashcraft took 11.3 s and held the worker's
+  447 models and 1593 files of Mak'gora took 11.3 s and held the worker's
   event loop for up to 7 s at once (one model's parse took 497 ms), which in
   the first relay match made each side see the other go silent for 3 s and end
   the match. A local run still loads the rest in the background after its
@@ -1042,7 +1042,7 @@ Decision (31 October 2026, after Tom said Chrome is a dead end and the Rust wind
 - **Skin on the GPU.** Each frame the render thread poses every drawn instance into one bone-matrix storage buffer; the vertex shader blends four bones per vertex.
 - **Instanced draws.** Poses are grouped by model. Each layer of each model is one instanced draw, with the layer's filter mode choosing one of seven pipelines (blend state and depth write): Transparent alpha-tests at 0.75 and writes depth; Blend is source alpha over and writes none; Additive is one-one and ignores the texture's alpha (the pose's alpha and the layer's fade scale its colour); AddAlpha is source alpha plus one; Modulate multiplies the destination by the colour and Modulate2x doubles that. Particle emitters add as Classic does: Additive and alpha-keyed particles (keyed ones cut at 0.75) scale their colour by their alpha in display colour, convert that to linear light and add it one-one, because Classic adds particles in display colour ([warsmash-notes.md](warsmash-notes.md), "Blending (confirmed)"); converting first and adding by source alpha made every soft fringe about three times as bright, so the Blood Elf orb's flames drew as clouds twice their size over its sphere (wisp#178). Other particle and bolt colours are converted to linear light like a layer's. Replaceable ids 1 and 2 draw the pose's team colour and a team-coloured glow. A layer draws its back faces only with the two-sided shading flag (0x10), as Warcraft does: the fragment shader drops a back face of a one-sided layer, and in the mirrored reflection, where every triangle winds the other way on screen, it drops the other side, so a cloak or pauldron shows its outside and never its lining. Before 1 November 2026 every layer drew both sides, and Sylvanas's cloak drew its inner sheet, mapped to the bright metal of her greaves, as flat light grey slabs over her back. Models with a layer below Blend draw before the rest, as `orderDrawnModels` does in Chrome.
 - **No per-frame allocation in the draw.** The bone, instance and grouping scratch vectors keep their capacity; only a new model, texture or larger scene allocates. The scene's JSON parse still allocates once per scene (see "The scene goes to Rust as the same JSON").
-- **Opacity, colour and texture animation.** Geoset animations (`GEOA`: alpha and colour, `KGAO` and `KGAC`), layer alphas (`KMTA`), layers whose texture changes over time (`KMTF`: one draw per texture the layer can show, only the current one visible; the format stores its keys as integers, which were read as floats until 31 October 2026, so every such layer showed texture 0 and the Tomb sea's water flipbook never reached the water pass) and texture coordinate animations (`TXAN`) are sampled per pose into two storage buffers the model shader reads; a geoset whose alpha is zero draws nothing. A geoset's colour multiplies every layer it draws, team colour included, with the stored order read as red, green, blue whatever the animation's flags say, as [headless](headless.md) draws it; a Re-Classic body that recolours borrowed textures this way (Smashcraft's Tyrande tints `HeroLich` and `UndeadArthas` teal and purple) drew them untinted before (31 October 2026).
+- **Opacity, colour and texture animation.** Geoset animations (`GEOA`: alpha and colour, `KGAO` and `KGAC`), layer alphas (`KMTA`), layers whose texture changes over time (`KMTF`: one draw per texture the layer can show, only the current one visible; the format stores its keys as integers, which were read as floats until 31 October 2026, so every such layer showed texture 0 and the Tomb sea's water flipbook never reached the water pass) and texture coordinate animations (`TXAN`) are sampled per pose into two storage buffers the model shader reads; a geoset whose alpha is zero draws nothing. A geoset's colour multiplies every layer it draws, team colour included, with the stored order read as red, green, blue whatever the animation's flags say, as [headless](headless.md) draws it; a Re-Classic body that recolours borrowed textures this way (Mak'gora's Tyrande tints `HeroLich` and `UndeadArthas` teal and purple) drew them untinted before (31 October 2026).
 - **Textures.** A BLP1 JPEG carries blue, green, red and alpha as four JPEG components; image-blp's reader drops the alpha, so `texture.rs` reads the components itself and matches the Chrome decoder's pixel means.
 - **Particles** (`render/particles.rs`). Version-2 particle emitters (`PRE2`) are born on the CPU into per-texture-and-blend ring buffers, one 64-byte record per particle, written once; the vertex shader evaluates position (velocity and gravity), size, colour and frame from the record and the scene clock, and each ring is one instanced draw. Head and tail quads, squirt emitters, line emitters and flat quads follow `war3-model`; particles live in world space.
 - **Lightning** (`render/lightning.rs`). Each bolt draws from its lightning type's row in the install's `Splats\LightningData.slk`: `drawScene.ts` passes the bolt's code name, `host/window/lightningLooks.ts` reads the table once through the model library's asset read (`host/terrain/lightningData.ts` parses the row), pushes the row's texture, and sends the look (texture, width, average segment length, noise, texture coordinate scale, colour) with the bolt once both are read. Rust groups bolts by texture and draws one instanced ribbon per texture, re-jagged 24 times a second: the segment count is the reach over the average segment length (at most 64), each joint is displaced by the noise times a segment length, the ribbon is the row's width in world units, u runs along the bolt at the scale's repeats per segment and scrolls over time, v runs across, and it blends additively with the texture times the row colour times the map's `SetLightningColor` colour, in linear light as the particle shader does. A type whose row or texture is missing draws the previous procedural strip (a glow and a bright core, 24 segments, in the bolt's colour) and is reported once. Texture scroll speed, the noise-to-segment relation and the repeats per segment are chosen from the table's column names, not read from the game; a playtest picture decides them.
@@ -1108,7 +1108,7 @@ Players' machines differ and rollback needs a steady frame, so every costly rend
 
   On the 890M Low is inside the 8.3 ms budget by 5 ms. Ultra costs no more than High because the keys that would make it dearer (volumetrics, 8x MSAA, refractive water, 4096 shadows) are not read yet; Low pays less than High only through bloom and ambient occlusion, the two keys that act today.
 
-  Render scale, measured 1 November 2026 on gex45 (RTX PRO 4000, private desktop, 2878x1892, Smashcraft's `--start match` water stage, 3600 frames, origin/main 38551ec9 against the change on it; CPU pressure 37 to 75% from other work, so frame rates there follow the CPU, and the two Low runs were made back to back; Low then drew flat water, which 579ae28a replaced with Medium's). GPU frame and passes, p50/p99 in ms, from the per-pass timestamps:
+  Render scale, measured 1 November 2026 on gex45 (RTX PRO 4000, private desktop, 2878x1892, Mak'gora's `--start match` water stage, 3600 frames, origin/main 38551ec9 against the change on it; CPU pressure 37 to 75% from other work, so frame rates there follow the CPU, and the two Low runs were made back to back; Low then drew flat water, which 579ae28a replaced with Medium's). GPU frame and passes, p50/p99 in ms, from the per-pass timestamps:
 
   Run | scale | frame | sky | scene | water | post | frames/s
   --- | --- | --- | --- | --- | --- | --- | ---
@@ -1132,7 +1132,7 @@ Classic art is sharpened and lit on the player's machine from the player's own m
 
 ### Measured choice (31 October 2026, the laptop, release build, one thread)
 
-Quality is PSNR of each upscaler restoring the original from a copy of half its size (higher is better); times are `enhance` for the whole texture including normal and roughness; `cache hit` reads both PNGs back. Textures are the Lich King's three from Smashcraft's map imports (map file entries `LichKing.BLP`, `FrostmourneNew.blp`, `HelmOfDom.BLP`). Produced by `cargo run --release -p wisp-window --example remaster_report -- OUT_DIR FILES...`.
+Quality is PSNR of each upscaler restoring the original from a copy of half its size (higher is better); times are `enhance` for the whole texture including normal and roughness; `cache hit` reads both PNGs back. Textures are the Lich King's three from Mak'gora's map imports (map file entries `LichKing.BLP`, `FrostmourneNew.blp`, `HelmOfDom.BLP`). Produced by `cargo run --release -p wisp-window --example remaster_report -- OUT_DIR FILES...`.
 
 | texture | size | bilinear dB | bicubic dB | edge-directed dB | x2 ms | x4 ms | cache hit ms |
 |---|---|---|---|---|---|---|---|
@@ -1144,7 +1144,7 @@ Edge-directed beats bilinear by about 1 dB and ties plain Catmull-Rom within 0.1
 
 ### Measured gates: an upscaler may sharpen the concept, never change it
 
-Tom shared a professional artist's critique of an AI-remastered building set (2026-10-31): smeared stone edges, visible seams, a palette and style unlike the original, blurry or invented texture. `remaster/check.rs` turns the parts a texture upscaler can cause into measured gates, and `cargo run --release -p wisp-window --example remaster_check -- --out DIR [--quality standard|high] [--worst N] [--classical] (--imports MAP_IMPORTS_DIR | TEXTURE...)` runs them with the upscaler the window would run (Real-CUGAN on the machine's GPU, else the edge-directed filter; `--classical` forces the filter). It prints one row per texture, sorted worst first, lists the failing gates, saves a crop of the worst N as `DIR/remaster-check-NAME.png` (original | remaster | colour error x4, nearest-neighbour zoom; a seam failure is cropped on the wrapped seam), and exits 1 when any texture fails. Textures 1024 px or more on a side and textures under 8 px (palette strips) are left alone. Judged art (stages, fighters, effects) is the rubric in smashcraft:docs/design/visual-quality.md.
+Tom shared a professional artist's critique of an AI-remastered building set (2026-10-31): smeared stone edges, visible seams, a palette and style unlike the original, blurry or invented texture. `remaster/check.rs` turns the parts a texture upscaler can cause into measured gates, and `cargo run --release -p wisp-window --example remaster_check -- --out DIR [--quality standard|high] [--worst N] [--classical] (--imports MAP_IMPORTS_DIR | TEXTURE...)` runs them with the upscaler the window would run (Real-CUGAN on the machine's GPU, else the edge-directed filter; `--classical` forces the filter). It prints one row per texture, sorted worst first, lists the failing gates, saves a crop of the worst N as `DIR/remaster-check-NAME.png` (original | remaster | colour error x4, nearest-neighbour zoom; a seam failure is cropped on the wrapped seam), and exits 1 when any texture fails. Textures 1024 px or more on a side and textures under 8 px (palette strips) are left alone. Judged art (stages, fighters, effects) is the rubric in makgora:docs/design/visual-quality.md.
 
 Every gate compares the upscale folded back to the source's size by premultiplied box average, so a faithful upscale scores as the source itself:
 
@@ -1154,9 +1154,9 @@ Every gate compares the upscale folded back to the source's size by premultiplie
 - **Detail added** (`detail added`): root-mean-square luma by which the upscale differs from a plain Catmull-Rom enlargement of the source, counted only at pixels whose 5x5 source neighbourhood is flat within 0.02. Sharpening a real edge puts nothing there; texture the source never had does.
 - **Alpha** (`alpha`): the larger of the share of mask-interior pixels (alpha flat within 0.1 across 5x5) whose alpha moved more than 0.1, and the relative change in total alpha, so team-colour and cutout masks stay put while edges antialias.
 
-Limits, chosen from the edge-directed filter's outputs over Smashcraft's imports (706 textures at 8 px or more, 3 fail on the filter): hue 6 degrees (filter p50 1.3, p90 3.5, p99 7.7 degrees, the limit sitting past the bulk), saturation 0.04, seam 0.02, detail kept 0.95, detail added 0.01 (filter max 0.005), alpha 0.02.
+Limits, chosen from the edge-directed filter's outputs over Mak'gora's imports (706 textures at 8 px or more, 3 fail on the filter): hue 6 degrees (filter p50 1.3, p90 3.5, p99 7.7 degrees, the limit sitting past the bulk), saturation 0.04, seam 0.02, detail kept 0.95, detail added 0.01 (filter max 0.005), alpha 0.02.
 
-Measured on the laptop's Radeon 890M, 31 October 2026, the newest unpacked Smashcraft map under `~/.cache/wisp/map-imports` (721 textures):
+Measured on the laptop's Radeon 890M, 31 October 2026, the newest unpacked Mak'gora map under `~/.cache/wisp/map-imports` (721 textures):
 
 | upscaler | measured | fail | failing gates |
 |---|---|---|---|
@@ -1169,7 +1169,7 @@ Findings filed: a 2x2 texture makes Real-CUGAN stop for every later texture (wis
 
 ### Silhouette before and after (one subdivision, bind pose, orthographic)
 
-Pixels of a 512x512 mask of the model's bind-pose silhouette, scaled to the same bounds; "only before" is area the tessellated model lost, "only after" area it gained. Models are Smashcraft's `LichKing2.mdx`, `IllidanTimelineBody` and `PeonTimelineBody` from the map imports (612, 590, 629 in the unpacked cache). Overlay PNGs (grey both, red only before, green only after) come from `cargo run --release -p wisp-window --example silhouette_report -- OUT_DIR MODELS...` and stay outside the repository.
+Pixels of a 512x512 mask of the model's bind-pose silhouette, scaled to the same bounds; "only before" is area the tessellated model lost, "only after" area it gained. Models are Mak'gora's `LichKing2.mdx`, `IllidanTimelineBody` and `PeonTimelineBody` from the map imports (612, 590, 629 in the unpacked cache). Overlay PNGs (grey both, red only before, green only after) come from `cargo run --release -p wisp-window --example silhouette_report -- OUT_DIR MODELS...` and stay outside the repository.
 
 | model | view | triangles before | after | silhouette px | only before | only after | IoU |
 |---|---|---|---|---|---|---|---|
@@ -1201,7 +1201,7 @@ Direction (Tom, 31 October 2026): full send on the native look, in five layers. 
 
 Style rule (Tom, 1 November 2026): a fighter reads first. Characters had looked too dark at the higher presets: the sun's map is fitted to the whole view, so at Medium a texel spans several units and its soft filter left dark blotches on a fighter's torso, legs and boots, and the ambient occlusion and contact shadows darkened them again. The look to match is a Warcraft III unit, always lit, with a soft shadow at its feet, drawn with today's means:
 
-- A unit (`Pose::unit`, every pose the game places as a unit; Smashcraft's fighters are units) never samples the sun's map, so the stage never shadows a fighter. Every unit still casts into the sun's map, so its shadow lands on the stage at every preset that draws shadows.
+- A unit (`Pose::unit`, every pose the game places as a unit; Mak'gora's fighters are units) never samples the sun's map, so the stage never shadows a fighter. Every unit still casts into the sun's map, so its shadow lands on the stage at every preset that draws shadows.
 - At High and Ultra (`fighterShadows`, 1024 and 2048 texels a side; zero at Low and Medium) a second depth map down the sun is fitted tightly around the units alone (their still boxes grown by 30% a side for their animation, the side in steps of 32 units and the centre on its texel grid), and a fighter takes its own and the other fighters' shadow from it with an 8-tap filter 1.5 texels wide, at 35% of the key light, so a fighter's shadowed side is never black. Low and Medium draw no fighter map and no extra pass, and a fighter there has no self-shadow.
 - A fill light from the camera adds 30% of the key where the sun leaves a fighter's side dark, beside the rim light every solid layer has.
 - A unit's solid layers write the stencil's `UNIT` bit (value 1) in the scene's depth (no new target; the depth format is `Depth24PlusStencil8`, which the Radeon 890M stores as 32-bit float depth anyway), and the composite keeps 35% of the ambient occlusion and contact shadow on those pixels.
@@ -1221,7 +1221,7 @@ The scene pass draws in linear light into a 4x multisampled half-float target an
    **Contact shadows** (`contactShadows`, High and Ultra; `contact_shadow` in `composite.wgsl`) march a ray from each full-resolution pixel toward the sun, ten steps spaced by the square of the step over `contact_reach` (45 units) with a per-pixel jitter, and compare each step with the single-sample depth image: a step behind a surface by more than a small bias and less than 0.8 of the reach is occluded, softly at both ends, and the shadow fades along the ray. A pixel the sun does not light (its normal, taken from the nearest half-resolution texel the occlusion pass wrote, faces away from the sun) takes none, which also keeps depth noise on grazing surfaces from self-shadowing. The strength is `contact_strength` (0.7); the shadow map's own shadow is not known here, so a pixel the shadow map already darkens darkens a little more where a caster is also within the reach. It darkens the light the same way the occlusion does, so bright effects are never shaded.
 5. **UI pass** last, straight onto the surface, so menu and HUD colours are untouched.
 
-**Per-stage grade.** A stage's grade (lift, gamma, gain, saturation) is derived from its own light: shadows lean toward the ambient colour, highlights toward the key colour, and saturation is restored after the curve. A stage with no light uses a neutral grade. Smashcraft's stage look docs (smashcraft: docs/design/home-stages.md) name where an explicit per-stage grade would be set if a derived one is not enough.
+**Per-stage grade.** A stage's grade (lift, gamma, gain, saturation) is derived from its own light: shadows lean toward the ambient colour, highlights toward the key colour, and saturation is restored after the curve. A stage with no light uses a neutral grade. Mak'gora's stage look docs (makgora: docs/design/home-stages.md) name where an explicit per-stage grade would be set if a derived one is not enough.
 
 **Rim light** is the lighting session's, in the model shader, because it needs the surface normal, which this pass does not have. It lights units only: the scene marks a pose `unit` (the fighters and other units the host places, not effects or doodads), the instance carries the mark in its team colour's fourth channel, and a stage or backdrop model gets no rim, because the rim brightened Gryphon Aerie's backdrop until it blended with the fighters (2026-10-31).
 
@@ -1238,7 +1238,7 @@ Cost and tuning constants are `post::look::TUNING`. `bloom_strength` and `occlus
 
   High after, by pass: depth resolve 1.37, half depth 0.29, occlusion 0.92, two denoise passes 0.43 each, bloom 0.68, composite (upsample and contact shadows) 1.51. Low and Medium fell because the old composite read the multisampled depth at every preset. High grows by 1.2 ms, so the p50 High frame of 4.04 ms in the sweep above becomes about 5.2 ms, inside the 8.3 ms of 120 Hz.
 
-  Captures through the window on a private desktop at 1920x1080 on the laptop (gex45's native queue held twelve jobs; before and after share one host), at match zoom with Illidan and Samuro on Stratholme, Ahn'Qiraj and Gryphon Aerie, in `~/.local/state/smashcraft/shots/ao-quality/`. Ring L* is the mean lightness of the band 4 to 18 px outside the fighters (their silhouette is what changes when `-dev hide fighter` hides them), by `bun tools/stage/contrast.ts` in Smashcraft: Stratholme 7.4 before, 7.0 at 0.7/0.55 strengths and 6.7 at the strengths now set; Ahn'Qiraj 49.3, 48.9, 48.6; Gryphon Aerie 34.0, 33.7, 33.5. The ring falls by 0.7 L* or less, with no dark band at a silhouette. Two consecutive drawn frames: of the pixels that are bit-identical across the before pair and lie more than 45 px from a fighter, 0.19%, 0.12% and 0.03% of the picture change by more than 5 of 255 in the after pair; the GPU test pins a still scene bit-for-bit.
+  Captures through the window on a private desktop at 1920x1080 on the laptop (gex45's native queue held twelve jobs; before and after share one host), at match zoom with Illidan and Samuro on Stratholme, Ahn'Qiraj and Gryphon Aerie, in `~/.local/state/makgora/shots/ao-quality/`. Ring L* is the mean lightness of the band 4 to 18 px outside the fighters (their silhouette is what changes when `-dev hide fighter` hides them), by `bun tools/stage/contrast.ts` in Mak'gora: Stratholme 7.4 before, 7.0 at 0.7/0.55 strengths and 6.7 at the strengths now set; Ahn'Qiraj 49.3, 48.9, 48.6; Gryphon Aerie 34.0, 33.7, 33.5. The ring falls by 0.7 L* or less, with no dark band at a silhouette. Two consecutive drawn frames: of the pixels that are bit-identical across the before pair and lie more than 45 px from a fighter, 0.19%, 0.12% and 0.03% of the picture change by more than 5 of 255 in the after pair; the GPU test pins a still scene bit-for-bit.
 
 **Sun shadow softness, measured 31 October 2026** (wisp#109; the sun's shadows read hard and stair-stepped at their edge). The model shader (`sun_visibility` in `shader.wgsl`) filters the sun's map as percentage-closer soft shadows: a blocker search of half the preset's taps (at least four) on a Vogel disk eight texels wide finds the mean gap between the receiver and what shades it, the penumbra is half that gap times 0.07 (a sun some four degrees wide, broader than the real one so the edge reads at match zoom) over the texel's size in world units, clamped to one to eight texels, and the filter takes 8, 16 or 24 comparison taps (map sides up to 1024, 2048 and larger) on a disk of that radius turned per pixel by interleaved gradient noise fixed to the pixel, so a still scene draws the same on every frame. The disk is read with a receiver-plane depth bias (the surface's slope in light space, from the sun projection and the normal) plus half a texel of constant bias, and the normal offset fell from 1.5 texels to half a texel; a wall's shadow still starts at its foot. A pixel with no blocker in the search returns lit without the filter taps. Shadow maps keep the whole-number-of-64-units fit, so a texel's size can change as the camera rises; a fit with texels on a fixed ladder was tried and not kept, since it softened the edge 1.3 to 1.6 times and the swim did not fall.
 
@@ -1251,7 +1251,7 @@ A throwaway harness in the render tests (removed before landing, as scaffolding)
   High | 1.99 ms | 2.45 ms
   Ultra | 2.16 ms | 2.59 ms
 
-High and Ultra pay about 0.45 ms for the search and the 16 or 24 taps; Low draws no sun shadows, so its 0.13 ms is the noise between runs on a shared GPU. In the capture (`before-deck.png` and `after-deck.png` in `~/.local/state/smashcraft/shots/shadow-softness/`) the edge along the pillar's long side crosses from 90% to 10% of the shadow's darkness in 2 pixels before and 9 after, and the far tip in 13 before and about 40 after, at the shadow's noise of at most 3 of 255. A reader given the two crops of the shadow with no labels called the after crop soft, its penumbra widening from the pillar with a smooth fade and no stair steps, and the before crop hard, its far tip cut off square and serrated.
+High and Ultra pay about 0.45 ms for the search and the 16 or 24 taps; Low draws no sun shadows, so its 0.13 ms is the noise between runs on a shared GPU. In the capture (`before-deck.png` and `after-deck.png` in `~/.local/state/makgora/shots/shadow-softness/`) the edge along the pillar's long side crosses from 90% to 10% of the shadow's darkness in 2 pixels before and 9 after, and the far tip in 13 before and about 40 after, at the shadow's noise of at most 3 of 255. A reader given the two crops of the shadow with no labels called the after crop soft, its penumbra widening from the pillar with a smooth fade and no stair steps, and the before crop hard, its far tip cut off square and serrated.
 
 ## Water as built (wisp#109)
 
@@ -1265,7 +1265,7 @@ A model layer painted with one of Warcraft's water frames (`ReplaceableTextures\
 - **Look (31 October 2026, after Tom found the sea and the poison flat).** Long swells stretched along the stage roll both ways over the frame normals (`swell`), a bright web of caustic lines drifts over the surface (widening with distance so it never aliases), the shallow-to-deep ramp also deepens with distance from the eye so a bed-less sea still goes from clear to deep, a teal haze rises toward the horizon, and the sun's glints fall back to a fixed sun when the scene has no light. Poison adds `swirl`: spiral whirlpools and ridged veins lit from within in the liquid's glow colour. A material with a water layer lists the surface Warcraft's own client draws before it; the window draws the water pass in its place, so the layers before the water layer are dropped (`without_stand_in`). The stage models for poison and lava now name the water frames in an additive layer, so the window finds them as water and Warcraft's client sees a faint shimmer. `WISP_WATER_STRIPS=DIR cargo test liquid_strips_for_the_eye` writes three frames half a second apart of both liquids, both facings.
 - **Sea composition (31 October 2026, after Tom found the sea samey: one small texture tiled from shore to horizon, pale and evenly busy).** A slow field of patches a few thousand units across (`breakup`) drifts over the sea. It shades the body in broad light and dark shapes, bends and scales the swells so they never run as parallel bands, and gathers the caustic web, the bed caustics, the crest flecks, the fine frame ripples and the glints into loose clumps over `sparkleCover` of the surface. The two frame layers are turned against each other and scaled apart so their repeats do not line up. Fine ripples, caustics and glints fade out by `detailReach` from the eye. Glints are sparse, bright points instead of an even sheen. The water preset is dark teal from depth, with less sky reflection, and its horizon hazes from the deep colour toward the fog (`hazeLift`). Poison and lava keep `breakup` at 0, which leaves their surface as it was. Three variants were judged blind at match zoom on stage 0 and Tomb of Sargeras beside the World of Warcraft Forever and Rivals 2 references; two of three viewers picked the one now shipped.
 - **Falling water (31 October 2026, after Tom found the Tomb of Sargeras falls were the sea stood on end).** A water layer is falling water when the faces of its part, taken by area, are mostly steeper than 60 degrees from the horizontal (`water::falls::is_falling`, normal z under `FALL_NORMAL_Z`), so a fall is told by its geometry and no model needs a name; the sea, a flat quad, is unchanged. Falling parts are not liquid: a model's water surface (`Surface::of_water`) is taken from its standing water parts only, so a fall never sets the water plane or the liquid (before, a fall listed ahead of the sea moved the sea's plane to the fall's origin). A fall is drawn by its own fragment entry of the water pass (`fragment_fall`) over the same images and uniform: banded streaks in three column widths run down at 4 m/s (70 world units to a metre from a fighter standing 1.8 m tall; v = sqrt(2 g h) reaches 4 m/s after 0.8 m of drop, and a faster streak smears at 60 frames a second), the body is the sea's shallow colour lightened toward the foam colour by air, and foam and mist stand 150 units up from the sea's plane and where the sheet touches a solid, with the sheet thinning out beneath the plane.
-- **Muted style (1 November 2026, after the style target in Smashcraft's water-stage-art.md).** `WaterSettings::muted` (1 for water and poison, 0 for lava) turns on World of Warcraft Forever's look: the body ramps through three stops (`shallow`, `mid`, `deep`; the sea's are #42655e, #244942 and #0f2c34) instead of two, the body's broad patches shade it by 6% instead of 28%, the caustic web, the bed caustics, the sun's glints, the swell, the crest flecks and poison's bubbles are off (their settings are 0), the reflection is dimmed to 45% of the sky it mirrors, and the foam is capped at 0.55 opaque and the waterline's foam is cut into soft streaks by noise instead of drawn as a continuous band. A muted liquid's foam colour is the crest colour mixed toward the horizon. Poison keeps its green, thickness and slowness, with its own stops, a quieter swirl and a softer inner light. A muted value of 0 leaves every expression it touches as it was, so lava draws the same pixels.
+- **Muted style (1 November 2026, after the style target in Mak'gora's water-stage-art.md).** `WaterSettings::muted` (1 for water and poison, 0 for lava) turns on World of Warcraft Forever's look: the body ramps through three stops (`shallow`, `mid`, `deep`; the sea's are #42655e, #244942 and #0f2c34) instead of two, the body's broad patches shade it by 6% instead of 28%, the caustic web, the bed caustics, the sun's glints, the swell, the crest flecks and poison's bubbles are off (their settings are 0), the reflection is dimmed to 45% of the sky it mirrors, and the foam is capped at 0.55 opaque and the waterline's foam is cut into soft streaks by noise instead of drawn as a continuous band. A muted liquid's foam colour is the crest colour mixed toward the horizon. Poison keeps its green, thickness and slowness, with its own stops, a quieter swirl and a softer inner light. A muted value of 0 leaves every expression it touches as it was, so lava draws the same pixels.
 - **Chop, glints, lava flow and falls (1 November 2026, after Tom's playtest found the sea a flat dark plane at match zoom, the lava still, and the Tomb fall a pale sheet over a dark pool).** The sea's finer water-frame layer is replaced by wind chop (`chop`, `chopSize`): two octaves of value noise with analytic slopes, cubed so only scattered crests stand up and stretched along x so they lie across the view, drifting apart, each fading out as its wavelength nears a few pixels (`fwidth`), so it covers the whole surface without crawling. Its crests lighten toward the crest colour where the sun faces them (`crestLight`), and a soft glint path from a sun placed low behind the water as the camera sees it runs over the near surface (`glint`), both fading by `detailReach`. Lava's crust rafts at about 28 units a second and its melt runs about twice as fast the other way (it moved 2.6 and 5, under a pixel a second at match zoom, so it read as still), and it keeps its detail out to 6000 units instead of hazing flat from 2500. A fall takes the colours of the liquid it falls into: the sea's body lightened along its streaks, its deep colour in the troughs and its crest colour in the foam where it lands. Every term whose setting is zero for a liquid (the caustic web and bed caustics, the swell, the old glints, the crest flecks, heat shimmer) is skipped by a uniform branch instead of computed and multiplied by zero, which pays for the chop. Rings and wake on a glowing muted liquid (poison) light up in its glow colour instead of darkening it, since viewers could not find them against the swirl.
 - **Not yet:** screen-space reflection ray marching, Gerstner displacement of the surface (a model sea is one quad), point lights and their shadows on the water, height and exponential fog over the sky, ripples and splashes at fighters, and a live-tuning panel.
 
@@ -1278,7 +1278,7 @@ Order:
 - W2, W3 and W5 follow W1b. W2 also follows W1c and needs wisp-latency's
   harness to land.
 - W4 follows W3. W6 follows W1.
-- W8 follows W2 to W7, and smashcraft#806, which creates
+- W8 follows W2 to W7, and makgora#806, which creates
   `bun wisp parity standalone`.
 - W9 follows W8.
 
@@ -1378,7 +1378,7 @@ yet are created by that box. Each graphics run takes the gpu lease as
 - **W4 Native lighting, effects, passes, world and UI** ([wisp#109](https://github.com/tompassarelli/wisp/issues/109)). It
   covers:
   - everything in the W4 rows of the rewrite list, text included;
-  - full-scene compare, including Smashcraft's stages.
+  - full-scene compare, including Mak'gora's stages.
 
   Done when:
   `cd ~/code/wisp/main && bun wisp render compare --reference chrome --candidate native --scenes test/render/scenes.json`
@@ -1401,7 +1401,7 @@ yet are created by that box. Each graphics run takes the gpu lease as
   - the audio counts in `standalone.json`.
 
   Done when:
-  `cd ~/code/smashcraft/main/ts && bun wisp play --standalone --window native --script test/native/pads/cpu-expert.pad --frames 1070 --out build/native-audio && jq -e '.missingSounds == [] and .audioPlayed > 0' build/native-audio/standalone.json`
+  `cd ~/code/makgora/main/ts && bun wisp play --standalone --window native --script test/native/pads/cpu-expert.pad --frames 1070 --out build/native-audio && jq -e '.missingSounds == [] and .audioPlayed > 0' build/native-audio/standalone.json`
 - **W7 wisp-window in CI on Linux and Windows** ([wisp#106](https://github.com/tompassarelli/wisp/issues/106)). It adds:
   - `cargo build --release` and `cargo test` for `window/` in ci.yml and
     windows.yml;
@@ -1414,11 +1414,11 @@ yet are created by that box. Each graphics run takes the gpu lease as
   `gh run list -R tompassarelli/wisp -w windows.yml -b main -L 1 --json conclusion -q '.[0].conclusion' | grep -x success`
 - **W8 Native window becomes the default** ([wisp#112](https://github.com/tompassarelli/wisp/issues/112)). `--window native`
   is the default since 2026-11-01 and the tools that still need Chrome pass
-  `--window chrome`. Open: Smashcraft's standalone parity and net-accept pass
+  `--window chrome`. Open: Mak'gora's standalone parity and net-accept pass
   with `--window native`, and W2's latency target holds.
 
   Done when:
-  `cd ~/code/smashcraft/main/ts && bun wisp parity standalone test/native/pads/cpu-expert.pad --presentation native,pool-predicted --window native && bun wisp net-accept --window native --out build/native-accept`
+  `cd ~/code/makgora/main/ts && bun wisp parity standalone test/native/pads/cpu-expert.pad --presentation native,pool-predicted --window native && bun wisp net-accept --window native --out build/native-accept`
 - **W9 Captures on the native renderer; delete the Chrome window**
   ([wisp#113](https://github.com/tompassarelli/wisp/issues/113)). `headless --render` draws offscreen through `wisp-window`. One
   change then deletes host/browser/, the browser bundle, the Chrome launch,

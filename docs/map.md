@@ -13,7 +13,7 @@ dispatchers can delegate the `preview` verb to that command.
 ## What selects the texture
 
 The Warcraft 3.0.1 lobby capture in
-[Smashcraft #317](https://github.com/tompassarelli/smashcraft/issues/317#issuecomment-6064778830)
+[Mak'gora #317](https://github.com/tompassarelli/makgora/issues/317#issuecomment-6064778830)
 shows the parchment minimap even though `war3mapPreview.tga` is imported.
 The captured map's flags are 40016, with hide-minimap (`0x1`) unset;
 `war3mapMap.blp` is the 256-by-256 parchment texture. Wisp follows that
@@ -29,7 +29,7 @@ asset directory, it writes the underlying texture and reports
 own assets and reference calibration.
 
 The 9 October 2026 Classic lobby references for
-`smashcraft-0911b5da` (parchment) and `custom-minimap-d8fe5996` (fighter lineup)
+`makgora-0911b5da` (parchment) and `custom-minimap-d8fe5996` (fighter lineup)
 both select `war3mapMap.blp` with flags 40016. Resizing Wisp's marked prediction to the captured
 154-pixel panel gives 6.99% RMS pixel error for parchment and 5.24% for the
 lineup. Package the desired lobby art as the minimap texture; importing only

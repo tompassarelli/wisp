@@ -93,7 +93,7 @@ burst of hundreds of characters stops the game as long as Warcraft would. The
 players' input sources, such as a journal helper's stand-in, live on that
 clock, so a frame that costs too much leaves input waiting, as it does in the
 game. The clients still run as fast as the process can run them:
-Smashcraft's 200-match soak played 57 game minutes in 46 s with four workers
+Mak'gora's 200-match soak played 57 game minutes in 46 s with four workers
 and 241 s of CPU (6 October 2026).
 
 A match repeats exactly from its seed while every frame stays within its

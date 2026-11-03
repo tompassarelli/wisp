@@ -92,7 +92,7 @@ with the saved files read again and checks only those files, in every project
 that contains them, Effect's diagnostics included. A change can also break a
 file that imports the saved one: the whole check in `wisp ci` reports those.
 TypeScript 6's in-process builder, which the map compiler uses, checked a
-saved Smashcraft file in 60-220 ms and an export change's importers in
+saved Mak'gora file in 60-220 ms and an export change's importers in
 0.4-3.5 s; the TypeScript 7 server checks the saved file in 6-80 ms.
 
 **The tests the save can affect.** A test is affected when it is the saved
@@ -141,9 +141,9 @@ stalls every process the loop runs, so with fewer the signals run in deadline
 order: the saved files' check and the unit tests, then the journeys, and test
 processes take turns for all but one CPU. Tests run at lower priority (`nice`).
 
-## On Smashcraft
+## On Mak'gora
 
-Ten saves of game modules on Smashcraft f3b3d39, five adding a private
+Ten saves of game modules on Mak'gora f3b3d39, five adding a private
 function and five an exported constant, measured in a 6-CPU cgroup quota
 (median from the save): the saved files' type errors 0.056 s, the unit tests
 0.640 s, the journeys 2.050 s (the whole check, 2.653 s, was part of the loop then). The journey work is

@@ -389,7 +389,7 @@ the open "Weekly Effect upgrade" issue with the branch to fix.
 ## Runner capacity and waiting
 
 The account runs at most 40 jobs at once across all of its repositories
-(GitHub Pro), and further jobs wait in one first-come queue. Smashcraft's
+(GitHub Pro), and further jobs wait in one first-come queue. Mak'gora's
 Balance plan measures running hosted jobs across recently active public
 repositories and leaves a reserve equal to the time-weighted p90 concurrent
 hosted jobs in the latest ten completed Autoland runs per repository. It prints
