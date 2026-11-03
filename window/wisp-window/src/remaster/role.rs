@@ -1,4 +1,4 @@
-//! What a texture is for, which picks its upscaler: Real-CUGAN paints fine detail into character skins and effects, but streaks smooth gradients and smooths the grain off tiling ground, so scenery takes the edge-directed filter (measured over Smashcraft's 706 imported textures: 35 failed gates with the network against 3 with the filter).
+//! What a texture is for, which picks its upscaler: Real-CUGAN paints fine detail into character skins and effects, but streaks smooth gradients and smooths the grain off tiling ground, so scenery takes the edge-directed filter (measured over Mak'gora's 706 imported textures: 35 failed gates with the network against 3 with the filter).
 
 /// A texture's role, read from its path the way `Edges::for_path` reads whether it tiles.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

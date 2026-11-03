@@ -40,7 +40,7 @@ farm sweep or parity corpus), not repeats: Bun/Lua parity and determinism.
 Read warcraft-modding and verification for
 changes, and load testing before writing, changing or deleting a test: tests
 follow its five kinds (wisp:docs/testing.md). The operator explicitly authorized extracting the existing framework;
-the skill's earlier in-Smashcraft deferral does not apply to this extraction.
+the skill's earlier in-Mak'gora deferral does not apply to this extraction.
 Host tools that Bun runs (commands, runners, builds, captures, farm jobs) are
 written as Effect programs when they start processes, wait, retry, hold a
 resource or parse outside data. Load the effect-development skill before
@@ -50,7 +50,7 @@ TypeScript; pure calculations stay plain functions.
 Read the installed pinned Effect source before choosing its APIs. Runtime imports must resolve through
 the installed package.
 
-No Smashcraft source imports or filesystem dependencies. Games supply their
+No Mak'gora source imports or filesystem dependencies. Games supply their
 configuration, assets, map declaration and acceptance journeys. Keep proprietary
 assets and binaries outside this repository. No releases are authorized.
 Follow [Principles](README.md#principles) (long form: wisp:docs/clean-room.md). If a task seems to need reading the game's memory, disassembly or Blizzard files in the repo, stop and measure from outside the game instead.
@@ -62,7 +62,7 @@ runner (wisp:host/testing/testCost.ts). Compilation is bounded only by the
 the ceilings. `bun run test` fails a test over one, naming the file and
 "shrink it or move it to the farm", and prints CPU without gating it. CI cost
 gates measure deterministic quantities, never CPU seconds (wisp#114,
-smashcraft#394) (wisp:docs/testing.md, "Test cost").
+makgora#394) (wisp:docs/testing.md, "Test cost").
 
 Main stays green. Each CI run on main opens, updates or closes the one
 "main is red" issue, which lists the failing tests and the first failing

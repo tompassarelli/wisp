@@ -52,7 +52,7 @@ farmTest("[invariant] both clients measure the same frames: no desync, equal rep
   expect(capture.samples.filter(({ luaUs, gcKb, sectionsUs: [work = -1] }) => !(work >= 0 && work <= luaUs && gcKb !== undefined))).toEqual([]);
 }, 120_000);
 
-test("[spec smashcraft#394] perf compare holds instructions at their top 1% mean: one frame's spike moves no verdict, a rise across the worst frames fails", () => {
+test("[spec makgora#394] perf compare holds instructions at their top 1% mean: one frame's spike moves no verdict, a rise across the worst frames fails", () => {
   const run = (max: number, top: number) => parsePerfRun([
     "frames 1800 step 100 problems 0",
     ...PERF_METRICS.map((metric) => metric === "instructions"
@@ -64,7 +64,7 @@ test("[spec smashcraft#394] perf compare holds instructions at their top 1% mean
   expect(comparePerfRuns(before, run(1000, 1000)).regressions).toEqual(["p0 Lua instructions top +11.1%"]);
 });
 
-test("[k4 reference smashcraft run 38723431856] perf compare gates the mean on the run total: a whole-KB rounding step moves no verdict, a rise over the threshold fails", () => {
+test("[k4 reference makgora run 38723431856] perf compare gates the mean on the run total: a whole-KB rounding step moves no verdict, a rise over the threshold fails", () => {
   const run = (total: number, mean: number) => parsePerfRun([
     "frames 1800 step 100 problems 0",
     ...PERF_METRICS.map((metric) => metric === "alloc-kb"

@@ -43,7 +43,7 @@ export const nativeRemote: Command = (args) => Effect.gen(function*() {
   const remotePads = posix.join(remoteRun, "inputs/pads");
   const remoteClients = posix.join(remoteRun, "inputs/clients.json");
   const remoteOut = posix.join(remoteRun, "out");
-  const localOut = resolve(homedir(), ".local/state/smashcraft", run);
+  const localOut = resolve(homedir(), ".local/state/makgora", run);
   const inputs = [{ path: resolve(map), type: "File" }, { path: resolve(pads), type: "Directory" }, { path: resolve(clients), type: "File" }] as const;
   const rewrite = (arg: string): string => {
     const tokens: Readonly<Record<string, string>> = { "{map}": remoteMap, "{pads}": remotePads, "{clients}": remoteClients, "{out}": remoteOut };

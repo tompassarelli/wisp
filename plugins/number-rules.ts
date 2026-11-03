@@ -21,7 +21,7 @@
 // - truthiness tests of a number or string: `||`, `&&`, `||=` and `&&=`
 //   operands, `!` operands and `if`, `while`, `do`, `for` and `?:`
 //   conditions. JavaScript treats 0, NaN and "" as false and Lua treats them
-//   as true, so `sign(x) || fallback` differs (smashcraft#389). Booleans and
+//   as true, so `sign(x) || fallback` differs (makgora#389). Booleans and
 //   objects that may be undefined test the same in both.
 // Node, Bun and DOM APIs need no rule: the map tsconfig doesn't declare them.
 //

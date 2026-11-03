@@ -6,9 +6,9 @@
  *   make posix MYCFLAGS="-DLUA_32BITS -include /path/to/toward-zero.h"
  *
  * Warcraft III's Lua numbers are binary32, and its raw float arithmetic
- * doesn't always round to nearest: in Smashcraft 0.0.48 the product
+ * doesn't always round to nearest: in Mak'gora 0.0.48 the product
  * 4.1f * 0.94f was 23.12399673461914 natively, the exact product truncated,
- * where rounding to nearest gives 23.123998641967773 (smashcraft#59). On
+ * where rounding to nearest gives 23.123998641967773 (makgora#59). On
  * 7 October 2026 its quotient 379.64484f / 0.49583164f was an ulp above the
  * nearest, and the numeral 0.016666667 read as the binary32 below it, where
  * the nearest is above. Its exact rule is not known; toward zero is the
@@ -25,7 +25,7 @@
 #include <math.h>
 #include <stdlib.h>
 
-/* Warcraft flushes a subnormal result to zero, keeping its sign (smashcraft#25). */
+/* Warcraft flushes a subnormal result to zero, keeping its sign (makgora#25). */
 static inline float flush_subnormal(float f) {
   return f != 0.0f && fabsf(f) < FLT_MIN ? copysignf(0.0f, f) : f;
 }

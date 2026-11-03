@@ -8,7 +8,7 @@ import { GameFiles } from "../host/io/gameFiles";
 import { hostPath, preloadLines } from "../host/io/preloadRecord";
 import { modelFailureFile } from "../src/runtime/gameFiles";
 
-test("native model failure lines reach the requesting map, including stock paths and later failures [spec smashcraft#365]", async () => {
+test("native model failure lines reach the requesting map, including stock paths and later failures [spec makgora#365]", async () => {
   const requestTime = new Date(2026, 0, 1, 0, 0, 1).getTime();
   const directory = mkdtempSync(join(tmpdir(), "wisp-model-failures-"));
   const data = join(directory, "CustomMapData");

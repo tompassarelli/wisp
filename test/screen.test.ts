@@ -12,7 +12,7 @@ import { PLACEMENTS } from "./frames125/layout";
 // Two players take two slots each with the bust centred, half a slot right.
 const bust = (slot: number) => [0.02625 + 0.19 * slot, 0.102, 0.02625 + 0.19 * slot + 0.08, 0.102 - 0.08] as const;
 
-test("[reference smashcraft#363] HUD bust rectangles match native captures", () => {
+test("[reference makgora#363] HUD bust rectangles match native captures", () => {
   const near = (rect: ReturnType<typeof uiPixels>, x: number, y: number, size: number) => {
     for (const [actual, expected] of [[rect.x, x], [rect.y, y], [rect.width, size], [rect.height, size]] as const) expect(Math.abs(actual - expected)).toBeLessThanOrEqual(1);
   };
@@ -20,7 +20,7 @@ test("[reference smashcraft#363] HUD bust rectangles match native captures", () 
   for (const p of [0, 1, 2, 3]) near(uiPixels(bust(p), 1280, 720), 191.5 + 228 * p, 597.6, 96);
 });
 
-test("[reference smashcraft#363] a BACKDROP bust reports its native rectangle and its whole texture at both resolutions", () => {
+test("[reference makgora#363] a BACKDROP bust reports its native rectangle and its whole texture at both resolutions", () => {
   const client = new HeadlessClient({ slot: 0, humans: [0], declarations: readNativeDeclarations(), filePrefix: "screen", localNatives: {}, network: [], screen: { width: 1280, height: 720 } });
   const call = (name: string, ...args: unknown[]) => (client.natives[name] as (this: void, ...args: unknown[]) => unknown)(...args);
   const frame = (name: string) => {
@@ -160,7 +160,7 @@ test("[reference wisp-standalone-menu] a child of a raised panel draws above a l
   expect(rows.get("PanelText")!.alignment).toBeUndefined();
 });
 
-test("[reference smashcraft#862] a frame painted with a signed JASS colour reaches the window as an unsigned ARGB word", () => {
+test("[reference makgora#862] a frame painted with a signed JASS colour reaches the window as an unsigned ARGB word", () => {
   const client = new HeadlessClient({ slot: 0, humans: [0], declarations: readNativeDeclarations(), filePrefix: "screen", localNatives: {}, network: [], screen: { width: 1280, height: 720 } });
   const call = (name: string, ...args: unknown[]) => (client.natives[name] as (this: void, ...args: unknown[]) => unknown)(...args);
   const portrait = call("BlzCreateFrameByType", "BACKDROP", "portrait", undefined, "", 0);

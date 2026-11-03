@@ -13,6 +13,6 @@
     {"description":"The native LAN provider is absent; offline clients can start solo games.","issue":"wisp#37"},
     {"description":"Equipment native declarations were renamed to Blz; 145 added native declarations are modeled headlessly.","issue":"wisp#51"},
     {"description":"Classic pause/resume captures supply the drawn-frame reference.","issue":"wisp#86"},
-    {"description":"Ambient Occlusion returned to graphics settings.","issue":"smashcraft#287"}
+    {"description":"Ambient Occlusion returned to graphics settings.","issue":"makgora#287"}
   ]
 }

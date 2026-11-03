@@ -82,7 +82,7 @@ test("[reference] f32 literals are the binary32 nearest their decimal", () => {
 });
 
 test("[reference] f32 flushes a subnormal result to zero, keeping its sign, as Warcraft does", () => {
-  // smashcraft#25: natively the camera's ease stopped at this x, where its step fell below 2^-126.
+  // makgora#25: natively the camera's ease stopped at this x, where its step fell below 2^-126.
   const stopped = 1.1940069608864212e-37;
   const rate = 0.09000000357627869;
   same(f32(f32(0.0 - stopped) * rate), -0.0);

@@ -40,7 +40,7 @@ farmTest("[spec #7] a number or string tested for truthiness fails compilation o
 
 farmTest("[spec #129] the check command reports every number-rule error the Lua32 compile reports, on the same line and column", async () => {
   const cwd = join(import.meta.dir, "refused");
-  // Each input Smashcraft's Autoland refused at the Lua32 compile, by line and the start of its diagnostic.
+  // Each input Mak'gora's Autoland refused at the Lua32 compile, by line and the start of its diagnostic.
   const refused = [
     ["4,17", "`||` tests a number or string"],
     ["4,29", "`||` tests a number or string"],

@@ -1,4 +1,4 @@
-//! Sound files to interleaved f32 samples. Warcraft's stock sounds are Vorbis, its music MP3, and Smashcraft's own sounds FLAC;
+//! Sound files to interleaved f32 samples. Warcraft's stock sounds are Vorbis, its music MP3, and Mak'gora's own sounds FLAC;
 //! `hound` reads the PCM and float WAVs the resolver may also reach (wisp:docs/native-window-plan.md, "Sound").
 
 use std::io::Cursor;

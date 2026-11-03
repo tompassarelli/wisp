@@ -10,8 +10,8 @@ const LOCUST = 0x416c6f63;
 const PROBE_MODEL = "Abilities\\Spells\\Other\\Silence\\SilenceTarget.mdx";
 
 export const UNIT_MOTION_NOOPS = {
-  SetUnitPathing: "the fixture's bodies mirror Smashcraft's, which turn off pathing; headless has no pathing to turn off",
-  PauseUnit: "the fixture's bodies mirror Smashcraft's paused bodies; headless runs no unit AI",
+  SetUnitPathing: "the fixture's bodies mirror Mak'gora's, which turn off pathing; headless has no pathing to turn off",
+  PauseUnit: "the fixture's bodies mirror Mak'gora's paused bodies; headless runs no unit AI",
 };
 
 const FACINGS: readonly (readonly [string, number])[] = [

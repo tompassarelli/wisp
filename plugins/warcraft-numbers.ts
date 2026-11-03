@@ -5,7 +5,7 @@
 //   overflow), matching Wurst's real literals, and prints each non-integer one
 //   as a hexadecimal float, its exact binary32 value: Warcraft parsed the
 //   decimal 0.016666667 toward zero where rounding to nearest gives the
-//   binary32 the host uses (smashcraft's native pose rate, 7 October 2026),
+//   binary32 the host uses (makgora's native pose rate, 7 October 2026),
 //   and a decimal that isn't exactly binary32 depends on the parser's
 //   rounding. Number rule TS9300 rejects a literal that isn't binary32 outside f32();
 // - compiles floorDiv and floorMod from src/sim/intMath.ts to Lua's exact

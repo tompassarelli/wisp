@@ -5,8 +5,8 @@ const CROW_FORM = 0x416d7266;
 const LOCUST = 0x416c6f63;
 
 export const UNIT_MOVEMENT_NOOPS = {
-  SetUnitPathing: "the fixture's bodies mirror Smashcraft's, which turn off pathing; headless has no pathing to turn off",
-  PauseUnit: "the fixture's bodies mirror Smashcraft's paused bodies; headless runs no unit AI",
+  SetUnitPathing: "the fixture's bodies mirror Mak'gora's, which turn off pathing; headless has no pathing to turn off",
+  PauseUnit: "the fixture's bodies mirror Mak'gora's paused bodies; headless runs no unit AI",
 };
 
 function body(crowForm: boolean): unit {

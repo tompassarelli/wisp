@@ -12,7 +12,7 @@ const DIVIDE = 4;
 const EXACT_INTEGERS = 16777216;
 /** 2^-100: from there up, the difference of two values within a factor of two of each other is a normal number. */
 const STERBENZ_FLOOR = 7.888609052210118e-31;
-/** 2^-126: Warcraft flushes a result below it to zero, keeping its sign (smashcraft#25). */
+/** 2^-126: Warcraft flushes a result below it to zero, keeping its sign (makgora#25). */
 const SMALLEST_NORMAL = 1.1754943508222875e-38;
 
 const flushSubnormal = (value: number) => value < SMALLEST_NORMAL && value > -SMALLEST_NORMAL ? value * 0.0 : value;

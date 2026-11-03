@@ -1,4 +1,4 @@
-// JavaScript treats 0 and "" as false and Lua treats them as true, so a truthiness test of a number or string differs (smashcraft#389).
+// JavaScript treats 0 and "" as false and Lua treats them as true, so a truthiness test of a number or string differs (makgora#389).
 
 const sign = (x: number): -1 | 0 | 1 => (x > 0 ? 1 : x < 0 ? -1 : 0);
 type Branded = number & { readonly brand: "frames" };

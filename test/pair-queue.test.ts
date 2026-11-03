@@ -69,12 +69,12 @@ test("[scenario] a host at its client cap is skipped until a pair frees, and a h
 });
 
 test("[scenario] a request from a session whose own pool holds a pair is granted it with every other pair held and the host at its client cap, and the same request from an unrelated session waits", async () => {
-  const holders = new Map([[7, "other-session"], [15, ""], [16, "smashcraft-1"]]);
+  const holders = new Map([[7, "other-session"], [15, ""], [16, "makgora-1"]]);
   const state = world({ hosts: [{ name: "gex45", pairs: [7, 15, 16], available: true, clientLimit: 6 }], holder: ({ pair }) => holders.get(pair) });
   await expect(take(state, "capture-other", 102, 1, "unrelated-session")).rejects.toThrow("no free pair within 1 s");
   await expect(take(state, "capture-outside", 103, 1)).rejects.toThrow("no free pair within 1 s");
-  expect(await take(state, "capture-own", 101, 5, "smashcraft-1")).toEqual({ host: "gex45", pair: 16 });
-  await expect(take(state, "capture-own-again", 104, 1, "smashcraft-1")).rejects.toThrow("no free pair within 1 s");
+  expect(await take(state, "capture-own", 101, 5, "makgora-1")).toEqual({ host: "gex45", pair: 16 });
+  await expect(take(state, "capture-own-again", 104, 1, "makgora-1")).rejects.toThrow("no free pair within 1 s");
 });
 
 test("[scenario] the peer's busy pairs are the ones a live lease of its own or a live pool claim holds, and only pairs on a build that runs a pool are offered", async () => {
@@ -88,7 +88,7 @@ test("[scenario] the peer's busy pairs are the ones a live lease of its own or a
   writeFileSync(join(state, "queue/leases", "elsewhere-5.json"), JSON.stringify({ host: "elsewhere", pair: 5, owner: "a", pid: process.pid, since: "" }));
   for (const [pair, pid] of [[7, process.pid], [8, dead]] as const) {
     mkdirSync(join(state, `pair-${pair}`), { recursive: true });
-    writeFileSync(join(state, `pair-${pair}`, "claim.json"), JSON.stringify({ pair, owner: "lane", session: "smashcraft-1", pid, start: 1, agent: { pid: dead, start: 1 } }, null, 2));
+    writeFileSync(join(state, `pair-${pair}`, "claim.json"), JSON.stringify({ pair, owner: "lane", session: "makgora-1", pid, start: 1, agent: { pid: dead, start: 1 } }, null, 2));
   }
   for (const [pair, version] of [[3, "3.0.0.24268"], [7, "3.0.1.24342"]] as const) {
     const install = join(root, "data/wisp/lan/clients", `lan${pair}a/pfx/drive_c/Program Files (x86)/Warcraft III`);
@@ -96,7 +96,7 @@ test("[scenario] the peer's busy pairs are the ones a live lease of its own or a
     writeFileSync(join(install, ".build.info"), `Branch!STRING:0|Active!DEC:1|Version!STRING:0\nus|1|${version}\n`);
   }
   const state_ = parsePeerState(await Bun.$`sh -c ${PEER_STATE_SCRIPT}`.env({ ...process.env, XDG_STATE_HOME: root, XDG_DATA_HOME: join(root, "data") }).text());
-  expect([...state_.busy].sort()).toEqual([[3, ""], [7, "smashcraft-1"]]);
+  expect([...state_.busy].sort()).toEqual([[3, ""], [7, "makgora-1"]]);
   expect([...state_.builds]).toEqual(expect.arrayContaining([[3, "3.0.0.24268"], [7, "3.0.1.24342"]]));
   expect(poolablePairs([3, 7, 9], state_.builds)).toEqual([3]);
 });
@@ -227,7 +227,7 @@ test("[scenario] a pool start on a pair leased to another session is refused nam
 }));
 
 test("[scenario] a lease on a pair whose pool outlived its custodian is granted only once that pool has exited, and fails when the pool will not stop", () => inStateHome(async () => {
-  const claim = (pid: number) => writeJson(claimFile(7), { pair: 7, owner: "smashcraft-653", session: "smashcraft-653", ...markOf(pid), agent: { pid: 2999999, start: 1 } });
+  const claim = (pid: number) => writeJson(claimFile(7), { pair: 7, owner: "makgora-653", session: "makgora-653", ...markOf(pid), agent: { pid: 2999999, start: 1 } });
   const pool = await trapped("trap 'sleep 1; exit 0' TERM");
   claim(pool.pid);
   await Effect.runPromise(reclaimOrphan(7, 10));

@@ -110,7 +110,7 @@ test.skipIf(!existsSync(windowLibraryPath()))("[spec docs/native-window-plan.md]
 
 test("[spec docs/play.md] a worker's game export given as a function is built with the flags the player ran with", async () => {
   const module = join(import.meta.dir, "fixtures/argumentGame.ts");
-  expect((await loadGame({ module, export: "game", arguments: ["--map", "Smashcraft.w3x", "--player-assets-only"] })).title).toBe("--map Smashcraft.w3x --player-assets-only");
+  expect((await loadGame({ module, export: "game", arguments: ["--map", "Makgora.w3x", "--player-assets-only"] })).title).toBe("--map Makgora.w3x --player-assets-only");
   expect((await loadGame({ module, export: "plain" })).title).toBe("plain");
   await expect(loadGame({ module, export: "absent" })).rejects.toThrow("exports no absent");
 });

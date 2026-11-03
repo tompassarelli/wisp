@@ -56,7 +56,7 @@ test("[invariant] a red main reverts only once 15 minutes pass with no green mai
 
 test("[invariant] the revert commit is Revert \"subject\" with a Reverts: trailer of the full sha, and the comment names the failing jobs", () => {
   const sha = "1d1f3b82".padEnd(40, "0");
-  const subject = "Compare renders by their frame hash (Fixes #7, Refs tompassarelli/smashcraft#832)";
+  const subject = "Compare renders by their frame hash (Fixes #7, Refs tompassarelli/makgora#832)";
   const issues = referencedIssues(`${subject}\n\nbody Refs other/repo#9`, "tompassarelli/wisp");
   expect(issues).toEqual([7]);
   const message = revertMessage({ landing: landing(sha, subject), jobs: ["framework", "knip"], runUrl: "https://github.com/x/y/actions/runs/11", issues });

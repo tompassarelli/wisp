@@ -10,8 +10,8 @@ export const ANIMATION_NOOPS = {
   FogMaskEnable: "headless has no black mask; the fixture turns it off so the real game shows every ruler",
   BlzHideOriginFrames: "headless draws no game UI; the fixture hides it so the real game's console covers no ruler",
   SetCameraBounds: "headless has no camera bounds; the fixture pins the real camera over the rulers",
-  SetUnitPathing: "the fixture's units mirror Smashcraft's bodies, which turn off pathing; headless has no pathing to turn off",
-  PauseUnit: "the fixture's units mirror Smashcraft's paused bodies; headless runs no unit AI",
+  SetUnitPathing: "the fixture's units mirror Mak'gora's bodies, which turn off pathing; headless has no pathing to turn off",
+  PauseUnit: "the fixture's units mirror Mak'gora's paused bodies; headless runs no unit AI",
 };
 
 function view(this: void): void {

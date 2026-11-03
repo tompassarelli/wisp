@@ -29,7 +29,7 @@ pub struct Limits {
     pub alpha_moved: f32,
 }
 
-/// Thresholds chosen from the edge-directed filter's outputs over Smashcraft's imported textures (remaster section of native-window-plan.md).
+/// Thresholds chosen from the edge-directed filter's outputs over Mak'gora's imported textures (remaster section of native-window-plan.md).
 pub const LIMITS: Limits = Limits { hue_degrees: 6.0, saturation: 0.04, seam: 0.02, detail_kept: 0.95, detail_added: 0.01, alpha_moved: 0.02 };
 
 /// Figures are doubled by Real-CUGAN, whose skins drift 6 to 7 degrees of hue, so their hue limit is 8.0 (gate 141, 2026-10-31).
