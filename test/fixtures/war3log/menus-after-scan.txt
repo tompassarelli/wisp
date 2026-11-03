@@ -53,5 +53,5 @@
 10/6 16:21:20.307  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season9/(4)TwistedMeadows_S2_v1.1.w3x
 10/6 16:21:20.318  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season9/(2)Hammerfall_S3.w3x
 10/6 16:21:20.318  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season9/(2)Hammerfall_S3.w3x
-10/6 16:22:40.031  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/Smashcraft_Melee_Physics_r7.w3x
-10/6 16:22:40.031  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/Smashcraft_Melee_Physics_r7.w3x
+10/6 16:22:40.031  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/Makgora_Melee_Physics_r7.w3x
+10/6 16:22:40.031  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/Makgora_Melee_Physics_r7.w3x

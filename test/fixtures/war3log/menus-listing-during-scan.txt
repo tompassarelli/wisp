@@ -29,12 +29,12 @@
 10/6 20:30:20.625  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season1/(2)LastRefuge_S2_v1.5.w3x
 10/6 20:30:20.634  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season1/(2)ConcealedHill_S2.w3x
 10/6 20:30:20.634  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season1/(2)ConcealedHill_S2.w3x
-10/6 20:30:20.908  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/Smashcraft_Melee_Physics_r7.w3x
-10/6 20:30:20.908  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/Smashcraft_Melee_Physics_r7.w3x
-10/6 20:30:20.927  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/Smashcraft_Melee_Physics_r8.w3x
-10/6 20:30:20.927  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/Smashcraft_Melee_Physics_r8.w3x
-10/6 20:30:20.947  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/Smashcraft_Melee_Physics_r9.w3x
-10/6 20:30:20.947  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/Smashcraft_Melee_Physics_r9.w3x
+10/6 20:30:20.908  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/Makgora_Melee_Physics_r7.w3x
+10/6 20:30:20.908  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/Makgora_Melee_Physics_r7.w3x
+10/6 20:30:20.927  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/Makgora_Melee_Physics_r8.w3x
+10/6 20:30:20.927  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/Makgora_Melee_Physics_r8.w3x
+10/6 20:30:20.947  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/Makgora_Melee_Physics_r9.w3x
+10/6 20:30:20.947  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/Makgora_Melee_Physics_r9.w3x
 10/6 20:30:20.967  Opening map - Maps/(10)dustwallowkeys.w3m
 10/6 20:30:20.967  Opening mod - Maps/(10)dustwallowkeys.w3m
 10/6 20:30:20.977  Opening map - Maps/(12)divideandconquer.w3m
@@ -127,10 +127,10 @@
 10/6 20:30:21.254  Opening mod - Maps/(8)thecrucible.w3m
 10/6 20:30:21.261  Opening map - Maps/(9)riverrun.w3m
 10/6 20:30:21.261  Opening mod - Maps/(9)riverrun.w3m
-10/6 20:30:21.331  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/00-Smashcraft/Smashcraft diagnostic stage lineup main bda8a366.w3x
-10/6 20:30:21.331  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/00-Smashcraft/Smashcraft diagnostic stage lineup main bda8a366.w3x
-10/6 20:30:21.386  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/00-Smashcraft/Smashcraft wisp-play diagnostic.w3x
-10/6 20:30:21.386  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/00-Smashcraft/Smashcraft wisp-play diagnostic.w3x
+10/6 20:30:21.331  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/00-Makgora/Mak'gora diagnostic stage lineup main bda8a366.w3x
+10/6 20:30:21.331  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/00-Makgora/Mak'gora diagnostic stage lineup main bda8a366.w3x
+10/6 20:30:21.386  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/00-Makgora/Mak'gora wisp-play diagnostic.w3x
+10/6 20:30:21.386  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/00-Makgora/Mak'gora wisp-play diagnostic.w3x
 10/6 20:30:21.420  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season9/(2)EchoIsles_S2_v2.2.w3x
 10/6 20:30:21.420  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season9/(2)EchoIsles_S2_v2.2.w3x
 10/6 20:30:21.429  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season9/(2)TerenasStand_LV.w3x
@@ -151,8 +151,8 @@
 10/6 20:30:21.492  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season9/(4)TwistedMeadows_S2_v1.1.w3x
 10/6 20:30:21.502  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season9/(2)Hammerfall_S3.w3x
 10/6 20:30:21.502  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season9/(2)Hammerfall_S3.w3x
-10/6 20:30:21.529  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/00-Smashcraft/Smashcraft wisp-play diagnostic.w3x
-10/6 20:30:21.529  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/00-Smashcraft/Smashcraft wisp-play diagnostic.w3x
+10/6 20:30:21.529  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/00-Makgora/Mak'gora wisp-play diagnostic.w3x
+10/6 20:30:21.529  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/00-Makgora/Mak'gora wisp-play diagnostic.w3x
 10/6 20:30:24.005  NetProviderBNET::PostDistFileComplete()
-10/6 20:30:31.445  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/00-Smashcraft/Smashcraft wisp-play diagnostic.w3x
-10/6 20:30:31.445  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/00-Smashcraft/Smashcraft wisp-play diagnostic.w3x
+10/6 20:30:31.445  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/00-Makgora/Mak'gora wisp-play diagnostic.w3x
+10/6 20:30:31.445  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/00-Makgora/Mak'gora wisp-play diagnostic.w3x
