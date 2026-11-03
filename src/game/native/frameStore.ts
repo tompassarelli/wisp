@@ -452,11 +452,11 @@ export class Frames {
     let found: Frame | undefined;
     const placements = new Placements();
     for (const frame of this.all) {
-      if (!frame.enabled || !takes(frame) || !this.shown(frame)) continue;
+      if (!frame.enabled || !this.shown(frame)) continue;
       const rectangle = this.rectangle(frame, placements);
       if (rectangle === undefined) continue;
       const [left, top, right, bottom] = rectangle;
-      if (x < left || x > right || y > top || y < bottom) continue;
+      if (x < left || x > right || y > top || y < bottom || !takes(frame)) continue;
       if (found === undefined || this.drawLevel(frame) >= this.drawLevel(found)) found = frame;
     }
     return found;

@@ -57,3 +57,23 @@ test("[scenario] a simple frame's textures keep their texCoord through SetTextur
   ui.setVisible(arch, false);
   assertEquals(row("ArchTile").visible, false);
 });
+
+test("a hit test asks whether a frame takes clicks only of a shown frame under the point, so hidden frames cost a match nothing per step", () => {
+  const { frames, ui } = world();
+  const place = (name: string, visible: boolean) => {
+    const frame = ui.createByType("BUTTON", name, undefined, "", 0);
+    ui.setSize(frame, 0.25, 0.125);
+    ui.setAbsPoint(frame, "FRAMEPOINT_TOPLEFT", 0.25, 0.5);
+    ui.setVisible(frame, visible);
+    return frame;
+  };
+  for (let index = 0; index < 50; index++) place(`Hidden${index}`, false);
+  const shown = place("Shown", true);
+  const elsewhere = ui.createByType("BUTTON", "Elsewhere", undefined, "", 0);
+  ui.setSize(elsewhere, 0.0625, 0.0625);
+  ui.setAbsPoint(elsewhere, "FRAMEPOINT_TOPLEFT", 0.625, 0.25);
+  const asked: string[] = [];
+  const found = frames.at(0.3125, 0.4375, (frame) => { asked.push(frame.name); return true; });
+  assertEquals(found, shown);
+  assertEquals(asked.join(","), "Shown");
+});
