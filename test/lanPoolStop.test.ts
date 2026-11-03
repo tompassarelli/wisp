@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { Effect } from "effect";
+import { CapacityAdmission } from "../host/contract/services";
 import { stopGame } from "../host/lan/pool";
+import { runPlatformSync } from "../host/os/platform/layer";
 
 const hungClient = async () => {
   const child = Bun.spawn([process.execPath, "-e", `process.on("SIGTERM", () => {}); console.log("ready"); setInterval(() => {}, 1000);`], { stdin: "ignore", stdout: "pipe", stderr: "ignore" });
@@ -35,5 +40,18 @@ describe("pool stop", () => {
       grace: "5 seconds",
     }));
     expect(log).toEqual([]);
+  });
+
+  test.if(process.platform === "linux")("[boundary] a pool whose working directory was removed still reads a stopped client scope as gone", () => {
+    const home = process.cwd();
+    const gone = mkdtempSync(join(tmpdir(), "wisp-pool-cwd-"));
+    process.chdir(gone);
+    rmSync(gone, { recursive: true });
+    try {
+      const live = runPlatformSync(CapacityAdmission.use((admission) => admission.leaseLive(crypto.randomUUID()).pipe(Effect.result)));
+      expect(live).toEqual(expect.objectContaining({ _tag: "Success", success: false }));
+    } finally {
+      process.chdir(home);
+    }
   });
 });

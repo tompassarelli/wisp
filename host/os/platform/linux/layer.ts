@@ -57,7 +57,7 @@ const leaseScope = (lease: string) => `agent-capacity-${lease.replaceAll("-", ""
 const userManager = (args: readonly string[]) => Effect.try({
   try: () => {
     const env = { ...process.env, XDG_RUNTIME_DIR: userRuntime(), DBUS_SESSION_BUS_ADDRESS: `unix:path=${userRuntime()}/bus` };
-    const done = Bun.spawnSync(["systemctl", "--user", ...args], { env, stdin: "ignore", stdout: "pipe", stderr: "pipe" });
+    const done = Bun.spawnSync(["systemctl", "--user", ...args], { env, cwd: "/", stdin: "ignore", stdout: "pipe", stderr: "pipe" });
     return done.stdout.toString().trim();
   },
   catch: failure("capacity admission"),
