@@ -12,7 +12,7 @@ export function compile(source: string): { readonly diagnostics: string; readonl
     writeFileSync(join(directory, "main.ts"), source);
     const config = join(directory, "tsconfig.json");
     writeFileSync(config, JSON.stringify({
-      compilerOptions: { target: "ESNext", module: "ESNext", moduleResolution: "Bundler", strict: true, types: [], skipLibCheck: true, rootDir: "../..", outDir: "out" },
+      compilerOptions: { target: "ESNext", lib: ["ESNext"], module: "ESNext", moduleResolution: "Bundler", strict: true, types: [], skipLibCheck: true, rootDir: "../..", outDir: "out" },
       files: ["main.ts", "../../src/natives/warcraft.d.ts"],
       tstl: { luaTarget: "5.3", luaBundle: "map.lua", luaBundleEntry: "main.ts", noImplicitSelf: true, noHeader: true,
         luaPlugins: [{ name: "../../plugins/warcraft-numbers.ts" }, { name: "../../plugins/game-api.ts" }] },

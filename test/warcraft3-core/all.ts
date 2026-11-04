@@ -1,9 +1,9 @@
+import { luaClient } from "../../src/headless/lua";
 import type { NativeDeclarations } from "../../src/headless/declarations";
 import { WARCRAFT3_NATIVES } from "../../src/headless/warcraft3Natives";
 import { coreFixture } from "./fixture";
 import { inventoryFixture, INVENTORY_TESTED_NAMES } from "../warcraft3-inventory/fixture";
 import { sceneryFixture } from "../warcraft3-scenery/fixture";
-import { HeadlessClient } from "../../src/headless/client";
 
 export function allWarcraft3Fixtures(declarations: NativeDeclarations, tested = new Set<string>()): number {
   coreFixture(declarations, tested);
@@ -12,7 +12,7 @@ export function allWarcraft3Fixtures(declarations: NativeDeclarations, tested = 
   for (const name of INVENTORY_TESTED_NAMES) tested.add(name);
   const missing = WARCRAFT3_NATIVES.filter(name => !tested.has(name));
   if (missing.length > 0) throw new Error(`Warcraft 3 natives without a fixture: ${missing.join(", ")}`);
-  const client = new HeadlessClient({ warcraftNatives: true, declarations, slot: 0, humans: [0], filePrefix: "integrated3", network: [], localNatives: {}, screen: { width: 1920, height: 1080 },
+  const client = luaClient({ declarations, slot: 0, humans: [0], filePrefix: "integrated3", network: [], localNatives: {}, screen: { width: 1920, height: 1080 },
     unitStates: { 11: { life: 40, maxLife: 100, mana: 0, maxMana: 0 } },
     inventory: { items: { 12: { itemType: 7, level: 1, equipmentType: 1, tag: 0, validMorph: true, pickRandom: true } }, units: { 11: { bagSize: 2, inventorySize: 2, extendedInventorySize: 2, loadout: { 1: [0] }, talents: { ability: 0 } } } },
     scenery: { hudScale: 1, cinematics: { "fixture.mdx": [1] } },

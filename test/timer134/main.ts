@@ -1,5 +1,6 @@
 import { configureRuntime } from "../../src/runtime/config";
 import { writeLines } from "../../src/map/fileio";
+import { floorMod } from "../../src/sim/intMath";
 
 export const TIMER134_CALLBACKS = 4000;
 export const TIMER134_FAST_CALLBACKS = 1024;
@@ -17,8 +18,8 @@ function record(this: void, readings: number[], total: number, name: string, rea
   if (readings.length >= total) return;
   readings.push(reading);
   const count = readings.length;
-  if (count % ROWS_PER_FILE !== 0 && count !== total) return;
-  const first = count - ((count - 1) % ROWS_PER_FILE);
+  if (floorMod(count, ROWS_PER_FILE) !== 0 && count !== total) return;
+  const first = count - floorMod(count - 1, ROWS_PER_FILE);
   const rows: string[] = [];
   for (let callback = first; callback <= count; callback++) rows.push(`${callback},${readings[callback - 1]}`);
   writeLines(`${name}-${count}-p${GetPlayerId(GetLocalPlayer())}.txt`, rows);

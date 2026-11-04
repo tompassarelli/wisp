@@ -1,5 +1,6 @@
+import { luaClient } from "../../src/headless/lua";
 import type { Handle } from "../../src/game/native/types";
-import { HeadlessClient } from "../../src/headless/client";
+import type { HeadlessClient } from "../../src/headless/client";
 import { parseNativeDeclarations, type NativeDeclarations } from "../../src/headless/declarations";
 import { Warcraft3Inventory, type Warcraft3InventoryFixtures } from "../../src/headless/warcraft3Inventory";
 
@@ -98,8 +99,8 @@ export function inventoryFixture(this: void, nativeDeclarations: NativeDeclarati
   let nextId = 1000;
   let equipEvents = 0;
   let unequipEvents = 0;
-  client = new HeadlessClient({
-    warcraftNatives: true, slot: 0, filePrefix: "inventory", humans: [0], declarations: nativeDeclarations,
+  client = luaClient({
+    slot: 0, filePrefix: "inventory", humans: [0], declarations: nativeDeclarations,
     network: [], screen: { width: 1920, height: 1080 }, localNatives: {},
     unitStates: { 11: { life: 40, maxLife: 100, mana: 0, maxMana: 0 } },
     natives: (current) => {

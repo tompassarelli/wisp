@@ -60,7 +60,7 @@ export function predict(quad: "glow" | "twin", matrix: ArrayLike<number>, textur
 
 /** Runs the map headless to the middle of its glow and twin phases and predicts each quad's added light from Wisp's projection of that scene. */
 export function oracles(glowTexture: Texels, offset: readonly [number, number] = [0, 0]): Oracle[] {
-  const runtime = installHeadless({ filePrefix: "glow6", globalPrefixes: ["__glow6"], warcraftNatives: true, intentionalNoops: GLOW_NOOPS });
+  const runtime = installHeadless({ filePrefix: "glow6", globalPrefixes: ["__glow6"], intentionalNoops: GLOW_NOOPS });
   const clients = runtime.clients({ install, start }, [0, 1], {});
   clients.start();
   const client = clients.clients[0];

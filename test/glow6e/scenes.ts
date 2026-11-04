@@ -6,7 +6,7 @@ import { GLOW_NOOPS, install, start } from "./main";
 
 /** Runs the map headless and records each phase's scene half-way through it. */
 export function phaseScenes(): Map<string, RenderScene> {
-  const runtime = installHeadless({ filePrefix: "glow6e", globalPrefixes: ["__glow6e"], warcraftNatives: true, intentionalNoops: GLOW_NOOPS });
+  const runtime = installHeadless({ filePrefix: "glow6e", globalPrefixes: ["__glow6e"], intentionalNoops: GLOW_NOOPS });
   const clients = runtime.clients({ install, start }, [0, 1], {});
   clients.start();
   const client = clients.clients[0];

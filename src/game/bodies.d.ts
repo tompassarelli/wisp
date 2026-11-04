@@ -8,12 +8,17 @@ export declare function mapCenter(): Location;
 export declare function locationX(location: Location): number;
 export declare function locationY(location: Location): number;
 export declare function removeLocation(location: Location): void;
+export declare function createLocation(x: number, y: number): Location;
+/** @local The terrain's height at the location; 0 on the native backend, which has flat ground. */
+export declare function locationZ(location: Location): number;
 /** The playable map's centre along x, as `GetRectCenterX` reads it; 0 on the native backend. */
 export declare function mapCenterX(): number;
 export declare function mapCenterY(): number;
 
 export declare function createBody(player: Player, kind: number, x: number, y: number, facing: number): Body;
 export declare function removeBody(body: Body): void;
+export declare function bodyX(body: Body): number;
+export declare function bodyY(body: Body): number;
 export declare function setBodyX(body: Body, x: number): void;
 export declare function setBodyY(body: Body, y: number): void;
 /** `rate` is how fast the body climbs to `height`; 0 puts it there at once. */

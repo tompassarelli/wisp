@@ -9,7 +9,7 @@ import { fixtureModels } from "./models";
 
 const program = (directory: string | undefined) => Effect.gen(function*() {
   if (directory === undefined) return yield* Effect.die("usage: bun test/animation58/render.ts OUT_DIR");
-  const runtime = installHeadless({ filePrefix: "animation", globalPrefixes: ["__animation58"], warcraftNatives: true, intentionalNoops: ANIMATION_NOOPS });
+  const runtime = installHeadless({ filePrefix: "animation", globalPrefixes: ["__animation58"], intentionalNoops: ANIMATION_NOOPS });
   const clients = runtime.clients({ install, start }, [0, 1], { effectDeaths: (model) => (model === RULER ? RULER_DEATH_SECONDS : undefined) });
   clients.start();
   clients.frames(CAPTURE_FRAME);

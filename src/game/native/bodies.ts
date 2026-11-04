@@ -32,6 +32,27 @@ export function removeLocation(location: Location): void {
   world.bodies.removeLocation(asHandle(location));
 }
 
+export function createLocation(x: number, y: number): Location {
+  const world = boundWorld();
+  world.log?.("Location", [x, y]);
+  return fromHandle<Location>(world.bodies.location(x, y));
+}
+
+export function locationZ(location: Location): number {
+  boundWorld().log?.("GetLocationZ", [location]);
+  return 0;
+}
+
+export function bodyX(body: Body): number {
+  boundWorld().log?.("GetUnitX", [body]);
+  return stored(body).x;
+}
+
+export function bodyY(body: Body): number {
+  boundWorld().log?.("GetUnitY", [body]);
+  return stored(body).y;
+}
+
 export function createBody(player: Player, kind: number, x: number, y: number, facing: number): Body {
   const world = boundWorld();
   world.log?.("CreateUnit", [player, kind, x, y, facing]);

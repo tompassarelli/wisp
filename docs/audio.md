@@ -10,7 +10,7 @@ In a Wisp checkout, run the complete sound/music example:
 
 ```sh
 bun wisp headless audio-acceptance --sound-cues /tmp/wisp-audio80.json --json
-bun run test test/headless-sounds.test.ts -t 'spec #80'
+bun test test/lua32-fixtures.test.ts -t sounds
 ```
 
 The 48-frame map run emits 14 events per client, 28 across two clients. It

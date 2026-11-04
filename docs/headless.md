@@ -1155,7 +1155,7 @@ existing call comparison.
 Run the shared cases and build their native measurement map:
 
 ```sh
-bun test test/headless-unit-states.test.ts
+bun test test/lua32-fixtures.test.ts -t unit-states
 bun test/unit-states/build.ts BASE.w3m PRIVATE_OUT.w3x
 ```
 
@@ -1182,7 +1182,7 @@ rules and their evidence are in
 [Warsmash notes](warsmash-notes.md#unit-position-and-facing).
 
 ```sh
-bun test test/headless-unit-motion.test.ts
+bun test test/lua32-fixtures.test.ts -t unit-motion
 bun test/unit-motion57/build.ts BASE.w3m PRIVATE_OUT.w3x
 ```
 
@@ -1236,7 +1236,7 @@ and their evidence are in
 [Warsmash notes](warsmash-notes.md#effects-attachment-scale-and-lifetime).
 
 ```sh
-bun test test/headless-effects.test.ts
+bun test test/lua32-fixtures.test.ts -t effect
 bun test/effects59/build.ts BASE.w3m PRIVATE_OUT.w3x
 ```
 
@@ -1259,7 +1259,7 @@ animate. The models are MDL text compiled to MDX with war3-model
 (`models.ts`), as Mak'gora's stage models are.
 
 ```sh
-bun test test/headless-animation.test.ts
+bun test test/lua32-fixtures.test.ts -t animation
 bun test/animation58/build.ts BASE.w3m PRIVATE_OUT.w3x
 bun test/animation58/read.ts SCREENSHOT.png
 bun test/animation58/render.ts PRIVATE_DIR
@@ -1399,7 +1399,7 @@ level fields are declared as the script defines them.
 
 ```bash
 bun host/toolchain/natives.ts /private/common.j /private/blizzard.j src/natives/warcraft.d.ts
-bun test test/headless-warcraft3.test.ts
+bun test test/lua32-fixtures.test.ts -t warcraft3
 ```
 
 Attack reset clears the selected weapon's remaining wait while retaining
@@ -1417,8 +1417,8 @@ settings, doodad colors and animations, and all 24 destructable creation
 variants. `SceneryFixtures` supplies map doodads, cinematic shot durations,
 terrain pathing cells and HUD scale. Queries for missing cinematic or terrain
 facts fail with the needed fixture name.
-The Warcraft 3 native fixture (wisp:test/headless-warcraft3.test.ts) exercises 92
-scenery native calls in Bun and Lua32, with zero missing-native reports.
+The Warcraft 3 native fixture (wisp:test/warcraft3-core/all.ts, run by
+wisp:test/lua32-fixtures.test.ts) exercises 92 scenery native calls in Lua32, with zero missing-native reports.
 
 Set `scenery` and `inventory` on `HeadlessMap` or `LuaHeadlessMap`; both are
 passed to every client. `inventory.items` declares item types, levels,

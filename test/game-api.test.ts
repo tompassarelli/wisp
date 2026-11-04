@@ -341,24 +341,24 @@ test("the files family lowers one to one and its native backend keeps a 300-byte
 });
 
 test("player calls lower to the natives they replaced, with a nested native and a global argument, byte for byte", () => {
-  const lowered = compile(`import { createEvents } from "../../src/game/events";\nimport { addLeaveEvent, eventPlayer, localPlayer, player, PlayerControl, playerControl, playerName, playerSlot, PlayerSlotState, playerSlotState, setPlayerColor } from "../../src/game/players";\n` + `export function run(slot: number): void {
+  const lowered = compile(`import { createEvents } from "../../src/game/events";\nimport { addLeaveEvent, eventPlayer, localPlayer, player, PlayerControl, playerControl, playerName, playerSlot, PlayerSlotState, playerSlotState, playerColor, setPlayerColor } from "../../src/game/players";\n` + `export function run(slot: number): void {
   const leave = createEvents();
   const who = player(slot);
   addLeaveEvent(leave, who);
-  setPlayerColor(who, slot);
+  setPlayerColor(who, playerColor(who));
   if (eventPlayer() === localPlayer() && playerControl(who) === PlayerControl.user && playerSlotState(who) === PlayerSlotState.playing) BJDebugMsg(playerName(who) + playerSlot(who));
 }\n`);
   const raw = compile(`export function run(slot: number): void {
   const leave = CreateTrigger();
   const who = Player(slot);
   TriggerRegisterPlayerEvent(leave, who, EVENT_PLAYER_LEAVE);
-  SetPlayerColor(who, ConvertPlayerColor(slot));
+  SetPlayerColor(who, ConvertPlayerColor(GetHandleId(GetPlayerColor(who))));
   if (GetTriggerPlayer() === GetLocalPlayer() && GetPlayerController(who) === MAP_CONTROL_USER && GetPlayerSlotState(who) === PLAYER_SLOT_STATE_PLAYING) BJDebugMsg(GetPlayerName(who) + GetPlayerId(who));
 }\n`);
   expect(lowered.diagnostics).toBe("");
   expect(raw.diagnostics).toBe("");
   expect(lowered.lua).toBe(raw.lua);
-  expect(lowered.lua).toContain("ConvertPlayerColor(slot)");
+  expect(lowered.lua).toContain("ConvertPlayerColor(GetHandleId(GetPlayerColor(who)))");
   expect(lowered.lua).toContain("TriggerRegisterPlayerEvent(leave, who, EVENT_PLAYER_LEAVE)");
 });
 

@@ -18,8 +18,12 @@ interface Timer extends Handle {
 
 const TRIM = 1e6;
 
-/** The frames a span of seconds takes, with the float noise of a period such as binary32 1/60 removed. */
-const framesOf = (seconds: number): number => Math.round(seconds * FRAMES_PER_SECOND * TRIM) / TRIM;
+/** The frames a span of seconds takes, with the float noise of a binary32 span such as 1/60 or 0.55 s removed: a span within binary32 rounding of whole frames is those frames. */
+const framesOf = (seconds: number): number => {
+  const frames = seconds * FRAMES_PER_SECOND;
+  const whole = Math.round(frames);
+  return Math.abs(frames - whole) <= Math.abs(whole) * 2 ** -23 ? whole : Math.round(frames * TRIM) / TRIM;
+};
 
 /** The timers of one running game, counted in whole simulation frames: a timer fires on the frame at or after its deadline, once per frame at most, in deadline then start order. */
 export class Clock {

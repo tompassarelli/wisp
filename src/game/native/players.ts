@@ -52,6 +52,15 @@ export function setPlayerColor(player: Player, color: number): void {
   world.players.setColor(slotOf(player), color);
 }
 
+export function playerColor(player: Player): number {
+  const world = boundWorld();
+  world.log?.("GetPlayerColor", [player]);
+  const color = world.players.color(slotOf(player));
+  const index = typeof color === "number" ? color : slotOf(player);
+  world.log?.("GetHandleId", [index]);
+  return index;
+}
+
 export function addLeaveEvent(events: Events, player: Player): void {
   const world = boundWorld();
   world.log?.("TriggerRegisterPlayerEvent", [events, player, "EVENT_PLAYER_LEAVE"]);

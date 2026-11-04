@@ -1,5 +1,5 @@
 import type { EffectDeaths } from "../game/native/types";
-import type { ClientScope, LocalNatives, MapEntry, IntentionalNoops, StandaloneProfile, HeadlessClient, NativeBehaviors, UnitStateFixtures } from "./client";
+import { type ClientOptions, type ClientScope, type LocalNatives, type MapEntry, type IntentionalNoops, type StandaloneProfile, HeadlessClient, type NativeBehaviors, type UnitStateFixtures } from "./client";
 import type { FrameTemplate } from "../game/native/frameStore";
 import type { SyncDelivery } from "./lockstep";
 import { parseNativeDeclarations } from "./declarations";
@@ -38,6 +38,11 @@ export function readFile(path: string): string {
   file.close();
   if (text === undefined) throw new Error(`can't read ${path}`);
   return text;
+}
+
+/** A lone client whose natives table holds Warcraft's natives, for fixtures that call them by name in a 32-bit Lua run. */
+export function luaClient(options: Omit<ClientOptions, "warcraftNatives">): HeadlessClient {
+  return new HeadlessClient({ ...options, warcraftNatives: true });
 }
 
 export function luaLockstep(map: LuaHeadlessMap, bundle: string, declarations: string, scope?: ClientScope, delivery?: SyncDelivery): Lockstep {

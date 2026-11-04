@@ -7,11 +7,14 @@ import { HeadlessClient } from "../src/headless/client";
 import { compile, wrap } from "./gameApiCompile";
 
 test("body calls lower to the natives they replaced, with a nested native, a global and a literal argument, byte for byte", () => {
-  const lowered = compile(`import { addBodyAbility, bodyAttackCooldown, bodyHidden, bodyKind, bodyMoveSpeed, createBody, locationX, locationY, mapCenter, pauseBody, removeBody, removeLocation, setAbilityTooltip, setBodyAnimation, setBodyAnimationIndex, setBodyAttackCooldown, setBodyBlendTime, setBodyColor, setBodyFacing, setBodyHeight, setBodyInvulnerable, setBodyMoveSpeed, setBodyName, setBodyPathing, setBodyScale, setBodySelectionScale, setBodyTeamGlow, setBodyTimeScale, setBodyTint, setBodyX, setBodyY, showBody, removeBodyAbility } from "../../src/game/bodies";\n` + wrap(`
+  const lowered = compile(`import { addBodyAbility, bodyAttackCooldown, bodyHidden, bodyKind, bodyMoveSpeed, bodyX, bodyY, createBody, createLocation, locationX, locationZ, locationY, mapCenter, pauseBody, removeBody, removeLocation, setAbilityTooltip, setBodyAnimation, setBodyAnimationIndex, setBodyAttackCooldown, setBodyBlendTime, setBodyColor, setBodyFacing, setBodyHeight, setBodyInvulnerable, setBodyMoveSpeed, setBodyName, setBodyPathing, setBodyScale, setBodySelectionScale, setBodyTeamGlow, setBodyTimeScale, setBodyTint, setBodyX, setBodyY, showBody, removeBodyAbility } from "../../src/game/bodies";\n` + wrap(`
   const center = mapCenter();
   const x = locationX(center) + locationY(center);
   removeLocation(center);
-  const body = createBody(owner, 7, x, 2, 180.0);
+  const ground = createLocation(x, 2);
+  const body = createBody(owner, 7, x, locationZ(ground), 180.0);
+  setBodyX(body, bodyY(body));
+  setBodyY(body, bodyX(body));
   setBodyName(body, model);
   setBodySelectionScale(body, 1.5);
   setBodyMoveSpeed(body, bodyMoveSpeed(body));
@@ -40,7 +43,10 @@ test("body calls lower to the natives they replaced, with a nested native, a glo
   const center = GetRectCenter(GetPlayableMapRect());
   const x = GetLocationX(center) + GetLocationY(center);
   RemoveLocation(center);
-  const body = CreateUnit(owner, 7, x, 2, 180.0);
+  const ground = Location(x, 2);
+  const body = CreateUnit(owner, 7, x, GetLocationZ(ground), 180.0);
+  SetUnitX(body, GetUnitY(body));
+  SetUnitY(body, GetUnitX(body));
   BlzSetUnitName(body, model);
   BlzSetUnitRealField(body, UNIT_RF_SELECTION_SCALE, 1.5);
   SetUnitMoveSpeed(body, GetUnitMoveSpeed(body));

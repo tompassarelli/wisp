@@ -152,6 +152,5 @@ LUA32 build/lua32-fixtures/fixtures.lua src/natives/warcraft.d.ts \
 ```
 
 `LUA32` denotes the repository's pinned 32-bit interpreter. The journey
-prints every output row, prefixed `shadow-strike`. The same native rows are
-pinned by `test/headless-shadow-strike.test.ts`, and the farm test
-`test/lua32-fixtures.test.ts` compares the emitted Lua rows with them. Keep raw private inputs outside Git.
+prints every output row, prefixed `shadow-strike`. The farm test
+`test/lua32-fixtures.test.ts` compares the emitted Lua rows with the same native rows. Keep raw private inputs outside Git.

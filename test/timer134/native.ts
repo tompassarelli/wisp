@@ -10,3 +10,16 @@ export const NATIVE_134_STEPS = [
   "1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111",
   "1111111111111111111111111111111111111111088888888888888888888888888888888888888888888888888888888888",
   "8888888888888888888888888888888888888888888888888888888888880000000000000000000000000000000000000000",].join("");
+
+const nativeReadings = (): number[] => {
+  let reading = 0;
+  return [...NATIVE_134_STEPS].flatMap(digit => [8, 4, 2, 1].map(bit => (reading += (Number.parseInt(digit, 16) & bit) === 0 ? 1092 : 1093)));
+};
+
+const RESIDUAL_CALLBACKS = new Set([...Array.from({ length: 120 }, (_, index) => 3364 + 4 * index), ...Array.from({ length: 160 }, (_, index) => 3841 + index)]);
+
+/** Wisp's timer134 files: 1,024 fast `callback,reading` rows at exactly 64 units each, then 4,000 rows at native's readings, each pinned residual callback one unit above. */
+export const TIMER134_ROWS: readonly string[] = [
+  ...Array.from({ length: 1024 }, (_, index) => `fast ${index + 1},${64 * (index + 1)}`),
+  ...nativeReadings().map((reading, index) => `${index + 1},${reading + (RESIDUAL_CALLBACKS.has(index + 1) ? 1 : 0)}`),
+];

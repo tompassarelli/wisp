@@ -346,8 +346,8 @@ and `PauseUnit`. It never reads a unit's position, height or facing back, and
 calls no `SetUnitPosition`, `SetUnitFacing`, `SetUnitFacingTimed`, nonzero fly
 rate, order or region native. Rules for those calls are recorded only where
 they explain a verdict. Fixture: `test/unit-motion57/` (position, height,
-exact facing reads and a dash, Bun and 32-bit Lua in
-`test/headless-unit-motion.test.ts`, native map via its `build.ts`).
+exact facing reads and a dash, 32-bit Lua in
+`test/lua32-fixtures.test.ts`, native map via its `build.ts`).
 
 | Behavior Mak'gora relies on | Warsmash rule | Wisp before #57 | Verdict |
 | --- | --- | --- | --- |
@@ -428,8 +428,8 @@ Hidden effects are collapsed with scale 0 and parked below the floor
 before `DestroyEffect`, and the fighter light is switched off before it,
 because teardown can be deferred. Animation selection, seek and blending on
 effects belong to wisp#58 and are not repeated here. Fixture:
-`test/effects59/` (seven cases and a Death timeline, Bun and 32-bit Lua in
-`test/headless-effects.test.ts`, native map via its `build.ts`).
+`test/effects59/` (seven cases and a Death timeline, 32-bit Lua in
+`test/lua32-fixtures.test.ts`, native map via its `build.ts`).
 
 | Behavior Mak'gora relies on | Warsmash rule | Wisp before #59 | Verdict |
 | --- | --- | --- | --- |
@@ -558,7 +558,7 @@ then `SetUnitTimeScale`, after `SetUnitBlendTime` from object data. It calls
 no `QueueUnitAnimation`, `BlzQueueSpecialEffectAnimation` or rarity control.
 Rules live in wisp:src/game/native/animation.ts, used by the headless runtime and
 the renderer; wisp:src/game/native/animation.tests.ts holds the rules the #58
-rulers (wisp:test/headless-animation.test.ts) leave unchecked, run in Bun (`test/animation.test.ts`) and 32-bit Lua (`test/runtime.test.ts`).
+rulers (wisp:test/animation58/, compared in wisp:test/lua32-fixtures.test.ts) leave unchecked, run in Bun (`test/animation.test.ts`) and 32-bit Lua (`test/runtime.test.ts`).
 
 | Behavior Mak'gora relies on | Warsmash rule | Wisp before #58 | Verdict |
 | --- | --- | --- | --- |
@@ -681,17 +681,17 @@ retain the exact maps, files and measured rows.
 
 | Rule | Mak'gora call sites | Headless test | Native evidence |
 | --- | --- | --- | --- |
-| Timer deadlines, equal-deadline order, elapsed, pause, destroy (`CreateTimer`, `TimerStart`, `GetExpiredTimer`, `TimerGetElapsed`, `PauseTimer`, `DestroyTimer`) | `platform/shell/{renderClock,betweenFrames,shell,trace,frameCost,responseProbe,rollback,analogPad}.ts` | `test/headless-timers.test.ts` (`test/timers56/`) | 3.0.1, 16 rows match (#56) |
-| Body position, fly height and facing writes (`SetUnitX/Y`, `SetUnitFlyHeight`, `BlzSetUnitFacingEx`) | `platform/shell/fighterBody.ts` | `test/headless-unit-motion.test.ts` (`test/unit-motion57/`) | 3.0.1, all 49 motion/facing rows match in Bun and both Lua32 modes ([#57](https://github.com/tompassarelli/wisp/issues/57#issuecomment-6053308287)) |
+| Timer deadlines, equal-deadline order, elapsed, pause, destroy (`CreateTimer`, `TimerStart`, `GetExpiredTimer`, `TimerGetElapsed`, `PauseTimer`, `DestroyTimer`) | `platform/shell/{renderClock,betweenFrames,shell,trace,frameCost,responseProbe,rollback,analogPad}.ts` | `test/lua32-fixtures.test.ts` (timers) (`test/timers56/`) | 3.0.1, 16 rows match (#56) |
+| Body position, fly height and facing writes (`SetUnitX/Y`, `SetUnitFlyHeight`, `BlzSetUnitFacingEx`) | `platform/shell/fighterBody.ts` | `test/lua32-fixtures.test.ts` (unit-motion) (`test/unit-motion57/`) | 3.0.1, all 49 motion/facing rows match in Bun and both Lua32 modes ([#57](https://github.com/tompassarelli/wisp/issues/57#issuecomment-6053308287)) |
 | Body setup: pathing off, Locust, Crow Form, pause, move speed (`SetUnitPathing`, `UnitAdd/RemoveAbility`, `PauseUnit`, `SetUnitMoveSpeed`, `GetUnitMoveSpeed`) | `platform/shell/fighterBody.ts`, `platform/objectData.ts`, `platform/shell/objectData.ts` | `test/headless-unit-movement.test.ts` (`test/unit-movement61/`) | 3.0.1, both rows match (#61) |
-| Unit object and state reads (`CreateUnit`, `RemoveUnit`, `GetUnitTypeId`, `ShowUnit`, `SetUnitScale`, `SetUnitVertexColor`, `Blz{Set,Get}UnitAttackCooldown`, `BlzSetUnitName`, `BlzSetUnitRealField`, `SetUnitInvulnerable`) | `platform/shell/{fighterBody,view,shell,matchStart,objectData}.ts`, `platform/objectData.ts` | `test/headless-unit-states.test.ts`, `test/object-data.test.ts` | 3.0.1, all 24 unit-state rows match native, Bun and Lua32 ([#44](https://github.com/tompassarelli/wisp/issues/44#issuecomment-6055269781)) |
+| Unit object and state reads (`CreateUnit`, `RemoveUnit`, `GetUnitTypeId`, `ShowUnit`, `SetUnitScale`, `SetUnitVertexColor`, `Blz{Set,Get}UnitAttackCooldown`, `BlzSetUnitName`, `BlzSetUnitRealField`, `SetUnitInvulnerable`) | `platform/shell/{fighterBody,view,shell,matchStart,objectData}.ts`, `platform/objectData.ts` | `test/lua32-fixtures.test.ts` (unit-states), `test/object-data.test.ts` | 3.0.1, all 24 unit-state rows match native, Bun and Lua32 ([#44](https://github.com/tompassarelli/wisp/issues/44#issuecomment-6055269781)) |
 | Animation selection, clock, seek and blend (`SetUnitAnimation(ByIndex)`, `SetUnitTimeScale`, `SetUnitBlendTime`, `BlzSetSpecialEffect{Animation,Time,TimeScale,AnimationBlendTime}`, `BlzPlaySpecialEffect`) | `game/render/fighterPool.ts`, `platform/shell/{view,preview,matchStart}.ts`, `game/render/placedObjectEffects.ts` | `test/animation.test.ts`, `test/runtime.test.ts` (`src/game/native/animation.tests.ts`) | 3.0.1, all 20 animation rulers match; 61/61 calibration marks ([#58](https://github.com/tompassarelli/wisp/issues/58#issuecomment-6055102913)) |
-| Effect create, place, scale, colour, orientation, destroy (`AddSpecialEffect`, `DestroyEffect`, `BlzSetSpecialEffect*`) | 38 + 26 sites under `game/render/` and `platform/shell/` | `test/headless-effects.test.ts` (`test/effects59/`, `test/animation58/`) | 3.0.1, 7 script rows and 10 effect rules match; five-second cleanup bracketed at 4.52–5.06 s (#59) |
-| Sound start, stop, kill-when-done, position, volume, pitch, duration (`CreateSound(FromLabel)`, `StartSound`, `StopSound`, `KillSoundWhenDone`, `SetSound*`, `GetSoundFileDuration`) | `game/render/{combatEffects,matchPresentation,specialEffects,modelSoundPresentation,bearFeedback}.ts` | `test/headless-sounds.test.ts` (`test/sounds60/`) | 3.0.1 rows match (#60); voice cap unresolved |
+| Effect create, place, scale, colour, orientation, destroy (`AddSpecialEffect`, `DestroyEffect`, `BlzSetSpecialEffect*`) | 38 + 26 sites under `game/render/` and `platform/shell/` | `test/lua32-fixtures.test.ts` (effects) (`test/effects59/`, `test/animation58/`) | 3.0.1, 7 script rows and 10 effect rules match; five-second cleanup bracketed at 4.52–5.06 s (#59) |
+| Sound start, stop, kill-when-done, position, volume, pitch, duration (`CreateSound(FromLabel)`, `StartSound`, `StopSound`, `KillSoundWhenDone`, `SetSound*`, `GetSoundFileDuration`) | `game/render/{combatEffects,matchPresentation,specialEffects,modelSoundPresentation,bearFeedback}.ts` | `test/lua32-fixtures.test.ts` (sounds) (`test/sounds60/`) | 3.0.1 rows match (#60); voice cap unresolved |
 | Music (`PlayMusic`, `StopMusic`, `ClearMapMusic`, `PlayThematicMusic`, `EndThematicMusic`) | `game/render/matchPresentation.ts` | Intentional no-ops (Mak'gora's `MAKGORA_NOOPS`) | Audible only; not a simulation rule |
-| Collision, pathing and engine orders | none: no `Issue*Order`, group, range or `SetUnitPosition` call | `overlapping-bodies-held` in `test/headless-unit-motion.test.ts` | Not used |
-| Number and text conversions (`R2S`, `R2SW`, `I2S`, `R2I`, `I2R`, `S2I`, `S2R`) | `S2I` of sync data in `game/ui/{stageUi,selectionUi}.ts`; chat arguments in `platform/shell/keys.ts`; `R2S`/`R2SW` in `platform/shell/{trace,view,diagnostics,frame,frameCost,renderClock}.ts` | `test/headless-script-rules.test.ts` rows `r2s` to `s2r` | 3.0.1, 7 rows match after the fixes below |
-| Synchronized messages: every client receives each one, the sender included, in each sender's order, with its sender and prefix; the size limit (`BlzSendSyncData`, `BlzTriggerRegisterPlayerSyncEvent`, `BlzGetTriggerSync{Data,Prefix}`, `GetTriggerPlayer`) | `platform/shell/{journal,rollback,playerFiles,stageLoad,journalPause,playtest}.ts`, `game/ui/{selectionUi,stageUi,frames}.ts` | `sync-*` rows in `test/headless-script-rules.test.ts`; latency in `test/sync-channel.test.ts` | Latency native-measured ([network model](network-model.md)); 3.0.1 order, sender and size rows match (size after the fix below) |
+| Collision, pathing and engine orders | none: no `Issue*Order`, group, range or `SetUnitPosition` call | `overlapping-bodies-held` in `test/lua32-fixtures.test.ts` (unit-motion) | Not used |
+| Number and text conversions (`R2S`, `R2SW`, `I2S`, `R2I`, `I2R`, `S2I`, `S2R`) | `S2I` of sync data in `game/ui/{stageUi,selectionUi}.ts`; chat arguments in `platform/shell/keys.ts`; `R2S`/`R2SW` in `platform/shell/{trace,view,diagnostics,frame,frameCost,renderClock}.ts` | `test/lua32-fixtures.test.ts` (script-rules) rows `r2s` to `s2r` | 3.0.1, 7 rows match after the fixes below |
+| Synchronized messages: every client receives each one, the sender included, in each sender's order, with its sender and prefix; the size limit (`BlzSendSyncData`, `BlzTriggerRegisterPlayerSyncEvent`, `BlzGetTriggerSync{Data,Prefix}`, `GetTriggerPlayer`) | `platform/shell/{journal,rollback,playerFiles,stageLoad,journalPause,playtest}.ts`, `game/ui/{selectionUi,stageUi,frames}.ts` | `sync-*` rows in `test/lua32-fixtures.test.ts` (script-rules); latency in `test/sync-channel.test.ts` | Latency native-measured ([network model](network-model.md)); 3.0.1 order, sender and size rows match (size after the fix below) |
 | Trigger actions: registration order across triggers, `DestroyTrigger` from its own action (`CreateTrigger`, `TriggerAddAction`, `DestroyTrigger`) | `platform/shell/{keyEvents,shell,playerFiles,analogPad}.ts`, `game/ui/{frames,selectionUi,stageUi}.ts` | `sync-order-*`, `trigger-destroyed-in-own-action` | 3.0.1 rows match |
 | Player slots (`Player`, `GetPlayerId`, `GetLocalPlayer`, `GetPlayerController`, `GetPlayerSlotState`) | `platform/shell/{inputs,playerFiles}.ts` and 20 files reading the local player | `player-*` rows | 3.0.1 rows match |
 | Map-made frame reads (`BlzFrameGetChildrenCount`, `BlzFrameGetChild`, `BlzFrameGetName`, `BlzFrameGetEnable`, `BlzFrameGetText`, `BlzFrameGetTextSizeLimit`, `BlzFrameIsVisible`) and frame writes | `platform/editboxJournal.ts`, `game/ui/*.ts` | `frame-*` rows | 3.0.1, 6 rows match after the fixes below. The chat box's place in Warcraft's own UI (children 2, 0, 4, 5) is not modeled: headless has no Warcraft UI, so `editboxJournal` takes its typed path |
@@ -704,8 +704,8 @@ retain the exact maps, files and measured rows.
 
 ### Script rules outside the six families
 
-Fixture: `test/script-rules50/` (Bun and 32-bit Lua in
-`test/headless-script-rules.test.ts`, native map via its `build.ts`). Warsmash
+Fixture: `test/script-rules50/` (32-bit Lua in
+`test/lua32-fixtures.test.ts`, native map via its `build.ts`). Warsmash
 offers only a weak lead here: its `R2S` prints Java's shortest decimal, its
 `R2SW` passes width and precision to the format in swapped places, its `S2I`
 and `S2R` accept only a whole well-formed number (anything else reads 0), and
@@ -782,8 +782,8 @@ at different frame rates gave these counts:
 
 Each rule below gives Warsmash's rule (from the subsection above), Wisp's
 behaviour before and after wisp#56, and a verdict. The row is the fixture line
-in `test/timers56/main.ts` that `test/headless-timers.test.ts` checks in Bun
-and 32-bit Lua, and that the native capture must reproduce.
+in `test/timers56/main.ts` that `test/lua32-fixtures.test.ts` checks in
+32-bit Lua, and that the native capture must reproduce.
 
 | Rule Mak'gora relies on | Warsmash rule | Wisp before | Wisp now | Verdict | Fixture row |
 | --- | --- | --- | --- | --- | --- |
@@ -840,7 +840,7 @@ unmeasured.
 The native capture builds `bun test/timers56/build.ts BASE.w3m OUT.w3x`, plays
 it in a two-player 3.0.1 private game for at least 1.25 game seconds and
 collects `timers56-p0.txt` and `timers56-p1.txt`; each must equal `EXPECTED`
-in `test/headless-timers.test.ts`. The 8 October capture (3.0.1.24342, both
+in `test/timers56/expected.ts`. The 8 October capture (3.0.1.24342, both
 clients) does, all 16 rows.
 
 wisp#134 measured the deadline sums directly on Classic 3.0.0.24268. A map
@@ -858,8 +858,8 @@ its 1/60 s deadline were one binary32 spacing below the toward-zero sum from
 callback 3,364 on. Round-to-nearest sums, deadlines computed as start plus
 n periods (binary32 or double), elapsed time as now minus start, and the
 65536 multiply in binary32 or double each match fewer readings, so the rule
-above stays; `test/headless-timers.test.ts` pins all readings and that
-residual. To recapture, build `bun test/timer134/build.ts BASE.w3m OUT.w3x`,
+above stays; the timer134 row of `test/lua32-fixtures.test.ts` pins all
+readings and that residual in 32-bit Lua. To recapture, build `bun test/timer134/build.ts BASE.w3m OUT.w3x`,
 play it once for at least 67 game seconds and read its CustomMapData files
 `timer134-N-p0.txt` and `timer134-fast-N-p0.txt`, `callback,reading` rows in
 files of 100.
@@ -902,7 +902,7 @@ samples it at a fraction of the file's length, away from the start and end.
 | `KillSoundWhenDone` right after `StartSound` (every one-shot cue) | The sound plays out, then the handle is released; from the call on, `GetSoundIsPlaying` reads false (3.0.1 capture, both clients) | Not registered | Plays out, then released; read as playing until it ends | Plays out, then released; read as not playing from the call | **Mismatch, fixed** from the native rows. Mak'gora never reads `GetSoundIsPlaying` | `kill-when-done-at-0.5=false` |
 | `StopSound` on a handle set to be killed (voice cut-off, Immolation release) releases it; stopping or starting a released handle does nothing | Released by the stop; later calls on it are ignored | Not registered | Released; later calls ignored | Same | **Match** | `stopped-kill-when-done-restarted=false`, `released-handle-started=false` |
 | `SetSoundPitch` changes how long a cue plays (swing pitch per tier) | Pitch is a playback-rate factor: pitch 2 ends in half the time | Setter does nothing | Ends at duration ÷ pitch | Same | **Match** | `pitch-two-at-0.25=true`, `pitch-two-at-0.75=false` |
-| `SetSoundPitch` and `SetSoundPosition` values (cue log) | `real` arguments are binary32 | Position not registered; pitch ignored | Stored unrounded: Bun's cue log kept doubles that Lua32 rounds | Stored as binary32 | **Mismatch, fixed** | Bun-only case in `test/headless-sounds.test.ts` (no getter in the game) |
+| `SetSoundPitch` and `SetSoundPosition` values (cue log) | `real` arguments are binary32 | Position not registered; pitch ignored | Stored unrounded: Bun's cue log kept doubles that Lua32 rounds | Stored as binary32 | **Mismatch, fixed** | Bun-only case in `test/lua32-fixtures.test.ts` (sounds) (no getter in the game) |
 | `StopSound(loop, false, true)` then a later `StartSound` (Immolation out, then lit again) | The fade-out ends the loop; a later start plays it again | Not registered | Stops at once; a later start plays | Same | **Match** for the later start. How long the fade lasts is audible only and stays with the capture | `fade-stopped-loop-at-1=false`, `fade-stopped-loop-restarted=true` |
 | Several new handles of one file or label started in one frame (a burst of hits and swings) | Each handle has its own voice; no per-file or per-channel cap is established. The engine's total voice count is finite and the quietest or lowest-priority voices may be dropped, which a script cannot see | No cap | No cap; each start is a cue | Same | **Native unresolved**: the fixture's 12 handles are set to be killed, so 3.0.1 reads all of them as not playing and the row can't count voices. Mak'gora can't observe a dropped voice either | `same-file-playing=0/12` |
 | `GetSoundFileDuration` feeding `SetSoundDuration` (announcer, voice, item and hover cues) | The file's length in milliseconds; 0 when missing | Decoded duration | Unmodelled: a map declares it or supplies it | Same; the fixture supplies 2,000 ms for its file | **Not applicable**: headless decodes no sound files, so a game supplies lengths through `natives` | (every case is timed from it) |

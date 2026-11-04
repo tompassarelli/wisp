@@ -1,5 +1,11 @@
+import { createLocation, locationZ } from "wisp/game/bodies";
+import { createTimer, destroyTimer, startTimer } from "wisp/game/clock";
+import { createEffect, setEffectPosition, setEffectTeamColor } from "wisp/game/effects";
+import { hideOriginFrames, namedFrame, screenHeight, screenWidth, setFrameVisible } from "wisp/game/frames";
+import { player, playerColor, setPlayerColor } from "wisp/game/players";
+import { CameraField, cameraEyeX, cameraEyeY, cameraEyeZ, cameraField, cameraTargetX, cameraTargetY, cameraTargetZ, enableFog, enableFogMask, setCameraBounds, setCameraField, setCameraPosition } from "wisp/game/view";
 import { configureRuntime } from "../../src/runtime/config";
-import { writeLines } from "../../src/map/fileio";
+import { writeLines } from "../gameApiLines";
 import { floorMod } from "../../src/sim/intMath";
 import { BOARD, CAMERA, GLOW, HIDDEN_Y, PHASES, PHASE_SECONDS, START_SECONDS, STATUS_FILE, TWIN } from "./layout";
 
@@ -12,21 +18,21 @@ export const GLOW_NOOPS = {
 
 function view(this: void): void {
   const { x, y } = CAMERA;
-  SetCameraBounds(x, y, x, y, x, y, x, y);
-  SetCameraField(CAMERA_FIELD_ROTATION, 90, 0);
-  SetCameraField(CAMERA_FIELD_ANGLE_OF_ATTACK, CAMERA.angleOfAttack, 0);
-  SetCameraField(CAMERA_FIELD_ROLL, 0, 0);
-  SetCameraField(CAMERA_FIELD_TARGET_DISTANCE, CAMERA.distance, 0);
-  SetCameraField(CAMERA_FIELD_ZOFFSET, 0, 0);
-  SetCameraField(CAMERA_FIELD_FIELD_OF_VIEW, CAMERA.fieldOfView, 0);
-  SetCameraField(CAMERA_FIELD_FARZ, 5000, 0);
-  SetCameraPosition(x, y);
+  setCameraBounds(x, y, x, y, x, y, x, y);
+  setCameraField(CameraField.rotation, 90, 0);
+  setCameraField(CameraField.angleOfAttack, CAMERA.angleOfAttack, 0);
+  setCameraField(CameraField.roll, 0, 0);
+  setCameraField(CameraField.targetDistance, CAMERA.distance, 0);
+  setCameraField(CameraField.zOffset, 0, 0);
+  setCameraField(CameraField.fieldOfView, CAMERA.fieldOfView, 0);
+  setCameraField(CameraField.farZ, 5000, 0);
+  setCameraPosition(x, y);
 }
 
 const hundredths = (value: number) => Math.floor(value * 100);
 
 function cameraRow(this: void): string {
-  return [CAMERA_FIELD_ROTATION, CAMERA_FIELD_ANGLE_OF_ATTACK, CAMERA_FIELD_TARGET_DISTANCE, CAMERA_FIELD_FIELD_OF_VIEW, CAMERA_FIELD_ZOFFSET].map((field) => hundredths(GetCameraField(field))).join(",");
+  return [CameraField.rotation, CameraField.angleOfAttack, CameraField.targetDistance, CameraField.fieldOfView, CameraField.zOffset].map((field) => hundredths(cameraField(field))).join(",");
 }
 
 export function install(this: void): void {
@@ -35,35 +41,36 @@ export function install(this: void): void {
 
 export function start(this: void): void {
   install();
-  FogEnable(false);
-  FogMaskEnable(false);
-  BlzHideOriginFrames(true);
-  BlzFrameSetVisible(BlzGetFrameByName("ConsoleUIBackdrop", 0), false);
-  SetPlayerColor(Player(0), PLAYER_COLOR_RED);
+  enableFog(false);
+  enableFogMask(false);
+  hideOriginFrames(true);
+  setFrameVisible(namedFrame("ConsoleUIBackdrop", 0), false);
+  setPlayerColor(player(0), 0);
   view();
-  AddSpecialEffect(BOARD, CAMERA.x, CAMERA.y);
+  createEffect(BOARD, CAMERA.x, CAMERA.y);
   const quad = (model: string) => {
-    const created = AddSpecialEffect(model, CAMERA.x, HIDDEN_Y);
-    BlzSetSpecialEffectColorByPlayer(created, Player(0));
+    const created = createEffect(model, CAMERA.x, HIDDEN_Y);
+    setEffectTeamColor(created, player(0));
     return created;
   };
   const glow = quad(GLOW), twin = quad(TWIN);
-  const ground = Location(CAMERA.x, CAMERA.y);
+  const ground = createLocation(CAMERA.x, CAMERA.y);
   let step = 0;
   const show = function(this: void): void {
     const phase = PHASES[floorMod(step, PHASES.length)] ?? "hidden";
     view();
-    BlzSetSpecialEffectPosition(glow, CAMERA.x, phase === "glow" ? CAMERA.y : HIDDEN_Y, 0);
-    BlzSetSpecialEffectPosition(twin, CAMERA.x, phase === "twin" ? CAMERA.y : HIDDEN_Y, 0);
-    writeLines(STATUS_FILE, [`phase=${phase}`, `step=${step}`, `width=${BlzGetLocalClientWidth()}`, `height=${BlzGetLocalClientHeight()}`,
-      `color=${GetHandleId(GetPlayerColor(Player(0)))}`, `ground=${hundredths(GetLocationZ(ground))}`, `camera=${cameraRow()}`,
-      `target=${hundredths(GetCameraTargetPositionX())},${hundredths(GetCameraTargetPositionY())},${hundredths(GetCameraTargetPositionZ())}`,
-      `eye=${hundredths(GetCameraEyePositionX())},${hundredths(GetCameraEyePositionY())},${hundredths(GetCameraEyePositionZ())}`]);
+    setEffectPosition(glow, CAMERA.x, phase === "glow" ? CAMERA.y : HIDDEN_Y, 0);
+    setEffectPosition(twin, CAMERA.x, phase === "twin" ? CAMERA.y : HIDDEN_Y, 0);
+    writeLines(STATUS_FILE, [`phase=${phase}`, `step=${step}`, `width=${screenWidth()}`, `height=${screenHeight()}`,
+      `color=${playerColor(player(0))}`, `ground=${hundredths(locationZ(ground))}`, `camera=${cameraRow()}`,
+      `target=${hundredths(cameraTargetX())},${hundredths(cameraTargetY())},${hundredths(cameraTargetZ())}`,
+      `eye=${hundredths(cameraEyeX())},${hundredths(cameraEyeY())},${hundredths(cameraEyeZ())}`]);
     step++;
   };
-  TimerStart(CreateTimer(), START_SECONDS, false, () => {
-    DestroyTimer(GetExpiredTimer());
+  const begin = createTimer();
+  startTimer(begin, START_SECONDS, false, () => {
+    destroyTimer(begin);
     show();
-    TimerStart(CreateTimer(), PHASE_SECONDS, true, show);
+    startTimer(createTimer(), PHASE_SECONDS, true, show);
   });
 }

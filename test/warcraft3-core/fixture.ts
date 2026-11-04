@@ -1,10 +1,10 @@
+import { luaClient } from "../../src/headless/lua";
 import type { Handle } from "../../src/game/native/types";
-import { HeadlessClient } from "../../src/headless/client";
 import type { NativeDeclarations } from "../../src/headless/declarations";
 import { f32 } from "../../src/sim/f32";
 
 export function unitReleaseFixture(declarations: NativeDeclarations): void {
-  const client = new HeadlessClient({ warcraftNatives: true, slot: 0, humans: [0], declarations, filePrefix: "unit-release", localNatives: {}, network: [], screen: { width: 1920, height: 1080 } });
+  const client = luaClient({ slot: 0, humans: [0], declarations, filePrefix: "unit-release", localNatives: {}, network: [], screen: { width: 1920, height: 1080 } });
   const call = (name: string, ...args: unknown[]) => {
     const fn = client.natives[name];
     if (typeof fn !== "function") throw new Error(`missing declaration ${name}`);
@@ -54,7 +54,7 @@ export function unitReleaseFixture(declarations: NativeDeclarations): void {
 
 export function coreFixture(declarations: NativeDeclarations, executed?: Set<string>): number {
   unitReleaseFixture(declarations);
-  const client = new HeadlessClient({ warcraftNatives: true, slot: 0, humans: [0], declarations, filePrefix: "warcraft3", localNatives: {}, network: [], screen: { width: 1920, height: 1080 } });
+  const client = luaClient({ slot: 0, humans: [0], declarations, filePrefix: "warcraft3", localNatives: {}, network: [], screen: { width: 1920, height: 1080 } });
   const tested = new Set<string>();
   const call = (name: string, ...args: unknown[]) => {
     const fn = client.natives[name];

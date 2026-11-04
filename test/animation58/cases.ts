@@ -1,3 +1,9 @@
+import { bodyX, bodyY, createBody, setBodyPathing, addBodyAbility, pauseBody, setBodyX, setBodyY, setBodyBlendTime, setBodyScale, setBodyAnimationIndex, setBodyAnimation, setBodyTimeScale, type Body } from "wisp/game/bodies";
+import { createTimer, destroyTimer, startTimer } from "wisp/game/clock";
+import { createEffect, destroyEffect, setEffectAnimation, setEffectBlendTime, setEffectPosition, setEffectTeamColor, setEffectTime, setEffectTimeScale, setEffectScale, setEffectYaw, setEffectMatrixScale, resetEffectMatrix, type Effect } from "wisp/game/effects";
+import { hideOriginFrames, namedFrame, setFrameVisible } from "wisp/game/frames";
+import { player } from "wisp/game/players";
+import { CameraField, enableFog, enableFogMask, setCameraBounds, setCameraField, setCameraPosition } from "wisp/game/view";
 import { f32 } from "../../src/sim/f32";
 import { BOARD, CAMERA, CLIP, DEATH_SECONDS, MARK, MARK_DY, ORIENTATION_MARK, READY_SECONDS, RULER, RULER_LENGTH, RULER_UNIT, SLOTS, START_SECONDS, slotNamed } from "./layout";
 
@@ -16,83 +22,84 @@ export const ANIMATION_NOOPS = {
 
 function view(this: void): void {
   const { x, y } = CAMERA;
-  SetCameraBounds(x, y, x, y, x, y, x, y);
-  SetCameraField(CAMERA_FIELD_ROTATION, 90, 0);
-  SetCameraField(CAMERA_FIELD_ANGLE_OF_ATTACK, 270, 0);
-  SetCameraField(CAMERA_FIELD_ROLL, 0, 0);
-  SetCameraField(CAMERA_FIELD_TARGET_DISTANCE, CAMERA.distance, 0);
-  SetCameraField(CAMERA_FIELD_ZOFFSET, 0, 0);
-  SetCameraField(CAMERA_FIELD_FIELD_OF_VIEW, CAMERA.fieldOfView, 0);
-  SetCameraField(CAMERA_FIELD_FARZ, 5000, 0);
-  SetCameraPosition(x, y);
+  setCameraBounds(x, y, x, y, x, y, x, y);
+  setCameraField(CameraField.rotation, 90, 0);
+  setCameraField(CameraField.angleOfAttack, 270, 0);
+  setCameraField(CameraField.roll, 0, 0);
+  setCameraField(CameraField.targetDistance, CAMERA.distance, 0);
+  setCameraField(CameraField.zOffset, 0, 0);
+  setCameraField(CameraField.fieldOfView, CAMERA.fieldOfView, 0);
+  setCameraField(CameraField.farZ, 5000, 0);
+  setCameraPosition(x, y);
 }
 
 function at(this: void, seconds: number, body: (this: void) => void): void {
-  TimerStart(CreateTimer(), seconds, false, () => {
-    DestroyTimer(GetExpiredTimer());
+  const once = createTimer();
+  startTimer(once, seconds, false, () => {
+    destroyTimer(once);
     body();
   });
 }
 
-function colored(this: void, model: string, x: number, y: number, player: number): effect {
-  const created = AddSpecialEffect(model, x, y);
-  BlzSetSpecialEffectColorByPlayer(created, Player(player));
+function colored(this: void, model: string, x: number, y: number, owner: number): Effect {
+  const created = createEffect(model, x, y);
+  setEffectTeamColor(created, player(owner));
   return created;
 }
 
-function rulerEffect(this: void, name: string): effect {
+function rulerEffect(this: void, name: string): Effect {
   const slot = slotNamed(name);
   return colored(RULER, slot.x, slot.y, 0);
 }
 
-function rulerUnit(this: void, name: string, blendTime: number): unit {
+function rulerUnit(this: void, name: string, blendTime: number): Body {
   const slot = slotNamed(name);
-  const created = CreateUnit(Player(0), RULER_UNIT, slot.x, slot.y, 0);
-  SetUnitPathing(created, false);
-  UnitAddAbility(created, LOCUST);
-  PauseUnit(created, true);
-  SetUnitX(created, slot.x);
-  SetUnitY(created, slot.y);
-  SetUnitBlendTime(created, blendTime);
+  const created = createBody(player(0), RULER_UNIT, slot.x, slot.y, 0);
+  setBodyPathing(created, false);
+  addBodyAbility(created, LOCUST);
+  pauseBody(created, true);
+  setBodyX(created, slot.x);
+  setBodyY(created, slot.y);
+  setBodyBlendTime(created, blendTime);
   return created;
 }
 
-function poolClip(this: void, name: string): effect {
+function poolClip(this: void, name: string): Effect {
   const slot = slotNamed(name);
   const clip = colored(CLIP, slot.x, slot.y, 0);
-  BlzSetSpecialEffectAnimationBlendTime(clip, 0);
-  BlzSetSpecialEffectAnimation(clip, "Stand");
-  BlzSetSpecialEffectTimeScale(clip, 0);
-  BlzSetSpecialEffectScale(clip, 0);
-  BlzSetSpecialEffectPosition(clip, slot.x, slot.y, -4096);
+  setEffectBlendTime(clip, 0);
+  setEffectAnimation(clip, "Stand");
+  setEffectTimeScale(clip, 0);
+  setEffectScale(clip, 0);
+  setEffectPosition(clip, slot.x, slot.y, -4096);
   return clip;
 }
 
-function showClip(this: void, clip: effect, name: string): void {
+function showClip(this: void, clip: Effect, name: string): void {
   const slot = slotNamed(name);
-  BlzSetSpecialEffectPosition(clip, slot.x, slot.y, 0);
-  BlzSetSpecialEffectYaw(clip, 0);
-  BlzSetSpecialEffectScale(clip, 1);
-  BlzSetSpecialEffectTime(clip, f32(0.4));
+  setEffectPosition(clip, slot.x, slot.y, 0);
+  setEffectYaw(clip, 0);
+  setEffectScale(clip, 1);
+  setEffectTime(clip, f32(0.4));
 }
 
 function preload(this: void): void {
-  for (const model of [RULER, CLIP]) BlzSetSpecialEffectScale(AddSpecialEffect(model, 0, PRELOAD_Y), 0);
-  const body = CreateUnit(Player(0), RULER_UNIT, 0, PRELOAD_Y, 0);
-  UnitAddAbility(body, LOCUST);
-  PauseUnit(body, true);
-  SetUnitScale(body, 0, 0, 0);
+  for (const model of [RULER, CLIP]) setEffectScale(createEffect(model, 0, PRELOAD_Y), 0);
+  const body = createBody(player(0), RULER_UNIT, 0, PRELOAD_Y, 0);
+  addBodyAbility(body, LOCUST);
+  pauseBody(body, true);
+  setBodyScale(body, 0, 0, 0);
 }
 
-function unitPositions(this: void, units: readonly (readonly [string, unit])[]): string[] {
-  return units.map(([name, body]) => `${name}-at=${Math.floor(GetUnitX(body) * 128)},${Math.floor(GetUnitY(body) * 128)}`);
+function unitPositions(this: void, units: readonly (readonly [string, Body])[]): string[] {
+  return units.map(([name, body]) => `${name}-at=${Math.floor(bodyX(body) * 128)},${Math.floor(bodyY(body) * 128)}`);
 }
 
 export function animationCases(this: void, done: (this: void, rows: readonly string[]) => void): void {
-  FogEnable(false);
-  FogMaskEnable(false);
-  BlzHideOriginFrames(true);
-  BlzFrameSetVisible(BlzGetFrameByName("ConsoleUIBackdrop", 0), false);
+  enableFog(false);
+  enableFogMask(false);
+  hideOriginFrames(true);
+  setFrameVisible(namedFrame("ConsoleUIBackdrop", 0), false);
   view();
   colored(BOARD, 0, 0, 11);
   colored(MARK, ORIENTATION_MARK[0], ORIENTATION_MARK[1], 4);
@@ -108,81 +115,81 @@ export function animationCases(this: void, done: (this: void, rows: readonly str
 function cases(this: void, done: (this: void, rows: readonly string[]) => void): void {
 
   const stand = rulerUnit("unit-stand", 0);
-  SetUnitAnimation(stand, "stand");
-  SetUnitTimeScale(stand, 0);
+  setBodyAnimation(stand, "stand");
+  setBodyTimeScale(stand, 0);
   const standHit = rulerUnit("unit-stand-hit", 0);
-  SetUnitAnimation(standHit, "stand hit");
-  SetUnitTimeScale(standHit, 0);
+  setBodyAnimation(standHit, "stand hit");
+  setBodyTimeScale(standHit, 0);
 
   const loop = rulerEffect("loop-played");
-  BlzSetSpecialEffectAnimation(loop, "walk");
+  setEffectAnimation(loop, "walk");
   const reference = rulerEffect("loop-reference");
-  BlzSetSpecialEffectAnimation(reference, "spell");
+  setEffectAnimation(reference, "spell");
   const held = rulerEffect("nonloop-held");
-  BlzSetSpecialEffectAnimation(held, "attack");
+  setEffectAnimation(held, "attack");
   at(4.5, () => {
-    for (const played of [loop, reference, held]) BlzSetSpecialEffectTimeScale(played, 0);
+    for (const played of [loop, reference, held]) setEffectTimeScale(played, 0);
   });
   for (const [name, animation] of [["loop-seek-past-end", "walk"], ["nonloop-seek-past-end", "attack"]] as const) {
     const sought = rulerEffect(name);
-    BlzSetSpecialEffectAnimation(sought, animation);
-    at(0.5, () => BlzSetSpecialEffectTimeScale(sought, 0));
-    at(1, () => BlzSetSpecialEffectTime(sought, 1.5));
+    setEffectAnimation(sought, animation);
+    at(0.5, () => setEffectTimeScale(sought, 0));
+    at(1, () => setEffectTime(sought, 1.5));
   }
 
   const birthDuring = rulerEffect("birth-during");
-  at(0.25, () => BlzSetSpecialEffectTimeScale(birthDuring, 0));
+  at(0.25, () => setEffectTimeScale(birthDuring, 0));
   const birthAfter = rulerEffect("birth-after");
-  at(1, () => BlzSetSpecialEffectTimeScale(birthAfter, 0));
+  at(1, () => setEffectTimeScale(birthAfter, 0));
 
   const blended = rulerUnit("blend-150", f32(0.15));
   const unblended = rulerUnit("blend-0", 0);
   const switchFrozen = rulerUnit("blend-switch-frozen", f32(0.15));
   const frozenSelect = rulerUnit("timescale-then-select", 0);
-  for (const body of [blended, unblended, switchFrozen, frozenSelect]) SetUnitAnimation(body, "stand");
+  for (const body of [blended, unblended, switchFrozen, frozenSelect]) setBodyAnimation(body, "stand");
   at(0.5, () => {
-    SetUnitAnimation(blended, "walk");
-    SetUnitAnimation(unblended, "walk");
+    setBodyAnimation(blended, "walk");
+    setBodyAnimation(unblended, "walk");
     for (const body of [switchFrozen, frozenSelect]) {
-      SetUnitTimeScale(body, 0);
-      SetUnitAnimation(body, "walk");
+      setBodyTimeScale(body, 0);
+      setBodyAnimation(body, "walk");
     }
   });
   at(f32(0.55), () => {
-    SetUnitTimeScale(blended, 0);
-    SetUnitTimeScale(unblended, 0);
+    setBodyTimeScale(blended, 0);
+    setBodyTimeScale(unblended, 0);
   });
 
   at(1, () => {
-    SetUnitTimeScale(switchFrozen, 0);
-    SetUnitTimeScale(frozenSelect, 0);
+    setBodyTimeScale(switchFrozen, 0);
+    setBodyTimeScale(frozenSelect, 0);
   });
 
   const globalFrozen = rulerEffect("global-frozen");
-  BlzSetSpecialEffectAnimation(globalFrozen, "stand");
-  BlzSetSpecialEffectTimeScale(globalFrozen, 0);
+  setEffectAnimation(globalFrozen, "stand");
+  setEffectTimeScale(globalFrozen, 0);
   const globalKept = rulerEffect("global-kept");
-  BlzSetSpecialEffectAnimation(globalKept, "stand");
-  at(f32(0.3), () => BlzSetSpecialEffectAnimation(globalKept, "walk"));
+  setEffectAnimation(globalKept, "stand");
+  at(f32(0.3), () => setEffectAnimation(globalKept, "walk"));
   at(f32(0.6), () => {
-    BlzSetSpecialEffectTimeScale(globalKept, 0);
-    BlzSetSpecialEffectTime(globalKept, 0.875);
+    setEffectTimeScale(globalKept, 0);
+    setEffectTime(globalKept, 0.875);
   });
   const outOfRange = rulerUnit("index-out-of-range", 0);
-  SetUnitTimeScale(outOfRange, 0);
-  SetUnitAnimationByIndex(outOfRange, 99);
+  setBodyTimeScale(outOfRange, 0);
+  setBodyAnimationIndex(outOfRange, 99);
 
   const selectFreeze = rulerEffect("select-freeze-seek");
   at(1, () => {
-    BlzSetSpecialEffectAnimation(selectFreeze, "walk");
-    BlzSetSpecialEffectTimeScale(selectFreeze, 0);
-    BlzSetSpecialEffectTime(selectFreeze, 0.25);
+    setEffectAnimation(selectFreeze, "walk");
+    setEffectTimeScale(selectFreeze, 0);
+    setEffectTime(selectFreeze, 0.25);
   });
   const freezeFirst = rulerEffect("freeze-then-select-seek");
-  at(0.5, () => BlzSetSpecialEffectTimeScale(freezeFirst, 0));
+  at(0.5, () => setEffectTimeScale(freezeFirst, 0));
   at(1, () => {
-    BlzSetSpecialEffectAnimation(freezeFirst, "walk");
-    BlzSetSpecialEffectTime(freezeFirst, 0.25);
+    setEffectAnimation(freezeFirst, "walk");
+    setEffectTime(freezeFirst, 0.25);
   });
 
   const shown = poolClip("clip-shown");
@@ -191,39 +198,39 @@ function cases(this: void, done: (this: void, rows: readonly string[]) => void):
     showClip(shown, "clip-shown");
     showClip(reseek, "clip-second-seek");
   });
-  at(f32(1.05), () => BlzSetSpecialEffectTime(reseek, f32(0.4)));
+  at(f32(1.05), () => setEffectTime(reseek, f32(0.4)));
 
   const deathReference = rulerEffect("death-reference");
-  BlzSetSpecialEffectAnimation(deathReference, "stand");
-  at(DEATH_SECONDS, () => BlzSetSpecialEffectAnimation(deathReference, "death"));
+  setEffectAnimation(deathReference, "stand");
+  at(DEATH_SECONDS, () => setEffectAnimation(deathReference, "death"));
   for (const [name, after] of [["death-at-0", 0], ["death-at-1", 1], ["death-at-2", 2]] as const) {
     const dying = rulerEffect(name);
-    BlzSetSpecialEffectAnimation(dying, "stand");
-    at(DEATH_SECONDS + after, () => DestroyEffect(dying));
+    setEffectAnimation(dying, "stand");
+    at(DEATH_SECONDS + after, () => destroyEffect(dying));
   }
   const deathFrozen = rulerEffect("death-frozen");
   const teardown = rulerEffect("teardown-hidden");
   const noDeath = colored(CLIP, slotNamed("no-death-frozen").x, slotNamed("no-death-frozen").y, 0);
   for (const frozen of [deathFrozen, teardown, noDeath]) {
-    BlzSetSpecialEffectAnimation(frozen, "stand");
-    at(0.5, () => BlzSetSpecialEffectTimeScale(frozen, 0));
+    setEffectAnimation(frozen, "stand");
+    at(0.5, () => setEffectTimeScale(frozen, 0));
   }
   at(DEATH_SECONDS, () => {
-    DestroyEffect(deathFrozen);
-    DestroyEffect(noDeath);
-    BlzSetSpecialEffectScale(teardown, 0);
-    DestroyEffect(teardown);
+    destroyEffect(deathFrozen);
+    destroyEffect(noDeath);
+    setEffectScale(teardown, 0);
+    destroyEffect(teardown);
   });
 
   for (const [name, reset, calls] of [["matrix-scale-once", false, 1], ["matrix-scale-twice", false, 2], ["matrix-scale-reset", true, 2]] as const) {
     const scaled = rulerEffect(name);
-    BlzSetSpecialEffectAnimation(scaled, "stand");
-    at(f32(0.1), () => BlzSetSpecialEffectTimeScale(scaled, 0));
+    setEffectAnimation(scaled, "stand");
+    at(f32(0.1), () => setEffectTimeScale(scaled, 0));
     at(0.5, () => {
-      BlzSetSpecialEffectTime(scaled, 0.125);
+      setEffectTime(scaled, 0.125);
       for (let call = 0; call < calls; call++) {
-        if (reset && call > 0) BlzResetSpecialEffectMatrix(scaled);
-        BlzSetSpecialEffectMatrixScale(scaled, 2, 1, 1);
+        if (reset && call > 0) resetEffectMatrix(scaled);
+        setEffectMatrixScale(scaled, 2, 1, 1);
       }
     });
   }

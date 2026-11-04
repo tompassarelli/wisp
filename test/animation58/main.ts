@@ -1,5 +1,6 @@
+import { localPlayer, playerSlot } from "wisp/game/players";
 import { configureRuntime } from "../../src/runtime/config";
-import { writeLines } from "../../src/map/fileio";
+import { writeLines } from "../gameApiLines";
 import { animationCases } from "./cases";
 
 export function install(this: void): void {
@@ -8,5 +9,5 @@ export function install(this: void): void {
 
 export function start(this: void): void {
   install();
-  animationCases(rows => writeLines(`animation-p${GetPlayerId(GetLocalPlayer())}.txt`, rows));
+  animationCases(rows => writeLines(`animation-p${playerSlot(localPlayer())}.txt`, rows));
 }

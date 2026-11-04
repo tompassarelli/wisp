@@ -17,6 +17,9 @@ import { CAPTURE_FRAME, RULER, RULER_DEATH_SECONDS } from "../animation58/layout
 import { animationRows } from "../animation58/rows";
 import { PLAYER_MOUSE_JOURNEY } from "../player-mouse67/journey";
 import { scheduleRows } from "../sync-delivery71/schedule";
+import { TIMER134_CALLBACKS, TIMER134_FAST_CALLBACKS } from "../timer134/main";
+import { effectOrderRows } from "../effects59/order";
+import { WARCRAFT3_NATIVES } from "../../src/headless/warcraft3Natives";
 
 // One Lua32 run of every fixture in test/lua32-fixtures.test.ts: it prints each fixture's rows, prefixed by its name, for the test to compare.
 declare const arg: Readonly<Record<number, string | undefined>>;
@@ -40,7 +43,7 @@ const FIXTURES: Record<string, (this: void, bundle: string) => string[]> = {
   "warcraft3": () => {
     const executed = new Set<string>();
     allWarcraft3Fixtures(parseNativeDeclarations(declarations), executed);
-    return [...executed].sort();
+    return WARCRAFT3_NATIVES.filter(name => executed.has(name));
   },
   "sync-delivery": () => scheduleRows(),
   "coverage": () => {
@@ -58,6 +61,15 @@ const FIXTURES: Record<string, (this: void, bundle: string) => string[]> = {
   "timers": bundle => {
     const clients = played(luaLockstep({ filePrefix: "timers56" }, bundle, declarations), 76);
     return diverged(clients, files(clients, ["timers56"]));
+  },
+  "timer134": bundle => {
+    const clients = luaLockstep({ filePrefix: "timer134", players: [0] }, bundle, declarations);
+    clients.start();
+    const client = clients.clients[0];
+    for (let frame = 0; frame < 2 * TIMER134_CALLBACKS && client?.files.get(`timer134-${TIMER134_CALLBACKS}-p0.txt`) === undefined; frame += 60) clients.frames(60);
+    const chunks = (name: string, total: number) => Array.from({ length: Math.ceil(total / 100) }, (_, index) => Math.min(total, 100 * (index + 1)))
+      .flatMap(count => client?.files.get(`${name}-${count}-p0.txt`) ?? [`missing ${name}-${count}`]);
+    return [...chunks("timer134-fast", TIMER134_FAST_CALLBACKS).map(row => `fast ${row}`), ...chunks("timer134", TIMER134_CALLBACKS)];
   },
   "player-mouse": bundle => {
     const clients = luaLockstep({ filePrefix: "player-mouse67" }, bundle, declarations, undefined, syncDelivery(MEASURED_BATTLE_NET, 67));
@@ -86,6 +98,12 @@ const FIXTURES: Record<string, (this: void, bundle: string) => string[]> = {
     const clients = luaLockstep({ filePrefix: "effects", intentionalNoops: EFFECT_NOOPS, effectDeaths: EFFECT_DEATHS }, bundle, declarations);
     const timeline = deathTimeline(clients);
     return diverged(clients, [...files(clients, ["effects"]), ...timeline]);
+  },
+  "effect-order": bundle => {
+    const clients = luaLockstep({ filePrefix: "effects", intentionalNoops: EFFECT_NOOPS, effectDeaths: EFFECT_DEATHS, players: [0] }, bundle, declarations);
+    clients.start();
+    const client = clients.clients[0];
+    return client === undefined ? ["no client"] : effectOrderRows(client);
   },
   "animation": bundle => {
     const effectDeaths = (model: string) => (model === RULER ? RULER_DEATH_SECONDS : undefined);
