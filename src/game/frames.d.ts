@@ -42,6 +42,15 @@ export declare const TextAlignment: {
 export declare const OriginFrame: {
   readonly gameUi: OriginFrame;
   readonly chatMsg: OriginFrame;
+  readonly commandButton: OriginFrame;
+  readonly itemButton: OriginFrame;
+  readonly heroBar: OriginFrame;
+  readonly heroButton: OriginFrame;
+  readonly heroHpBar: OriginFrame;
+  readonly heroManaBar: OriginFrame;
+  readonly heroButtonIndicator: OriginFrame;
+  readonly minimap: OriginFrame;
+  readonly minimapButton: OriginFrame;
 };
 
 export type FrameKind = "BACKDROP" | "BUTTON" | "CHECKBOX" | "EDITBOX" | "FRAME" | "GLUEBUTTON" | "GLUETEXTBUTTON" | "HIGHLIGHT" | "SCROLLBAR" | "SLIDER" | "SPRITE" | "TEXT" | "TEXTAREA";
