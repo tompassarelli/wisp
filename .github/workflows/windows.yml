@@ -29,7 +29,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.2
+          bun-version: 1.4.4
       - run: bun install --frozen-lockfile
       - run: gcc --version && cmake --version && command -v gcc make cmake
       - run: bun host/compile/buildWindowsTools.ts "$RUNNER_TEMP/windows-tools"
@@ -51,7 +51,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.2
+          bun-version: 1.4.4
       - run: bun install --frozen-lockfile
       - name: Remove compilers, make and nix from PATH
         run: |
@@ -107,7 +107,7 @@ jobs:
       - if: steps.crate.outputs.present == 'true'
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.2
+          bun-version: 1.4.4
       - if: steps.crate.outputs.present == 'true'
         run: bun install --frozen-lockfile
       - if: steps.crate.outputs.present == 'true'

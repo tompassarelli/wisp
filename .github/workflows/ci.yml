@@ -50,7 +50,7 @@ jobs:
           ref: ${{ inputs.ref }}
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.2
+          bun-version: 1.4.4
       - run: bun install --frozen-lockfile
       - run: bun host/checks/cleanRoom.ts
       - run: git clone --depth 1 https://github.com/tompassarelli/north "$RUNNER_TEMP/north"
@@ -85,7 +85,7 @@ jobs:
     uses: ./.github/workflows/consumer.yml
     with:
       ref: ${{ inputs.ref }}
-      bun-version: 1.4.2
+      bun-version: 1.4.4
       test: bun run test examples/sample
       headless: bun examples/sample/scripts/sample.ts headless
       artifact-name: wisp-ci-sample
@@ -94,7 +94,7 @@ jobs:
     uses: ./.github/workflows/consumer.yml
     with:
       ref: ${{ inputs.ref }}
-      bun-version: 1.4.2
+      bun-version: 1.4.4
       check: ""
       test: ""
       lua: false
@@ -111,7 +111,7 @@ jobs:
           ref: ${{ inputs.ref }}
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.2
+          bun-version: 1.4.4
       - run: bun install --frozen-lockfile
       - run: bunx knip@6.38.0
 
@@ -174,7 +174,7 @@ jobs:
       - if: steps.crate.outputs.present == 'true'
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.2
+          bun-version: 1.4.4
       - if: steps.crate.outputs.present == 'true'
         run: bun install --frozen-lockfile
       - if: steps.crate.outputs.present == 'true'
@@ -233,7 +233,7 @@ jobs:
           fetch-depth: 0
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.2
+          bun-version: 1.4.4
       - run: npm i -g @ast-grep/cli@0.42.1
       - run: git clone --depth 1 https://github.com/tompassarelli/north "$RUNNER_TEMP/north"
       - run: cargo build --release --locked --bin north && echo "CODE_HEALTH_NORTH_BIN=$PWD/target/release/north" >> "$GITHUB_ENV"

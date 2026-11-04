@@ -29,7 +29,7 @@ jobs:
   wisp:
     uses: tompassarelli/wisp/.github/workflows/consumer.yml@<wisp commit>
     with:
-      bun-version: 1.4.2              # the game's packageManager version
+      bun-version: 1.4.4              # the game's packageManager version
       wisp-ref: <wisp commit>          # the same commit; checked against package.json
       headless: bun scripts/game.ts headless
       soak: bun scripts/game.ts soak --minutes 5
@@ -57,7 +57,7 @@ run `ci pre-merge` in a job of their own, with the history it diffs:
           fetch-depth: 0               # ci pre-merge diffs against the base commit
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.2
+          bun-version: 1.4.4
       - run: bun install --frozen-lockfile
       - run: bun scripts/game.ts ci pre-merge --base ${{ github.event.pull_request.base.sha }}
 ```
@@ -299,7 +299,7 @@ it locally.
    a test is new unless main's result also had one in that suite.
    Beside the suite, a `code-health` job runs north's
    `harness/code-health/cli.ts gate BASE SHA` on the rebased commit (Bun
-   1.4.2, ast-grep 0.42.1); new debt (exit 1) or a gate error (exit 2)
+   1.4.4, ast-grep 0.42.1); new debt (exit 1) or a gate error (exit 2)
    refuses the branch. The gate passes without `structure.toml`.
    A `ci` job runs wisp:.github/workflows/ci.yml itself on the rebased commit
    (`ref` the commit, `base` the main it was rebased onto, `bun-tests: skip`
