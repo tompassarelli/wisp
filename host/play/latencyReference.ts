@@ -9,7 +9,8 @@ import { decodePpm } from "../contract/services";
 import { runTool } from "../os/warcraft/desktopClient";
 import { DesktopFailure } from "../contract/client";
 import { referenceChromeArguments } from "../render/chromeArguments";
-import { type PressLatencyOptions, pressLatency, type Rect } from "./pressLatency";
+import type { Rect } from "./grabBrackets";
+import { type PressLatencyOptions, pressLatency } from "./pressLatency";
 
 /** Frames the reference page waits between the key and the pixel it changes. */
 const REFERENCE_DELAYS = [0, 4, 8] as const;
@@ -112,7 +113,7 @@ export const checkPressLatency = (options: Pick<PressLatencyOptions, "waylandRun
       writeFileSync(page, referencePage(frames));
       const report = yield* Effect.scoped(Effect.gen(function*() {
         yield* chromeFor(chrome, options.display, join(work, "profile"), page);
-        const measured = { ...options, window: "reference" as const, input: "xtest" as const, waylandDisplay: "wayland-0", sampleLog: undefined, flash: false, inputDelayFrames: 0, key: "j", region: REGION, control: CONTROL, out: join(options.out, `frames-${frames}`) };
+        const measured = { ...options, window: "reference" as const, input: "xtest" as const, waylandDisplay: "wayland-0", sampleLog: undefined, flash: false, inputDelayFrames: 0, follow: undefined, key: "j", region: REGION, control: CONTROL, out: join(options.out, `frames-${frames}`) };
         yield* shown(measured, CONTROL);
         yield* Effect.sleep(1500);
         return yield* pressLatency(measured);

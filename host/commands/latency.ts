@@ -10,7 +10,7 @@ class LatencyFailure extends Schema.TaggedError<LatencyFailure, { readonly brand
   override get message() { return this.problem; }
 }
 
-const USAGE = "press --window native|chrome|warcraft|reference (--display :N | --input wayland) --wayland-runtime DIR [--wayland-display NAME] --key KEYSYM --region X,Y,W,H (--control X,Y,W,H | --flash) --out DIR [--trials N] [--settle-ms MS] [--sample-log FILE] [--input-delay-frames N] [--warcraft press-latency.json]   (wisp:docs/native-window-plan.md, box W2)";
+const USAGE = "press --window native|chrome|warcraft|reference (--display :N | --input wayland) --wayland-runtime DIR [--wayland-display NAME] --key KEYSYM --region X,Y,W,H (--control X,Y,W,H | --flash [--follow X,Y,W,H]) --out DIR [--trials N] [--settle-ms MS] [--sample-log FILE] [--input-delay-frames N] [--warcraft press-latency.json]   (wisp:docs/native-window-plan.md, box W2)";
 
 const attempt = <A>(run: () => Promise<A>) => Effect.tryPromise({ try: run, catch: (cause) => new LatencyFailure({ problem: describeCause(cause) }) });
 

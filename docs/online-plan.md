@@ -462,10 +462,87 @@ a grab are left out and counted below.
   XTEST write to the window's next poll of the keyboard, 33.3 ms of input
   delay, and 12.6 ms from there to the changed pixels (the sim step that
   carries the press, the scene, and Mailbox's present).
-- **The flash removes the jab's lead-in.** The same window, same run, measured
-  with the jab-region method (`--region 555,680,240,240 --control 900,850,300,40`,
-  fullscreen) gave a press p50 of 75.7 ms (p95 99.6 ms, 16 of 24 counted; an earlier 12-trial jab run gave 74.4 ms). The 60-trial flash run of that window, minutes before, gave
-  56.2 ms (p50). The 19.5 ms between them, 1.2 display frames, is the frames before the jab's first pose differs from idle, which the flash does not count; the jab method's own median came from 16 counted trials, so its spread is wide.
+- **The jab-region method reads one frame late.** The same window, same run,
+  measured with the jab-region method (`--region 555,680,240,240 --control 900,850,300,40`,
+  fullscreen) gave a press p50 of 75.7 ms (p95 99.6 ms, 16 of 24 counted; an
+  earlier 12-trial jab run gave 74.4 ms), against 56.2 ms from the 60-trial
+  flash run minutes before: 19.5 ms apart. The frame-stamped capture below
+  shows the jab's first pose on the flash's own frame, and the jab method
+  firing one frame later because of its threshold.
+
+### Where the jab method's extra frame goes (wisp#244, 5 November 2026)
+
+`latency press --flash --follow X,Y,W,H` times a second region in the same
+grabs as the flash. Every grab holds both regions, so the two are compared
+frame for frame on the same compositor frames. Each trial row gives the
+grab the flash appeared in (`follow.flashGrab`), the follow region's changed
+pixels in each grab from the press on (`follow.changedByGrab`), the grab
+where it passed the jab method's own threshold (3x its drift over a 300 ms
+baseline, at least 300 pixels), and the display frames between the two
+(`follow.framesAfterFlash`).
+
+For this capture only, the flash was moved next to the fighter, so one
+400x240 grab holds both regions (Mak'gora a5be2536b2 with `FLASH_LEFT`
+0.0125 and `FLASH_TOP` 0.3875; the flash region was 215,695,130,130 and the
+jab region 555,680,240,240, fullscreen 2880x1920). The flash is drawn in the
+same frame wherever it sits. Kept at the corner, the joint grab is 615x910
+and catches only every other frame. Laptop, Mailbox, delay 2, key N, 64
+trials, 1 s settle (run m1).
+
+- **The jab's first pose is on the flash's frame.** The fighter's idle
+  animation moves 1,000 to 1,500 pixels of the region a frame. The jab's
+  first pose moves 6,500 to 14,100 (p50 13,600) and the second 28,000 to
+  38,000. In the 36 trials that started from a still fighter and counted,
+  the first grab with a jab-sized change (over 5,000 pixels) was the
+  flash's grab every time.
+- **The jab method fires on the second pose.** Its threshold, 3x the idle
+  drift over 300 ms, was p50 19,600 pixels (17,100 at least), above the
+  first pose. In the 29 trials where the grabs caught the first pose, the
+  jab method fired exactly 1 display frame after the flash. In the other 7,
+  the flash's grab already showed the second pose and both fired on the
+  same grab.
+- **The flash does not under-read.** The 19.5 ms gap is one display frame
+  (16.9 ms at 59.1 Hz) from the jab method's threshold, plus 2.6 ms between
+  two separate runs. The flash is the instrument; the jab method's
+  medians run a frame high whenever the idle drift sets the threshold
+  above the first pose. A second capture (m2, same build) gave the same:
+  in 43 of 43 trials starting from a still fighter, the first jab-sized
+  change was in the flash's grab, and in 17 of the 43 that change was below
+  the threshold.
+
+### What a missed grab is on the native window (wisp#244, 5 November 2026)
+
+Runs 1 to 5 below lost 13 to 22 of 100 native trials to "missed a grab"
+against 0 on Warcraft, which could bias native's median low if the lost
+trials were the slow ones. The harness now records, for every trial, the
+time between one grab's end and the next grab's request (`grabs.overheadP50Ms`,
+`answerGrab.overheadMs`) and each grab's wait for the compositor
+(`grabs.waitP50Ms`, `answerGrab.waitMs`).
+
+- **The harness never paused.** Between grabs it spent 0.03 to 0.3 ms
+  (p50 per trial), so a screencopy request was pending through every
+  bracket. wlroots answers a pending request on the next frame it
+  commits, so a grab that waited two vblanks means the compositor
+  committed no frame at the first: the screen skipped that vblank.
+- **The flash's frame skips more often than other frames.** Under Mailbox
+  (30 trials, fullscreen), 8% of ordinary grabs waited two vblanks, against
+  8 of the 30 grabs (27%) that first showed the flash. The answering
+  brackets were 30 to 33 ms, two vblanks to the millisecond. So the frame that
+  carries the press reaches the screen a vblank late in about one press in
+  four, and the old harness dropped exactly those trials.
+- **The fix counts them.** A bracket wider than 1.5 frames that the harness
+  waited through, with its next grab requested within 2 ms of the last
+  one's end, is now counted as one display frame ending at the answering
+  grab (`skippedVblanks` on the row), the same convention as every other
+  trial. Only a bracket the harness itself paused across stays uncounted.
+- **A censored sample is refused.** When more than 2% of trials are
+  uncounted, `latency press` prints `N of M trials missed: result invalid:
+  censored sample`, writes the rows with no p50 or p95, and exits 1, so no
+  median stands on the survivors.
+- **The jab-region method was also slowed by the harness.** Its stop test
+  recomputed every grab since the press on each new grab. It now checks
+  only the newest grab, so the test costs the same every grab.
+
 
 A flash trial takes 0.41 s at p50 and 0.52 s at p95 (native, 60 trials in
 25.4 s; Warcraft 0.43 and 0.54 s, 60 trials in 28.0 s), against 12.0 s for the

@@ -6,7 +6,8 @@ import { Effect, Fiber } from "effect";
 import type { Frame } from "../host/contract/services";
 import { checkArguments, referenceErrors } from "../host/play/latencyReference";
 import { decodePressRun, latencyReport } from "../host/play/latencyComparison";
-import { changedPixels, framePeriodMs, pressLatencyArguments, pressToSample, response, windowShare, type Sample } from "../host/play/pressLatency";
+import { changeWatch, changedPixels, displayFrameMs, followRow, framePeriodMs, response, shown, type Sample } from "../host/play/grabBrackets";
+import { pressLatencyArguments, pressResult, pressToSample, windowShare } from "../host/play/pressLatency";
 import { openSampleLog, parseSampleLog } from "../host/window/sampleLog";
 import { monotonicNs } from "../host/os/platform/linux/monotonic";
 import { Reader, displaySocket, fakeKey, keycodeOf, keysymOf, queryExtension } from "../host/play/xtest";
@@ -136,4 +137,50 @@ test("[spec docs/online-plan.md] flash mode needs no control region, and the pre
   const edges = parseSampleLog('{"sampleNs":40000000,"mask":1,"pressed":true}\n');
   expect(pressToSample(edges, 36 * ms)).toBe(4);
   expect(pressToSample(edges, 41 * ms)).toBeUndefined();
+});
+
+test("[spec docs/online-plan.md] a follow region is timed in the flash's own grabs, so its lag is counted in display frames from the grab the flash appeared in", () => {
+  const flashRegion = { x: 0, y: 0, width: 2, height: 2 };
+  const follow = { x: 2, y: 2, width: 2, height: 2 };
+  const lit = (x: number, y: number) => [[x, y]] as const;
+  const frames = [frame(4, 4), frame(4, 4), frame(4, 4, [...lit(1, 1)]), frame(4, 4, [...lit(1, 1)]), frame(4, 4, [...lit(1, 1), ...lit(3, 3)])];
+  const grabs: Sample[] = frames.map((f, index) => ({ frame: f, beforeNs: (index * 16 + 1) * ms, afterNs: (index + 1) * 16 * ms }));
+  const flash = response(grabs, flashRegion, 0, 20 * ms)!;
+  expect(flash).toMatchObject({ reference: 0, index: 2 });
+  const lag = (threshold: number) => followRow(grabs, follow, flash, 20 * ms, 16, threshold);
+  expect(lag(0)).toEqual({ threshold: 0, flashGrab: 2, pressMs: 52, framesAfterFlash: 2, changedByGrab: [0, 0, 0, 1] });
+  expect(lag(1).pressMs).toBeUndefined();
+});
+
+test("[spec docs/online-plan.md] a run with more than 2% of its trials uncounted is refused as a censored sample, with no median over the survivors", () => {
+  const countedRow = { idleChanged: 0, threshold: 100, changed: 16900, frameMs: 16.7, pressWriteMs: 0.14, pressMs: 34.8, windowShareMs: 24.4, pressToSampleMs: 10.4, baselineMs: 326, quietWaits: 0, watchMs: 192, settledMs: 1000, trialMs: 1521, lowerMs: 16.4, upperMs: 53.1, bracketMs: 36.7, skippedFrames: 0, controlChanged: undefined, follow: undefined };
+  const missedRow = { ...countedRow, pressMs: undefined, windowShareMs: undefined, pressToSampleMs: undefined, lowerMs: undefined, upperMs: undefined, bracketMs: 30.8, skippedFrames: 1 };
+  const options = pressLatencyArguments(["--window", "native", "--display", ":1", "--wayland-runtime", "/run/x", "--key", "n", "--region", "1,2,30,30", "--flash", "--out", "/tmp/o"], {});
+  if (typeof options === "string") throw new Error(options);
+  const run = (missed: number) => Effect.runSync(pressResult(options, [...Array(100 - missed).fill(countedRow), ...Array(missed).fill(missedRow)]).pipe(
+    Effect.match({ onFailure: (refused) => refused.message, onSuccess: (report) => `p50 ${report.pressMs.p50}` })));
+  expect(run(20)).toBe("20 of 100 trials missed: result invalid: censored sample");
+  expect(run(2)).toBe("p50 34.8");
+  expect(run(3)).toBe("3 of 100 trials missed: result invalid: censored sample");
+});
+
+test("[spec docs/online-plan.md] the stop test finds the same grab as the bracket, checking each grab once", () => {
+  const grabs = samples(false, false, false, true, true);
+  const watch = changeWatch(region, 1);
+  expect(watch(grabs.slice(0, 3), 40 * ms)).toBe(false);
+  expect(watch(grabs.slice(0, 3), undefined)).toBe(false);
+  expect(watch(grabs.slice(0, 4), 40 * ms)).toBe(true);
+  expect(changeWatch(region, 2)(grabs, 40 * ms)).toBe(false);
+});
+
+test("[spec docs/online-plan.md] a two-vblank bracket the harness waited through is a skipped vblank counted on its answering frame; one it paused across is uncounted", () => {
+  const grabs = samples(false, false, true);
+  const waited = grabs.map((sample, index) => (index === 2 ? { ...sample, beforeNs: grabs[1]!.afterNs + 0.1 * ms, afterNs: sample.afterNs + 16 * ms } : sample));
+  const found = response(waited, region, 1, 33 * ms)!;
+  expect(found.bracketMs).toBe(32);
+  expect(shown(waited, found, 16)).toEqual({ lowerMs: 15, upperMs: 31, skippedVblanks: 1 });
+  const paused = waited.map((sample, index) => (index === 2 ? { ...sample, beforeNs: sample.beforeNs + 10 * ms } : sample));
+  expect(shown(paused, response(paused, region, 1, 33 * ms)!, 16)).toBeUndefined();
+  expect(shown(grabs, response(grabs, region, 1, 33 * ms)!, 16)).toEqual({ lowerMs: 0, upperMs: 15, skippedVblanks: 0 });
+  expect(displayFrameMs(waited)).toBe(16);
 });
