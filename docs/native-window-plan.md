@@ -233,6 +233,8 @@ one lands inside a step, so the worker frame p99 rises from 3.78 to 5.39 ms at
 rollback 0 and from 5.48 to 7.10 ms at rollback 7, and the pause max from 7.44
 to 12.92 and 5.38 to 15.96 ms. The cadence stays.
 
+Bun 1.4.4 gives the same answer (4 November 2026, same machine, cells and command, three runs each interleaved, south:agents/decisions/makgora/perf-smooth-plan.md). With the cadence the worker frame p99 is 3.21 ms at rollback 0 and 4.30 at rollback 7, 0.091 collections per step and a pause max of 4.97 and 4.65 ms. With a turn every frame and collections left to Bun it is 5.21 and 5.89 ms, 0.028 collections per step, and a pause max of 11.58 and 10.69 ms; one of four such rollback 7 runs hung until the 600 s limit. The cadence stays.
+
 ### Libraries
 
 Licences were checked on crates.io on 30 October 2026 and are recorded in

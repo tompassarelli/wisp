@@ -121,7 +121,7 @@ export function createFrameLoop(player: NativePlayer, window: WindowView, option
 
 const EVENT_WAIT_MS = 1000;
 const NET_POLL_MS = 1;
-/** Frames between event-loop turns once nothing is being read: Bun 1.4.2 collects rarely on its own but then inside a step, so turns and collections are taken here, between frames (docs/native-window-plan.md, "The game steps on a worker thread"). */
+/** Frames between event-loop turns once nothing is being read: Bun 1.4.4 collects rarely on its own but then inside a step, so turns and collections are taken here, between frames (docs/native-window-plan.md, "The game steps on a worker thread"). */
 export const YIELD_EVERY_FRAMES = 12;
 
 const turn = Effect.callback<void>((resume) => { setImmediate(() => resume(Effect.void)); });
