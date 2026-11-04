@@ -1,14 +1,15 @@
 import { expect, test } from "bun:test";
-import { type MapInfo, declareMap, loadingScreenModel } from "../host/toolchain/mapInfo";
+import { type MapInfo, declareMap, loadingScreenModel, supportedModes } from "../host/toolchain/mapInfo";
 
 const text = (value: string) => new TextEncoder().encode(`${value}\0`);
 const int = (value: number) => { const bytes = new Uint8Array(4); new DataView(bytes.buffer).setInt32(0, value, true); return bytes; };
 const join = (...parts: Uint8Array[]) => { const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0)); let at = 0; for (const p of parts) { out.set(p, at); at += p.length; } return out; };
 
 const after = join(text("Loading text"), text("Title"), text("Subtitle"), int(2), text("prologue"));
+const closing = join(int(1), int(3), ...Array.from({ length: 14 }, (_, index) => int(100 + index)));
 const base: MapInfo = {
   versions: new Uint8Array(28), name: "Base", author: "", description: "", suggestedPlayers: "",
-  bounds: new Uint8Array(56), flags: 0, environment: join(new Uint8Array([76]), int(-1), int(128), text(""), after),
+  bounds: new Uint8Array(56), flags: 0, environment: join(new Uint8Array([76]), int(-1), int(128), text(""), after, closing),
   players: [], forces: [], tables: new Uint8Array(0),
 };
 
@@ -17,6 +18,21 @@ test("[scenario] a declared loading screen model replaces the preset background 
   expect(loadingScreenModel(declared.environment)).toBe("war3mapImported\\Loading.mdx");
   const view = new DataView(declared.environment.buffer, declared.environment.byteOffset);
   expect([declared.environment[0], view.getInt32(1, true), view.getInt32(5, true)]).toEqual([76, -1, -1]);
-  expect(declared.environment.subarray(declared.environment.length - after.length)).toEqual(after);
+  expect(declared.environment.subarray(declared.environment.length - closing.length - after.length, declared.environment.length - closing.length)).toEqual(after);
   expect(declareMap(base, "Map", { author: "", description: "", suggestedPlayers: "", players: [], forces: [] }).environment).toEqual(base.environment);
+});
+
+test("[scenario] a declared supported-modes value is read back from the field 60 bytes before the end, leaving every other byte as the base had it", () => {
+  const declare = (modes?: "sd" | "hd" | "both") => declareMap(base, "Map", { author: "", description: "", suggestedPlayers: "", players: [], forces: [], ...(modes === undefined ? {} : { supportedModes: modes }) });
+  expect(supportedModes(base.environment)).toBe("both");
+  expect(supportedModes(declare().environment)).toBe("both");
+  for (const [modes, value] of [["sd", 1], ["hd", 2], ["both", 3]] as const) {
+    const declared = declare(modes);
+    expect(supportedModes(declared.environment)).toBe(modes);
+    const view = new DataView(declared.environment.buffer, declared.environment.byteOffset);
+    expect(view.getInt32(declared.environment.length - 60, true)).toBe(value);
+    const differing = declared.environment.map((byte, index) => (byte === base.environment[index] ? 0 : 1)).reduce((sum, flag) => sum + flag, 0);
+    expect(differing).toBeLessThanOrEqual(1);
+    expect(declared.environment.length).toBe(base.environment.length);
+  }
 });

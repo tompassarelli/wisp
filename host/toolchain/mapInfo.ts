@@ -1,3 +1,5 @@
+export type SupportedModes = "sd" | "hd" | "both";
+
 export interface MapDeclaration {
   readonly author: string;
   readonly description: string;
@@ -5,6 +7,7 @@ export interface MapDeclaration {
   readonly players: readonly { readonly id: number; readonly name: string }[];
   readonly forces: readonly { readonly name: string; readonly playerIds: readonly number[] }[];
   readonly loadingScreenModel?: string;
+  readonly supportedModes?: SupportedModes;
 }
 
 interface PlayerRecord {
@@ -201,10 +204,25 @@ function withLoadingScreen(environment: Uint8Array, model: string | undefined): 
   return concat([environment.subarray(0, LOADING_SCREEN_NUMBER), int32Bytes(CUSTOM_LOADING_SCREEN), stringBytes(model), environment.subarray(end + 1)]);
 }
 
+// war3map.w3i format 39 keeps its Supported Modes int 60 bytes before the end of the environment block; 1 is SD, 2 is HD, 3 both.
+const SUPPORTED_MODES_FROM_END = 60;
+const MODE_VALUES: Readonly<Record<SupportedModes, number>> = { sd: 1, hd: 2, both: 3 };
+
+export function supportedModes(environment: Uint8Array): SupportedModes | undefined {
+  const value = new DataView(environment.buffer, environment.byteOffset, environment.length).getInt32(environment.length - SUPPORTED_MODES_FROM_END, true);
+  return (Object.keys(MODE_VALUES) as SupportedModes[]).find((mode) => MODE_VALUES[mode] === value);
+}
+
+function withSupportedModes(environment: Uint8Array, modes: SupportedModes | undefined): Uint8Array {
+  if (modes === undefined) return environment;
+  const at = environment.length - SUPPORTED_MODES_FROM_END;
+  return concat([environment.subarray(0, at), int32Bytes(MODE_VALUES[modes]), environment.subarray(at + 4)]);
+}
+
 export function declareMap(base: MapInfo, name: string, map: MapDeclaration): MapInfo {
   return {
     ...base,
-    environment: withLoadingScreen(base.environment, map.loadingScreenModel),
+    environment: withSupportedModes(withLoadingScreen(base.environment, map.loadingScreenModel), map.supportedModes),
     name,
     author: map.author,
     description: map.description,
