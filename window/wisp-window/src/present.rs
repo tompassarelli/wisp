@@ -1,4 +1,4 @@
-/// What the player asked of the present path. `Mailbox` is the default: its acquire returns at once and the display latches the newest image, so the window is paced from the vblank phase it extrapolates and a press reaches the screen about three frames sooner than under `Fifo`, whose acquire waits for the display behind the images it queued.
+/// What the player asked of the present path. `Mailbox` is the default: its acquire returns at once and the display latches the newest image, so the window is paced from the vblank phase it extrapolates and a press reaches the screen about three frames sooner than under `Fifo`, whose acquire waits for the display behind the images it queued. `Immediate` presents on ready: each step's scene is drawn and presented as soon as it arrives, one frame a step, so a display that refreshes when given an image shows it at once.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[repr(u8)]
 pub enum PresentSetting {

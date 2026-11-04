@@ -36,6 +36,8 @@ struct World {
     unshown: bool,
     held_in_present: bool,
     mailbox: bool,
+    ready: bool,
+    answered: Vec<(u32, u64)>,
     gpu_ns: u64,
     gpu_free_ns: u64,
     step_ms: fn(u32) -> f64,
@@ -68,6 +70,7 @@ impl SimClock {
         }
         while let Some(&(arrival, frame)) = world.in_flight.front().filter(|(arrival, _)| *arrival <= world.now_ns) {
             world.in_flight.pop_front();
+            world.answered.push((frame, arrival));
             self.mailbox.submit(Submission { bytes: b"{}".to_vec(), step: frame as u64 + 1, frame, arrived_ns: arrival });
         }
     }
@@ -133,7 +136,7 @@ impl Surface for SimDisplay {
     fn acquire(&mut self) -> Option<()> {
         let (now, every, presented, unshown, mailbox, gpu_free, held_in_present) = {
             let world = self.0.world.borrow();
-            (world.now_ns, world.image_every_ns, world.presented_ns, world.unshown, world.mailbox, world.gpu_free_ns, world.held_in_present)
+            (world.now_ns, world.image_every_ns, world.presented_ns, world.unshown, world.mailbox || world.ready, world.gpu_free_ns, world.held_in_present)
         };
         if unshown {
             self.0.advance(now + UNSHOWN_TRY_NS);
@@ -170,12 +173,9 @@ impl Surface for SimDisplay {
         Some(self.0.world.borrow().refresh_ns as f64 / 1e6)
     }
 
-    fn blocks_on_display(&self) -> bool {
-        !self.0.world.borrow().mailbox
-    }
-
-    fn present_mode(&self) -> &'static str {
-        if self.0.world.borrow().mailbox { "Mailbox" } else { "Fifo" }
+    fn present_setting(&self) -> PresentSetting {
+        let world = self.0.world.borrow();
+        if world.ready { PresentSetting::Immediate } else if world.mailbox { PresentSetting::Mailbox } else { PresentSetting::Fifo }
     }
 }
 
@@ -190,7 +190,7 @@ impl Sim {
     fn new(period_ns: u64, step_ms: fn(u32) -> f64) -> Self {
         let mailbox = Arc::new(Mailbox::default());
         let stepper = Arc::new(Stepper::default());
-        let world = World { now_ns: period_ns, refresh_ns: period_ns, image_every_ns: period_ns, unshown: false, held_in_present: false, mailbox: false, gpu_ns: 0, gpu_free_ns: 0, step_ms, worker_free_ns: 0, in_flight: VecDeque::new(), presented_ns: None, acquires: Vec::new(), shown: Vec::new(), drawn_at: Vec::new(), began: Vec::new() };
+        let world = World { now_ns: period_ns, refresh_ns: period_ns, image_every_ns: period_ns, unshown: false, held_in_present: false, mailbox: false, ready: false, answered: Vec::new(), gpu_ns: 0, gpu_free_ns: 0, step_ms, worker_free_ns: 0, in_flight: VecDeque::new(), presented_ns: None, acquires: Vec::new(), shown: Vec::new(), drawn_at: Vec::new(), began: Vec::new() };
         let clock = SimClock { world: Rc::new(RefCell::new(world)), mailbox: mailbox.clone(), stepper: stepper.clone() };
         let metrics = Arc::new(Mutex::new(Metrics::default()));
         let frames = FrameLoop::new(SimDisplay(clock.clone()), clock.clone(), mailbox, metrics.clone(), stepper);
@@ -427,4 +427,45 @@ fn starts_under_mailbox(step_ms: fn(u32) -> f64) -> Sim {
     assert!(total * WINDOW_FRAMES < 3 * late.len(), "{total} of {} frames were late, the oracle allows under 3 in {WINDOW_FRAMES}", late.len());
     assert!(sim.pulse_lines.iter().all(|line| line.ends_with("present Mailbox")), "{:?}", sim.pulse_lines);
     sim
+}
+
+fn presents_on_ready(hz: f64, step_ms: fn(u32) -> f64) -> Sim {
+    const SECONDS: u64 = 20;
+    let period_ns = (1e9 / hz) as u64;
+    let mut sim = Sim::new(period_ns, step_ms);
+    sim.world().ready = true;
+    sim.run_until(SECONDS * SECOND_NS);
+    let seconds = (sim.now_ns() - period_ns) as f64 / 1e9;
+    assert!((sim.stepped() as f64 - seconds * 60.0).abs() <= 2.0, "at {hz} Hz {} steps in {seconds:.2} s", sim.stepped());
+    let world = sim.world();
+    let rate = world.acquires.len() as f64 / seconds;
+    assert!(rate <= 60.5, "at {hz} Hz the window draws one frame a step, not one a vblank or unthrottled: {rate:.1} frames/s");
+    let arrivals: std::collections::HashMap<u64, u64> = world.answered.iter().map(|(frame, arrival)| (*frame as u64 + 1, *arrival)).collect();
+    let waits: Vec<f64> = world.shown.iter().zip(&world.drawn_at).filter_map(|(step, drawn)| arrivals.get(step).map(|arrival| drawn.saturating_sub(*arrival) as f64 / 1e6)).collect();
+    assert!(waits.len() as f64 >= rate * seconds * 0.9 && quantile(&waits, 0.5) < 0.01, "at {hz} Hz a scene is drawn the moment it arrives, not at a vblank: p50 {:.2} ms after its arrival", quantile(&waits, 0.5));
+    drop(world);
+    let late = sim.late();
+    let total = late.iter().filter(|late| **late).count();
+    assert!(total * WINDOW_FRAMES < 3 * late.len(), "at {hz} Hz {total} of {} frames were late, the oracle allows under 3 in {WINDOW_FRAMES}", late.len());
+    assert!(sim.pulse_lines.iter().all(|line| line.ends_with("present Immediate")), "{:?}", sim.pulse_lines);
+    sim
+}
+
+#[test]
+fn presenting_on_ready_draws_each_scene_as_it_arrives_once_a_step_at_60_and_120_hz() {
+    presents_on_ready(60.0, scripted_step_ms);
+    presents_on_ready(120.0, scripted_step_ms);
+    presents_on_ready(120.0, quick_step_ms);
+}
+
+#[test]
+fn presenting_on_ready_redraws_a_stalled_game_at_most_once_in_three_steps() {
+    let mut sim = Sim::new(PERIOD_NS, one_stall);
+    sim.world().ready = true;
+    sim.run_until(4 * SECOND_NS);
+    let world = sim.world();
+    let stalled: Vec<u64> = world.drawn_at.windows(2).map(|pair| pair[1] - pair[0]).filter(|gap| *gap > 2 * PERIOD_NS).collect();
+    assert!(!stalled.is_empty() && stalled.iter().all(|gap| *gap >= 3 * STEP_NS - DRAW_NS), "the 300 ms stall is redrawn at most every three steps: {stalled:?}");
+    let frames: Vec<(u64, u64)> = world.drawn_at.iter().copied().zip(world.shown.iter().copied()).collect();
+    assert!(frames.windows(2).all(|pair| pair[1].1 > pair[0].1 || pair[1].0 - pair[0].0 >= 3 * STEP_NS - DRAW_NS), "every frame draws a newer step, or redraws one only after three steps without a scene");
 }

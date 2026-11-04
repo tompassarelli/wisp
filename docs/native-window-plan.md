@@ -326,11 +326,20 @@ How the native window meets it:
   against Mailbox's 68.4 ms and Warcraft's 70.8 ms on the laptop
   (online-plan.md, "The native window against Warcraft"). The library reads
   the image count back and logs it in `standalone.json`.
-  - Under `Mailbox` and `Immediate` the acquire does not wait, so the window
-    paces itself: it sleeps to the vblank extrapolated from a learned phase
-    (the last `Fifo` acquire, else its first frame's) at the display's
-    reported rate, so it draws one frame per vblank and never unthrottled,
-    and the step clock keeps 60 ticks a second either way.
+  - Under `Mailbox` the acquire does not wait, so the window paces itself:
+    it sleeps to the vblank extrapolated from a learned phase (the last
+    `Fifo` acquire, else its first frame's) at the display's reported rate,
+    so it draws one frame per vblank and never unthrottled, and the step
+    clock keeps 60 ticks a second either way.
+  - `Immediate` presents on ready (makgora#1122 part 5): the step clock runs
+    free, unaimed, and the frame loop waits for the scene of the step after
+    the last one it drew, then acquires, draws and presents at once. It
+    draws one frame a step whatever the display's rate (60 a second at
+    120 Hz, where `Mailbox` draws 120), and a game that answers no step for
+    three sim periods gets its last scene redrawn and the frame counted
+    late. On a fixed-rate compositor the image still waits for the
+    compositor's next repaint; a display that refreshes when it is given an
+    image (variable refresh) shows it then.
   - The source for which modes each platform offers is wgpu 30's
     `PresentMode` documentation.
 - **Frame pacing.** Each frame runs in this order:

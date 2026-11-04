@@ -417,12 +417,8 @@ impl Surface for WindowSurface {
         self.gpu.present(image);
     }
 
-    fn blocks_on_display(&self) -> bool {
-        self.gpu.setting() == PresentSetting::Fifo
-    }
-
-    fn present_mode(&self) -> &'static str {
-        self.gpu.setting().name()
+    fn present_setting(&self) -> PresentSetting {
+        self.gpu.setting()
     }
 
     fn refresh_ms(&self) -> Option<f64> {

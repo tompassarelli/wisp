@@ -5,6 +5,7 @@ use crate::clock::Clock;
 use crate::metrics::{ms, Beat, Metrics, Pulse, Series, Timings};
 pub use crate::mailbox::{End, Event, Mailbox, Sample, Submission};
 use crate::pacing::{Pacer, Phase};
+use crate::present::PresentSetting;
 use crate::stepper::{Aim, Mode, Stepper, STEP_NS};
 use crate::sync::lock;
 use crate::timer::TimerResolution;
@@ -15,6 +16,7 @@ const MISSED_PERIODS: f64 = 1.5;
 const SAMPLE_MEMORY: usize = 64;
 const UNMEASURED_LIMIT: usize = 8;
 const AIM_TOLERANCE_NS: u64 = 1_000_000;
+const READY_WAIT_STEPS: u64 = 3;
 
 /// What the frame loop draws on: `acquire` blocks until the display hands back an image, and `None` means nothing is showing right now.
 pub trait Surface {
@@ -32,13 +34,9 @@ pub trait Surface {
     fn present(&self, image: Self::Image);
     /// Runs while the window shows its loading state: takes what Bun sent so far.
     fn idle(&mut self) {}
-    /// Whether `acquire` waits for the display; a mode that returns at once is timed from the phase learned while one did.
-    fn blocks_on_display(&self) -> bool {
-        true
-    }
-    /// The present mode the surface granted, which the pulse line names.
-    fn present_mode(&self) -> &'static str {
-        "Fifo"
+    /// The present mode the surface granted, which paces the loop and the pulse line names: `Fifo`'s acquire waits for the display; `Mailbox`'s returns at once, so the loop is timed from the phase learned while one waited; under `Immediate` each new scene is drawn and presented as soon as it arrives, so a display that refreshes when it is given an image shows it then.
+    fn present_setting(&self) -> PresentSetting {
+        PresentSetting::Fifo
     }
     /// The display's frame in milliseconds as the display reports its rate, or none, which the loop takes as 60 Hz. The loop never measures it from its own frames: they include its own waits, and a window the compositor held to one frame a second would keep pacing to that second.
     fn refresh_ms(&self) -> Option<f64> {
@@ -56,6 +54,7 @@ pub struct FrameLoop<S: Surface, C: Clock> {
     previous_acquire: Option<u64>,
     drawn_step: u64,
     drawn_frame: Option<u32>,
+    taken_frame: Option<u32>,
     sample_times: [Option<(u32, u64)>; SAMPLE_MEMORY],
     previous_frame_late: bool,
     pending: VecDeque<Aimed>,
@@ -81,6 +80,7 @@ impl<S: Surface, C: Clock> FrameLoop<S, C> {
             previous_acquire: None,
             drawn_step: 0,
             drawn_frame: None,
+            taken_frame: None,
             sample_times: [None; SAMPLE_MEMORY],
             previous_frame_late: false,
             pending: VecDeque::new(),
@@ -102,7 +102,10 @@ impl<S: Surface, C: Clock> FrameLoop<S, C> {
 
     /// Runs one frame and returns whether it presented; false means the surface had no image.
     pub fn frame(&mut self, mode: Mode) -> bool {
-        let blocking = self.surface.blocks_on_display();
+        if mode != Mode::Loading && self.surface.present_setting() == PresentSetting::Immediate {
+            return self.frame_on_ready();
+        }
+        let blocking = self.surface.present_setting() == PresentSetting::Fifo;
         let period_ms = self.period_ms();
         let predicted = if blocking { None } else { self.phase.next_vblank_ns(self.clock.now_ns(), period_ms) };
         if let Some(vblank) = predicted {
@@ -145,7 +148,7 @@ impl<S: Surface, C: Clock> FrameLoop<S, C> {
         if mode != Mode::Loading {
             let times = Times { asked, acquired, drawing, drawn, presented };
             self.publish(&outcome, &times, &timings, interval, missed);
-            let beat = Beat { presented_ns: presented, interval_ms: interval, step: self.stepper.next(presented).0 as u64, late: outcome.late, dropped: outcome.dropped, acquire_ms: ms(asked, acquired), draw_ms: ms(drawing, drawn), gpu_ms: timings.gpu.iter().map(|frame| frame.span_ms).collect(), render_scale: timings.render_scale, present: self.surface.present_mode() };
+            let beat = Beat { presented_ns: presented, interval_ms: interval, step: self.stepper.next(presented).0 as u64, late: outcome.late, dropped: outcome.dropped, acquire_ms: ms(asked, acquired), draw_ms: ms(drawing, drawn), gpu_ms: timings.gpu.iter().map(|frame| frame.span_ms).collect(), render_scale: timings.render_scale, present: self.surface.present_setting().name() };
             self.pulse_line = self.pulse.beat(beat);
         }
         self.previous_frame_late = outcome.late;
@@ -205,8 +208,56 @@ impl<S: Surface, C: Clock> FrameLoop<S, C> {
         }
         self.measure_arrivals();
         outcome.ready_ns = Some(self.clock.now_ns());
+        self.load_newest(&mut outcome);
+        outcome
+    }
+
+    /// Draws the scene after the one last drawn as soon as it arrives and presents it at once; the step clock runs free, unaimed, so the window draws one frame a step and never more, whatever the display's rate. A game that answers no step for three sim periods gets its last scene redrawn and the frame counted late.
+    fn frame_on_ready(&mut self) -> bool {
+        self.stepper.aim(None);
+        let mut outcome = Outcome::default();
+        self.note_steps(&mut outcome);
+        let now = self.clock.now_ns();
+        let target = self.taken_frame.map_or_else(|| self.stepper.next(now).0, |drawn| drawn.wrapping_add(1));
+        outcome.late = !self.clock.wait_for_scene(&self.mailbox, target, now + READY_WAIT_STEPS * STEP_NS) && !self.mailbox.is_stopping();
+        self.note_steps(&mut outcome);
+        self.load_newest(&mut outcome);
+        let asked = self.clock.now_ns();
+        let Some(image) = self.surface.acquire() else {
+            self.previous_acquire = None;
+            return false;
+        };
+        let acquired = self.clock.now_ns();
+        let interval = self.previous_acquire.map(|before| ms(before, acquired));
+        self.surface.draw(&image, self.drawn_step);
+        let drawn = self.clock.now_ns();
+        let timings = self.surface.timings();
+        self.surface.present(image);
+        let presented = self.clock.now_ns();
+        let missed = interval.is_some_and(|interval| interval > MISSED_PERIODS * self.period_ms().max(STEP_NS as f64 / 1e6));
+        let times = Times { asked, acquired, drawing: acquired, drawn, presented };
+        self.publish(&outcome, &times, &timings, interval, missed);
+        let beat = Beat { presented_ns: presented, interval_ms: interval, step: self.stepper.next(presented).0 as u64, late: outcome.late, dropped: outcome.dropped, acquire_ms: ms(asked, acquired), draw_ms: ms(acquired, drawn), gpu_ms: timings.gpu.iter().map(|frame| frame.span_ms).collect(), render_scale: timings.render_scale, present: self.surface.present_setting().name() };
+        self.pulse_line = self.pulse.beat(beat);
+        self.previous_frame_late = outcome.late;
+        self.previous_acquire = Some(acquired);
+        true
+    }
+
+    /// Notes when each step the clock took since the last look read its input, and how many it dropped.
+    fn note_steps(&mut self, outcome: &mut Outcome) {
+        let steps = self.stepper.take();
+        outcome.dropped += steps.dropped;
+        for taken in steps.taken {
+            self.sample_times[taken.frame as usize % SAMPLE_MEMORY] = Some((taken.frame, taken.sampled_ns));
+        }
+    }
+
+    /// Loads the newest scene that has arrived, if one has since the last draw.
+    fn load_newest(&mut self, outcome: &mut Outcome) {
         if let Some(submission) = self.mailbox.take_scene() {
             let began = self.clock.now_ns();
+            self.taken_frame = Some(submission.frame);
             match self.surface.load_scene(&submission.bytes) {
                 Ok(()) => {
                     self.drawn_step = submission.step;
@@ -222,7 +273,6 @@ impl<S: Surface, C: Clock> FrameLoop<S, C> {
             }
             outcome.parse_ms = Some(ms(began, self.clock.now_ns()));
         }
-        outcome
     }
 
     /// Takes the steps the clock took since the last look, each aimed at the vblank its lead reaches; one a frame already waited for is only measured.
