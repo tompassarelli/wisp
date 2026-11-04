@@ -65,13 +65,14 @@ describe("delay proxy jitter", () => {
     const oneWayMs = 40, jitterMs = 30, count = 40;
     const arrivals: number[] = [];
     const sentAt = new Map<number, number>();
+    const bound = Promise.withResolvers<void>();
     const target = await Bun.udpSocket({ hostname: "127.0.0.1", socket: { data: (_socket, data) => { const id = data[0] ?? 0; arrivals.push(performance.now() - (sentAt.get(id) ?? 0)); } } });
     const probe = await Bun.udpSocket({ hostname: "127.0.0.1", port: 0 });
     const listen = probe.port;
     probe.close();
-    const proxy = Effect.runFork(runProxy({ listen, to: { address: "127.0.0.1", port: target.port }, oneWayMs, loss: 0, seed: 7, jitterMs }, () => undefined));
+    const proxy = Effect.runFork(runProxy({ listen, to: { address: "127.0.0.1", port: target.port }, oneWayMs, loss: 0, seed: 7, jitterMs }, () => bound.resolve()));
     const sender = await Bun.udpSocket({ hostname: "127.0.0.1" });
-    await Bun.sleep(50);
+    await bound.promise;
     for (let id = 0; id < count; id++) {
       sentAt.set(id, performance.now());
       sender.send(new Uint8Array([id]), listen, "127.0.0.1");

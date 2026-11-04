@@ -4,7 +4,7 @@ import { joinCode, joinTarget, relayCode, relayRegions, CODE_HASH_DIGITS, type R
 import { chooseHostRelay, showJoinPing } from "../net/regionChoice";
 import { NetFailure } from "../net/failure";
 import { type NetListening, type NetRole, runNetPeer } from "../net/peer";
-import { RenderFailure } from "../render/headlessRender";
+import { attempt } from "./renderAttempt";
 import type { StandaloneGame, StandaloneNet, StandaloneNetSession } from "./standaloneGame";
 
 class MapMismatch extends Schema.TaggedError<MapMismatch, { readonly brand: unique symbol }>()("MapMismatch", { code: Schema.String, here: Schema.String }) {
@@ -20,8 +20,6 @@ function reachableAddresses(): string[] {
 }
 
 const FOREVER_FRAMES = 60 * 60 * 60 * 24;
-
-const attempt = <A>(run: () => Promise<A>) => Effect.tryPromise({ try: run, catch: (cause) => new RenderFailure({ cause }) });
 
 interface Reach { readonly role: NetRole; readonly relay?: RelayChoice }
 

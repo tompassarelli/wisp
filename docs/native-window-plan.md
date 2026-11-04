@@ -108,7 +108,7 @@ and `readAsset` times in that window.
 Two kinds of Bun work could break that rule, and each has an owner:
 
 - **Asset reads.** `readAsset` is the game's function and runs on the Bun
-  thread today (`/asset`, host/play/standalone.ts). Rust queues its requests,
+  thread today (`/asset`, host/play/standalonePage.ts). Rust queues its requests,
   and Bun serves them only right after it hands back a scene, within a 2 ms
   budget per frame. If W1 measures a single read over 2 ms, the reader moves
   into a Bun Worker. The game then exports its reader as a module path rather

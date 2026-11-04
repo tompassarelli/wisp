@@ -19,6 +19,8 @@ import { createSoundPlayer } from "../window/soundPlayer";
 import type { NativeGameModule } from "../window/simProtocol";
 import type { StandaloneFrame, StandaloneInput } from "../render/standaloneFrames";
 import type { StandaloneGame, StandaloneNet } from "./standaloneGame";
+import { attempt, decode, failed, problemOf, thrownAsFailure } from "./renderAttempt";
+import { pageRoutes } from "./standalonePage";
 import { openNetMatch } from "./standaloneNet";
 
 export type { StandaloneFrame, StandaloneInput } from "../render/standaloneFrames";
@@ -49,31 +51,11 @@ export interface StandaloneOptions {
   readonly library?: string | undefined;
 }
 
-const framesAhead = (scripted: boolean) => (scripted ? 3 : 1);
-
 const Input = Schema.Struct({ buttons: Schema.Array(Schema.String), axisX: Schema.Finite, axisY: Schema.Finite });
-const Sound = Schema.Struct({
-  event: Schema.Literals(["create", "start", "stop", "volume"]), frame: Schema.Finite,
-  kind: Schema.Literals(["sound", "music"]), looping: Schema.Boolean, effectiveVolume: Schema.Finite,
-  source: Schema.optional(Schema.String), label: Schema.optional(Schema.String),
-  handle: Schema.Struct({ kind: Schema.String, id: Schema.Finite }),
-  volume: Schema.Finite, pitch: Schema.Finite, x: Schema.Finite, y: Schema.Finite, z: Schema.Finite,
-});
-
-const Completion = Schema.fromJsonString(Schema.StructWithRest(Schema.Struct({ error: Schema.optional(Schema.String) }), [Schema.Record(Schema.String, Schema.Unknown)]));
-
-const attempt = <A>(run: () => Promise<A>) => Effect.tryPromise({ try: run, catch: (cause) => new RenderFailure({ cause }) });
-const failed = (problem: string) => new RenderFailure({ cause: new Error(problem) });
-
-const problemOf = (failure: RenderFailure) => (failure.cause instanceof Error ? failure.cause.message : String(failure.cause));
-const decode = <S extends Schema.Top & { readonly DecodingServices: never }>(schema: S, input: unknown) =>
-  Schema.decodeUnknownEffect(schema)(input).pipe(Effect.mapError((cause) => failed(cause.message)));
 
 /** The file `emulatedCalls` names: an object of native name to call count, names in order. */
 export const emulatedCallsJson = (calls: ReadonlyMap<string, number>) =>
   JSON.stringify(Object.fromEntries([...calls].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))), null, 2) + "\n";
-
-const thrownAsFailure = Effect.catchDefect((cause) => Effect.fail(new RenderFailure({ cause })));
 
 export const openStandalone = (game: StandaloneGame, options: StandaloneOptions = {}) => Effect.gen(function*() {
   const script = options.script === undefined ? undefined : yield* attempt(() => Bun.file(options.script!).text());
@@ -83,7 +65,6 @@ export const openStandalone = (game: StandaloneGame, options: StandaloneOptions 
   const captures = new Set(options.captureFrames ?? []);
   const recordChecksums = options.recordChecksums ?? (options.script !== undefined && session.paced !== true);
   const sounds = createSoundResolver(game.render.readAsset);
-  const assets = new Map<string, Promise<Uint8Array | undefined>>();
   const audio = options.window === "native" ? yield* Effect.acquireRelease(attempt(async () => openNativeAudio(options.library)), (open) => Effect.sync(() => open.close())) : undefined;
   const soundPlayer = audio === undefined ? undefined : createSoundPlayer(sounds, audio);
   const completion = yield* Deferred.make<Readonly<Record<string, unknown>>, RenderFailure>();
@@ -133,43 +114,8 @@ export const openStandalone = (game: StandaloneGame, options: StandaloneOptions 
     else yield* Deferred.succeed(completion, result);
     return result;
   });
-  const handle = (request: Request, server: Bun.Server<undefined>) => Effect.gen(function*() {
-    const url = new URL(request.url);
-    if (url.pathname === "/") return new Response(`<!doctype html><html><head><title>${game.title.replaceAll("<", "&lt;")}</title><style>html,body{margin:0;width:100%;height:100%;background:#101522;overflow:hidden}body{display:flex;align-items:center;justify-content:center}canvas{max-width:100%;max-height:100%;object-fit:contain}#status{position:fixed;bottom:12px;left:16px;color:white;font:14px sans-serif;background:#101522bb;padding:6px 10px;border-radius:5px}</style></head><body><script type="module" src="/player.js"></script></body></html>`, { headers: {
-      "content-type": "text/html",
-
-      "cross-origin-opener-policy": "same-origin", "cross-origin-embedder-policy": "require-corp",
-    } });
-    if (url.pathname === "/player.js") return new Response(javascript, { headers: { "content-type": "text/javascript" } });
-    if (url.pathname === "/config") return Response.json({ title: game.title, width: game.render.width ?? 1280, height: game.render.height ?? 720, scripted: options.script !== undefined, samples: options.out !== undefined, gamepadIndex: options.gamepadIndex, frames: session.paced === true ? undefined : options.frames, ahead: framesAhead(options.script !== undefined) });
-    if (url.pathname === "/prepare") return Response.json({ scene: sceneWithUnits(game.render, captureScene(session.client)), models: game.render.preloadModels ?? [], step: steps });
-    if (url.pathname === "/asset") {
-      const path = url.searchParams.get("path") ?? "";
-      let data = assets.get(path);
-      if (data === undefined) assets.set(path, data = game.render.readAsset(path));
-      const pending = data;
-      const bytes = yield* attempt(() => pending);
-      return bytes === undefined ? new Response(`missing map asset: ${path}`, { status: 404 }) : new Response(new Uint8Array(bytes));
-    }
-    if (url.pathname === "/sound" && request.method === "POST") {
-      const cue = yield* decode(Sound, yield* attempt(() => request.json()));
-      const resolved = yield* attempt(() => sounds({ ...cue, source: cue.source, label: cue.label }));
-      return resolved === undefined ? new Response(`missing sound: ${cue.source ?? cue.label}`, { status: 404 }) : new Response(new Uint8Array(resolved.bytes), { headers: { "x-wisp-sound-path": resolved.path } });
-    }
-    if (url.pathname === "/frames") return server.upgrade(request) ? undefined : new Response("frames need a WebSocket", { status: 400 });
-    if (url.pathname === "/capture" && request.method === "POST" && options.out !== undefined) {
-      const frame = Number(url.searchParams.get("frame")), slot = session.client.slot;
-      if (!Number.isSafeInteger(frame) || frame < 0) return yield* failed("invalid capture frame");
-      const image = yield* attempt(() => request.arrayBuffer());
-      yield* attempt(() => Bun.write(join(options.out!, `p${slot}-frame-${frame}.png`), image));
-      return new Response("saved");
-    }
-    if (url.pathname === "/complete" && request.method === "POST") {
-      yield* finish(yield* decode(Completion, yield* attempt(() => request.text())));
-      return new Response("saved");
-    }
-    return new Response("not found", { status: 404 });
-  }).pipe(thrownAsFailure, Effect.catch((failure) => Effect.succeed(new Response(problemOf(failure), { status: 500 }))));
+  const prepare = () => ({ scene: sceneWithUnits(game.render, captureScene(session.client)), models: game.render.preloadModels ?? [], step: steps });
+  const handle = pageRoutes(game, options, { session, javascript, sounds, prepare, finish });
   const run = yield* FiberSet.makeRuntimePromise<never>();
   let steps$ = Promise.resolve();
 
@@ -184,7 +130,7 @@ export const openStandalone = (game: StandaloneGame, options: StandaloneOptions 
   return {
     url: `http://127.0.0.1:${server.port}/`, completed: Deferred.await(completion),
     /** What the native window drives in place of the page: the scene before the first step, one step, and the end of the run. */
-    native: { prepare: () => ({ scene: sceneWithUnits(game.render, captureScene(session.client)), models: game.render.preloadModels ?? [], step: steps }), advance: (input: StandaloneInput) => advance(input).frame, finish: (result: Readonly<Record<string, unknown>>) => run(finish(result)) },
+    native: { prepare, advance: (input: StandaloneInput) => advance(input).frame, finish: (result: Readonly<Record<string, unknown>>) => run(finish(result)) },
   };
 });
 
