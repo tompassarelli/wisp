@@ -8,11 +8,24 @@ export interface ProxyOptions {
   readonly oneWayMs: number;
   readonly loss: number;
   readonly seed: number;
+  /** The spread of each datagram's wait: it waits `oneWayMs` plus or minus half of this, drawn evenly, so datagrams can pass one another as netem's jitter lets them. */
+  readonly jitterMs?: number;
 }
+
+/** Where a datagram due `at` goes in `pending`, which is kept in due order: after every datagram due no later. */
+export const dueIndex = (pending: readonly { readonly at: number }[], at: number): number => {
+  let low = 0, high = pending.length;
+  while (low < high) {
+    const middle = (low + high) >> 1;
+    if ((pending[middle]?.at ?? 0) <= at) low = middle + 1;
+    else high = middle;
+  }
+  return low;
+};
 
 /**
  * A delay and loss proxy between one joiner and a host (the joiner is whoever sent last, so its relay ping and its match may use two sockets), standing in for a network path on one machine:
- * every datagram waits `oneWayMs` in each direction and is dropped with probability `loss`. It runs until interrupted.
+ * every datagram waits `oneWayMs` (give or take half of `jitterMs`) in each direction and is dropped with probability `loss`. It runs until interrupted.
  */
 export const runProxy = (options: ProxyOptions, log: (line: string) => void = console.error) => Effect.scoped(Effect.gen(function*() {
   const random = new Random(options.seed);
@@ -20,7 +33,9 @@ export const runProxy = (options: ProxyOptions, log: (line: string) => void = co
   let client: { address: string; port: number } | undefined;
   const hold = (forward: () => void) => {
     if (random.chance(options.loss)) return;
-    pending.push({ at: performance.now() + options.oneWayMs, forward });
+    const jitter = options.jitterMs ?? 0;
+    const at = performance.now() + Math.max(0, options.oneWayMs + (jitter === 0 ? 0 : (random.next() - 0.5) * jitter));
+    pending.splice(dueIndex(pending, at), 0, { at, forward });
   };
   const toHost = yield* Effect.acquireRelease(Effect.tryPromise({
     try: () => Bun.udpSocket({
@@ -52,7 +67,7 @@ export const runProxy = (options: ProxyOptions, log: (line: string) => void = co
     }),
     catch: (cause) => new NetFailure({ problem: `proxy port ${options.listen}: ${String(cause)}` }),
   }), (socket) => Effect.sync(() => socket.close()));
-  log(`net: proxy on UDP port ${listener.port} to ${options.to.address}:${options.to.port}, ${options.oneWayMs} ms each way, ${options.loss * 100}% loss`);
+  log(`net: proxy on UDP port ${listener.port} to ${options.to.address}:${options.to.port}, ${options.oneWayMs} ms each way${(options.jitterMs ?? 0) > 0 ? ` ± ${(options.jitterMs ?? 0) / 2} ms` : ""}, ${options.loss * 100}% loss`);
   for (;;) {
     const now = performance.now();
     while ((pending[0]?.at ?? Infinity) <= now) {

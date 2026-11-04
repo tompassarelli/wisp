@@ -22,6 +22,8 @@ export interface StandaloneNetSession extends NetSession {
   readonly client: HeadlessClient;
   input(this: void, input: StandaloneInput): void;
   finished?(this: void): boolean;
+  /** The named stage times since the window last asked, summed over the transport's steps in between, such as the sim tick and the rollback's resimulation (`StandaloneSession.stages`). */
+  stages?(this: void): Readonly<Record<string, number>>;
 }
 
 export interface StandaloneGame {

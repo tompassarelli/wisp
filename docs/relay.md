@@ -1671,7 +1671,7 @@ byte for byte, to the other members.
   per line for every control message. `cargo test -p relay-proto peer_room`
   checks the Rust codec against it, and `bun test test/relayVectors.test.ts`
   checks host/net/relayControl.ts, the TypeScript codec the standalone
-  window uses (host/net/relayLink.ts, wisp#101). `--humans N` (2 to 4) makes the room for N members; `pair --relay local --humans 4` plays four players through a local relay (wisp#99). A relayed datagram carries the sender's slot, and the peer tells members apart by it.
+  window uses (host/net/relayLink.ts, wisp#101). `--humans N` (2 to 4) makes the room for N members; `pair --relay local --humans 4` plays four players through a local relay (wisp#99). `pair --relay local --window native --out DIR` plays two of the game's native windows instead of headless peers (the command line `makeNet` takes as `nativePlay`), each writing its figures to DIR/host or DIR/join and its whole output to DIR/host.log or DIR/join.log; `--jitter MS` spreads each proxied datagram's wait by half that either way, as netem's jitter does (wisp#229). A relayed datagram carries the sender's slot, and the peer tells members apart by it.
 - **Regions (wisp#102).** `bun wisp net regions` pings every region with a
   cookie-less `join`, which the relay answers with a Challenge before it
   looks at any room, so a probe costs the relay no state; a region's round

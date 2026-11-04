@@ -77,7 +77,7 @@ export const openNetMatch = (game: StandaloneGame, options: { readonly script?: 
     ...game,
     create: async () => {
       const session = await created.promise;
-      return { client: session.client, paced: true, step: session.input, checksum: session.checksum, frame: session.frame, ...(session.finished === undefined ? {} : { finished: session.finished }), close: session.close };
+      return { client: session.client, paced: true, step: session.input, checksum: session.checksum, frame: session.frame, ...(session.finished === undefined ? {} : { finished: session.finished }), ...(session.stages === undefined ? {} : { stages: session.stages }), close: session.close };
     },
   };
   return { game: paced, ended: Fiber.join(peer).pipe(Effect.tap((report) => Effect.sync(() => console.error(`net: ${JSON.stringify(report)}`)))) };
