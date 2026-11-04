@@ -3287,6 +3287,7 @@ dependencies = [
  "image-blp",
  "jpeg-decoder",
  "lewton",
+ "libc",
  "nanomp3",
  "padbridge-model",
  "pollster",
@@ -3298,6 +3299,7 @@ dependencies = [
  "wgpu",
  "windows",
  "winit",
+ "x11rb",
 ]
 
 [[package]]

@@ -10,6 +10,7 @@ mod audio;
 mod clock;
 pub mod decode_pool;
 mod decode;
+mod display_lock;
 mod draw;
 mod frame;
 mod host;
@@ -24,6 +25,8 @@ mod offscreen;
 pub mod offscreen_ffi;
 mod pacing;
 mod present;
+#[cfg(target_os = "linux")]
+mod present_feedback;
 mod stepper;
 mod pad;
 mod pad_sdl;

@@ -1,9 +1,12 @@
+mod latching;
+
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
 use std::time::Duration;
-
 use super::super::*;
 use super::{Quiet, PERIOD_NS};
+use crate::display_lock::Shown;
 use crate::stepper::Stepper;
 
 const DRAW_NS: u64 = 2_000_000;
@@ -48,6 +51,11 @@ struct World {
     shown: Vec<u64>,
     drawn_at: Vec<u64>,
     began: Vec<u64>,
+    display: Option<latching::Latching>,
+    sampled: HashMap<u32, u64>,
+    press_every: u64,
+    press_gpu_ns: u64,
+    frame_gpu_ns: u64,
 }
 
 #[derive(Clone)]
@@ -62,6 +70,7 @@ impl SimClock {
         let mut world = self.world.borrow_mut();
         while world.worker_free_ns <= world.now_ns {
             let Event::Frame(sample) = self.mailbox.next_event(Duration::ZERO) else { break };
+            world.sampled.insert(sample.frame, sample.sampled_ns);
             let began = sample.sampled_ns.max(world.worker_free_ns);
             world.began.push(began);
             let arrival = began + ((world.step_ms)(sample.frame) * 1e6) as u64;
@@ -154,7 +163,9 @@ impl Surface for SimDisplay {
         let mut world = self.0.world.borrow_mut();
         world.shown.push(step);
         world.drawn_at.push(now);
-        world.gpu_free_ns = world.now_ns + world.gpu_ns;
+        let pressed = world.press_every > 0 && step.is_multiple_of(world.press_every);
+        world.frame_gpu_ns = world.gpu_ns + if pressed { world.press_gpu_ns } else { 0 };
+        world.gpu_free_ns = world.now_ns + world.frame_gpu_ns;
     }
 
     fn present(&self, _: ()) {
@@ -167,15 +178,33 @@ impl Surface for SimDisplay {
         }
         let mut world = self.0.world.borrow_mut();
         world.presented_ns = Some(world.now_ns);
+        let ready = world.now_ns.max(world.gpu_free_ns);
+        let sampled = world.shown.last().and_then(|step| world.sampled.get(&(step.saturating_sub(1) as u32))).copied();
+        let pressed = world.press_every > 0 && world.shown.last().is_some_and(|step| step.is_multiple_of(world.press_every));
+        if let Some(display) = world.display.as_mut() {
+            display.present(ready, sampled, pressed);
+        }
     }
 
     fn refresh_ms(&self) -> Option<f64> {
         Some(self.0.world.borrow().refresh_ns as f64 / 1e6)
     }
 
+    fn timings(&mut self) -> Timings {
+        Timings { gpu: vec![crate::gpu_time::FrameGpu { passes: Vec::new(), span_ms: self.0.world.borrow().frame_gpu_ns as f64 / 1e6 }], ..Timings::default() }
+    }
+
     fn present_setting(&self) -> PresentSetting {
         let world = self.0.world.borrow();
         if world.ready { PresentSetting::Immediate } else if world.mailbox { PresentSetting::Mailbox } else { PresentSetting::Fifo }
+    }
+
+    fn shown(&mut self) -> Vec<Shown> {
+        let mut world = self.0.world.borrow_mut();
+        let now = world.now_ns;
+        let Some(display) = world.display.as_mut().filter(|display| display.reports) else { return Vec::new() };
+        let ready = display.queued.iter().take_while(|shown| shown.shown_ns <= now).count();
+        display.queued.drain(..ready).collect()
     }
 }
 
@@ -190,7 +219,7 @@ impl Sim {
     fn new(period_ns: u64, step_ms: fn(u32) -> f64) -> Self {
         let mailbox = Arc::new(Mailbox::default());
         let stepper = Arc::new(Stepper::default());
-        let world = World { now_ns: period_ns, refresh_ns: period_ns, image_every_ns: period_ns, unshown: false, held_in_present: false, mailbox: false, ready: false, answered: Vec::new(), gpu_ns: 0, gpu_free_ns: 0, step_ms, worker_free_ns: 0, in_flight: VecDeque::new(), presented_ns: None, acquires: Vec::new(), shown: Vec::new(), drawn_at: Vec::new(), began: Vec::new() };
+        let world = World { now_ns: period_ns, refresh_ns: period_ns, image_every_ns: period_ns, unshown: false, held_in_present: false, mailbox: false, ready: false, answered: Vec::new(), gpu_ns: 0, gpu_free_ns: 0, step_ms, worker_free_ns: 0, in_flight: VecDeque::new(), presented_ns: None, acquires: Vec::new(), shown: Vec::new(), drawn_at: Vec::new(), began: Vec::new(), display: None, sampled: HashMap::new(), press_every: 0, press_gpu_ns: 0, frame_gpu_ns: 0 };
         let clock = SimClock { world: Rc::new(RefCell::new(world)), mailbox: mailbox.clone(), stepper: stepper.clone() };
         let metrics = Arc::new(Mutex::new(Metrics::default()));
         let frames = FrameLoop::new(SimDisplay(clock.clone()), clock.clone(), mailbox, metrics.clone(), stepper);

@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex};
 use crate::clock::Clock;
 use crate::metrics::{ms, Beat, Metrics, Pulse, Series, Timings};
 pub use crate::mailbox::{End, Event, Mailbox, Submission};
+use crate::display_lock::{DisplayLock, Shown};
 use crate::pacing::{Pacer, Phase};
 use crate::present::PresentSetting;
 use crate::stepper::{Aim, Mode, Stepper, STEP_NS};
@@ -42,6 +43,10 @@ pub trait Surface {
     fn refresh_ms(&self) -> Option<f64> {
         None
     }
+    /// The display's reports of the presents it showed since the last call, oldest first; none where the display gives none, and the loop then paces from its own phase.
+    fn shown(&mut self) -> Vec<Shown> {
+        Vec::new()
+    }
 }
 
 /// The render thread's frame: acquire, aim the step clock, wait for the scene aimed at this frame's vblank until its deadline, draw the newest scene that has arrived, present. The game steps on the step clock's thread whether or not a frame comes.
@@ -62,6 +67,7 @@ pub struct FrameLoop<S: Surface, C: Clock> {
     waited: Option<u32>,
     pacer: Pacer,
     phase: Phase,
+    display: DisplayLock,
     pulse: Pulse,
     pub problem: Option<String>,
     pub pulse_line: Option<String>,
@@ -88,6 +94,7 @@ impl<S: Surface, C: Clock> FrameLoop<S, C> {
             waited: None,
             pacer: Pacer::default(),
             phase: Phase::default(),
+            display: DisplayLock::default(),
             pulse: Pulse::default(),
             problem: None,
             pulse_line: None,
@@ -97,7 +104,7 @@ impl<S: Surface, C: Clock> FrameLoop<S, C> {
     }
 
     pub fn period_ms(&self) -> f64 {
-        self.surface.refresh_ms().filter(|period| *period >= SHORTEST_PERIOD_MS).unwrap_or(NOMINAL_PERIOD_MS)
+        self.display.period_ms().or_else(|| self.surface.refresh_ms()).filter(|period| *period >= SHORTEST_PERIOD_MS).unwrap_or(NOMINAL_PERIOD_MS)
     }
 
     /// Runs one frame and returns whether it presented; false means the surface had no image.
@@ -106,8 +113,9 @@ impl<S: Surface, C: Clock> FrameLoop<S, C> {
             return self.frame_on_ready();
         }
         let blocking = self.surface.present_setting() == PresentSetting::Fifo;
+        self.absorb_shown();
         let period_ms = self.period_ms();
-        let predicted = if blocking { None } else { self.phase.next_vblank_ns(self.clock.now_ns(), period_ms) };
+        let predicted = if blocking { None } else { self.grid_ns(self.clock.now_ns(), period_ms) };
         if let Some(vblank) = predicted {
             self.clock.sleep_until(vblank);
         }
@@ -136,6 +144,10 @@ impl<S: Surface, C: Clock> FrameLoop<S, C> {
         let timings = self.surface.timings();
         self.surface.present(image);
         let presented = self.clock.now_ns();
+        self.display.presented(presented, period_ms);
+        for frame in &timings.gpu {
+            self.display.cost(frame.span_ms);
+        }
         if let Some(ready) = outcome.ready_ns {
             self.pacer.record_finish(ms(ready, drawn));
         }
@@ -149,11 +161,24 @@ impl<S: Surface, C: Clock> FrameLoop<S, C> {
             let times = Times { asked, acquired, drawing, drawn, presented };
             self.publish(&outcome, &times, &timings, interval, missed);
             let beat = Beat { presented_ns: presented, interval_ms: interval, step: self.stepper.next(presented).0 as u64, late: outcome.late, dropped: outcome.dropped, acquire_ms: ms(asked, acquired), draw_ms: ms(drawing, drawn), gpu_ms: timings.gpu.iter().map(|frame| frame.span_ms).collect(), render_scale: timings.render_scale, present: self.surface.present_setting().name() };
-            self.pulse_line = self.pulse.beat(beat);
+            self.pulse_line = self.pulse.beat(beat).map(|line| if self.display.reporting() { format!("{line}, display lead {:.2} ms, period {:.3} ms, {} display misses", self.display.lead_ms(period_ms), period_ms, self.display.crossings()) } else { line });
         }
         self.previous_frame_late = outcome.late;
         self.previous_acquire = Some(stamp);
         true
+    }
+
+    /// Takes the display's reports, which give every mode the display's true period and a mode whose acquire returns at once its phase and the lead its presents need; a blocking acquire keeps its own phase.
+    fn absorb_shown(&mut self) {
+        let nominal = self.surface.refresh_ms().unwrap_or(NOMINAL_PERIOD_MS);
+        for report in self.surface.shown() {
+            self.display.observe(report, nominal);
+        }
+    }
+
+    /// The first vblank at or after `now_ns`: from the display's reports once there are any, else from the learned phase.
+    fn grid_ns(&self, now_ns: u64, period_ms: f64) -> Option<u64> {
+        self.display.next_vblank_ns(now_ns, period_ms).or_else(|| self.phase.next_vblank_ns(now_ns, period_ms))
     }
 
     /// The frame's anchor, which deadlines count from, and its stamp, which the frame's interval is measured between: a blocking acquire is locked to the display's phase so its wake lateness leaves the anchor alone, and any other mode counts from the extrapolated vblank.
@@ -306,7 +331,7 @@ impl<S: Surface, C: Clock> FrameLoop<S, C> {
     /// The first vblank a step sampled at `sampled_ns` can show at, given the lead; a sample read up to 1 ms after its aimed time still counts toward that vblank.
     fn vblank_of(&self, sampled_ns: u64, lead_ns: u64, period_ms: f64) -> u64 {
         let reach = (sampled_ns + lead_ns).saturating_sub(AIM_TOLERANCE_NS);
-        self.phase.next_vblank_ns(reach, period_ms).map_or(reach, |vblank| vblank.max(reach))
+        self.grid_ns(reach, period_ms).map_or(reach, |vblank| vblank.max(reach))
     }
 
     /// Gives the pacer each awaited step's time from its sample to its scene's arrival, whether the scene came in time or after its frame drew without it, so the lead learns the step's whole tail.

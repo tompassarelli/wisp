@@ -337,6 +337,8 @@ impl Drop for Host {
 
 struct WindowSurface {
     refresh_ms: Option<f64>,
+    #[cfg(target_os = "linux")]
+    feedback: Option<crate::present_feedback::PresentFeedback>,
     gpu: Gpu,
     cursor_shown: bool,
     requested: PresentSetting,
@@ -423,6 +425,11 @@ impl Surface for WindowSurface {
     fn refresh_ms(&self) -> Option<f64> {
         self.refresh_ms
     }
+
+    #[cfg(target_os = "linux")]
+    fn shown(&mut self) -> Vec<crate::display_lock::Shown> {
+        self.feedback.as_ref().map_or_else(Vec::new, crate::present_feedback::PresentFeedback::take)
+    }
 }
 
 struct InputSeam {
@@ -468,7 +475,7 @@ fn render_loop(shared: Arc<Shared>, windows: mpsc::Receiver<Arc<Window>>, aspect
     };
     *lock(&shared.info) = info_json(&gpu);
     let reported = (gpu.setting(), gpu.image_count());
-    let surface = WindowSurface { gpu, cursor_shown: true, refresh_ms: None, requested: PresentSetting::default(), reported, window, shared: shared.clone() };
+    let surface = WindowSurface { #[cfg(target_os = "linux")] feedback: crate::present_feedback::PresentFeedback::requested(&window), gpu, cursor_shown: true, refresh_ms: None, requested: PresentSetting::default(), reported, window, shared: shared.clone() };
     let mut frames = FrameLoop::new(surface, LibraryClock, shared.mailbox.clone(), shared.metrics.clone(), steps);
     while !shared.mailbox.is_stopping() {
         if shared.closed.load(Ordering::Acquire) {
