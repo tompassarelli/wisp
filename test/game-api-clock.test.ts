@@ -30,7 +30,7 @@ test("clock calls lower to the natives they replaced, byte for byte", () => {
 
 test("the native clock fires a timer on the frame at or after its deadline, once per frame, and keeps each client's timers apart", () => {
   const declarations = readNativeDeclarations();
-  const make = (slot: number) => new HeadlessClient({ warcraftNatives: true, screen: { width: 1920, height: 1080 }, slot, humans: [0, 1], declarations, filePrefix: "game-api", localNatives: {}, network: [] });
+  const make = (slot: number) => new HeadlessClient({ screen: { width: 1920, height: 1080 }, slot, humans: [0, 1], declarations, filePrefix: "game-api", localNatives: {}, network: [] });
   const [first, second] = [make(0), make(1)];
   const fired: string[] = [];
   bindWorld(first.world);

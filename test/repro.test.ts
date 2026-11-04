@@ -16,7 +16,7 @@ describe("record text and repro contracts", () => {
   for (const contract of contracts) test(contract.name, contract.run);
 });
 
-const MAP = { filePrefix: "fixture", globalPrefixes: ["__fixture"], warcraftNatives: true };
+const MAP = { filePrefix: "fixture", globalPrefixes: ["__fixture"] };
 const directory = join(import.meta.dir, "../build/repro-tests");
 
 function writeReproFile(checksum: string): string {
