@@ -483,6 +483,89 @@ Warcraft `--window warcraft --region 6,6,38,38 --flash` on lan0a's display,
 after `-dev quick training` and `-dev flash on` typed into its chat (the first
 key tap after a window opens is sometimes dropped, so tap once before the run).
 
+### Runs 1 to 5: the acceptance runs from the flash (wisp#242, wisp#107, makgora#1122, 5 November 2026)
+
+wisp#242's Done when names the jab-region command. The flash makes the same
+comparison with the jab's late first frame taken out of both sides, so these
+runs judge it from the flash. Measured on the laptop between 3:29 and
+3:47 AM, one sitting. The Wisp harness was 9aef8c46. Mak'gora was a5be2536b2
+(the flash), with the native window and the `native-input` map built from
+that source. Each target ran alone on a private labwc desktop at 2880x1920,
+59.1 Hz, under a quiet native lease. CPU pressure (some avg10) was 0 to 0.04%
+at the end of each native run.
+
+- The native window ran at Tom's size, High, with the Mailbox default and
+  `WISP_WINDOW_PRESENT` unset: a 2848x1840 window, or borderless fullscreen.
+- Warcraft was Classic on LAN pair 0's lan0a (`lan solo`, parity 800x600).
+- Every run set its delay explicitly: `--dev "flash on;delay N"` for the
+  window, and `-dev delay N`, `-dev quick training`, `-dev flash on` typed
+  into Warcraft's chat.
+- Every run had 100 trials. Trial 0 is the first tap after the window
+  opens, which the game drops, so it counts in no run.
+- The windowed delay-2 run is the last row. Its first attempt, second in
+  the order, watched an empty region: the step that located the flash kept
+  the last of its tries rather than the first hit. That attempt was thrown
+  out and the run repeated after run 5.
+
+| Run | Target | Delay | Press to display, p50 / p95 | Responded | Missed a grab | Press to sample, p50 / p95 | Sample to display after the delay, p50 / p95 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | Warcraft (lan0a) | 2 | 67.2 / 86.0 ms | 99 of 100 | 0 | | |
+| 3 | Native, fullscreen | 2 | 55.9 / 78.2 ms | 79 of 100 | 20 | 8.4 / 16.8 ms | 13.5 / 27.7 ms |
+| 4 | Native, windowed | 1 | 40.3 / 54.0 ms | 77 of 100 | 22 | 9.8 / 16.5 ms | 11.9 / 24.6 ms |
+| 4 | Native, fullscreen | 1 | 40.4 / 56.3 ms | 79 of 100 | 20 | 9.4 / 16.3 ms | 14.1 / 24.1 ms |
+| 5 | Warcraft (lan0a) | 1 | 48.9 / 73.7 ms | 99 of 100 | 0 | | |
+| 2 | Native, windowed | 2 | 59.3 / 87.3 ms | 86 of 100 | 13 | 6.6 / 16.1 ms | 18.9 / 38.4 ms |
+
+The input delay is 33.3 ms at delay 2 and 16.7 ms at delay 1. Warcraft
+writes no sample log, so its press has no split.
+
+- **At delay 2 the native window is ahead of Warcraft, windowed and
+  fullscreen.** Windowed: 59.3 against 67.2 ms at the median, 7.9 ms
+  ahead. Fullscreen: 55.9 against 67.2 ms, 11.3 ms ahead. So wisp#242's
+  acceptance line holds both ways. The 1.2 ms fullscreen miss in "Mailbox by
+  default" was a jab-region run: on the flash, fullscreen is the faster of
+  the two (sample to display 13.5 against 18.9 ms at the median).
+- **At delay 1 both targets gain about a frame.** Warcraft goes from 67.2 to
+  48.9 ms (18.3 ms). The native window goes from 59.3 to 40.3 ms windowed
+  (19.0 ms) and from 55.9 to 40.4 ms fullscreen (15.5 ms). At delay 1 the
+  native window is 8.5 ms ahead of Warcraft. The delay-1 runs confirm
+  `-dev delay 1` took effect in each target, which makgora#1122 part 8b
+  needs before the Warcraft build's own default moves.
+- **The window held its pacing at Tom's size** in every native run.
+  Every five-second pulse named Mailbox. 13 to 15 of each run's 16 or 17
+  pulses had 0 late scenes, and none had more than 2.
+- **Sample to present** (`inputToPresentMs`, the window share as restated
+  in native-window-plan.md, "Window share": p50 at most 16.7 ms, p95 at
+  most 33.3 ms). The window writes `standalone.json` only when a match
+  ends, so the training runs above give no figure. It comes from wisp#145's
+  pacing run right after them instead, at Tom's size:
+  `WISP_WINDOW_SIZE=2848x1840 [WISP_WINDOW_FULLSCREEN=1] bun scripts/perf-window.ts --here --resolution 2880x1920 --preset High --stage "Tomb of Sargeras"`,
+  3600 frames after 900 warmup, Mailbox.
+  - Windowed: p50 14.9 ms, p95 24.3 ms, p99 27.6 ms. It holds.
+  - Fullscreen: p50 17.9 ms, p95 26.5 ms, p99 28.9 ms. The median is
+    1.2 ms over the bar.
+  - Both runs gave 59.6 frames/s, with 0 late scenes in 13 of 16 pulses
+    and 1 in the other 3.
+  - The same windowed command measured p50 7.0 ms and p95 16.2 ms under
+    87d39752 ("Mailbox by default"), so this window's sample to present
+    has about doubled since. Wisp's window code is the same in both runs:
+    between 87d39752 and 9aef8c46 only the harness and these notes
+    changed. Mak'gora moved from 6bcd0db3a8 to a5be2536b2, which includes
+    the native window's 1-frame offline default (827e32fed0) and the
+    drawn rollback easing (019b0ab00f). The cause is not found yet.
+  - wisp#107's restated line stays unmet fullscreen until that is
+    explained.
+
+Commands, from Wisp, inside each desktop with the window up
+(`WISP_WINDOW_SAMPLE_LOG=DIR/samples.jsonl`, `WISP_WINDOW_SIZE=2848x1840`,
+`[WISP_WINDOW_FULLSCREEN=1]`, and in Mak'gora's `ts/`
+`bun scripts/wisp.ts play --standalone --window native --start training --no-tutorial-offer --dev "flash on;delay N"`):
+`bun wisp latency press --window native --display :N --wayland-runtime RUN/runtime --key n --region R --flash --input-delay-frames N --sample-log DIR/samples.jsonl --trials 100 --out DIR/flash`.
+R is the flash located by one press: 180,20,120,120 fullscreen (the block
+fills 160,0 to 319,159) and 232,72,116,115 windowed (213,53 to 366,205).
+For Warcraft: `--window warcraft --region 6,6,38,38 --flash --input-delay-frames N`
+on lan0a's display.
+
 ### How the harness reaches one frame
 
 Validated 30 October 2026 on gex45 against a reference page of known delay:
