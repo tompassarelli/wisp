@@ -1,9 +1,12 @@
-import { expect, test } from "bun:test";
+import { afterEach, expect, test } from "bun:test";
 import { readNativeDeclarations } from "../host/headless/headless";
 import { multiply } from "../host/browser/matrix";
 import type { DrawnPose, RenderScene } from "../host/render/headlessRender";
 import { camera, transform, uiPixels, uiReport } from "../host/render/screen";
 import type { FrameDefinition } from "../host/compile/frames";
+import { FramePoint, OriginFrame, createFrameByType, createSimpleFrame, namedFrame, originFrame, setFrameAbsPoint, setFrameColor, setFrameLevel, setFramePoint, setFrameScale, setFrameSize, setFrameTextColor, setFrameTexture, setFrameVisible } from "../src/game/native/frames";
+import type { Frame, FrameKind } from "../src/game/frames";
+import { bindWorld } from "../src/game/native/world";
 import { HeadlessClient } from "../src/headless/client";
 import { MEASURED_1280X720, MEASURED_800X600 } from "./frames125/expected";
 import { PLACEMENTS } from "./frames125/layout";
@@ -11,6 +14,7 @@ import { PLACEMENTS } from "./frames125/layout";
 // Player 0 of four: absolute top-left (0.02625, 0.102), size 0.08, one 0.19 slot per player (wisp#125 plan).
 // Two players take two slots each with the bust centred, half a slot right.
 const bust = (slot: number) => [0.02625 + 0.19 * slot, 0.102, 0.02625 + 0.19 * slot + 0.08, 0.102 - 0.08] as const;
+afterEach(() => { bindWorld(undefined); });
 
 test("[reference makgora#363] HUD bust rectangles match native captures", () => {
   const near = (rect: ReturnType<typeof uiPixels>, x: number, y: number, size: number) => {
@@ -21,17 +25,17 @@ test("[reference makgora#363] HUD bust rectangles match native captures", () => 
 });
 
 test("[reference makgora#363] a BACKDROP bust reports its native rectangle and its whole texture at both resolutions", () => {
-  const client = new HeadlessClient({ warcraftNatives: true, slot: 0, humans: [0], declarations: readNativeDeclarations(), filePrefix: "screen", localNatives: {}, network: [], screen: { width: 1280, height: 720 } });
-  const call = (name: string, ...args: unknown[]) => (client.natives[name] as (this: void, ...args: unknown[]) => unknown)(...args);
+  const client = new HeadlessClient({ slot: 0, humans: [0], declarations: readNativeDeclarations(), filePrefix: "screen", localNatives: {}, network: [], screen: { width: 1280, height: 720 } });
+  bindWorld(client.world);
   const frame = (name: string) => {
-    const created = call("BlzCreateFrameByType", "BACKDROP", name, undefined, "", 0);
-    call("BlzFrameSetAbsPoint", created, 0, 0.02625, 0.102);
-    call("BlzFrameSetSize", created, 0.08, 0.08);
-    call("BlzFrameSetTexture", created, "Bust.blp", 0, true);
+    const created = createFrameByType("BACKDROP", name, originFrame(OriginFrame.gameUi, 0), "", 0);
+    setFrameAbsPoint(created, FramePoint.topLeft, 0.02625, 0.102);
+    setFrameSize(created, 0.08, 0.08);
+    setFrameTexture(created, "Bust.blp", 0, true);
     return created;
   };
   frame("bust");
-  call("BlzFrameSetVisible", frame("hidden"), false);
+  setFrameVisible(frame("hidden"), false);
   const identity = { layer: "base", sha256: "ab".repeat(32) };
   for (const [width, height, x, y, size] of [[1280, 720, 191.5, 597.6, 96], [800, 600, 26.25, 498, 80]] as const) {
     const [row, ...rest] = uiReport({ ui: client.frames.snapshot() }, width, height, (path) => (path === "Bust.blp" ? identity : undefined));
@@ -43,15 +47,15 @@ test("[reference makgora#363] a BACKDROP bust reports its native rectangle and i
 
 test("[scenario] a SIMPLEFRAME texture with a TexCoord reports its sub-rectangle region and draws beneath a BACKDROP at a higher level", () => {
   const arch: FrameDefinition = { name: "Arch", type: "SIMPLEFRAME", width: 0.25, height: 0.125, textures: [{ key: "tile", layer: "BACKGROUND", file: "Tile.blp", texCoord: [0.5, 1, 0, 0.5] }] };
-  const client = new HeadlessClient({ warcraftNatives: true, slot: 0, humans: [0], declarations: readNativeDeclarations(), filePrefix: "screen", localNatives: {}, network: [], screen: { width: 1280, height: 720 }, frames: [arch] });
-  const call = (name: string, ...args: unknown[]) => (client.natives[name] as (this: void, ...args: unknown[]) => unknown)(...args);
-  const backdrop = call("BlzCreateFrameByType", "BACKDROP", "plate", undefined, "", 0);
-  call("BlzFrameSetAbsPoint", backdrop, 0, 0.25, 0.75);
-  call("BlzFrameSetSize", backdrop, 0.25, 0.125);
-  call("BlzFrameSetTexture", backdrop, "Plate.blp", 0, true);
-  call("BlzFrameSetLevel", backdrop, -3);
-  const simple = call("BlzCreateSimpleFrame", "Arch", undefined, 0);
-  call("BlzFrameSetAbsPoint", simple, 0, 0.25, 0.75);
+  const client = new HeadlessClient({ slot: 0, humans: [0], declarations: readNativeDeclarations(), filePrefix: "screen", localNatives: {}, network: [], screen: { width: 1280, height: 720 }, frames: [arch] });
+  bindWorld(client.world);
+  const backdrop = createFrameByType("BACKDROP", "plate", originFrame(OriginFrame.gameUi, 0), "", 0);
+  setFrameAbsPoint(backdrop, FramePoint.topLeft, 0.25, 0.75);
+  setFrameSize(backdrop, 0.25, 0.125);
+  setFrameTexture(backdrop, "Plate.blp", 0, true);
+  setFrameLevel(backdrop, -3);
+  const simple = createSimpleFrame("Arch", originFrame(OriginFrame.gameUi, 0), 0);
+  setFrameAbsPoint(simple, FramePoint.topLeft, 0.25, 0.75);
   const rows = uiReport({ ui: client.frames.snapshot() }, 1280, 720);
   expect(rows.filter((row) => row.texture !== null).map((row) => [row.name, row.type, row.texture, row.region])).toEqual([
     ["ArchTile", "TEXTURE", "Tile.blp", [0.5, 0, 1, 0.5]],
@@ -61,21 +65,21 @@ test("[scenario] a SIMPLEFRAME texture with a TexCoord reports its sub-rectangle
 });
 
 test("[reference wisp#125] frames125 boxes match native at 800x600 and 1280x720: frame scale and the 4:3 area", () => {
-  const client = new HeadlessClient({ warcraftNatives: true, screen: { width: 1920, height: 1080 }, slot: 0, humans: [0], declarations: readNativeDeclarations(), filePrefix: "frames125", localNatives: {}, network: [] });
-  const call = (name: string, ...args: unknown[]) => (client.natives[name] as (this: void, ...args: unknown[]) => unknown)(...args);
-  const created = new Map<string, unknown>();
-  const gameUi = call("BlzGetOriginFrame", client.natives.ORIGIN_FRAME_GAME_UI, 0);
+  const client = new HeadlessClient({ screen: { width: 1920, height: 1080 }, slot: 0, humans: [0], declarations: readNativeDeclarations(), filePrefix: "frames125", localNatives: {}, network: [] });
+  bindWorld(client.world);
+  const created = new Map<string, Frame>();
+  const gameUi = originFrame(OriginFrame.gameUi, 0);
   // As test/frames125/main.ts places them.
   for (const placement of PLACEMENTS) {
-    const parent = placement.parent === "console" ? call("BlzGetFrameByName", "ConsoleUIBackdrop", 0) : placement.parent === "red" ? created.get("abs-scaled") : gameUi;
-    const frame = call("BlzCreateFrameByType", "BACKDROP", `Wisp125${placement.name}`, parent, "", 0);
-    call("BlzFrameSetTexture", frame, placement.texture, 0, true);
-    call("BlzFrameSetSize", frame, placement.size, placement.size);
-    if (placement.scale !== 1) call("BlzFrameSetScale", frame, placement.scale);
-    const point = client.natives[placement.point === "center" ? "FRAMEPOINT_CENTER" : "FRAMEPOINT_TOPLEFT"];
-    if (placement.abs !== undefined) call("BlzFrameSetAbsPoint", frame, point, placement.abs[0], placement.abs[1]);
+    const parent = placement.parent === "console" ? namedFrame("ConsoleUIBackdrop", 0) : placement.parent === "red" ? created.get("abs-scaled") : gameUi;
+    const frame = createFrameByType("BACKDROP", `Wisp125${placement.name}`, parent, "", 0);
+    setFrameTexture(frame, placement.texture, 0, true);
+    setFrameSize(frame, placement.size, placement.size);
+    if (placement.scale !== 1) setFrameScale(frame, placement.scale);
+    const point = placement.point === "center" ? FramePoint.center : FramePoint.topLeft;
+    if (placement.abs !== undefined) setFrameAbsPoint(frame, point, placement.abs[0], placement.abs[1]);
     const relative = placement.relative;
-    if (relative !== undefined) call("BlzFrameSetPoint", frame, point, created.get(relative.to), client.natives[relative.to === "anchor" ? "FRAMEPOINT_BOTTOMRIGHT" : "FRAMEPOINT_TOPRIGHT"], relative.x, relative.y);
+    if (relative !== undefined) setFramePoint(frame, point, created.get(relative.to) as Frame, relative.to === "anchor" ? FramePoint.bottomRight : FramePoint.topRight, relative.x, relative.y);
     created.set(placement.name, frame);
   }
   for (const [width, height, measured] of [[800, 600, MEASURED_800X600], [1276, 716, MEASURED_1280X720]] as const) {
@@ -139,18 +143,18 @@ test("[reference wisp#46] an effect draws at the scale and position its map set:
 });
 
 test("[reference wisp-standalone-menu] a child of a raised panel draws above a lower-level sibling, and a button's text is centred", () => {
-  const client = new HeadlessClient({ warcraftNatives: true, slot: 0, humans: [0], declarations: readNativeDeclarations(), filePrefix: "screen", localNatives: {}, network: [], screen: { width: 1280, height: 720 } });
-  const call = (name: string, ...args: unknown[]) => (client.natives[name] as (this: void, ...args: unknown[]) => unknown)(...args);
-  const frame = (type: string, name: string, owner?: unknown) => {
-    const created = call("BlzCreateFrameByType", type, name, owner, "", 0);
-    call("BlzFrameSetAbsPoint", created, 0, 0.1, 0.5);
-    call("BlzFrameSetSize", created, 0.2, 0.05);
+  const client = new HeadlessClient({ slot: 0, humans: [0], declarations: readNativeDeclarations(), filePrefix: "screen", localNatives: {}, network: [], screen: { width: 1280, height: 720 } });
+  bindWorld(client.world);
+  const frame = (type: FrameKind, name: string, owner?: Frame) => {
+    const created = createFrameByType(type, name, owner ?? originFrame(OriginFrame.gameUi, 0), "", 0);
+    setFrameAbsPoint(created, FramePoint.topLeft, 0.1, 0.5);
+    setFrameSize(created, 0.2, 0.05);
     return created;
   };
   const chip = frame("BACKDROP", "Chip");
-  call("BlzFrameSetLevel", chip, 10);
+  setFrameLevel(chip, 10);
   const panel = frame("BACKDROP", "Panel");
-  call("BlzFrameSetLevel", panel, 20);
+  setFrameLevel(panel, 20);
   frame("TEXT", "PanelText", panel);
   frame("GLUETEXTBUTTON", "PanelButton", panel);
   const rows = new Map(client.frames.snapshot().map((row) => [row.name, row]));
@@ -161,11 +165,11 @@ test("[reference wisp-standalone-menu] a child of a raised panel draws above a l
 });
 
 test("[reference makgora#862] a frame painted with a signed JASS colour reaches the window as an unsigned ARGB word", () => {
-  const client = new HeadlessClient({ warcraftNatives: true, slot: 0, humans: [0], declarations: readNativeDeclarations(), filePrefix: "screen", localNatives: {}, network: [], screen: { width: 1280, height: 720 } });
-  const call = (name: string, ...args: unknown[]) => (client.natives[name] as (this: void, ...args: unknown[]) => unknown)(...args);
-  const portrait = call("BlzCreateFrameByType", "BACKDROP", "portrait", undefined, "", 0);
-  call("BlzFrameSetVertexColor", portrait, -1);
-  call("BlzFrameSetTextColor", portrait, -16744193);
-  const [row] = client.frames.snapshot();
+  const client = new HeadlessClient({ slot: 0, humans: [0], declarations: readNativeDeclarations(), filePrefix: "screen", localNatives: {}, network: [], screen: { width: 1280, height: 720 } });
+  bindWorld(client.world);
+  const portrait = createFrameByType("BACKDROP", "portrait", originFrame(OriginFrame.gameUi, 0), "", 0);
+  setFrameColor(portrait, -1);
+  setFrameTextColor(portrait, -16744193);
+  const row = client.frames.snapshot().find((shown) => shown.name === "portrait");
   expect(row).toMatchObject({ name: "portrait", color: 0xffffffff, textColor: 0xff0080ff });
 });

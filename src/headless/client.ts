@@ -10,7 +10,7 @@ import { enforceStandaloneProfile } from "./standaloneProfile";
 import { FRAMES_PER_SECOND, steppedFrames } from "../game/native/frameRate";
 import { describeNumber } from "../game/native/textFormat";
 import { checkIntentionalNoops, EmulatedCalls, logUnlessLocal } from "./nativeCalls";
-import { NativeTable } from "./nativeTable";
+import { type NativeSurface, NativeTable, WISP_HOOKS } from "./nativeTable";
 import { Lightnings } from "../game/native/lightnings";
 import { Ribbons } from "./ribbons";
 import { Weathers } from "./weather";
@@ -76,7 +76,6 @@ export interface ClientOptions {
   readonly scope?: ClientScope;
 
   readonly natives?: (this: void, client: HeadlessClient) => NativeBehaviors;
-  readonly warcraftNatives?: boolean;
   readonly files?: ClientFiles;
 
   readonly frames?: readonly FrameTemplate[];
@@ -184,7 +183,7 @@ export class HeadlessClient {
   readonly sync: Sync;
   readonly bodies: Bodies;
 
-  constructor(options: ClientOptions) {
+  constructor(options: ClientOptions, surface: NativeSurface = WISP_HOOKS) {
     this.screen = clientScreen(options.screen);
     this.abilities = new Warcraft3Abilities(options.abilityObjects);
     this.view = new View(() => this.frame);
@@ -224,7 +223,7 @@ export class HeadlessClient {
       log: logUnlessLocal(log, local),
     };
 
-    const table = new NativeTable(this.natives, log, local, this.emulated, options.warcraftNatives === true);
+    const table = new NativeTable(this.natives, log, local, this.emulated, surface);
     const declared = new Set<string>();
     const missing = new Set<string>();
     const noops = options.intentionalNoops ?? {};

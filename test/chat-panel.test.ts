@@ -1,4 +1,6 @@
 import { afterAll, expect, test } from "bun:test";
+import { createEvents, onEvents } from "wisp/game/events";
+import { localPlayer, playerSlot } from "wisp/game/players";
 import { installHeadless } from "../host/headless/headless";
 import { createKeyFeed } from "../src/headless/keyInput";
 import { unpackKey } from "../host/window/keyEvents";
@@ -6,7 +8,7 @@ import { createPointerFeed } from "../src/headless/pointer";
 import { ChatPanel, type ChatSlot, type ChatStyle, registerChatEvents } from "../src/ui/chatPanel";
 import { FRIZ_QUADRATA_WIDTHS } from "../src/ui/chatLog";
 
-const runtime = installHeadless({ filePrefix: "chatPanel", globalPrefixes: ["__chatPanel"], warcraftNatives: true });
+const runtime = installHeadless({ filePrefix: "chatPanel", globalPrefixes: ["__chatPanel"] });
 afterAll(runtime.restore);
 
 const STYLE: ChatStyle = {
@@ -24,10 +26,10 @@ test("[scenario] the framed chat box shows its title, the chat event's lines and
   const panels = new Map<number, ChatPanel>();
   const map = { install: () => {}, start: () => {
     const panel = new ChatPanel(STYLE);
-    panels.set(GetPlayerId(GetLocalPlayer()), panel);
-    const said = CreateTrigger();
-    registerChatEvents(said as never, [0, 1]);
-    TriggerAddAction(said, () => { panel.receive(); });
+    panels.set(playerSlot(localPlayer()), panel);
+    const said = createEvents();
+    registerChatEvents(said, [0, 1]);
+    onEvents(said, () => { panel.receive(); });
   } };
   const clients = runtime.clients(map, [0, 1]);
   clients.start();
@@ -64,7 +66,7 @@ test("[scenario] a framed chat box whose style gives no title creates no title f
 
 test("[scenario] leaving the framed box for a recent view with no lines hides the entry line's placeholder, and a box with no lines still shows the line while the player types", () => {
   const panels = new Map<number, ChatPanel>();
-  const map = { install: () => {}, start: () => { panels.set(GetPlayerId(GetLocalPlayer()), new ChatPanel(STYLE)); } };
+  const map = { install: () => {}, start: () => { panels.set(playerSlot(localPlayer()), new ChatPanel(STYLE)); } };
   const clients = runtime.clients(map, [0, 1]);
   clients.start();
   clients.frames(2);

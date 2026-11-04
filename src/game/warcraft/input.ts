@@ -23,5 +23,6 @@ export const input: Lowering = {
 export const inputConstants: ConstantLowering = {
   MouseButton: {
     left: "MOUSE_BUTTON_TYPE_LEFT",
+    right: "MOUSE_BUTTON_TYPE_RIGHT",
   },
 };

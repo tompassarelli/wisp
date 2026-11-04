@@ -1,10 +1,16 @@
 import { afterAll, expect, test } from "bun:test";
+import { createBody, setBodyX } from "wisp/game/bodies";
+import { createTimer, startTimer } from "wisp/game/clock";
+import { createEvents, onEvents } from "wisp/game/events";
+import { namedFrame, setFrameText } from "wisp/game/frames";
+import { localPlayer, player, playerSlot } from "wisp/game/players";
+import { addSyncEvent, sendSync, syncData } from "wisp/game/sync";
 import { installHeadless } from "../host/headless/headless";
 import { installDispatch, on, trampoline } from "../src/map/dispatch";
 import { configureRuntime } from "../src/runtime/config";
 import { MEASURED_BATTLE_NET, MEASURED_TURN_BURSTS, syncDelivery, turnBursts } from "../src/headless/syncChannel";
 
-const FIXTURE = { filePrefix: "fixture", globalPrefixes: ["__fixture"], warcraftNatives: true, localNatives: { BlzFrameSetText: "shows text on this client" } };
+const FIXTURE = { filePrefix: "fixture", globalPrefixes: ["__fixture"], localNatives: { BlzFrameSetText: "shows text on this client" } };
 const runtime = installHeadless(FIXTURE);
 afterAll(runtime.restore);
 
@@ -15,19 +21,19 @@ const everyFrame = (frame: () => void) => ({
     configure();
     installDispatch();
     on("fixture.frame", frame);
-    TimerStart(CreateTimer(), 1 / 60, true, trampoline("fixture.frame"));
+    startTimer(createTimer(), 1 / 60, true, trampoline("fixture.frame"));
   },
   install: () => {},
 });
 
 test("a call one client makes alone is the desync, shown with the calls before it; local-only natives may differ", () => {
   const clients = runtime.clients(everyFrame(() => {
-    const slot = GetPlayerId(GetLocalPlayer());
-    BlzFrameSetText(BlzGetFrameByName("Score", 0), `${slot}`);
+    const slot = playerSlot(localPlayer());
+    setFrameText(namedFrame("Score", 0), `${slot}`);
 
     globalThis.__fixtureFrame = (globalThis.__fixtureFrame ?? 0) + 1;
-    SetUnitX(CreateUnit(Player(0), 0x68666f6f, 0.0, 0.0, 0.0), 10);
-    if (globalThis.__fixtureFrame === 7 && slot === 1) CreateTimer();
+    setBodyX(createBody(player(0), 0x68666f6f, 0.0, 0.0, 0.0), 10);
+    if (globalThis.__fixtureFrame === 7 && slot === 1) createTimer();
   }));
   clients.start();
   clients.frames(5);
@@ -45,8 +51,8 @@ test("a call one client makes alone is the desync, shown with the calls before i
 test("with keepCalls, clients compare every frame and keep only their latest calls, with the same checksums and desync", () => {
   const map = everyFrame(() => {
     globalThis.__fixtureFrame = (globalThis.__fixtureFrame ?? 0) + 1;
-    SetUnitX(CreateUnit(Player(0), 0x68666f6f, 0.0, 0.0, 0.0), globalThis.__fixtureFrame);
-    if (globalThis.__fixtureFrame === 7 && GetPlayerId(GetLocalPlayer()) === 1) CreateTimer();
+    setBodyX(createBody(player(0), 0x68666f6f, 0.0, 0.0, 0.0), globalThis.__fixtureFrame);
+    if (globalThis.__fixtureFrame === 7 && playerSlot(localPlayer()) === 1) createTimer();
   });
   const whole = runtime.clients(map);
   const kept = runtime.clients(map, [0, 1], { keepCalls: 2 });
@@ -78,16 +84,16 @@ test("[property seed 66] every client receives each sync message on the frame it
         globalThis.__fixtureReceived = [];
         on("fixture.frame", () => {
           globalThis.__fixtureFrame = (globalThis.__fixtureFrame ?? 0) + 1;
-          const slot = GetPlayerId(GetLocalPlayer());
-          for (const { sender, frame } of sends) if (sender === slot && frame === globalThis.__fixtureFrame) BlzSendSyncData("FX_SYNC", `${sender}:${frame}`);
+          const slot = playerSlot(localPlayer());
+          for (const { sender, frame } of sends) if (sender === slot && frame === globalThis.__fixtureFrame) sendSync("FX_SYNC", `${sender}:${frame}`);
         });
         on("fixture.sync", () => {
-          globalThis.__fixtureReceived?.push(`${BlzGetTriggerSyncData()}@${globalThis.__fixtureFrame ?? 0}`);
+          globalThis.__fixtureReceived?.push(`${syncData()}@${globalThis.__fixtureFrame ?? 0}`);
         });
-        const trigger = CreateTrigger();
-        for (const sender of [0, 1]) BlzTriggerRegisterPlayerSyncEvent(trigger, Player(sender), "FX_SYNC", false);
-        TriggerAddAction(trigger, trampoline("fixture.sync"));
-        TimerStart(CreateTimer(), 1 / 60, true, trampoline("fixture.frame"));
+        const trigger = createEvents();
+        for (const sender of [0, 1]) addSyncEvent(trigger, player(sender), "FX_SYNC");
+        onEvents(trigger, trampoline("fixture.sync"));
+        startTimer(createTimer(), 1 / 60, true, trampoline("fixture.frame"));
       },
       install: () => {},
     });
@@ -126,17 +132,17 @@ test("[invariant] with turn-burst callbacks each callback reads its turn's wall 
       globalThis.__fixtureFrame = 0;
       on("fixture.frame", () => {
         globalThis.__fixtureFrame = (globalThis.__fixtureFrame ?? 0) + 1;
-        const slot = GetPlayerId(GetLocalPlayer());
+        const slot = playerSlot(localPlayer());
         clocks[slot]?.push(os.clock());
-        BlzSendSyncData("FX_SYNC", `${globalThis.__fixtureFrame}`);
+        sendSync("FX_SYNC", `${globalThis.__fixtureFrame}`);
       });
       on("fixture.sync", () => {
-        landed[GetPlayerId(GetLocalPlayer())]?.push((globalThis.__fixtureFrame ?? 0) + 1);
+        landed[playerSlot(localPlayer())]?.push((globalThis.__fixtureFrame ?? 0) + 1);
       });
-      const trigger = CreateTrigger();
-      for (const sender of [0, 1]) BlzTriggerRegisterPlayerSyncEvent(trigger, Player(sender), "FX_SYNC", false);
-      TriggerAddAction(trigger, trampoline("fixture.sync"));
-      TimerStart(CreateTimer(), 1 / 60, true, trampoline("fixture.frame"));
+      const trigger = createEvents();
+      for (const sender of [0, 1]) addSyncEvent(trigger, player(sender), "FX_SYNC");
+      onEvents(trigger, trampoline("fixture.sync"));
+      startTimer(createTimer(), 1 / 60, true, trampoline("fixture.frame"));
     },
     install: () => {},
   }, [0, 1], { delivery: syncDelivery(MEASURED_BATTLE_NET, 5), callbacks: timing });

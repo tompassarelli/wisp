@@ -1,8 +1,13 @@
 import { afterAll, expect, test } from "bun:test";
+import { createTimer, startTimer } from "wisp/game/clock";
+import { createEvents, onEvents } from "wisp/game/events";
+import { FrameEvent, FramePoint, OriginFrame, addFrameEvent, createFrameByType, originFrame, setFrameAbsPoint, setFrameLevel, setFrameSize } from "wisp/game/frames";
+import { MouseButton, mouseDown, pointerX, pointerY } from "wisp/game/input";
+import { eventPlayer, localPlayer, playerSlot } from "wisp/game/players";
 import { installHeadless } from "../host/headless/headless";
 import { POINTER_LEFT, POINTER_RIGHT, type PointerReading, createPointerFeed, screenPoint, uiPoint } from "../src/headless/pointer";
 
-const runtime = installHeadless({ filePrefix: "windowPointer", globalPrefixes: ["__windowPointer"], warcraftNatives: true });
+const runtime = installHeadless({ filePrefix: "windowPointer", globalPrefixes: ["__windowPointer"] });
 afterAll(runtime.restore);
 
 const WINDOW = { width: 1600, height: 900 };
@@ -28,18 +33,18 @@ test("[scenario] a window click reaches only the topmost of two overlapping butt
   const latest = () => seen.filter(row => row.player === 0).map(({ player: _, ...rest }) => rest).at(-1);
   const map = { install: () => {}, start: () => {
     const make = (name: string, x: number, level: number) => {
-      const button = BlzCreateFrameByType("BUTTON", name, BlzGetOriginFrame(ORIGIN_FRAME_GAME_UI, 0), "", 0);
-      BlzFrameSetAbsPoint(button, FRAMEPOINT_CENTER, x, 0.3);
-      BlzFrameSetSize(button, 0.2, 0.2);
-      BlzFrameSetLevel(button, level);
-      const trigger = CreateTrigger();
-      BlzTriggerRegisterFrameEvent(trigger, button, FRAMEEVENT_CONTROL_CLICK);
-      TriggerAddAction(trigger, () => { clicked.push(`${name} ${GetPlayerId(GetTriggerPlayer())}`); });
+      const button = createFrameByType("BUTTON", name, originFrame(OriginFrame.gameUi, 0), "", 0);
+      setFrameAbsPoint(button, FramePoint.center, x, 0.3);
+      setFrameSize(button, 0.2, 0.2);
+      setFrameLevel(button, level);
+      const trigger = createEvents();
+      addFrameEvent(trigger, button, FrameEvent.controlClick);
+      onEvents(trigger, () => { clicked.push(`${name} ${playerSlot(eventPlayer())}`); });
     };
     make("high", 0.35, 5);
     make("low", 0.45, 1);
-    TimerStart(CreateTimer(), 1 / 60, true, () => {
-      seen.push({ player: GetPlayerId(GetLocalPlayer()), x: BlzGetMouseScreenPosX(), y: BlzGetMouseScreenPosY(), left: BlzIsMouseButtonPressed(MOUSE_BUTTON_TYPE_LEFT), right: BlzIsMouseButtonPressed(MOUSE_BUTTON_TYPE_RIGHT) });
+    startTimer(createTimer(), 1 / 60, true, () => {
+      seen.push({ player: playerSlot(localPlayer()), x: pointerX(), y: pointerY(), left: mouseDown(MouseButton.left), right: mouseDown(MouseButton.right) });
     });
   } };
   const clients = runtime.clients(map, [0, 1]);

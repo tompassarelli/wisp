@@ -3,7 +3,7 @@ import { defineSoak } from "../soak";
 
 export default defineSoak({
   name: "soak test",
-  map: { filePrefix: "soaktest", globalPrefixes: ["__soakTest"], warcraftNatives: true },
+  map: { filePrefix: "soaktest", globalPrefixes: ["__soakTest"] },
   game: join(import.meta.dir, "game.ts"),
   roster: { fighters: ["a", "b"], stages: ["flat"], policies: [["fuzz", "fuzz"], ["fuzz", "freeze"]] },
   controller: { buttons: ["jump", "attack", "start"], toggles: ["start"], axes: ["x", "y"], axisLimit: 127, deadZone: 10 },

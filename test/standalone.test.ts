@@ -3,8 +3,11 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
-import { installHeadless } from "../host/headless/headless";
+import { installHeadless, readNativeDeclarations } from "../host/headless/headless";
 import { openStandalone, standaloneEmulatedCallsArgument, type StandaloneGame, type StandaloneOptions } from "../host/play/standalone";
+import { screenHeight, screenWidth } from "../src/game/native/frames";
+import { bindWorld } from "../src/game/native/world";
+import { warcraftLockstep } from "../src/headless/lua";
 
 test("[spec docs/play.md] standalone records scripted checksums and skips live, networked or explicitly disabled checksums", async () => {
   const directory = await mkdtemp(join(tmpdir(), "wisp-checksums-"));
@@ -14,7 +17,7 @@ test("[spec docs/play.md] standalone records scripted checksums and skips live, 
     const cases: readonly [StandaloneOptions, number, boolean?][] = [[{}, 0], [{ script }, 3], [{ script, recordChecksums: false }, 0], [{ script }, 0, true]];
     for (const [index, [options, expected, paced]] of cases.entries()) {
       let checksumCalls = 0;
-      const runtime = installHeadless({ filePrefix: "checksum-fixture", globalPrefixes: [], warcraftNatives: true });
+      const runtime = installHeadless({ filePrefix: "checksum-fixture", globalPrefixes: [] });
       const clients = runtime.clients({ install() {}, start() {} }, [0]);
       clients.start();
       const game: StandaloneGame = {
@@ -58,13 +61,12 @@ test("[spec docs/game-api-plan.md] a run given emulatedCalls writes the client's
   const directory = await mkdtemp(join(tmpdir(), "wisp-emulated-"));
   try {
     for (const [called, calls] of [[["PreloadGenEnd", "Preload", "Preload"], { Preload: 2, PreloadGenEnd: 1 }], [[], {}]] as const) {
-      const runtime = installHeadless({ filePrefix: "emulated-fixture", globalPrefixes: [], warcraftNatives: true });
-      const clients = runtime.clients({ install() {}, start() {} }, [0]);
+      const clients = warcraftLockstep({ declarations: readNativeDeclarations(), players: [0], filePrefix: "emulated-fixture", modules: { entry: "map", modules: [] }, entry: () => ({ install() {}, start() {} }) });
       clients.start();
       const client = clients.client(0);
       const game: StandaloneGame = {
         title: "Emulated fixture", render: { readAsset: async () => undefined },
-        create: async () => ({ client, step: () => clients.frames(1), checksum: () => client.checksum(), close: () => runtime.restore() }),
+        create: async () => ({ client, step: () => clients.frames(1), checksum: () => client.checksum(), close: () => {} }),
       };
       const emulatedCalls = join(directory, `calls-${Object.keys(calls).length}.json`);
       await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
@@ -82,7 +84,7 @@ test("[spec docs/game-api-plan.md] a run given emulatedCalls writes the client's
 });
 
 test("[spec docs/play.md] each step's stages carry the game's own names and the scene build, timed by the step", async () => {
-  const runtime = installHeadless({ filePrefix: "stages-fixture", globalPrefixes: [], warcraftNatives: true });
+  const runtime = installHeadless({ filePrefix: "stages-fixture", globalPrefixes: [] });
   const clients = runtime.clients({ install() {}, start() {} }, [0]);
   clients.start();
   const client = clients.client(0);
@@ -107,11 +109,10 @@ test("[spec docs/play.md] --emulated-calls takes a file and leaves the other arg
 });
 
 test("[spec docs/native-window-plan.md] the local client reports the window's size as its screen, follows a resize, and keeps the last size while the window has no area", async () => {
-  const runtime = installHeadless({ filePrefix: "screen-fixture", globalPrefixes: [], warcraftNatives: true });
+  const runtime = installHeadless({ filePrefix: "screen-fixture", globalPrefixes: [] });
   const clients = runtime.clients({ install() {}, start() {} }, [0]);
   clients.start();
   const client = clients.client(0);
-  const natives = client.natives as Record<string, () => number>;
   const game: StandaloneGame = {
     title: "Screen fixture", render: { readAsset: async () => undefined },
     create: async () => ({ client, step: () => clients.frames(1), checksum: () => client.checksum(), close: () => runtime.restore() }),
@@ -120,7 +121,12 @@ test("[spec docs/native-window-plan.md] the local client reports the window's si
     const player = yield* openStandalone(game);
     const reported = (screen?: { readonly width: number; readonly height: number }) => {
       player.native.advance({ buttons: [], axisX: 0, axisY: 0, ...(screen === undefined ? {} : { screen }) });
-      return [natives.BlzGetLocalClientWidth?.(), natives.BlzGetLocalClientHeight?.(), client.screen.width];
+      bindWorld(client.world);
+      try {
+        return [screenWidth(), screenHeight(), client.screen.width];
+      } finally {
+        bindWorld(undefined);
+      }
     };
     expect(reported({ width: 1280, height: 960 })).toEqual([1280, 960, 1280]);
     expect(reported({ width: 1600, height: 900 })).toEqual([1600, 900, 1600]);

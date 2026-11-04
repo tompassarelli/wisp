@@ -4,6 +4,7 @@ import * as nativeInput from "../src/game/native/input";
 import * as nativePlayers from "../src/game/native/players";
 import { bindWorld } from "../src/game/native/world";
 import { HeadlessClient } from "../src/headless/client";
+import { luaClient } from "../src/headless/lua";
 import { captureScene } from "../host/render/headlessRender";
 import { readNativeDeclarations } from "../host/headless/headless";
 import { registerChatEvents, registerChatHistoryKey } from "../src/ui/chatPanel";
@@ -41,7 +42,7 @@ test("input calls lower to the natives they replaced, byte for byte", () => {
 
 test("the native backend runs a client's key, chat and pointer events and local reads over its own input, and the emulated natives stay at zero", () => {
   const declarations = readNativeDeclarations();
-  const make = (slot: number) => new HeadlessClient({ warcraftNatives: true, screen: { width: 1920, height: 1080 }, slot, humans: [0, 1], declarations, filePrefix: "game-api", localNatives: {}, network: [] });
+  const make = (slot: number) => new HeadlessClient({ screen: { width: 1920, height: 1080 }, slot, humans: [0, 1], declarations, filePrefix: "game-api", localNatives: {}, network: [] });
   const [first, second] = [make(0), make(1)];
   const heard: string[] = [];
   bindWorld(first.world);
@@ -61,21 +62,21 @@ test("the native backend runs a client's key, chat and pointer events and local 
   first.hold(32, 0, true);
   first.mouseScreenX = 640;
   first.mouseScreenY = 360;
-  first.heldMouseButtons.add(first.natives.MOUSE_BUTTON_TYPE_LEFT);
+  first.heldMouseButtons.add(nativeInput.MouseButton.left);
   expect(heard).toEqual(["32||0,0|1", "32|say -hi there|0,0|1", "32|say -hi there|4,5|1"]);
-  expect([nativeInput.keyDown(space), nativeInput.windowFocused(), nativeInput.pointerX(), nativeInput.pointerY(), nativeInput.mouseDown(first.natives.MOUSE_BUTTON_TYPE_LEFT as never), nativeInput.mouseDown(first.natives.MOUSE_BUTTON_TYPE_RIGHT as never)]).toEqual([true, true, 640, 360, true, false]);
+  expect([nativeInput.keyDown(space), nativeInput.windowFocused(), nativeInput.pointerX(), nativeInput.pointerY(), nativeInput.mouseDown(nativeInput.MouseButton.left), nativeInput.mouseDown(nativeInput.MouseButton.right)]).toEqual([true, true, 640, 360, true, false]);
   nativeInput.setPointer(1, 2);
   nativeInput.showCursor(false);
   nativeInput.enableSelections(false, false);
   nativeInput.enableUserControl(true);
   bindWorld(second.world);
-  expect([nativeInput.keyDown(space), nativeInput.pointerX(), nativeInput.mouseDown(second.natives.MOUSE_BUTTON_TYPE_LEFT as never)]).toEqual([false, 0, false]);
+  expect([nativeInput.keyDown(space), nativeInput.pointerX(), nativeInput.mouseDown(nativeInput.MouseButton.left)]).toEqual([false, 0, false]);
   bindWorld(undefined);
   expect([...first.emulatedCalls.keys(), ...second.emulatedCalls.keys()]).toEqual([]);
 });
 
 test("[boundary] the chat panel's registrations run on Bun over the native backend and register each slot", () => {
-  const client = new HeadlessClient({ warcraftNatives: true, screen: { width: 1920, height: 1080 }, slot: 0, humans: [0, 1], declarations: readNativeDeclarations(), filePrefix: "game-api", localNatives: {}, network: [] });
+  const client = new HeadlessClient({ screen: { width: 1920, height: 1080 }, slot: 0, humans: [0, 1], declarations: readNativeDeclarations(), filePrefix: "game-api", localNatives: {}, network: [] });
   bindWorld(client.world);
   const events = nativeEvents.createEvents();
   registerChatEvents(events, [0, 1]);
@@ -86,7 +87,7 @@ test("[boundary] the chat panel's registrations run on Bun over the native backe
 });
 
 test("showCursor(false) on the native backend and BlzEnableCursor(false) on the emulation hide the native window's cursor until it is shown again", () => {
-  const client = new HeadlessClient({ warcraftNatives: true, slot: 0, humans: [0], declarations: readNativeDeclarations(), filePrefix: "game-api", localNatives: {}, network: [] });
+  const client = luaClient({ slot: 0, humans: [0], declarations: readNativeDeclarations(), filePrefix: "game-api", localNatives: {}, network: [] });
   const hidden = () => captureScene(client).cursorHidden === true;
   expect(hidden()).toBe(false);
   bindWorld(client.world);

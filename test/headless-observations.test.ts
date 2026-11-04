@@ -1,8 +1,13 @@
 import { afterAll, expect, test } from "bun:test";
 import { installHeadless } from "../host/headless/headless";
+import { createTimer, startTimer } from "wisp/game/clock";
+import { createEvents, onEvents } from "wisp/game/events";
+import { displayText } from "wisp/game/frames";
+import { addChatEvent, chatText } from "wisp/game/input";
+import { player } from "wisp/game/players";
 import { runJourney } from "../src/headless/journey";
 
-const runtime = installHeadless({ filePrefix: "observations", globalPrefixes: ["__observations"], warcraftNatives: true, frames: [{
+const runtime = installHeadless({ filePrefix: "observations", globalPrefixes: ["__observations"], frames: [{
   name: "Pips", type: "BACKDROP", width: 0.25, height: 0.125, texture: "panel.blp", children: [{
     key: "pip", type: "BACKDROP", width: 0.0625, height: 0.0625, texture: "pip.blp",
     points: [{ point: "TOPLEFT", x: 0.0625, y: -0.03125 }],
@@ -15,11 +20,10 @@ afterAll(runtime.restore);
 
 test("journey observations run after all same-frame events without changing calls or checksums", () => {
   const map = { start: () => {
-    const trigger = CreateTrigger();
-    TriggerRegisterPlayerChatEvent(trigger, Player(0), "", false);
-    TriggerAddAction(trigger, () => DisplayTextToPlayer(Player(0), 0, 0, GetEventPlayerChatString()));
-    const timer = CreateTimer();
-    TimerStart(timer, 0, true, () => {});
+    const said = createEvents();
+    addChatEvent(said, player(0), "", false);
+    onEvents(said, () => displayText(player(0), 0, 0, chatText()));
+    startTimer(createTimer(), 0, true, () => {});
   }, install: () => {} };
   const journey = { frames: 12, events: [{ frame: 0, player: 0, chat: "first" }, { frame: 4, player: 0, chat: "second" }, { frame: 4, player: 0, chat: "third" }] };
   const plain = runJourney(runtime.clients(map, [0]), journey);

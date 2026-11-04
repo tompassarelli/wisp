@@ -28,6 +28,7 @@ export const frames: Lowering = {
   setFrameTextLimit: "BlzFrameSetTextSizeLimit($1, $2)",
   setFrameTexture: "BlzFrameSetTexture($1, $2, $3, $4)",
   setFrameColor: "BlzFrameSetVertexColor($1, $2)",
+  setFrameTextColor: "BlzFrameSetTextColor($1, $2)",
   setFrameModel: "BlzFrameSetModel($1, $2, $3)",
   setFrameSpriteAnimation: "BlzFrameSetSpriteAnimate($1, $2, $3)",
   setFrameSpriteTime: "WispFrameSetSpriteTime($1, $2)",

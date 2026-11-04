@@ -182,6 +182,12 @@ export function setFrameColor(frame: Frame, color: number): void {
   world.frames.setVertexColor(frame, color);
 }
 
+export function setFrameTextColor(frame: Frame, color: number): void {
+  const world = boundWorld();
+  world.log?.("BlzFrameSetTextColor", [frame, color]);
+  world.frames.setTextColor(frame, color);
+}
+
 export function setFrameModel(frame: Frame, model: string, camera: number): void {
   const world = boundWorld();
   world.log?.("BlzFrameSetModel", [frame, model, camera]);

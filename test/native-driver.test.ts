@@ -1,11 +1,12 @@
 import { afterAll, expect, test } from "bun:test";
+import { createTimer, startTimer } from "wisp/game/clock";
 import { installHeadless } from "../host/headless/headless";
 import { installDispatch, on, trampoline } from "../src/map/dispatch";
 import { installNativeDriver, publishNativeDriverStatus, serviceNativeDriver, startNativeDriver } from "../src/map/nativeDriver";
 import { configureRuntime } from "../src/runtime/config";
 import { driverCommandFile, driverReadyFile, driverStatusFile } from "../src/runtime/nativeDriver";
 
-const runtime = installHeadless({ filePrefix: "fixture", globalPrefixes: ["__fixture"], warcraftNatives: true });
+const runtime = installHeadless({ filePrefix: "fixture", globalPrefixes: ["__fixture"] });
 afterAll(runtime.restore);
 const entry = {
   install() {
@@ -13,7 +14,7 @@ const entry = {
     installDispatch();
     installNativeDriver(text => {
 
-      CreateTimer();
+      createTimer();
       publishNativeDriverStatus(Number(text), "123:456", true);
     });
     on("fixture.tick", serviceNativeDriver);
@@ -21,7 +22,7 @@ const entry = {
   start() {
     this.install();
     startNativeDriver([0, 1]);
-    TimerStart(CreateTimer(), 1 / 60, true, trampoline("fixture.tick"));
+    startTimer(createTimer(), 1 / 60, true, trampoline("fixture.tick"));
   },
 };
 

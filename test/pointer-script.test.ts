@@ -1,9 +1,13 @@
 import { afterAll, expect, test } from "bun:test";
+import { createTimer, startTimer } from "wisp/game/clock";
+import { createEvents, onEvents } from "wisp/game/events";
+import { FrameEvent, FramePoint, OriginFrame, addFrameEvent, createFrameByType, eventFrameEvent, eventFrameValue, originFrame, setFrameAbsPoint, setFrameSize } from "wisp/game/frames";
+import { eventPlayer, localPlayer, playerSlot } from "wisp/game/players";
 import { installHeadless } from "../host/headless/headless";
 import { POINTER_LEFT, createPointerFeed, uiPoint } from "../src/headless/pointer";
 import { type PointerStep, pointerStep, scriptedPointer, uiReading } from "../src/headless/pointerScript";
 
-const runtime = installHeadless({ filePrefix: "pointerScript", globalPrefixes: ["__pointerScript"], warcraftNatives: true });
+const runtime = installHeadless({ filePrefix: "pointerScript", globalPrefixes: ["__pointerScript"] });
 afterAll(runtime.restore);
 
 const steps = (script: string): PointerStep[] => script.split("\n").flatMap((line) => {
@@ -15,12 +19,12 @@ const steps = (script: string): PointerStep[] => script.split("\n").flatMap((lin
 function play(script: string, frames: number): string[] {
   const clicked: string[] = [];
   const map = { install: () => {}, start: () => {
-    const card = BlzCreateFrameByType("BUTTON", "card", BlzGetOriginFrame(ORIGIN_FRAME_GAME_UI, 0), "", 0);
-    BlzFrameSetAbsPoint(card, FRAMEPOINT_CENTER, 0.3, 0.2);
-    BlzFrameSetSize(card, 0.1, 0.1);
-    const trigger = CreateTrigger();
-    BlzTriggerRegisterFrameEvent(trigger, card, FRAMEEVENT_CONTROL_CLICK);
-    TriggerAddAction(trigger, () => { clicked.push(`card ${GetPlayerId(GetTriggerPlayer())} ${GetLocalPlayer() === GetTriggerPlayer()}`); });
+    const card = createFrameByType("BUTTON", "card", originFrame(OriginFrame.gameUi, 0), "", 0);
+    setFrameAbsPoint(card, FramePoint.center, 0.3, 0.2);
+    setFrameSize(card, 0.1, 0.1);
+    const trigger = createEvents();
+    addFrameEvent(trigger, card, FrameEvent.controlClick);
+    onEvents(trigger, () => { clicked.push(`card ${playerSlot(eventPlayer())} ${localPlayer() === eventPlayer()}`); });
   } };
   const clients = runtime.clients(map, [0]);
   clients.start();
@@ -70,13 +74,13 @@ function wheelPlay(script: string, frames: number, registered = true): { seen: s
   const seen: string[] = [];
   const outside: number[] = [];
   const map = { install: () => {}, start: () => {
-    const list = BlzCreateFrameByType("BUTTON", "list", BlzGetOriginFrame(ORIGIN_FRAME_GAME_UI, 0), "", 0);
-    BlzFrameSetAbsPoint(list, FRAMEPOINT_CENTER, 0.3, 0.2);
-    BlzFrameSetSize(list, 0.1, 0.1);
-    const trigger = CreateTrigger();
-    BlzTriggerRegisterFrameEvent(trigger, list, registered ? FRAMEEVENT_MOUSE_WHEEL : FRAMEEVENT_CONTROL_CLICK);
-    TriggerAddAction(trigger, () => { seen.push(`${BlzGetTriggerFrameValue()} ${GetPlayerId(GetTriggerPlayer())} ${BlzGetTriggerFrameEvent() === FRAMEEVENT_MOUSE_WHEEL}`); });
-    TimerStart(CreateTimer(), 1 / 60, true, () => { outside.push(BlzGetTriggerFrameValue()); });
+    const list = createFrameByType("BUTTON", "list", originFrame(OriginFrame.gameUi, 0), "", 0);
+    setFrameAbsPoint(list, FramePoint.center, 0.3, 0.2);
+    setFrameSize(list, 0.1, 0.1);
+    const trigger = createEvents();
+    addFrameEvent(trigger, list, registered ? FrameEvent.mouseWheel : FrameEvent.controlClick);
+    onEvents(trigger, () => { seen.push(`${eventFrameValue()} ${playerSlot(eventPlayer())} ${eventFrameEvent() === FrameEvent.mouseWheel}`); });
+    startTimer(createTimer(), 1 / 60, true, () => { outside.push(eventFrameValue()); });
   } };
   const clients = runtime.clients(map, [0]);
   clients.start();

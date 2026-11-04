@@ -90,6 +90,7 @@ export declare function setFrameTextAlignment(frame: Frame, vertical: TextAlignm
 export declare function setFrameTextLimit(frame: Frame, limit: number): void;
 export declare function setFrameTexture(frame: Frame, file: string, flag: number, blend: boolean): void;
 export declare function setFrameColor(frame: Frame, color: number): void;
+export declare function setFrameTextColor(frame: Frame, color: number): void;
 export declare function setFrameModel(frame: Frame, model: string, camera: number): void;
 export declare function setFrameSpriteAnimation(frame: Frame, animation: number, flags: number): void;
 export declare function setFrameSpriteTime(frame: Frame, seconds: number): void;

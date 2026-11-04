@@ -7,6 +7,7 @@ export type MouseButton = Opaque<"MouseButton">;
 
 export declare const MouseButton: {
   readonly left: MouseButton;
+  readonly right: MouseButton;
 };
 
 export declare function osKey(code: number): OsKey;

@@ -103,4 +103,5 @@ export function enableUserControl(enabled: boolean): void {
 
 export const MouseButton = {
   left: fromValue<MouseButtonType>("MOUSE_BUTTON_TYPE_LEFT"),
+  right: fromValue<MouseButtonType>("MOUSE_BUTTON_TYPE_RIGHT"),
 };

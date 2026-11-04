@@ -1,9 +1,12 @@
 import { afterAll, expect, test } from "bun:test";
+import { createEvents, onEvents } from "wisp/game/events";
+import { addChatEvent, addKeyEvent, chatText, eventKey, osKey } from "wisp/game/input";
+import { eventPlayer, localPlayer, player, playerSlot } from "wisp/game/players";
 import { installHeadless } from "../host/headless/headless";
 import { createKeyFeed } from "../src/headless/keyInput";
 import { unpackKey } from "../host/window/keyEvents";
 
-const runtime = installHeadless({ filePrefix: "windowKeys", globalPrefixes: ["__windowKeys"], warcraftNatives: true });
+const runtime = installHeadless({ filePrefix: "windowKeys", globalPrefixes: ["__windowKeys"] });
 afterAll(runtime.restore);
 
 const OSKEY_N = 0x4e, OSKEY_SEMICOLON = 186, OSKEY_Q = 0x51;
@@ -22,9 +25,9 @@ test("[scenario] window keys reach the triggers registered for that player, key,
   const heard: string[] = [];
   const map = { install: () => {}, start: () => {
     const register = (name: string, key: number, meta: number, down: boolean) => {
-      const trigger = CreateTrigger();
-      BlzTriggerRegisterPlayerKeyEvent(trigger, Player(0), ConvertOsKeyType(key), meta, down);
-      TriggerAddAction(trigger, () => { heard.push(`${name} ${GetPlayerId(GetTriggerPlayer())} ${BlzGetTriggerPlayerKey() as unknown as number}`); });
+      const trigger = createEvents();
+      addKeyEvent(trigger, player(0), osKey(key), meta, down);
+      onEvents(trigger, () => { heard.push(`${name} ${playerSlot(eventPlayer())} ${eventKey()}`); });
     };
     register("n down", OSKEY_N, 0, true);
     register("n up", OSKEY_N, 0, false);
@@ -56,12 +59,12 @@ const typing = (text: string) => Array.from(text).flatMap((character) => tap(cha
 test("[scenario] in the native window Enter opens the chat line, typing fills it and Enter sends it as one chat event from the local player on every client, Escape sends none, and the game hears no key while the line is open", () => {
   const chats: string[] = [], keys: string[] = [];
   const map = { install: () => {}, start: () => {
-    const said = CreateTrigger();
-    TriggerRegisterPlayerChatEvent(said, Player(0), "", false);
-    TriggerAddAction(said, () => { chats.push(`client ${GetPlayerId(GetLocalPlayer())} heard ${GetPlayerId(GetTriggerPlayer())}: ${GetEventPlayerChatString()}`); });
-    const pressed = CreateTrigger();
-    for (let key = 1; key <= 255; key++) for (const down of [true, false]) BlzTriggerRegisterPlayerKeyEvent(pressed, Player(0), ConvertOsKeyType(key), 0, down);
-    TriggerAddAction(pressed, () => { if (GetPlayerId(GetLocalPlayer()) === 0) keys.push(`${BlzGetTriggerPlayerKey() as unknown as number}`); });
+    const said = createEvents();
+    addChatEvent(said, player(0), "", false);
+    onEvents(said, () => { chats.push(`client ${playerSlot(localPlayer())} heard ${playerSlot(eventPlayer())}: ${chatText()}`); });
+    const pressed = createEvents();
+    for (let key = 1; key <= 255; key++) for (const down of [true, false]) addKeyEvent(pressed, player(0), osKey(key), 0, down);
+    onEvents(pressed, () => { if (playerSlot(localPlayer()) === 0) keys.push(`${eventKey()}`); });
   } };
   const clients = runtime.clients(map, [0, 1]);
   clients.start();

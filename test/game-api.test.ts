@@ -16,6 +16,7 @@ import * as nativeSync from "../src/game/native/sync";
 import * as nativeView from "../src/game/native/view";
 import { bindWorld } from "../src/game/native/world";
 import { HeadlessClient } from "../src/headless/client";
+import { luaClient } from "../src/headless/lua";
 import { readNativeDeclarations } from "../host/headless/headless";
 import { parseTemplate, templateParts } from "../src/game/warcraft/lowering";
 import { effects, effectsConstants } from "../src/game/warcraft/effects";
@@ -96,7 +97,7 @@ test.each(families)("every $name lowering row names a declared native with the a
 test.each(families)("every $name constant is declared, implemented and lowered to a Warcraft global holding the value the native backend gives", ({ name, backend, constants: table }) => {
   const declarations = readNativeDeclarations();
   const globals = new Set(declarations.constants.map(([constant]) => constant));
-  const client = new HeadlessClient({ warcraftNatives: true, screen: { width: 1920, height: 1080 }, slot: 0, humans: [0], declarations, filePrefix: "game-api", localNatives: {}, network: [] });
+  const client = new HeadlessClient({ screen: { width: 1920, height: 1080 }, slot: 0, humans: [0], declarations, filePrefix: "game-api", localNatives: {}, network: [] });
   const dts = readFileSync(join(root, `src/game/${name}.d.ts`), "utf8");
   const declared = [...dts.matchAll(/export declare const (\w+): \{([^}]*)\}/g)].map(match => [match[1]!, [...match[2]!.matchAll(/readonly (\w+):/g)].map(member => member[1]!).sort()] as const);
   expect(declared.map(([type]) => type).sort()).toEqual(Object.keys(table).sort());
@@ -152,7 +153,7 @@ test("the text family lowers to the native calls it replaced, byte for byte", ()
 
 test("the text native backend logs its row's native in a headless client and works with no world bound", () => {
   expect(nativeText.formatReal(0.0625)).toBe("0.063");
-  const client = new HeadlessClient({ warcraftNatives: true, screen: { width: 1920, height: 1080 }, slot: 0, humans: [0], declarations: readNativeDeclarations(), filePrefix: "game-api", localNatives: {}, network: [] });
+  const client = new HeadlessClient({ screen: { width: 1920, height: 1080 }, slot: 0, humans: [0], declarations: readNativeDeclarations(), filePrefix: "game-api", localNatives: {}, network: [] });
   bindWorld(client.world);
   nativeText.formatInt(7);
   nativeText.formatRealWidth(2.5, 6, 2);
@@ -165,7 +166,7 @@ test("the text native backend logs its row's native in a headless client and wor
 
 test("the native backend logs the native call of its lowering row and keeps each client's effects apart", () => {
   const declarations = readNativeDeclarations();
-  const make = (slot: number) => new HeadlessClient({ warcraftNatives: true, screen: { width: 1920, height: 1080 }, slot, humans: [0, 1], declarations, filePrefix: "game-api", localNatives: { BlzGetLocalSpecialEffectX: "local" }, network: [] });
+  const make = (slot: number) => luaClient({ screen: { width: 1920, height: 1080 }, slot, humans: [0, 1], declarations, filePrefix: "game-api", localNatives: { BlzGetLocalSpecialEffectX: "local" }, network: [] });
   const [first, second] = [make(0), make(1)];
   bindWorld(first.world);
   const a = native.createEffect("a.mdx", 1, 2);
@@ -226,7 +227,7 @@ test("frame and event calls lower to the natives they replaced, byte for byte", 
 
 test("the native backend runs frames, events and the quest log in the bound world and refuses a second registration of one frame event", () => {
   const declarations = readNativeDeclarations();
-  const make = (slot: number) => new HeadlessClient({ warcraftNatives: true, screen: { width: 1920, height: 1080 }, slot, humans: [0, 1], declarations, filePrefix: "game-api", localNatives: { BlzFrameGetText: "local" }, network: [] });
+  const make = (slot: number) => new HeadlessClient({ screen: { width: 1920, height: 1080 }, slot, humans: [0, 1], declarations, filePrefix: "game-api", localNatives: { BlzFrameGetText: "local" }, network: [] });
   const [first, second] = [make(0), make(1)];
   const click = first.natives.FRAMEEVENT_CONTROL_CLICK;
   bindWorld(first.world);
@@ -278,7 +279,7 @@ test("a lowered sound call compiles to the native call it replaced, byte for byt
 
 test("the native backend plays sounds through the bound world's cue log and logs the native call of each row", () => {
   const declarations = readNativeDeclarations();
-  const make = (slot: number) => new HeadlessClient({ warcraftNatives: true, screen: { width: 1920, height: 1080 }, slot, humans: [0, 1], declarations, filePrefix: "game-api", localNatives: {}, network: [] });
+  const make = (slot: number) => new HeadlessClient({ screen: { width: 1920, height: 1080 }, slot, humans: [0, 1], declarations, filePrefix: "game-api", localNatives: {}, network: [] });
   const [first, second] = [make(0), make(1)];
   bindWorld(first.world);
   const cue = nativeSound.soundFromLabel("Defend", false, true, true, 10, 10);
@@ -319,7 +320,7 @@ test("the files family lowers one to one and its native backend keeps a 300-byte
   expect(lowered.lua).toBe(raw.lua);
   const line = "x".repeat(300);
   const written: [string, readonly string[]][] = [];
-  const client = new HeadlessClient({ warcraftNatives: true, screen: { width: 1920, height: 1080 }, slot: 0, humans: [0], declarations: readNativeDeclarations(), filePrefix: "game-api", localNatives: {}, network: [],
+  const client = luaClient({ screen: { width: 1920, height: 1080 }, slot: 0, humans: [0], declarations: readNativeDeclarations(), filePrefix: "game-api", localNatives: {}, network: [],
     files: { written: (name, lines) => { written.push([name, lines]); }, read: () => undefined } });
   bindWorld(client.world);
   filesApi.clearFileLines();
@@ -371,7 +372,7 @@ test("the template grammar takes nested natives and globals and refuses a reused
 
 test("the native backend answers from each client's slots", () => {
   const declarations = readNativeDeclarations();
-  const make = (slot: number) => new HeadlessClient({ warcraftNatives: true, screen: { width: 1920, height: 1080 }, slot, humans: [0, 1, 3], playerNames: { 1: "Ada" }, declarations, filePrefix: "game-api", localNatives: { GetLocalPlayer: "local" }, network: [] });
+  const make = (slot: number) => luaClient({ screen: { width: 1920, height: 1080 }, slot, humans: [0, 1, 3], playerNames: { 1: "Ada" }, declarations, filePrefix: "game-api", localNatives: { GetLocalPlayer: "local" }, network: [] });
   const [first, second] = [make(0), make(1)];
   bindWorld(first.world);
   const events = nativeEvents.createEvents();
@@ -419,7 +420,7 @@ test("view calls compile to the native calls they replaced, byte for byte", () =
 
 test("the view backend logs the native call of its lowering row, keeps each client's view apart and shares it with the client's Warcraft-named natives", () => {
   const declarations = readNativeDeclarations();
-  const make = (slot: number) => new HeadlessClient({ warcraftNatives: true, screen: { width: 1920, height: 1080 }, slot, humans: [0, 1], declarations, filePrefix: "game-api", localNatives: { GetCameraField: "local", GetCameraTargetPositionX: "local", GetCameraTargetPositionY: "local" }, network: [] });
+  const make = (slot: number) => luaClient({ screen: { width: 1920, height: 1080 }, slot, humans: [0, 1], declarations, filePrefix: "game-api", localNatives: { GetCameraField: "local", GetCameraTargetPositionX: "local", GetCameraTargetPositionY: "local" }, network: [] });
   const [first, second] = [make(0), make(1)];
   const field = first.natives.CAMERA_FIELD_ZOFFSET as CameraField;
   bindWorld(first.world);
@@ -468,7 +469,7 @@ test("sync calls lower to the natives they replaced, byte for byte", () => {
 
 test("the native backend delivers a client's messages to its registrations in order and refuses a 256-character one", () => {
   const declarations = readNativeDeclarations();
-  const make = (slot: number, network: SyncMessage[]) => new HeadlessClient({ warcraftNatives: true, screen: { width: 1920, height: 1080 }, slot, humans: [0, 1], declarations, filePrefix: "game-api", localNatives: {}, network });
+  const make = (slot: number, network: SyncMessage[]) => new HeadlessClient({ screen: { width: 1920, height: 1080 }, slot, humans: [0, 1], declarations, filePrefix: "game-api", localNatives: {}, network });
   const [outbox0, outbox1]: SyncMessage[][] = [[], []];
   const [first, second] = [make(0, outbox0), make(1, outbox1)];
   const heard: string[] = [];

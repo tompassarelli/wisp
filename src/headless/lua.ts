@@ -5,6 +5,7 @@ import type { LockstepOptions, SyncDelivery } from "./lockstep";
 import { parseNativeDeclarations } from "./declarations";
 import { type Journey, journeyLines, journeyProblems, runJourney } from "./journey";
 import { Lockstep } from "./lockstep";
+import { WARCRAFT_TABLE } from "./nativeTable";
 import { bundleModules } from "../runtime/modules";
 import { stringChecksum } from "../map/payloadChecksum";
 import type { SceneryFixtures } from "./warcraft3Scenery";
@@ -41,13 +42,13 @@ export function readFile(path: string): string {
 }
 
 /** A lone client whose natives table holds Warcraft's natives, for fixtures that call them by name in a 32-bit Lua run. */
-export function luaClient(options: Omit<ClientOptions, "warcraftNatives">): HeadlessClient {
-  return new HeadlessClient({ ...options, warcraftNatives: true });
+export function luaClient(options: ClientOptions): HeadlessClient {
+  return new HeadlessClient(options, WARCRAFT_TABLE);
 }
 
 /** A lockstep whose natives tables hold Warcraft's natives, for fixtures that call them by name in a 32-bit Lua run. */
-export function warcraftLockstep(options: Omit<LockstepOptions, "warcraftNatives">): Lockstep {
-  return new Lockstep({ ...options, warcraftNatives: true });
+export function warcraftLockstep(options: LockstepOptions): Lockstep {
+  return new Lockstep(options, WARCRAFT_TABLE);
 }
 
 export function luaLockstep(map: LuaHeadlessMap, bundle: string, declarations: string, scope?: ClientScope, delivery?: SyncDelivery): Lockstep {
@@ -70,7 +71,6 @@ export function luaLockstep(map: LuaHeadlessMap, bundle: string, declarations: s
     ...(map.scenery === undefined ? {} : { scenery: map.scenery }),
     ...(map.inventory === undefined ? {} : { inventory: map.inventory }),
     ...(map.effectDeaths === undefined ? {} : { effectDeaths: map.effectDeaths }),
-    warcraftNatives: true,
     natives: (client) => {
       const environment = client.natives;
       setmetatable(environment, { __index: _G });
@@ -83,7 +83,7 @@ export function luaLockstep(map: LuaHeadlessMap, bundle: string, declarations: s
       const entry: MapEntry = chunk();
       return entry;
     },
-  });
+  }, WARCRAFT_TABLE);
 }
 
 export function runLuaJourney(map: LuaHeadlessMap, journey: Journey, bundlePath: string, declarationsPath: string): number {

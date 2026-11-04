@@ -1,8 +1,11 @@
 import { afterAll, expect, test } from "bun:test";
 import { installHeadless } from "../host/headless/headless";
+import { createTimer, startTimer } from "wisp/game/clock";
+import { MouseButton, mouseDown, pointerX } from "wisp/game/input";
+import { localPlayer, playerSlot } from "wisp/game/players";
 import { type Journey, runJourney } from "../src/headless/journey";
 
-const runtime = installHeadless({ filePrefix: "mouse", globalPrefixes: ["__mouse"], warcraftNatives: true });
+const runtime = installHeadless({ filePrefix: "mouse", globalPrefixes: ["__mouse"] });
 afterAll(runtime.restore);
 
 const CARD_PIXELS = 200;
@@ -11,10 +14,10 @@ test("[scenario] journey mouse events drag a chip across cards on the dragging p
   const chips = new Map<number, { card: number; carried: boolean; path: number[] }>();
   const map = { install: () => {}, start: () => {
     const chip = { card: 0, carried: false, path: [] as number[] };
-    chips.set(GetPlayerId(GetLocalPlayer()), chip);
-    TimerStart(CreateTimer(), 1 / 60, true, () => {
-      const card = Math.floor(BlzGetMouseScreenPosX() / CARD_PIXELS);
-      const held = BlzIsMouseButtonPressed(MOUSE_BUTTON_TYPE_LEFT);
+    chips.set(playerSlot(localPlayer()), chip);
+    startTimer(createTimer(), 1 / 60, true, () => {
+      const card = Math.floor(pointerX() / CARD_PIXELS);
+      const held = mouseDown(MouseButton.left);
       if (held && !chip.carried && card === chip.card) chip.carried = true;
       if (chip.carried && chip.path[chip.path.length - 1] !== card) chip.path.push(card);
       if (!held && chip.carried) {

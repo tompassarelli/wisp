@@ -5,6 +5,7 @@ import { type ClientFiles, type ClientScope, HeadlessClient, type LocalNatives, 
 import type { NativeDeclarations } from "./declarations";
 import type { EffectDeaths } from "../game/native/types";
 import type { UnitStateFixtures } from "./clientTypes";
+import { type NativeSurface, WISP_HOOKS } from "./nativeTable";
 import type { IntentionalNoops, PlayerMouseInput, StandaloneProfile } from "./clientTypes";
 import type { SceneryFixtures } from "./warcraft3Scenery";
 import type { Warcraft3InventoryFixtures } from "./warcraft3Inventory";
@@ -38,7 +39,6 @@ export interface LockstepOptions {
   readonly intentionalNoops?: IntentionalNoops;
   readonly standaloneProfile?: StandaloneProfile | undefined;
   readonly natives?: (this: void, client: HeadlessClient) => NativeBehaviors;
-  readonly warcraftNatives?: boolean;
   readonly scope?: ClientScope;
 
   readonly delivery?: SyncDelivery;
@@ -106,7 +106,7 @@ export class Lockstep {
   private inFrame = false;
   private readonly publisher: ModulePublisher;
 
-  constructor(options: LockstepOptions) {
+  constructor(options: LockstepOptions, surface: NativeSurface = WISP_HOOKS) {
     this.options = options;
     this.publisher = new ModulePublisher(options.filePrefix, options.hash);
     const localNatives = { ...WISP_LOCAL_NATIVES, ...options.localNatives };
@@ -128,7 +128,6 @@ export class Lockstep {
         screen: options.screen ?? { width: 1920 + 640 * index, height: 1080 },
         ...(options.scope === undefined ? {} : { scope: options.scope }),
         ...(options.natives === undefined ? {} : { natives: options.natives }),
-        warcraftNatives: options.warcraftNatives === true,
         ...(files === undefined ? {} : { files }),
         ...(options.frames === undefined ? {} : { frames: options.frames }),
         ...(options.unitStates === undefined ? {} : { unitStates: options.unitStates }),
@@ -137,7 +136,7 @@ export class Lockstep {
         ...(options.inventory === undefined ? {} : { inventory: options.inventory }),
         ...(options.effectDeaths === undefined ? {} : { effectDeaths: options.effectDeaths }),
         ...(options.musicSlider === undefined ? {} : { musicSlider: options.musicSlider }),
-      }));
+      }, surface));
     }
     this.clients = clients;
   }
