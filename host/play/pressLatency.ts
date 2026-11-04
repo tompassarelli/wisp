@@ -8,7 +8,8 @@ import { runTool } from "../os/warcraft/desktopClient";
 import { DesktopFailure } from "../contract/client";
 import { monotonicNs } from "../os/platform/linux/monotonic";
 import { type SampleEdge, parseSampleLog } from "../window/sampleLog";
-import { type Keyboard, openKeyboard } from "./xtest";
+import type { Keyboard } from "./keyboard";
+import { PRESS_INPUTS, type PressInput, openPressKeyboard } from "./pressKeyboard";
 
 export const WINDOW_KINDS = ["chrome", "warcraft", "native", "reference"] as const;
 export type WindowKind = (typeof WINDOW_KINDS)[number];
@@ -22,8 +23,11 @@ export interface Rect {
 
 export interface PressLatencyOptions {
   readonly window: WindowKind;
-  readonly display: string;
+  /** How the harness presses the key: through XTEST on `display` for an Xwayland window, or the compositor's virtual keyboard for a native Wayland one. */
+  readonly input: PressInput;
+  readonly display: string | undefined;
   readonly waylandRuntime: string;
+  readonly waylandDisplay: string;
   readonly key: string;
   readonly region: Rect;
   readonly control: Rect | undefined;
@@ -54,7 +58,7 @@ export interface Trial {
   readonly bracketMs: number | undefined;
   readonly skippedFrames: number | undefined;
   readonly frameMs: number;
-  /** How long the XTEST request took to write: the uncertainty of the press time. */
+  /** How long the key request took to write: the uncertainty of the press time. */
   readonly pressWriteMs: number;
   /** The middle of the bracket: press to the changed pixels. */
   readonly pressMs: number | undefined;
@@ -188,7 +192,7 @@ function pressReport(options: PressLatencyOptions, trials: readonly Trial[]) {
   const inputDelayMs = options.inputDelayFrames * SIM_FRAME_MS;
   const spread = (values: readonly number[]) => ({ p50: percentile(values, 0.5), p95: percentile(values, 0.95), measured: values.length });
   return {
-    window: options.window, key: options.key, region: options.region, control: options.control, flash: options.flash, trials: trials.length,
+    window: options.window, input: options.input, key: options.key, region: options.region, control: options.control, flash: options.flash, trials: trials.length,
     responded: seen.length, missedFrames: answered.length - seen.length,
     resolutionMs: percentile(trials.map((trial) => trial.frameMs), 0.5),
     bracketMs: { p50: percentile(seen.map((trial) => trial.bracketMs!), 0.5), p95: percentile(seen.map((trial) => trial.bracketMs!), 0.95), max: Math.max(...seen.map((trial) => trial.bracketMs!)) },
@@ -227,7 +231,7 @@ type Pressed = { readonly beforeNs: number; readonly afterNs: number };
 const drift = (samples: readonly Sample[], rect: Rect, from: Frame | undefined = undefined) => Math.max(...samples.map((sample) => changedPixels(from ?? samples[0]!.frame, sample.frame, rect)));
 
 function grabber(options: PressLatencyOptions, area: Rect) {
-  const wayland = { XDG_RUNTIME_DIR: options.waylandRuntime, WAYLAND_DISPLAY: "wayland-0" };
+  const wayland = { XDG_RUNTIME_DIR: options.waylandRuntime, WAYLAND_DISPLAY: options.waylandDisplay };
   const capture = Effect.gen(function*() {
     const beforeNs = nowNs();
     const bytes = yield* runTool(options.window, "grab the screen", [options.grim, "-g", `${area.x},${area.y} ${area.width}x${area.height}`, "-s", "1", "-t", "ppm", "-"], wayland);
@@ -332,14 +336,14 @@ const runTrial = (context: TrialContext, index: number) => Effect.gen(function*(
 });
 
 /**
- * Taps `key` through XTEST on `display` while grabbing the compositor output back to back, and times the first grab whose `region` changed.
+ * Taps `key` through XTEST on `display`, or the compositor's virtual keyboard with `--input wayland`, while grabbing the compositor output back to back, and times the first grab whose `region` changed.
  * grim returns once the compositor has drawn the next frame, so a loop of small-region grabs catches every frame and each grab's end is that frame's timestamp;
- * the press is an in-process XTEST request at a known instant, fired at a random phase of the frame.
+ * the press is an in-process request at a known instant, fired at a random phase of the frame.
  * A trial whose still `control` region also changed in the answering grab saw the camera move, not the press, and counts as unanswered.
  * See wisp:docs/online-plan.md, "Input-to-display latency".
  */
 export const pressLatency = (options: PressLatencyOptions) => Effect.scoped(Effect.gen(function*() {
-  const keyboard = yield* openKeyboard(options.display, options.key);
+  const keyboard = yield* openPressKeyboard(options, options.key);
   const area = bounds(options.region, options.control);
   const region = relativeTo(area, options.region), control = options.control === undefined ? undefined : relativeTo(area, options.control);
   const context: TrialContext = { options, keyboard, region, control, captureFor: grabber(options, area), quiet: quietCheck(options, region, control) };
@@ -351,24 +355,25 @@ export const pressLatency = (options: PressLatencyOptions) => Effect.scoped(Effe
   return report;
 }));
 
-const PRESS_LATENCY_USAGE = `--window ${WINDOW_KINDS.join("|")} --display :N --wayland-runtime DIR --key KEYSYM --region X,Y,W,H (--control X,Y,W,H | --flash) --out DIR [--trials N] [--settle-ms MS] [--sample-log FILE] [--input-delay-frames N]`;
+const PRESS_LATENCY_USAGE = `--window ${WINDOW_KINDS.join("|")} (--display :N | --input wayland) --wayland-runtime DIR [--wayland-display NAME] --key KEYSYM --region X,Y,W,H (--control X,Y,W,H | --flash) --out DIR [--trials N] [--settle-ms MS] [--sample-log FILE] [--input-delay-frames N]`;
 
 /** Reads the harness's flags; `GRIM` names the tool when it is not on PATH. Returns the usage line when a flag is missing or malformed. */
 export function pressLatencyArguments(args: readonly string[], env: Readonly<Record<string, string | undefined>> = process.env): PressLatencyOptions | string {
   const { values } = parseArgs({ args: [...args], strict: false, options: {
     window: { type: "string" }, display: { type: "string" }, "wayland-runtime": { type: "string" }, key: { type: "string" },
     region: { type: "string" }, control: { type: "string" }, out: { type: "string" }, trials: { type: "string" }, "settle-ms": { type: "string" }, "sample-log": { type: "string" },
-    flash: { type: "boolean" }, "input-delay-frames": { type: "string" },
+    flash: { type: "boolean" }, "input-delay-frames": { type: "string" }, input: { type: "string" }, "wayland-display": { type: "string" },
   } });
   const text = (name: string) => { const value = values[name]; return typeof value === "string" ? value : undefined; };
   const window = WINDOW_KINDS.find((kind) => kind === text("window"));
   const flash = values["flash"] === true;
+  const input = PRESS_INPUTS.find((kind) => kind === (text("input") ?? "xtest"));
   const region = parseRect(text("region") ?? ""), control = parseRect(text("control") ?? "");
   const display = text("display"), waylandRuntime = text("wayland-runtime"), key = text("key"), out = text("out");
   const trials = Number(text("trials") ?? "30"), settleMs = Number(text("settle-ms") ?? "1500"), inputDelayFrames = Number(text("input-delay-frames") ?? "2");
-  if (window === undefined || region === undefined || (control === undefined && !flash) || display === undefined || waylandRuntime === undefined || key === undefined || out === undefined
+  if (window === undefined || region === undefined || (control === undefined && !flash) || input === undefined || (input === "xtest" && display === undefined) || waylandRuntime === undefined || key === undefined || out === undefined
     || !Number.isInteger(trials) || trials < 1 || !(settleMs >= 0) || !Number.isInteger(inputDelayFrames) || inputDelayFrames < 0) return PRESS_LATENCY_USAGE;
-  return { window, display, waylandRuntime, key, region, control, out, trials, settleMs, sampleLog: text("sample-log"), flash, inputDelayFrames, grim: env["GRIM"] ?? "grim" };
+  return { window, input, display, waylandRuntime, waylandDisplay: text("wayland-display") ?? "wayland-0", key, region, control, out, trials, settleMs, sampleLog: text("sample-log"), flash, inputDelayFrames, grim: env["GRIM"] ?? "grim" };
 }
 
 if (import.meta.main) {

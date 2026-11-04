@@ -566,6 +566,69 @@ fills 160,0 to 319,159) and 232,72,116,115 windowed (213,53 to 366,205).
 For Warcraft: `--window warcraft --region 6,6,38,38 --flash --input-delay-frames N`
 on lan0a's display.
 
+### The native-Wayland path (makgora#1122 part 9, 5 November 2026)
+
+Every figure above is from an Xwayland window driven through XTEST. On Tom's
+niri desktop the window is native Wayland: winit picks Wayland whenever
+`WAYLAND_DISPLAY` is set. `latency press --input wayland` presses the key
+through the compositor's `zwp_virtual_keyboard_v1` instead of XTEST
+(host/play/waylandKeyboard.ts). The compositor takes that keyboard as an
+input device and sends its key to the focused surface, the way it sends a
+real key. The harness writes the Wayland requests on a raw unix socket in
+the same process, so the press time is known to the write, as with XTEST.
+The private desktop's labwc runs on wlroots' headless backend with no
+libinput devices, so a uinput keyboard would not reach it, and would reach
+niri instead. To check which path a window took, look at its process's
+sockets: under `--input wayland` the window's only display connection
+ended at labwc's `wayland-0`, and under XTEST at Xwayland's `X1`.
+
+Smoke runs on the laptop, Mak'gora's standalone on Wisp 9aef8c46, input
+delay 1, Mailbox, `-dev flash on`:
+
+- Native Wayland, fullscreen: 4 of 5 presses answered.
+- Native Wayland, windowed: 5 of 5 answered.
+- Xwayland, windowed: 5 of 5 answered.
+
+Native Wayland and Xwayland, windowed and fullscreen, 100 trials each, are
+taken in the next commit. The first 100-trial set was thrown out: three
+quiet native leases ran at once, and the harness's grabs slowed from one a
+frame to 20 to 36 ms.
+
+Command, from Wisp, inside the desktop with the window up (`WAYLAND_DISPLAY`
+set for the window):
+`bun wisp latency press --window native --input wayland --wayland-runtime RUN/runtime --key n --region R --flash --input-delay-frames 1 --sample-log DIR/samples.jsonl --trials 100 --out DIR/flash`
+(`--wayland-display NAME` when the socket is not `wayland-0`).
+
+What each compositor offers, read from the binaries and source on this
+laptop (labwc 0.9.7 on wlroots 0.19.3, the private desktop's; niri 26.04,
+Tom's):
+
+- **Virtual keyboard (`zwp_virtual_keyboard_manager_v1`):** both. So the
+  same harness path can drive a window on niri. The private desktop never
+  does that, because it would be Tom's screen.
+- **Tearing control (`wp_tearing_control_manager_v1`):** labwc only, behind
+  `<core><allowTearing>`, which defaults to `no` and is not set in the
+  private desktop. wlroots tears only on its DRM backend, through async page
+  flips. The headless backend shows a committed buffer on its frame timer
+  either way, so tearing cannot change a private-desktop figure. niri does
+  not offer the protocol at all, so on Tom's desktop a window cannot ask for
+  tearing.
+- **Direct scanout of a fullscreen window:** both. niri does it by default
+  (`debug { disable-direct-scanout }` turns it off). wlroots' scene tries it
+  for a single fullscreen buffer. But every screencopy frame takes
+  `wlr_output_lock_attach_render`, and `wlr_output_is_direct_scanout_allowed`
+  refuses while that lock is held ("Direct scan-out disabled by lock",
+  wlroots types/output/output.c). The harness grabs back to back, so every
+  frame it times was composited. A grim-based harness cannot measure direct
+  scanout on any wlroots compositor; that takes light off the panel.
+  Composition costs the GPU time of one full-screen copy, not a frame: the
+  composited buffer is committed on the same output frame.
+- **Presentation time (`wp_presentation`):** both. **FIFO and commit timing
+  (`wp_fifo_manager_v1`, `wp_commit_timing_manager_v1`):** neither.
+- **Xwayland:** labwc runs it built in. niri runs X clients through
+  `xwayland-satellite`, a separate Wayland client, so an Xwayland window on
+  niri goes through one more process than it does on labwc.
+
 ### How the harness reaches one frame
 
 Validated 30 October 2026 on gex45 against a reference page of known delay:

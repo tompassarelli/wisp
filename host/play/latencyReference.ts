@@ -102,7 +102,7 @@ export function checkArguments(args: readonly string[], env: Readonly<Record<str
  * Validates the press-latency method against a source of known delay: a Chrome page that changes a pixel `REFERENCE_DELAYS` frames after the key.
  * The method passes when every delayed run's median lands within one display frame of the delay the page was given.
  */
-export const checkPressLatency = (options: Pick<PressLatencyOptions, "display" | "waylandRuntime" | "trials" | "out" | "grim" | "settleMs">, chrome = process.env["CHROME"] ?? "google-chrome-stable") =>
+export const checkPressLatency = (options: Pick<PressLatencyOptions, "waylandRuntime" | "trials" | "out" | "grim" | "settleMs"> & { readonly display: string }, chrome = process.env["CHROME"] ?? "google-chrome-stable") =>
   Effect.gen(function*() {
     mkdirSync(options.out, { recursive: true });
     const delays: ReferenceDelay[] = [];
@@ -112,7 +112,7 @@ export const checkPressLatency = (options: Pick<PressLatencyOptions, "display" |
       writeFileSync(page, referencePage(frames));
       const report = yield* Effect.scoped(Effect.gen(function*() {
         yield* chromeFor(chrome, options.display, join(work, "profile"), page);
-        const measured = { ...options, window: "reference" as const, sampleLog: undefined, flash: false, inputDelayFrames: 0, key: "j", region: REGION, control: CONTROL, out: join(options.out, `frames-${frames}`) };
+        const measured = { ...options, window: "reference" as const, input: "xtest" as const, waylandDisplay: "wayland-0", sampleLog: undefined, flash: false, inputDelayFrames: 0, key: "j", region: REGION, control: CONTROL, out: join(options.out, `frames-${frames}`) };
         yield* shown(measured, CONTROL);
         yield* Effect.sleep(1500);
         return yield* pressLatency(measured);

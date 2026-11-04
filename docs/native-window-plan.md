@@ -406,8 +406,15 @@ How it is measured:
     [--warcraft DIR/press-latency.json]` runs it and writes `latency.json`: the
     native run's `pressMs` and `windowShareMs`, with the Warcraft run beside
     it as `warcraft` when one is given. The window must already be on the
-    desktop and take its input from XTEST (an X11 window); the command does not
-    start it.
+    desktop; the command does not start it. By default the key goes through
+    XTEST on `--display`, which reaches an Xwayland window only. `--input
+    wayland` presses it through the compositor's `zwp_virtual_keyboard_v1`
+    instead (host/play/waylandKeyboard.ts, socket `--wayland-display`,
+    `wayland-0` by default), which reaches a native Wayland window the way a
+    real key does: the compositor takes it as a keyboard device and sends it to
+    the focused surface. The private desktop's labwc runs on wlroots' headless
+    backend with no libinput devices, so a uinput keyboard would never reach
+    it, and it would reach Tom's niri instead.
   - `--flash` replaces the fighter region and its control with the game's own
     press marker (wisp#244): a block that a development build draws in a fixed
     corner on the sim frame whose input row carries a new press, after input
@@ -416,7 +423,7 @@ How it is measured:
     harness grabs a small region back to back, stops at the first grab that
     shows the block, and starts the next trial once the block is gone, so a
     trial takes about 0.4 s. The report splits press to display into
-    `split.pressToSampleMs` (the key's XTEST write to the window sample that
+    `split.pressToSampleMs` (the key request's write to the window sample that
     carried it), `split.inputDelayMs` (`--input-delay-frames` sim frames, 2 by
     default) and `split.sampleToDisplayMs` (the rest, from the sample to the
     changed pixels, less the delay), and each row and the summary carry the

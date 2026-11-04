@@ -2,6 +2,7 @@ import { connect } from "node:net";
 import { Effect } from "effect";
 import { DesktopFailure } from "../contract/client";
 import { monotonicNs } from "../os/platform/linux/monotonic";
+import type { Keyboard } from "./keyboard";
 
 const NAMED_KEYSYMS: Readonly<Record<string, number>> = {
   space: 0x20, Return: 0xff0d, Escape: 0xff1b, Tab: 0xff09, BackSpace: 0xff08,
@@ -100,11 +101,6 @@ export class Reader {
     this.queued = this.queued.slice(length);
     resolve(taken);
   }
-}
-
-export interface Keyboard {
-  /** Presses or releases the key, returning the monotonic nanoseconds just before and after the request left for the X server. */
-  readonly send: (down: boolean) => { readonly beforeNs: number; readonly afterNs: number };
 }
 
 const connectKeyboard = (display: string, keyName: string) => {
