@@ -199,7 +199,7 @@ newest main on a hosted `ubuntu-latest` runner after every CI run on main
 (`workflow_run` for pushes; a CI run that Autoland dispatches starts no
 workflow_run, so ci.yml's `seed-farm` job dispatches it instead) and once an hour (`schedule` at minute 17, which GitHub
 fires late or skips under load), and files every new failure as an issue. A run checks out the
-ref, installs Bun 1.3.13 and both Lua32 builds with ci.yml's and the farm
+ref, installs Bun 1.4.2 and both Lua32 builds with ci.yml's and the farm
 tests' cache keys, and runs `COMMAND ci nightly --minutes M --json`.
 Runs never overlap: a new one cancels nothing and waits behind the running
 one, and GitHub keeps one waiting run per repository, so runs never

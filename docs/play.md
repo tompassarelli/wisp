@@ -351,7 +351,7 @@ warm-up frames, and writes `probe.json` with the counts `missedPresents`,
 (0, at most 6 and 0), and beside them p50, p95, p99 and max for the wake
 (the render thread's sample to the worker returning from `next_event`), the step, the scene (encode plus parse), the
 `readAsset` calls, the present interval and the collection pauses. The pauses
-come from JavaScriptCore's collector log (`BUN_JSC_logGC`), because Bun 1.3.13
+come from JavaScriptCore's collector log (`BUN_JSC_logGC`), because Bun (as measured on 1.3.13)
 reports no `gc` entries to `PerformanceObserver`; the run is a child process so
 its stderr can carry the log. It builds the library when it is missing.
 A process opens one native window, because winit builds one event loop per

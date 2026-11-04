@@ -1,5 +1,5 @@
 sourceLanguage = "TypeScript"
-bun = "1.3.13"
+bun = "1.4.2"
 typescriptCompilerApi = "6.0.2"
 typescriptChecker = "7.0.2"
 typescriptToLua = "1.37.1"

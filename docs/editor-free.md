@@ -5,7 +5,7 @@ smallest complete supported example: a chat trigger, two moving units, typed
 unit/ability object data, a map declaration and a two-client headless journey.
 No editor or Warcraft client is needed for the commands below.
 
-Use Bun 1.3.13, Git and Nix. Supply your own Lua base map outside the checkout;
+Use Bun 1.4.2, Git and Nix. Supply your own Lua base map outside the checkout;
 see [base-map requirements](sample-map.md#the-base-map). The base supplies
 terrain and map metadata; this route replaces its initialization with the
 TypeScript entry. A base already saved with Lua can be reused without opening

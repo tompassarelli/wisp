@@ -828,7 +828,7 @@ blaming settings: such a client is the one to stop or restart.
    for its LAN socket, and the game's own search goes to 16000 (held by the
    first client), so the host announces to the clients instead of answering
    searches. Discovery closes when countdown starts. An unused announcement
-   port can leave Bun 1.3.13 spending nearly one core on the UDP socket even
+   port can leave Bun (as measured on 1.3.13) spending nearly one core on the UDP socket even
    after announcements stop. A two-second isolated sample used 1.66 CPU-seconds
    with that socket open and 0.003 after closing it; gameplay needs only TCP;
 4. for each client, switches its provider to LAN (below), then sends its

@@ -80,7 +80,7 @@ jobs:
           fetch-depth: 0
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.3.13
+          bun-version: 1.4.2
       - run: bun install --frozen-lockfile
       # verdict: test (the queued tips stacked on main and checked), check (the stack failed its checks) or none (no tip left to test).
       # A tip that is gone, held, refused or conflicts with main alone is settled here; one that conflicts with the stack waits in deferred.
@@ -227,7 +227,7 @@ jobs:
       - if: steps.cached.outputs.from == ''
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.3.13
+          bun-version: 1.4.2
       - if: steps.cached.outputs.from == ''
         run: |
           set +e -uo pipefail
@@ -264,7 +264,7 @@ jobs:
           fetch-depth: 0
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.3.13
+          bun-version: 1.4.2
       - run: npm i -g @ast-grep/cli@0.42.1
       - run: git clone --depth 1 https://github.com/tompassarelli/north "$RUNNER_TEMP/north"
       - run: cargo build --release --locked --bin north && echo "CODE_HEALTH_NORTH_BIN=$PWD/target/release/north" >> "$GITHUB_ENV"
@@ -323,7 +323,7 @@ jobs:
       - if: env.VERDICT != 'none'
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.3.13
+          bun-version: 1.4.2
       - id: judge
         run: |
           set +e -uo pipefail
@@ -420,7 +420,7 @@ jobs:
           path: candidate
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.3.13
+          bun-version: 1.4.2
       - id: land
         run: |
           set +e -uo pipefail

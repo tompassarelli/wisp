@@ -224,6 +224,15 @@ in that turn. Every collection then runs between a submit and the next sample,
 about 2 per 12 frames, and none runs inside a step. A networked match still
 takes a turn every frame, because its peer's sockets run on this thread.
 
+On Bun 1.4.2 (4 November 2026, laptop, High, Blackrock, four fighters, three
+runs per cell, south:agents/decisions/makgora/perf-smooth-plan.md) the per-turn
+requests are gone, so a networked match no longer collects every frame, but the
+cadence still pays for a local window: taking a turn every frame and leaving
+collections to Bun gives 0.025 collections per step instead of 0.10, yet each
+one lands inside a step, so the worker frame p99 rises from 3.78 to 5.39 ms at
+rollback 0 and from 5.48 to 7.10 ms at rollback 7, and the pause max from 7.44
+to 12.92 and 5.38 to 15.96 ms. The cadence stays.
+
 ### Libraries
 
 Licences were checked on crates.io on 30 October 2026 and are recorded in

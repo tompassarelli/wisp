@@ -4,7 +4,7 @@
   "private": true,
   "license": "MIT",
   "type": "module",
-  "packageManager": "bun@1.3.13",
+  "packageManager": "bun@1.4.2",
   "exports": {
     "./scripts/cleanRoom": "./host/checks/cleanRoom.ts",
     "./scripts/compiler": "./host/toolchain/compiler.ts",

@@ -111,7 +111,7 @@ export function installHeadless(map: HeadlessMap, declarations = readNativeDecla
     if (own === undefined) values.set(client, own = { ...starting });
     return own;
   };
-  // The globals go in on the first clients() call, not at load: Bun 1.3.13 skips afterAll in a file whose tests
+  // The globals go in on the first clients() call, not at load: Bun (as seen on 1.3.13) skips afterAll in a file whose tests
   // -t filters out, so a load-time install outlives the file, and while this Proxy sits in globalThis's prototype
   // chain Bun can't evaluate any CommonJS module ("Expected CommonJS module to have a function wrapper").
   let installed: { readonly before: Map<string, PropertyDescriptor | undefined>; readonly ownNames: Set<string>; readonly outerPrototype: object | null } | undefined;
