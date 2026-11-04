@@ -104,3 +104,17 @@ test("[spec docs/native-window-plan.md] a local window's loop takes an event-loo
   expect(await turnsSeen(YIELD_EVERY_FRAMES * 3, () => false)).toBe(3);
   expect(await turnsSeen(YIELD_EVERY_FRAMES, () => true)).toBe(YIELD_EVERY_FRAMES);
 });
+
+test("[spec docs/native-window-plan.md] a networked window's loop takes a turn every frame and collects after every YIELD_EVERY_FRAMES-th, between frames, as a local one does", async () => {
+  const collectionsSeen = async (frames: number, networked: boolean) => {
+    let stepped = 0, collections = 0, inStep = false;
+    const between: boolean[] = [];
+    const view = { ...fakeWindow({}), nextEvent: () => (stepped < frames ? { kind: "frame" as const, sample: sample(stepped) } : { kind: "stopped" as const }) };
+    const loop: FrameLoop = { series: { wakes: [], steps: [], encodes: [], frames: [], intervals: [], stages: {} }, complete: () => {}, dispose: () => {}, step: () => { inStep = true; stepped++; inStep = false; } };
+    expect(await Effect.runPromise(serveFrames(view, loop, Promise.resolve(), networked, () => false, () => { collections++; between.push(!inStep); }))).toBe("ended");
+    return { collections, between: between.every(Boolean) };
+  };
+  expect(await collectionsSeen(YIELD_EVERY_FRAMES * 3, true)).toEqual({ collections: 3, between: true });
+  expect(await collectionsSeen(YIELD_EVERY_FRAMES * 3, false)).toEqual({ collections: 3, between: true });
+  expect(await collectionsSeen(YIELD_EVERY_FRAMES - 1, true)).toEqual({ collections: 0, between: true });
+});

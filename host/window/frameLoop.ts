@@ -132,9 +132,10 @@ const turn = Effect.callback<void>((resume) => { setImmediate(() => resume(Effec
  * `readAsset` completions run, followed by an eden collection that also finishes any collection Bun asked for in that turn, so each
  * collection runs between a submit and the next sample instead of inside a step. A networked match's peer owns sockets and timers on this
  * thread, so there every frame takes a turn and the wait never blocks: with no sample queued the thread sleeps 1 ms on its event loop
- * instead. Returns whether the window closed, or failed or was stopped.
+ * instead, and the eden collection still follows every `YIELD_EVERY_FRAMES`th frame's turn, since Bun's own collections would otherwise land
+ * inside a transport step or a scene (wisp#229). Returns whether the window closed, or failed or was stopped.
  */
-export const serveFrames = (view: WindowView, loop: FrameLoop, finished: Promise<void>, networked: boolean, reading: () => boolean = () => false) => Effect.gen(function*() {
+export const serveFrames = (view: WindowView, loop: FrameLoop, finished: Promise<void>, networked: boolean, reading: () => boolean = () => false, collect: () => void = edenGC) => Effect.gen(function*() {
   let sinceTurn = 0;
   for (;;) {
     const event = view.nextEvent(networked ? 0 : EVENT_WAIT_MS);
@@ -142,12 +143,10 @@ export const serveFrames = (view: WindowView, loop: FrameLoop, finished: Promise
       if (networked) yield* Effect.sleep(NET_POLL_MS);
     } else if (event.kind === "frame") {
       loop.step(event.sample);
-      if (networked) yield* turn;
-      else if (++sinceTurn >= YIELD_EVERY_FRAMES || reading()) {
-        sinceTurn = 0;
-        yield* turn;
-        edenGC();
-      }
+      const due = ++sinceTurn >= YIELD_EVERY_FRAMES || (!networked && reading());
+      if (due) sinceTurn = 0;
+      if (networked || due) yield* turn;
+      if (due) collect();
     } else if (event.kind === "closed") {
       return "closed";
     } else if (event.kind === "failed") {
