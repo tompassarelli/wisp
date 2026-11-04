@@ -92,3 +92,31 @@ fn a_texture_with_a_region_draws_only_that_sub_rectangle_of_its_image() {
     let uvs: Vec<[f32; 4]> = quads.iter().map(|(_, quad)| quad.uv).collect();
     assert_eq!(uvs, [[0.5, 0.0, 1.0, 0.5], [0.0, 0.0, 1.0, 1.0]]);
 }
+
+fn measured(text: &str, size: f32) -> f32 {
+    let face = fontdue::Font::from_bytes(include_bytes!("../../assets/DejaVuSans.ttf") as &[u8], fontdue::FontSettings::default()).unwrap();
+    let mut before = None;
+    text.chars().fold(0.0, |width, ch| {
+        let kern = before.and_then(|left| face.horizontal_kern(left, ch, size)).unwrap_or(0.0);
+        before = Some(ch);
+        width + kern + face.metrics(ch, size).advance_width
+    })
+}
+
+fn text_rows(text: &str, width_units: f32) -> Option<usize> {
+    let scene = format!(r#"{{"ui":[{{"name":"row","type":"TEXT","rectangle":[0.05,0.5,{},0.45],"text":"{text}","alpha":255,"visible":true,"scale":2,"plain":true}}]}}"#, 0.05 + width_units);
+    let (_, quads) = built_from(&scene)?;
+    let mut tops: Vec<i32> = quads.iter().filter(|(source, _)| *source == Source::Glyphs).map(|(_, quad)| (quad.rect[1] + quad.rect[3]).round() as i32).collect();
+    tops.sort_unstable();
+    Some(1 + tops.windows(2).filter(|pair| pair[1] - pair[0] > 10).count())
+}
+
+#[test]
+fn a_plain_text_row_wraps_only_when_its_measured_width_passes_the_frame_width() {
+    let text = "This is where to find games, report bugs and contribute.";
+    let size = 0.0085 * AREA[3] / 0.6 * 2.0;
+    let units = measured(text, size) / (AREA[3] / 0.6);
+    let Some(fits) = text_rows(text, units + 0.002) else { return };
+    assert_eq!(fits, 1, "a row {units} units wide fits a frame 0.002 wider");
+    assert_eq!(text_rows(text, units - 0.002), Some(2), "a row {units} units wide wraps in a frame 0.002 narrower");
+}
