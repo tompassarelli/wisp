@@ -6,6 +6,7 @@ import { Effect } from "effect";
 import { decodePpm, encodePpm, type Frame } from "../contract/services";
 import { runTool } from "../os/warcraft/desktopClient";
 import { DesktopFailure } from "../contract/client";
+import { monotonicNs } from "../os/platform/linux/monotonic";
 import { type SampleEdge, parseSampleLog } from "../window/sampleLog";
 import { openKeyboard } from "./xtest";
 
@@ -70,7 +71,7 @@ const QUIET_CHANGED = 1000;
 const QUIET_TRIES = 30;
 const CONTROL_CHANGED = 100;
 
-const nowNs = () => Number(process.hrtime.bigint());
+const nowNs = monotonicNs;
 
 function parseRect(text: string): Rect | undefined {
   const numbers = text.split(",").map(Number);
@@ -134,9 +135,9 @@ export function framePeriodMs(samples: readonly Sample[]): number {
   return percentile(samples.slice(1).map((sample, index) => (sample.afterNs - samples[index]!.afterNs) / 1e6), 0.5);
 }
 
-/** The sample that carried the press is the first logged button change at or after it; the window's share is from that sample to the middle of the bracket the change appeared in. */
+/** The sample that carried the press is the first logged press (a new pad button or a key going down) at or after it; the window's share is from that sample to the middle of the bracket the change appeared in. */
 export function windowShare(edges: readonly SampleEdge[], pressNs: number, changed: Pick<Response, "lowerMs" | "upperMs">): number | undefined {
-  const sampled = edges.find((edge) => edge.sampleNs >= pressNs && edge.mask !== 0);
+  const sampled = edges.find((edge) => edge.sampleNs >= pressNs && edge.pressed);
   if (sampled === undefined) return undefined;
   return (pressNs - sampled.sampleNs) / 1e6 + (changed.lowerMs + changed.upperMs) / 2;
 }

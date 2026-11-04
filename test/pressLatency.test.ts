@@ -1,10 +1,15 @@
 import { expect, test } from "bun:test";
+import { mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { Effect, Fiber } from "effect";
 import type { Frame } from "../host/contract/services";
 import { checkArguments, referenceErrors } from "../host/play/latencyReference";
 import { decodePressRun, latencyReport } from "../host/play/latencyComparison";
 import { changedPixels, framePeriodMs, pressLatencyArguments, response, windowShare, type Sample } from "../host/play/pressLatency";
-import { parseSampleLog } from "../host/window/sampleLog";
-import { displaySocket, fakeKey, keycodeOf, keysymOf, queryExtension } from "../host/play/xtest";
+import { openSampleLog, parseSampleLog } from "../host/window/sampleLog";
+import { monotonicNs } from "../host/os/platform/linux/monotonic";
+import { Reader, displaySocket, fakeKey, keycodeOf, keysymOf, queryExtension } from "../host/play/xtest";
 
 const frame = (width: number, height: number, lit: readonly (readonly [number, number])[] = []): Frame => {
   const rgb = new Uint8Array(width * height * 3);
@@ -74,7 +79,7 @@ test("[spec docs/online-plan.md] a key press is one XTEST FakeInput request at a
 });
 
 test("[spec docs/native-window-plan.md] the window's share runs from the logged sample that carried the press to the middle of the bracket the change appeared in", () => {
-  const edges = parseSampleLog('{"sampleNs":40000000,"mask":1}\n{"sampleNs":90000000,"mask":0}\n');
+  const edges = parseSampleLog('{"sampleNs":40000000,"mask":1,"pressed":true}\n{"sampleNs":90000000,"mask":0,"pressed":false}\n');
   expect(windowShare(edges, 36 * ms, { lowerMs: 8, upperMs: 24 })).toBe(12);
   expect(windowShare(edges, 41 * ms, { lowerMs: 8, upperMs: 24 })).toBeUndefined();
   expect(windowShare([], 36 * ms, { lowerMs: 8, upperMs: 24 })).toBeUndefined();
@@ -87,4 +92,38 @@ test("[spec docs/native-window-plan.md] latency.json carries the Warcraft run on
   expect(latencyReport(run, warcraft)).toEqual({ ...run, warcraft });
   expect(decodePressRun({ ...warcraft, rows: [] })).toEqual(warcraft);
   expect(() => decodePressRun({ window: "warcraft" })).toThrow();
+});
+
+test("the X reader hands consecutive reads consecutive bytes when one chunk answers both", async () => {
+  const reader = new Reader();
+  const reads = Effect.runFork(Effect.gen(function*() {
+    const head = yield* reader.take(2);
+    const rest = yield* reader.take(2);
+    return [...head, ...rest];
+  }));
+  reader.push(Uint8Array.of(1, 2, 3, 4));
+  expect(await Effect.runPromise(Fiber.join(reads))).toEqual([1, 2, 3, 4]);
+});
+
+test("the sample log records a keyboard press, which leaves the pad mask unchanged, as a press", () => {
+  const path = join(mkdtempSync(join(tmpdir(), "sample-log-")), "samples.jsonl");
+  const record = openSampleLog(path, { nowNs: () => 0 });
+  const key = (down: boolean) => ({ key: 74, meta: 0, down });
+  record({ sampleNs: 10, mask: 0, keys: [] });
+  record({ sampleNs: 20, mask: 0, keys: [key(true)] });
+  record({ sampleNs: 30, mask: 0, keys: [key(false)] });
+  record({ sampleNs: 40, mask: 2, keys: [] });
+  record({ sampleNs: 50, mask: 0, keys: [] });
+  expect(parseSampleLog(readFileSync(path, "utf8")).map(({ mask, pressed }) => ({ mask, pressed }))).toEqual([
+    { mask: 0, pressed: true }, { mask: 0, pressed: false }, { mask: 2, pressed: true }, { mask: 0, pressed: false },
+  ]);
+});
+
+test("[boundary] a worker reads the same monotonic clock as the process that started it, so the window's stamps compare with the harness's", async () => {
+  const before = monotonicNs();
+  const worker = new Worker(URL.createObjectURL(new Blob([`import { monotonicNs } from ${JSON.stringify(join(import.meta.dir, "../host/os/platform/linux/monotonic.ts"))}; postMessage(monotonicNs());`], { type: "text/javascript" })));
+  const inWorker = await new Promise<number>((resolve) => { worker.onmessage = (event) => resolve(event.data as number); });
+  worker.terminate();
+  expect(inWorker).toBeGreaterThanOrEqual(before);
+  expect(inWorker).toBeLessThanOrEqual(monotonicNs());
 });

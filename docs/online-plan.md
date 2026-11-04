@@ -297,6 +297,82 @@ run back to back at the same load, several times; the native window's
 acceptance check should do that. The p95 figures are the host's, not the
 window's: each comes from two or three slow trials.
 
+### The native window against Warcraft (W2, 4 November 2026)
+
+Measured back to back on the laptop (Radeon 890M, 24 threads), each target
+alone on a private labwc desktop under a quiet native capacity lease, CPU
+pressure (`/proc/pressure/cpu` some avg10, sampled every 5 s) 0% at the median
+of every run and load average 2 to 9. The native window is Mak'gora's
+standalone (makgora `--start training`, Wisp a69c0cf6's harness fixes) at
+Tom's size: a 2848x1840 window, or borderless fullscreen, on a 2880x1920
+desktop at 59.1 Hz, High, run as an Xwayland window so it takes XTEST input.
+Warcraft is Classic 3.0.0.24268 on LAN pair 0's lan0a at the pool's parity
+profile (800x600), playing the `native-input` map alone (`lan solo`). Both run
+the same build (`playable-0047`: keyboard input, two frames of delay, predicted
+pooled fighters) in `-dev quick training`, and the harness taps N, the attack
+in the WASD preset both share, while watching Illidan's upper body. Each figure
+is the middle of the trial's bracket, from trials with the camera still and no
+missed grab.
+
+| Target | Present mode | Press to changed pixels, p50 | p95 | Window share (sample to pixels), p50 / p95 | Trials counted |
+| --- | --- | --- | --- | --- | --- |
+| Native window, windowed | Fifo (default) | 114.0 ms | 149.7 ms | 104.7 / 126.7 ms | 65 of 100 |
+| Native window, fullscreen | Fifo (default) | 114.6 ms | 141.4 ms | 105.1 / 119.9 ms | 53 of 100 |
+| Native Warcraft (lan0a, windowed) | | 70.8 ms | 101.1 ms | | 100 of 100 |
+| Native window, windowed, after the runs above | Mailbox (`WISP_WINDOW_PRESENT=Mailbox`) | 68.4 ms | 104.3 ms | 61.1 / 90.6 ms | 19 of 30 |
+
+Commands, from a Mak'gora `ts/`: the window is
+`WISP_WINDOW_SAMPLE_LOG=DIR/samples.jsonl WISP_WINDOW_SIZE=2848x1840 [WISP_WINDOW_FULLSCREEN=1] [WISP_WINDOW_PRESENT=Mailbox] bun scripts/wisp.ts play --standalone --window native --start training --no-tutorial-offer`
+with `WAYLAND_DISPLAY` unset, under a gpu lease of 4 CPUs and 4 GiB; Warcraft
+is `bun wisp lan pool --pair 0 --pool-profile parity` inside a private desktop,
+`bun wisp lan solo MAP --pair 0` and `-dev quick training` typed into lan0a's
+chat. The harness, from Wisp:
+`bun wisp latency press --window native --display :N --wayland-runtime RUN/runtime --key n --region 600,690,220,240 --control 900,880,300,40 --sample-log DIR/samples.jsonl --trials 100 --out build/latency`
+(fullscreen `--region 555,680,240,240 --control 900,850,300,40`), and
+`--window warcraft --key n --region 40,170,110,180 --control 420,240,180,40`.
+Each mode's `latency.json` is its native report with the Warcraft run as
+`warcraft` (`latencyReport`, wisp:host/play/latencyComparison.ts).
+
+The acceptance check (`.windowShareMs.p95 <= 16.7 and .windowShareMs.p50 <= 10 and .pressMs.p50 <= .warcraft.pressMs.p50`)
+fails in both modes: the share's p50 is 104.7 and 105.1 ms against 10, its p95
+126.7 and 119.9 ms against 16.7, and the press p50 114.0 and 114.6 ms against
+Warcraft's 70.8 ms, 43 to 44 ms (about three frames) over.
+
+Reading the rows:
+
+- **The three frames are the Fifo present path.** Windowed and fullscreen
+  measure the same (114.0 and 114.6 ms), so composition is not where they go.
+  Under Fifo the window's next acquire blocks: `acquire p99` 17 to 27 ms in
+  its five-second reports, against 0.1 to 0.2 ms under Mailbox. Changing only
+  the present mode to Mailbox took the press p50 from 114.0 to 68.4 ms and
+  the share from 104.7 to 61.1 ms, level with Warcraft's 70.8 ms, at a steady
+  60.0 frames/s with no late scenes. Fifo asks for
+  `desired_maximum_frame_latency = 1`, but through Xwayland it still queues
+  about three frames between the sample and the screen. wisp#242 owns the fix.
+- **The share bar counts the game's own frames.** The share runs from the
+  sample that carried the key to the changed pixels, so it includes the build's
+  two frames of input delay and the frames before the jab's first pose differs
+  from idle. Warcraft, with the same build, shows the change 70.8 ms after the
+  press. So the 10 ms and 16.7 ms share bars, written for a game that draws a
+  press on the step that samples it, cannot hold for Mak'gora on any window:
+  even under Mailbox the share is 61 ms. The bar against Warcraft is the one
+  that separates windows here. wisp#242 owns restating the share as the window's
+  part alone (sample to present, or to pixels minus the game's steps).
+- **Missed grabs.** At 2880x1920 the harness's grab loop misses a frame more
+  often than at Chrome's or Warcraft's sizes: 22 and 37 trials of 100 were
+  dropped for a two-frame bracket, against none for Warcraft at 800x600. A
+  dropped trial is one with no figure, not a slow one, so the medians stand.
+
+The live run found three harness faults the unit tests could not, fixed in
+a69c0cf6: the X reader handed its first read's bytes to the second (every key
+was refused), the sample log recorded only pad buttons (a keyboard press left
+it empty), and Bun's `process.hrtime` counts from each process's and worker's
+own start, so the window's stamps and the harness's could not be compared
+(they now both read CLOCK_MONOTONIC).
+
+Not measured here: PresentMon on Windows (no Windows host), and the netcode
+tick's phase lock under `--net`.
+
 ### How the harness reaches one frame
 
 Validated 30 October 2026 on gex45 against a reference page of known delay:

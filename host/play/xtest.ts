@@ -1,6 +1,7 @@
 import { connect } from "node:net";
 import { Effect } from "effect";
 import { DesktopFailure } from "../contract/client";
+import { monotonicNs } from "../os/platform/linux/monotonic";
 
 const NAMED_KEYSYMS: Readonly<Record<string, number>> = {
   space: 0x20, Return: 0xff0d, Escape: 0xff1b, Tab: 0xff09, BackSpace: 0xff08,
@@ -15,7 +16,7 @@ const FAKE_INPUT = 2;
 const SETUP_MIN_KEYCODE = 26;
 const SETUP_MAX_KEYCODE = 27;
 
-const nowNs = () => Number(process.hrtime.bigint());
+const nowNs = monotonicNs;
 const padded = (length: number) => (length + 3) & ~3;
 
 /** The X keysym for a key name: one Latin-1 character, a named key, or `0x` hex. */
@@ -72,7 +73,7 @@ export function keycodeOf(keysym: number, firstKeycode: number, keysymsPerKeycod
 }
 
 /** A byte stream that hands out exact byte counts as they arrive. */
-class Reader {
+export class Reader {
   private queued: Uint8Array = new Uint8Array(0);
   private waiting: { readonly length: number; readonly resolve: (bytes: Uint8Array) => void } | undefined;
 
@@ -95,8 +96,9 @@ class Reader {
     if (this.waiting === undefined || this.queued.length < this.waiting.length) return;
     const { length, resolve } = this.waiting;
     this.waiting = undefined;
-    resolve(this.queued.slice(0, length));
+    const taken = this.queued.slice(0, length);
     this.queued = this.queued.slice(length);
+    resolve(taken);
   }
 }
 
