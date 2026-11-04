@@ -372,13 +372,4 @@ export const TextAlignment = {
 export const OriginFrame = {
   gameUi: fromValue<OriginFrameType>("ORIGIN_FRAME_GAME_UI"),
   chatMsg: fromValue<OriginFrameType>("ORIGIN_FRAME_CHAT_MSG"),
-  commandButton: fromValue<OriginFrameType>("ORIGIN_FRAME_COMMAND_BUTTON"),
-  itemButton: fromValue<OriginFrameType>("ORIGIN_FRAME_ITEM_BUTTON"),
-  heroBar: fromValue<OriginFrameType>("ORIGIN_FRAME_HERO_BAR"),
-  heroButton: fromValue<OriginFrameType>("ORIGIN_FRAME_HERO_BUTTON"),
-  heroHpBar: fromValue<OriginFrameType>("ORIGIN_FRAME_HERO_HP_BAR"),
-  heroManaBar: fromValue<OriginFrameType>("ORIGIN_FRAME_HERO_MANA_BAR"),
-  heroButtonIndicator: fromValue<OriginFrameType>("ORIGIN_FRAME_HERO_BUTTON_INDICATOR"),
-  minimap: fromValue<OriginFrameType>("ORIGIN_FRAME_MINIMAP"),
-  minimapButton: fromValue<OriginFrameType>("ORIGIN_FRAME_MINIMAP_BUTTON"),
 };

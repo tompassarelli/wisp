@@ -88,14 +88,5 @@ export const framesConstants: ConstantLowering = {
   OriginFrame: {
     gameUi: "ORIGIN_FRAME_GAME_UI",
     chatMsg: "ORIGIN_FRAME_CHAT_MSG",
-    commandButton: "ORIGIN_FRAME_COMMAND_BUTTON",
-    itemButton: "ORIGIN_FRAME_ITEM_BUTTON",
-    heroBar: "ORIGIN_FRAME_HERO_BAR",
-    heroButton: "ORIGIN_FRAME_HERO_BUTTON",
-    heroHpBar: "ORIGIN_FRAME_HERO_HP_BAR",
-    heroManaBar: "ORIGIN_FRAME_HERO_MANA_BAR",
-    heroButtonIndicator: "ORIGIN_FRAME_HERO_BUTTON_INDICATOR",
-    minimap: "ORIGIN_FRAME_MINIMAP",
-    minimapButton: "ORIGIN_FRAME_MINIMAP_BUTTON",
   },
 };
