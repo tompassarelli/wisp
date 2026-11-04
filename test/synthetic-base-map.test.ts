@@ -16,7 +16,7 @@ farmTest("[boundary] the installed package's syntheticBaseMap export writes a ba
     const archive = join(fixture, "wisp.tgz");
     await producePackage(archive);
     await Bun.write(join(fixture, "package.json"), JSON.stringify({ private: true, dependencies: { wisp: "file:./wisp.tgz" } }));
-    const install = Bun.spawnSync([process.execPath, "install", "--offline", "--ignore-scripts", "--silent"], { cwd: fixture, stdout: "pipe", stderr: "pipe" });
+    const install = Bun.spawnSync([process.execPath, "install", "--prefer-offline", "--ignore-scripts", "--silent"], { cwd: fixture, stdout: "pipe", stderr: "pipe" });
     expect({ code: install.exitCode, stderr: install.stderr.toString().replace(/bun install[^\n]*\n|Saved lockfile\n/g, "") }).toEqual({ code: 0, stderr: "" });
     const script = Bun.resolveSync("wisp/scripts/wisp/syntheticBaseMap", fixture);
     expect(script).toBe(join(fixture, "node_modules/wisp/host/compile/syntheticBaseMap.ts"));

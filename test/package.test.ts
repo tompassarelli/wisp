@@ -15,7 +15,7 @@ farmTest("[invariant] installed package resolves bare imports and preserves Lua3
     await producePackage(archive, "0123456789abcdef0123456789abcdef01234567");
     await Bun.write(join(fixture, "package.json"), JSON.stringify({ private: true, dependencies: { wisp: "file:./wisp.tgz" } }));
     for (const file of ["entry.ts", "tsconfig.json", "perf.ts", "tsconfig.perf.json"]) await copyFile(join(import.meta.dir, "package", file), join(fixture, file));
-    const install = Bun.spawnSync([process.execPath, "install", "--offline", "--ignore-scripts", "--silent"], { cwd: fixture, stdout: "pipe", stderr: "pipe" });
+    const install = Bun.spawnSync([process.execPath, "install", "--prefer-offline", "--ignore-scripts", "--silent"], { cwd: fixture, stdout: "pipe", stderr: "pipe" });
     expect({ code: install.exitCode, stderr: install.stderr.toString().replace(/bun install[^\n]*\n|Saved lockfile\n/g, "") }).toEqual({ code: 0, stderr: "" });
     expect(await Bun.file(join(fixture, "node_modules/wisp/src/map/hotReload.lua")).exists()).toBe(true);
     expect((await Bun.file(join(fixture, "node_modules/wisp/package.json")).json()).version).toBe("0.0.0-g0123456789ab");
