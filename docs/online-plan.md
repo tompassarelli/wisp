@@ -405,9 +405,19 @@ unset.
   unthrottled. GPU frame p50 10.5 ms, p99 14.9 ms of the 16.7 ms frame, the
   scene at 75% of the window. `inputToPresentMs` p50 7.0 ms, p95 16.2 ms.
 
+- **Press to changed pixels, borderless fullscreen, default (Mailbox):**
+  100 trials at CPU pressure 0 to 0.85%: p50 72.0 ms, p95 85.8 ms, 65
+  counted (21 missed a grab frame), against Warcraft's p50 70.8 ms and p95
+  101.1 ms. The median is 1.2 ms over Warcraft's, so the acceptance line
+  fails fullscreen, while the p95 is 15 ms under it. `inputToPresentMs` p50
+  3.3 ms, p95 4.5 ms. The share as first written was p50 63.6 ms, level
+  with windowed (62.2 ms), so fullscreen adds no window time; the gap is in
+  the press-to-sample wait and the display path. An earlier 30-trial
+  fullscreen run, during a landing's checks (pressure up to 12%), gave p50
+  74.1 ms.
+
 `acquire p99` is 0.1 to 0.2 ms in every pulse (it was 17 to 27 ms under
-`Fifo`). Fullscreen was not rerun: under `Fifo` it measured the same as
-windowed, so composition is not where the frames went.
+`Fifo`).
 
 ### How the harness reaches one frame
 
