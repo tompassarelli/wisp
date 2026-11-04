@@ -268,8 +268,8 @@ threads); with `--host` or `--join` the match's peer runs on that worker too
 (wisp:docs/native-window-plan.md, "Networked play on the worker"). The
 worker owns the frame loop: it blocks in `next_event` (a networked match polls
 it and sleeps 1 ms on the event loop instead, so the peer's sockets keep running), steps the map once,
-gives the scene back as JSON in one call, then yields one `setImmediate` turn so
-timers and `readAsset` completions run; Bun's main thread only opens the window
+gives the scene back as JSON in one call, then every 12th frame (every frame while a read is in flight) yields one `setImmediate` turn so
+timers and `readAsset` completions run and runs an eden collection, so collections fall between a submit and the next sample rather than inside a step; Bun's main thread only opens the window
 and waits for the worker's `completed`, `closed` or `failed`. The worker holds
 its own counted reference to the window (`wisp_window_attach` and
 `wisp_window_release`), so closing the window never frees it under a worker

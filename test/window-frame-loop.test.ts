@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import type { InputSample, WindowView } from "../host/window/binding";
-import { type NativePlayer, createFrameLoop } from "../host/window/frameLoop";
+import { Effect } from "effect";
+import { type FrameLoop, type NativePlayer, YIELD_EVERY_FRAMES, createFrameLoop, serveFrames } from "../host/window/frameLoop";
 import type { StandaloneFrame } from "../host/render/standaloneFrames";
 
 const scene = {} as StandaloneFrame["scene"];
@@ -86,4 +87,20 @@ test("[spec docs/native-window-plan.md] warmup frames are left out of the step, 
   expect(result.stageMs).toEqual({ sim: { p50: 2, p95: 3, p99: 3, max: 3 } });
   expect(result.cpuEncodeMs).toEqual({ p50: 1, p95: 1, p99: 1, max: 1 });
   expect(result.gpuPassMs).toEqual({ frame: { p50: 2, p95: 2, p99: 2, max: 2 } });
+});
+
+test("[spec docs/native-window-plan.md] a local window's loop takes an event-loop turn only every YIELD_EVERY_FRAMES frames, and on every frame while a read is in flight", async () => {
+  const turnsSeen = async (frames: number, reading: (frame: number) => boolean) => {
+    let turns = 0, stepped = 0, live = true;
+    const tick = () => { turns++; if (live) setImmediate(tick); };
+    setImmediate(tick);
+    const seen: number[] = [];
+    const view = { ...fakeWindow({}), nextEvent: () => (stepped < frames ? { kind: "frame" as const, sample: sample(stepped) } : { kind: "stopped" as const }) };
+    const loop: FrameLoop = { series: { wakes: [], steps: [], encodes: [], frames: [], intervals: [], stages: {} }, complete: () => {}, dispose: () => {}, step: () => { seen.push(turns); stepped++; } };
+    expect(await Effect.runPromise(serveFrames(view, loop, Promise.resolve(), false, () => reading(stepped)))).toBe("ended");
+    live = false;
+    return new Set(seen).size;
+  };
+  expect(await turnsSeen(YIELD_EVERY_FRAMES * 3, () => false)).toBe(3);
+  expect(await turnsSeen(YIELD_EVERY_FRAMES, () => true)).toBe(YIELD_EVERY_FRAMES);
 });

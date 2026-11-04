@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import { edenGC } from "bun:jsc";
 import type { StandaloneFrame, StandaloneInput } from "../render/standaloneFrames";
 import type { InputSample, WindowView } from "./binding";
 import { RENDER_SERIES, gpuReport } from "./renderSeries";
@@ -120,21 +121,33 @@ export function createFrameLoop(player: NativePlayer, window: WindowView, option
 
 const EVENT_WAIT_MS = 1000;
 const NET_POLL_MS = 1;
+/** Frames between event-loop turns once nothing is being read: Bun 1.3.13 asks for an eden collection on about every turn that comes 16 ms after the last one (docs/native-window-plan.md, "The game steps on a worker thread"). */
+export const YIELD_EVERY_FRAMES = 12;
+
+const turn = Effect.callback<void>((resume) => { setImmediate(() => resume(Effect.void)); });
 
 /**
- * Steps the game once per sample, in the order the render thread took them: wait in the window, step, submit, then one macrotask turn so
- * timers, messages and `readAsset` completions run outside the time from sample to scene. A networked match's peer owns sockets and timers
- * on this thread, so there the wait never blocks: with no sample queued the thread sleeps 1 ms on its event loop instead. Returns whether
- * the window closed, or failed or was stopped.
+ * Steps the game once per sample, in the order the render thread took them: wait in the window, step, submit, then, every
+ * `YIELD_EVERY_FRAMES` frames or on any frame while `reading` says a read is in flight, one macrotask turn so timers, messages and
+ * `readAsset` completions run, followed by an eden collection that also finishes any collection Bun asked for in that turn, so each
+ * collection runs between a submit and the next sample instead of inside a step. A networked match's peer owns sockets and timers on this
+ * thread, so there every frame takes a turn and the wait never blocks: with no sample queued the thread sleeps 1 ms on its event loop
+ * instead. Returns whether the window closed, or failed or was stopped.
  */
-export const serveFrames = (view: WindowView, loop: FrameLoop, finished: Promise<void>, networked: boolean) => Effect.gen(function*() {
+export const serveFrames = (view: WindowView, loop: FrameLoop, finished: Promise<void>, networked: boolean, reading: () => boolean = () => false) => Effect.gen(function*() {
+  let sinceTurn = 0;
   for (;;) {
     const event = view.nextEvent(networked ? 0 : EVENT_WAIT_MS);
     if (event.kind === "timeout") {
       if (networked) yield* Effect.sleep(NET_POLL_MS);
     } else if (event.kind === "frame") {
       loop.step(event.sample);
-      yield* Effect.callback<void>((resume) => { setImmediate(() => resume(Effect.void)); });
+      if (networked) yield* turn;
+      else if (++sinceTurn >= YIELD_EVERY_FRAMES || reading()) {
+        sinceTurn = 0;
+        yield* turn;
+        edenGC();
+      }
     } else if (event.kind === "closed") {
       return "closed";
     } else if (event.kind === "failed") {

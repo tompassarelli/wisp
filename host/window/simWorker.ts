@@ -22,6 +22,22 @@ const WARMUP_FRAMES = Number(process.env.WISP_WINDOW_WARMUP_FRAMES ?? 0);
 interface NetEnd { readonly net?: NetReport; readonly netEnded?: string; readonly error?: string }
 
 const send = (message: SimWorkerMessage) => self.postMessage(message);
+
+/** A probe's timed `readAsset` calls, one every `READ_ASSET_EVERY` frames through `assets`, and how many are still in flight. */
+const createReadProbe = (readAsset: (path: string) => Promise<unknown>, assets: readonly string[]) => {
+  const reads: number[] = [];
+  let inFlight = 0;
+  return {
+    reads,
+    inFlight: () => inFlight,
+    frame(count: number) {
+      if (count % READ_ASSET_EVERY !== 0) return;
+      const read = performance.now();
+      inFlight++;
+      void readAsset(assets[(count / READ_ASSET_EVERY) % assets.length] ?? "").then(() => reads.push(performance.now() - read)).finally(() => { inFlight--; });
+    },
+  };
+};
 const problemOf = (cause: unknown) => (cause instanceof Error ? cause.message : String(cause));
 
 const run = async (init: SimWorkerInit) => {
@@ -38,10 +54,9 @@ const run = async (init: SimWorkerInit) => {
     const match = net === undefined ? undefined : yield* preloadAll(game.render, library).pipe(Effect.andThen(openNetMatch(game, init.options, net)));
     const player = yield* openStandalone(match?.game ?? game, { ...init.options, window: "native", library: init.library });
     const finished = Promise.withResolvers<void>();
-    const reads: number[] = [];
     let measuredFrom: Readonly<Record<RenderSeriesName, number>> | undefined;
     let measured: RenderSeries | undefined;
-    const assets = [...(game.render.preloadModels ?? []), "missing\\probe.mdx"];
+    const reads = createReadProbe(game.render.readAsset, [...(game.render.preloadModels ?? []), "missing\\probe.mdx"]);
     const probe = init.probe;
     const sampleLogPath = process.env[SAMPLE_LOG_VARIABLE];
     const loop = createFrameLoop(player.native, view, {
@@ -59,12 +74,9 @@ const run = async (init: SimWorkerInit) => {
           console.error(GC_LOG_END);
           if (measuredFrom !== undefined) measured = renderSeriesSince(view, measuredFrom, probe.frames);
         }
-        if (count % READ_ASSET_EVERY === 0) {
-          const read = performance.now();
-          void game.render.readAsset(assets[(count / READ_ASSET_EVERY) % assets.length] ?? "").then(() => reads.push(performance.now() - read));
-        }
+        reads.frame(count);
       },
-      extraResult: probe === undefined ? undefined : (series) => ({ series: { ...series, readAssets: reads, render: measured } }),
+      extraResult: probe === undefined ? undefined : (series) => ({ series: { ...series, readAssets: reads.reads, render: measured } }),
     }, (result) => {
       void player.native.finish(result).catch(() => result).then(async (final) => { send({ type: "completed", result: { ...final, ...await netEnd.promise } }); finished.resolve(); });
     });
@@ -86,7 +98,7 @@ const run = async (init: SimWorkerInit) => {
     yield* preloadScene(player.native.prepare().scene, library, () => view.assetsPending());
     view.start();
     preloadAssets(game.render, library);
-    return yield* serveFrames(view, loop, finished.promise, match !== undefined);
+    return yield* serveFrames(view, loop, finished.promise, match !== undefined, () => library.loading() + reads.inFlight() > 0);
   })));
   if (ending === "closed") send({ type: "closed" });
 };

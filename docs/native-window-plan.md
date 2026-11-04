@@ -199,8 +199,30 @@ the callback) runs about 320 eden collections in 300 ticks under
 an array, a number or a `Float64Array` runs 42 to 46, and a callback that stores
 nothing runs 11 or fewer. `BUN_GC_TIMER_DISABLE`, `BUN_GC_TIMER_INTERVAL`,
 `BUN_JSC_useConcurrentGC=false`, `BUN_JSC_percentCPUPerMBForEdenTimer` and
-`BUN_JSC_collectionTimerMaxPercentCPU` leave the count unchanged. It has not
-been reported upstream; that waits for Tom.
+`BUN_JSC_collectionTimerMaxPercentCPU` leave the count unchanged.
+
+The cause (wisp#230, 4 November 2026): Bun 1.3.13's `GarbageCollectionController`
+reads the heap's block bytes on every event-loop turn and, whenever they changed,
+arms a 16 ms timer whose next turn requests a collection, so a thread that takes
+a turn every frame gets about one eden collection per 16 ms of wall time,
+whatever it allocates. Upstream replaced that sampler with an idle-only timer
+(oven-sh/bun#35356, 30 July 2026, in Bun 1.4), with a test that counts the
+same symptom. On a four-fighter Mak'gora worker each eden collection costs
+3 to 4 ms however small the eden is: a sampled profile puts the time in the
+end-of-collection finalizers that walk every compiled function and code block
+(`FunctionExecutable::finalizeUnconditionally`, `PropertyInlineCache::visitWeak`,
+`CodeBlock::finalizeUnconditionally`), so the cost follows the amount of loaded
+code, about 20,000 function executables, not the 300 MB heap: with the preload
+models left out the heap is 98 MB and the pause still 3.1 ms. Moving data out of
+the heap would not shorten it.
+
+So the worker takes an event-loop turn only every `YIELD_EVERY_FRAMES` (12)
+frames, and on every frame while the model library or a probe read is in
+flight, and right after each turn runs an eden collection itself
+(`edenGC` from `bun:jsc`), which also finishes any collection Bun asked for
+in that turn. Every collection then runs between a submit and the next sample,
+about 2 per 12 frames, and none runs inside a step. A networked match still
+takes a turn every frame, because its peer's sockets run on this thread.
 
 ### Libraries
 
@@ -838,8 +860,10 @@ The worker replaces `takeWakes`. Each frame it does four things:
    window is told to stop.
 2. It steps one frame with that sample's input.
 3. It encodes the scene into the reused buffer and calls `wisp_window_submit`.
-4. It yields one macrotask turn, `await new Promise(setImmediate)`, so timers,
-   messages and `readAsset` completions run.
+4. Every 12th frame, or every frame while a read is in flight, it yields one
+   macrotask turn, `await new Promise(setImmediate)`, so timers, messages and
+   `readAsset` completions run, then runs an eden collection ("The game steps
+   on a worker thread").
 
 The yield comes after the submit, outside the time from sample to scene.
 `readAssetMs` stays a figure, since a read now finishes only between frames.
@@ -896,8 +920,8 @@ fall through to `close` regardless, go away.
   sleep-poll, which adds up to a timer tick to every sample. A blocking call
   does the same wait on a condvar that Rust signals.
 - **Tuning the collector.** No JavaScriptCore or Bun option changed the
-  collection count ("The game steps on a worker thread"). The deadline makes
-  that count irrelevant to the present.
+  collection count ("The game steps on a worker thread"). The deadline keeps
+  that count off the present, and fewer event-loop turns keep it off the step.
 - **A blocking call on the main thread.** It would block the event loop that
   owns the sockets. The worker that blocks owns no sockets.
 - **Rust running Bun as a child process.** The reasons under "Process shape"
