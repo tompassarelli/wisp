@@ -243,6 +243,12 @@ export function eventFrameText(): string {
   return world.events.triggerFrameText();
 }
 
+export function eventFrameValue(): number {
+  const world = boundWorld();
+  world.log?.("BlzGetTriggerFrameValue", []);
+  return world.events.triggerFrameValue();
+}
+
 export function hideOriginFrames(hide: boolean): void {
   boundWorld().log?.("BlzHideOriginFrames", [hide]);
 }
@@ -351,6 +357,7 @@ export const FrameEvent = {
   editboxTextChanged: fromValue<FrameEventType>("FRAMEEVENT_EDITBOX_TEXT_CHANGED"),
   mouseEnter: fromValue<FrameEventType>("FRAMEEVENT_MOUSE_ENTER"),
   mouseLeave: fromValue<FrameEventType>("FRAMEEVENT_MOUSE_LEAVE"),
+  mouseWheel: fromValue<FrameEventType>("FRAMEEVENT_MOUSE_WHEEL"),
 };
 
 export const TextAlignment = {

@@ -1,4 +1,5 @@
-import type { LinkEvent, LockstepLink } from "./lockstep";
+import type { LinkEvent } from "./linkEvent";
+import type { LockstepLink } from "./lockstep";
 
 export interface Turn {
   readonly frame: number;

@@ -129,6 +129,7 @@ impl ApplicationHandler<Command> for App {
             WindowEvent::CursorMoved { position, .. } => self.shared.pointer.moved(position.x as f32, position.y as f32),
             WindowEvent::CursorLeft { .. } => self.shared.pointer.left(),
             WindowEvent::MouseInput { state, button, .. } => self.shared.pointer.button(button, state == ElementState::Pressed),
+            WindowEvent::MouseWheel { delta, .. } => self.shared.pointer.wheel(delta),
             WindowEvent::KeyboardInput { event, .. } if !event.repeat => {
                 if let PhysicalKey::Code(code) = event.physical_key {
                     let typed = event.text.as_deref().and_then(|text| text.chars().next());

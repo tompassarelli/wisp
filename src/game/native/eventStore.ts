@@ -22,4 +22,5 @@ export interface EventStore {
   triggerFrame(): unknown;
   triggerFrameEvent(): unknown;
   triggerFrameText(): string;
+  triggerFrameValue(): number;
 }

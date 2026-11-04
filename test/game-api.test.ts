@@ -192,7 +192,7 @@ test("the native backend refuses to run with no world bound", () => {
 });
 
 test("frame and event calls lower to the natives they replaced, byte for byte", () => {
-  const lowered = compile(`import { createEvents, onEvents } from "../../src/game/events";\nimport { addFrameEvent, createFrameByType, createSimpleFrame, FrameEvent, FramePoint, frameColor, OriginFrame, originFrame, setFramePoint, setFrameText, setFrameVisible } from "../../src/game/frames";\n` + `export function run(): void {
+  const lowered = compile(`import { createEvents, onEvents } from "../../src/game/events";\nimport { addFrameEvent, createFrameByType, createSimpleFrame, eventFrameValue, FrameEvent, FramePoint, frameColor, OriginFrame, originFrame, setFramePoint, setFrameText, setFrameVisible } from "../../src/game/frames";\n` + `export function run(): void {
   const root = originFrame(OriginFrame.gameUi, 0);
   const box = createFrameByType("EDITBOX", "Box", root, "", 0);
   setFrameVisible(createSimpleFrame("Arch", root, 0), true);
@@ -201,7 +201,8 @@ test("frame and event calls lower to the natives they replaced, byte for byte", 
   setFrameVisible(box, frameColor(255, 1, 2, 3) > 0);
   const events = createEvents();
   addFrameEvent(events, box, FrameEvent.editboxEnter);
-  onEvents(events, () => setFrameText(box, ""));
+  addFrameEvent(events, box, FrameEvent.mouseWheel);
+  onEvents(events, () => setFrameText(box, eventFrameValue() > 0 ? "up" : ""));
 }\n`);
   const raw = compile(`export function run(): void {
   const root = BlzGetOriginFrame(ORIGIN_FRAME_GAME_UI, 0);
@@ -212,12 +213,15 @@ test("frame and event calls lower to the natives they replaced, byte for byte", 
   BlzFrameSetVisible(box, BlzConvertColor(255, 1, 2, 3) > 0);
   const events = CreateTrigger();
   BlzTriggerRegisterFrameEvent(events, box, FRAMEEVENT_EDITBOX_ENTER);
-  TriggerAddAction(events, () => BlzFrameSetText(box, ""));
+  BlzTriggerRegisterFrameEvent(events, box, FRAMEEVENT_MOUSE_WHEEL);
+  TriggerAddAction(events, () => BlzFrameSetText(box, BlzGetTriggerFrameValue() > 0 ? "up" : ""));
 }\n`);
   expect(lowered.diagnostics).toBe("");
   expect(raw.diagnostics).toBe("");
   expect(lowered.lua).toBe(raw.lua);
   expect(lowered.lua).toContain("BlzTriggerRegisterFrameEvent(events, box, FRAMEEVENT_EDITBOX_ENTER)");
+  expect(lowered.lua).toContain("BlzTriggerRegisterFrameEvent(events, box, FRAMEEVENT_MOUSE_WHEEL)");
+  expect(lowered.lua).toContain("BlzGetTriggerFrameValue()");
 });
 
 test("the native backend runs frames, events and the quest log in the bound world and refuses a second registration of one frame event", () => {
@@ -241,7 +245,7 @@ test("the native backend runs frames, events and the quest log in the bound worl
   bindWorld(second.world);
   nativeFrames.createFrameByType("TEXT", "Other", nativeFrames.originFrame(second.natives.ORIGIN_FRAME_GAME_UI as never, 0), "", 0);
   bindWorld(undefined);
-  first.frameEvent(0, (button as unknown as { id: number }).id, click);
+  first.frameEvent(0, (button as unknown as { id: number }).id, click, 0);
   expect(clicked).toBe(1);
   expect(first.frames.snapshot().filter(frame => frame.name !== "").map(frame => frame.name)).toEqual(["Go"]);
   expect(second.frames.snapshot().filter(frame => frame.name !== "").map(frame => frame.name)).toEqual(["Other"]);

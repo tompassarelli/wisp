@@ -27,6 +27,7 @@ export declare const FrameEvent: {
   readonly editboxTextChanged: FrameEvent;
   readonly mouseEnter: FrameEvent;
   readonly mouseLeave: FrameEvent;
+  readonly mouseWheel: FrameEvent;
 };
 
 export declare const TextAlignment: {
@@ -93,6 +94,8 @@ export declare function originFrame(origin: OriginFrame, index: number): Frame;
 export declare function eventFrame(): Frame;
 export declare function eventFrameEvent(): FrameEvent;
 export declare function eventFrameText(): string;
+/** The turn of the wheel the event reports, positive when the wheel turns away from the user and negative toward them, 120 a notch as Warcraft reports it; 0 when no wheel event is firing. */
+export declare function eventFrameValue(): number;
 export declare function hideOriginFrames(hide: boolean): void;
 export declare function loadFrameFile(path: string): boolean;
 export declare function frameColor(alpha: number, red: number, green: number, blue: number): number;

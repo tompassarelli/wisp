@@ -10,6 +10,7 @@ import type { SceneryFixtures } from "./warcraft3Scenery";
 import type { Warcraft3InventoryFixtures } from "./warcraft3Inventory";
 import type { AbilityObjectFixtures } from "./warcraft3Abilities";
 import { type CallbackTiming, stampWallTime, turnStart } from "../game/native/frameRate";
+import { applyLinkEvent, type LinkEvent } from "./linkEvent";
 
 export interface LockstepOptions {
   readonly abilityObjects?: AbilityObjectFixtures;
@@ -62,13 +63,6 @@ export interface SyncDelivery {
 
   arrivalFrame(this: void, sender: number, frame: number, message: SyncMessage): number;
 }
-
-export type LinkEvent =
-  | { readonly sender: number; readonly kind: "sync"; readonly prefix: string; readonly data: string }
-  | { readonly sender: number; readonly kind: "key"; readonly key: number; readonly meta: number; readonly down: boolean }
-  | { readonly sender: number; readonly kind: "mouse"; readonly mouse: PlayerMouseInput }
-  | { readonly sender: number; readonly kind: "chat"; readonly text: string }
-  | { readonly sender: number; readonly kind: "click"; readonly frame: number };
 
 /** Carries this process's events to the clients other processes run, each due on one frame everywhere (wisp:docs/network-model.md). */
 export interface LockstepLink {
@@ -192,14 +186,6 @@ export class Lockstep {
     if (link !== undefined) link.sent(this.frame + link.delay + (this.inFrame ? 0 : 1), event);
   }
 
-  private apply(client: HeadlessClient, event: LinkEvent): void {
-    if (event.kind === "sync") client.deliverSync({ sender: event.sender, prefix: event.prefix, data: event.data });
-    else if (event.kind === "key") client.keyEvent(event.sender, event.key, event.meta, event.down);
-    else if (event.kind === "mouse") client.playerMouse(event.sender, event.mouse);
-    else if (event.kind === "chat") client.chat(event.sender, event.text);
-    else client.frameEvent(event.sender, event.frame, client.natives.FRAMEEVENT_CONTROL_CLICK);
-  }
-
   /** Delivers the messages due at the current frame, before its callbacks, as Warcraft runs a turn's events first. */
   private arrive(): void {
     const link = this.options.link;
@@ -209,7 +195,7 @@ export class Lockstep {
           const client = this.clients[index];
           if (client === undefined) continue;
           const started = this.options.cost?.();
-          this.apply(client, event);
+          applyLinkEvent(client, event);
           this.charge(index, started);
         }
       }
@@ -264,7 +250,7 @@ export class Lockstep {
   /** A player's input event reaches every client on one frame: through the link, or here at once. */
   private input(event: LinkEvent): void {
     if (this.options.link !== undefined) return this.send(event);
-    for (const client of this.clients) this.apply(client, event);
+    for (const client of this.clients) applyLinkEvent(client, event);
     this.flush();
   }
 
@@ -302,10 +288,18 @@ export class Lockstep {
 
   click(sender: number, x: number, y: number): boolean {
     const clicker = this.client(sender);
-    const frame = clicker.clickTarget(x, y);
+    const frame = clicker.eventTarget(clicker.natives.FRAMEEVENT_CONTROL_CLICK, x, y);
     if (frame === undefined) return false;
     clicker.frames.focus(frame, true);
     this.input({ sender, kind: "click", frame: frame.id });
+    return true;
+  }
+
+  /** A turn of the wheel over the topmost frame that registered `FRAMEEVENT_MOUSE_WHEEL`, sent through the lockstep like a click; false when no such frame is under the point. */
+  wheel(sender: number, x: number, y: number, value: number): boolean {
+    const frame = this.client(sender).eventTarget(this.client(sender).natives.FRAMEEVENT_MOUSE_WHEEL, x, y);
+    if (frame === undefined) return false;
+    this.input({ sender, kind: "wheel", frame: frame.id, value });
     return true;
   }
 

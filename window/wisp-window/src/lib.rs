@@ -199,11 +199,11 @@ pub unsafe extern "C" fn wisp_window_submit(handle: *mut c_void, scene: *const u
 }
 
 /// Waits up to `timeout_ms` (zero never waits) for the next event and returns its kind: `EVENT_TIMEOUT`, `EVENT_FRAME` with the oldest
-/// queued sample in `out` as (frame, sampleNs, buttons, axisX, axisY, pointerX, pointerY, windowWidth, windowHeight, pointerBits; the pointer in physical pixels from the window's top-left, the bits as `PointerSample::bits` packs them), or `EVENT_CLOSED`, `EVENT_FAILED` or `EVENT_STOPPED` when the stream has ended.
+/// queued sample in `out` as (frame, sampleNs, buttons, axisX, axisY, pointerX, pointerY, windowWidth, windowHeight, pointerBits, wheel; the pointer in physical pixels from the window's top-left, the bits as `PointerSample::bits` packs them, the wheel in whole notches since the sample before, positive away from the user), or `EVENT_CLOSED`, `EVENT_FAILED` or `EVENT_STOPPED` when the stream has ended.
 /// The calling thread runs no JavaScript while it waits; `wisp_window_stop` wakes it.
 ///
 /// # Safety
-/// `handle` is live and `out` has room for ten f64s.
+/// `handle` is live and `out` has room for eleven f64s.
 #[no_mangle]
 pub unsafe extern "C" fn wisp_window_next_event(handle: *mut c_void, out: *mut f64, timeout_ms: u32) -> u32 {
     guard(EVENT_FAILED, || match host(handle).map(|host| host.next_event(Duration::from_millis(timeout_ms as u64))) {
@@ -215,7 +215,7 @@ pub unsafe extern "C" fn wisp_window_next_event(handle: *mut c_void, out: *mut f
         Some(Event::Frame(sample)) => {
             if !out.is_null() {
                 let pointer = sample.input.pointer;
-                let fields = [sample.frame as f64, sample.sampled_ns as f64, sample.input.buttons as f64, sample.input.axis_x as f64, sample.input.axis_y as f64, pointer.x as f64, pointer.y as f64, pointer.width as f64, pointer.height as f64, pointer.bits() as f64];
+                let fields = [sample.frame as f64, sample.sampled_ns as f64, sample.input.buttons as f64, sample.input.axis_x as f64, sample.input.axis_y as f64, pointer.x as f64, pointer.y as f64, pointer.width as f64, pointer.height as f64, pointer.bits() as f64, pointer.wheel as f64];
                 ptr::copy_nonoverlapping(fields.as_ptr(), out, fields.len());
             }
             EVENT_FRAME

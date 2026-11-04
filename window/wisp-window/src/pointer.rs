@@ -1,8 +1,11 @@
 use std::sync::Mutex;
 
-use winit::event::MouseButton;
+use winit::event::{MouseButton, MouseScrollDelta};
 
 use crate::sync::lock;
+
+/// The pixels of a touchpad scroll that make one notch of a wheel.
+const PIXELS_PER_NOTCH: f32 = 40.0;
 
 /// The bit of a button in the masks a pointer sample carries.
 pub fn button_bit(button: MouseButton) -> Option<u8> {
@@ -14,7 +17,7 @@ pub fn button_bit(button: MouseButton) -> Option<u8> {
     }
 }
 
-/// What one sample point reads of the mouse: the cursor in physical pixels from the window's top-left, the window's size, whether the cursor is over it, the buttons held and the buttons pressed and released since the last sample.
+/// What one sample point reads of the mouse: the cursor in physical pixels from the window's top-left, the window's size, whether the cursor is over it, the buttons held and the buttons pressed and released since the last sample, and the whole notches the wheel turned since the last sample, positive away from the user.
 #[derive(Clone, Copy, Default, PartialEq, Debug)]
 pub struct PointerSample {
     pub x: f32,
@@ -25,6 +28,7 @@ pub struct PointerSample {
     pub held: u8,
     pub pressed: u8,
     pub released: u8,
+    pub wheel: i16,
 }
 
 impl PointerSample {
@@ -42,6 +46,7 @@ struct State {
     held: u8,
     pressed: u8,
     released: u8,
+    wheel: f32,
 }
 
 /// The mouse as the window thread hears it, read by the render thread at its sample point; a press and a release between two samples both survive until the next one.
@@ -60,6 +65,15 @@ impl Pointer {
 
     pub fn left(&self) {
         lock(&self.state).inside = false;
+    }
+
+    /// A turn of the wheel in notches; a touchpad's pixels count for a notch at `PIXELS_PER_NOTCH`, and a part of a notch waits for the rest of it.
+    pub fn wheel(&self, delta: MouseScrollDelta) {
+        let notches = match delta {
+            MouseScrollDelta::LineDelta(_, y) => y,
+            MouseScrollDelta::PixelDelta(position) => position.y as f32 / PIXELS_PER_NOTCH,
+        };
+        lock(&self.state).wheel += notches;
     }
 
     pub fn button(&self, button: MouseButton, down: bool) {
@@ -85,7 +99,9 @@ impl Pointer {
     pub fn sample(&self, width: u32, height: u32) -> PointerSample {
         let mut state = lock(&self.state);
         let quick = state.pressed & state.released;
-        let sample = PointerSample { x: state.x, y: state.y, width, height, inside: state.inside, held: state.held | state.pressed, pressed: state.pressed, released: state.released & !quick };
+        let wheel = state.wheel.trunc();
+        state.wheel -= wheel;
+        let sample = PointerSample { x: state.x, y: state.y, width, height, inside: state.inside, held: state.held | state.pressed, pressed: state.pressed, released: state.released & !quick, wheel: wheel as i16 };
         state.pressed = 0;
         state.released = quick;
         sample
@@ -122,6 +138,22 @@ mod tests {
         assert_eq!(sample.bits(), 1 | 1 << 4);
         let next = pointer.sample(100, 100);
         assert_eq!((next.held, next.released), (0, 1));
+    }
+
+    #[test]
+    fn wheel_notches_reach_one_sample_whole_and_a_part_of_a_notch_waits_for_the_rest() {
+        let pointer = Pointer::default();
+        pointer.wheel(MouseScrollDelta::LineDelta(0.0, 1.0));
+        pointer.wheel(MouseScrollDelta::LineDelta(0.0, 1.0));
+        pointer.wheel(MouseScrollDelta::LineDelta(0.0, -1.0));
+        assert_eq!(pointer.sample(10, 10).wheel, 1);
+        assert_eq!(pointer.sample(10, 10).wheel, 0, "a turn is delivered once");
+        pointer.wheel(MouseScrollDelta::PixelDelta(winit::dpi::PhysicalPosition::new(0.0, -30.0)));
+        assert_eq!(pointer.sample(10, 10).wheel, 0, "30 of 40 pixels is not yet a notch");
+        pointer.wheel(MouseScrollDelta::PixelDelta(winit::dpi::PhysicalPosition::new(0.0, -30.0)));
+        assert_eq!(pointer.sample(10, 10).wheel, -1);
+        pointer.wheel(MouseScrollDelta::LineDelta(0.0, 2.0));
+        assert_eq!(pointer.sample(10, 10).wheel, 1, "the half notch left over joins the next turn: 2 - 0.5 is 1 and a half");
     }
 
     #[test]

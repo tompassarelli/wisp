@@ -49,6 +49,7 @@ interface EventContext {
   timer: Timer | undefined;
   frame: Frame | undefined;
   frameEvent: unknown;
+  frameValue: number;
 }
 
 type Registration =
@@ -88,7 +89,7 @@ export class TriggersTimers implements EventStore {
 
   private now = 0;
   private readonly registrations: Registration[] = [];
-  private readonly event: EventContext = { player: 0, syncPrefix: "", syncData: "", chat: "", key: 0, mouseX: 0, mouseY: 0, mouseButton: undefined, timer: undefined, frame: undefined, frameEvent: undefined };
+  private readonly event: EventContext = { player: 0, syncPrefix: "", syncData: "", chat: "", key: 0, mouseX: 0, mouseY: 0, mouseButton: undefined, timer: undefined, frame: undefined, frameEvent: undefined, frameValue: 0 };
 
   constructor(private readonly handle: HandleFactory, private readonly units: Units, private readonly bodies: Bodies) {}
 
@@ -112,6 +113,7 @@ export class TriggersTimers implements EventStore {
     if (event.mouseButton !== undefined) this.event.mouseButton = event.mouseButton;
     if (event.frame !== undefined) this.event.frame = event.frame;
     if (event.frameEvent !== undefined) this.event.frameEvent = event.frameEvent;
+    this.event.frameValue = event.frameValue ?? 0;
     const running = trigger.running;
     const interrupted = trigger.interrupted;
     trigger.running = true;
@@ -124,6 +126,7 @@ export class TriggersTimers implements EventStore {
     } finally {
       trigger.running = running;
       trigger.interrupted = interrupted;
+      this.event.frameValue = 0;
     }
   }
 
@@ -206,10 +209,10 @@ export class TriggersTimers implements EventStore {
     }
   }
 
-  frameEvent(sender: number, id: number, event: unknown): void {
+  frameEvent(sender: number, id: number, event: unknown, value = 0): void {
     for (const registration of [...this.registrations]) {
       if (registration.kind === "frame" && registration.frame.id === id && registration.event === event) {
-        this.fire(registration.trigger, { player: sender, frame: registration.frame, frameEvent: event });
+        this.fire(registration.trigger, { player: sender, frame: registration.frame, frameEvent: event, frameValue: value });
       }
     }
   }
@@ -301,6 +304,10 @@ export class TriggersTimers implements EventStore {
     return this.event.frame?.text ?? "";
   }
 
+  triggerFrameValue(): number {
+    return this.event.frameValue;
+  }
+
   handles(frame: Frame, event: unknown): boolean {
     return this.registrations.some((registration) =>
       registration.kind === "frame" && registration.frame === frame && registration.event === event && !registration.trigger.destroyed);
@@ -352,6 +359,7 @@ export class TriggersTimers implements EventStore {
       BlzGetTriggerFrame: () => this.triggerFrame(),
       BlzGetTriggerFrameEvent: () => this.triggerFrameEvent(),
       BlzGetTriggerFrameText: () => this.triggerFrameText(),
+      BlzGetTriggerFrameValue: () => this.triggerFrameValue(),
       BlzGetTriggerSyncData: () => this.syncData(),
       BlzGetTriggerSyncPrefix: () => this.syncPrefix(),
       GetEventPlayerChatString: () => this.triggerChat(),

@@ -5,6 +5,7 @@ declares (wisp:docs/architecture.md, "Where things live").
 
 ## 0.1
 
+- `wisp/game/frames` has `FrameEvent.mouseWheel` (`FRAMEEVENT_MOUSE_WHEEL`) and `eventFrameValue()` (`BlzGetTriggerFrameValue`, 120 a notch away from the user and -120 toward, 0 when no wheel event is firing): the native window sends a wheel turn over a frame that registered the event through the lockstep, one event per notch, and a pad script plays `wheel X Y DELTA`.
 - `wisp/game/frames` has `createSimpleFrame(template, owner, context)`, and the bindings `generateFrames` writes use the game API (`Frame`, `FramePoint`, `loadFrameFile`, `createFrame` or `createSimpleFrame`, `namedFrame`, `setFrameAbsPoint`, `setFrameLevel`, `setFrameText`, `setFrameEnabled`) instead of raw `Blz` natives.
 - `wisp/scripts/wisp/frames` exports `generateFrames` and `frameDefinitionProblems`, and `FrameDefinition` takes `type: "SIMPLEFRAME"` with `textures` (`SimpleTexture`: key, layer, file, texCoord, alphaMode, width, height, anchor) and an optional `children`.
 

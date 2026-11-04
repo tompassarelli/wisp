@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { Option } from "effect";
 import { join } from "node:path";
-import type { LinkEvent } from "../src/headless/lockstep";
+import type { LinkEvent } from "../src/headless/linkEvent";
 import type { TurnPacket } from "../src/headless/turnLedger";
 import { joinCode, joinTarget, relayChoice, relayCode, relayRegions } from "../host/net/joinCode";
 import { lineMatching } from "./headless/lineMatching";
@@ -18,6 +18,8 @@ const events: readonly LinkEvent[] = [
   { sender: 1, kind: "mouse", mouse: { x: 3e-9, y: 1e9 } },
   { sender: 0, kind: "chat", text: "-ping ✓" },
   { sender: 1, kind: "click", frame: 2 ** 40 },
+  { sender: 1, kind: "wheel", frame: 2 ** 40, value: -120 },
+  { sender: 0, kind: "wheel", frame: 7, value: 120 },
 ];
 
 const packet = (turnFrames: readonly number[], overrides: Partial<TurnPacket> = {}): TurnPacket => ({

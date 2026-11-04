@@ -169,10 +169,10 @@ const textFrom = (read: (pointer: Uint8Array, capacity: number) => number | bigi
 
 const vocabularyOf = (library: Library) => JSON.parse(textFrom((out, capacity) => library.symbols.wisp_window_vocabulary(out, capacity))) as { buttons: string[]; metrics: string[] };
 
-/** The sample's mouse fields (`wisp_window_next_event`): the cursor and window size, then the bits `PointerSample::bits` packs: held 0 to 2, pressed 4 to 6, released 8 to 10, inside 12. */
+/** The sample's mouse fields (`wisp_window_next_event`): the cursor and window size, then the bits `PointerSample::bits` packs: held 0 to 2, pressed 4 to 6, released 8 to 10, inside 12, then the whole notches the wheel turned since the sample before, positive away from the user. */
 const pointerOf = (sample: Float64Array): PointerReading => {
   const bits = sample[9]!;
-  return { x: sample[5]!, y: sample[6]!, width: sample[7]!, height: sample[8]!, inside: (bits & 1 << 12) !== 0, held: bits & 7, pressed: bits >> 4 & 7, released: bits >> 8 & 7 };
+  return { x: sample[5]!, y: sample[6]!, width: sample[7]!, height: sample[8]!, inside: (bits & 1 << 12) !== 0, held: bits & 7, pressed: bits >> 4 & 7, released: bits >> 8 & 7, wheel: sample[10]! };
 };
 
 const KEY_BATCH = 64;
@@ -183,7 +183,7 @@ const viewOf = (library: Library, handle: Pointer, vocabulary: { buttons: string
   const encoder = new TextEncoder();
   // A fresh array per frame reports external memory to the collector, which then collects every frame; one reused buffer keeps the pause count to what the frame allocates.
   let sceneBuffer = new Uint8Array(64 * 1024);
-  const sample = new Float64Array(10);
+  const sample = new Float64Array(11);
   const keyBuffer = new Uint32Array(KEY_BATCH);
   const takeKeys = () => {
     let count = Number(call.wisp_window_take_keys(handle, keyBuffer, KEY_BATCH));

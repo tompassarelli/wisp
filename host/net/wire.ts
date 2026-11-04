@@ -1,5 +1,5 @@
 import { Option, Schema } from "effect";
-import type { LinkEvent } from "../../src/headless/lockstep";
+import type { LinkEvent } from "../../src/headless/linkEvent";
 import type { TurnPacket } from "../../src/headless/turnLedger";
 import { NetFailure } from "./failure";
 
@@ -25,7 +25,7 @@ export type Datagram = typeof Control.Type | ({ readonly t: "turns" } & TurnPack
 
 const CONTROL = 0;
 const TURNS = 1;
-const EVENT_KINDS = ["sync", "key", "mouse", "mouseMove", "chat", "click"] as const;
+const EVENT_KINDS = ["sync", "key", "mouse", "mouseMove", "chat", "click", "wheel"] as const;
 const BUTTONS = ["left", "middle", "right"] as const;
 
 class Writer {
@@ -114,6 +114,7 @@ function writeEvent(out: Writer, event: LinkEvent): void {
   if (event.kind === "sync") out.text(event.prefix).text(event.data);
   else if (event.kind === "key") out.varint(event.key).u8(event.meta * 2 + (event.down ? 1 : 0));
   else if (event.kind === "chat") out.text(event.text);
+  else if (event.kind === "wheel") out.varint(event.frame).zigzag(event.value);
   else out.varint(event.frame);
 }
 
@@ -134,6 +135,7 @@ function readEvent(r: Reader): LinkEvent {
     case "mouseMove": return { sender, kind: "mouse", mouse: { x: r.f64(), y: r.f64() } };
     case "chat": return { sender, kind, text: r.text() };
     case "click": return { sender, kind, frame: r.varint() };
+    case "wheel": return { sender, kind, frame: r.varint(), value: r.zigzag() };
     default: throw new Error("kind");
   }
 }

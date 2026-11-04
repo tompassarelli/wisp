@@ -106,6 +106,10 @@ weights).
   carries an MIT-style notice, the others were not read). Made for pixel
   art. Not run; not adopted.
 
+## Warcraft facts from public community data
+
+- Hive Workshop thread "UI: FrameEvents and FrameTypes", https://www.hiveworkshop.com/threads/ui-frameevents-and-frametypes.318309 (read 2026-11-04). Public community documentation, no licence stated; only the fact is used, in our own words: a `FRAMEEVENT_MOUSE_WHEEL` event fires when the wheel turns over the frame, and `BlzGetTriggerFrameValue` reads 120 for a turn forward (away from the user) and -120 for a turn back. A second Hive thread, "Camera Zoom Limits with Mouse Wheel Scrolling" (https://www.hiveworkshop.com/threads/camera-zoom-limits-with-mouse-wheel-scrolling.327568), comments the same two values in a sample script. Neither says what a smooth-scrolling wheel reports, so the native window counts whole notches only (wisp#234).
+
 ## Technique references
 
 Read for method only (2026-10-31). Neither states a licence, so no code, shader text or texture is copied; the water pass in `window/wisp-window/src/render/water.wgsl` is written here and its textures are Warcraft's own water frames read from the player's install.

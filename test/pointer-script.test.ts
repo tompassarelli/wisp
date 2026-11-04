@@ -65,3 +65,58 @@ test("a pointer step ignores other pad actions and refuses a point off Warcraft'
   expect(() => pointerStep(1, "click", ["0.3", "0.2", "0"])).toThrow("click FRAMES runs 1..600");
   expect(() => pointerStep(1, "pointer", ["0.3"])).toThrow("pointer Y runs 0..0.6");
 });
+
+function wheelPlay(script: string, frames: number, registered = true): { seen: string[]; outside: number[] } {
+  const seen: string[] = [];
+  const outside: number[] = [];
+  const map = { install: () => {}, start: () => {
+    const list = BlzCreateFrameByType("BUTTON", "list", BlzGetOriginFrame(ORIGIN_FRAME_GAME_UI, 0), "", 0);
+    BlzFrameSetAbsPoint(list, FRAMEPOINT_CENTER, 0.3, 0.2);
+    BlzFrameSetSize(list, 0.1, 0.1);
+    const trigger = CreateTrigger();
+    BlzTriggerRegisterFrameEvent(trigger, list, registered ? FRAMEEVENT_MOUSE_WHEEL : FRAMEEVENT_CONTROL_CLICK);
+    TriggerAddAction(trigger, () => { seen.push(`${BlzGetTriggerFrameValue()} ${GetPlayerId(GetTriggerPlayer())} ${BlzGetTriggerFrameEvent() === FRAMEEVENT_MOUSE_WHEEL}`); });
+    TimerStart(CreateTimer(), 1 / 60, true, () => { outside.push(BlzGetTriggerFrameValue()); });
+  } };
+  const clients = runtime.clients(map, [0]);
+  clients.start();
+  const pointer = scriptedPointer(steps(script));
+  const feed = createPointerFeed(clients, 0);
+  for (let frame = 0; frame < frames; frame++) {
+    const reading = pointer(frame);
+    if (reading !== undefined) feed(reading);
+    clients.frames(1);
+  }
+  expect(clients.clients.map((client) => client.errors)).toEqual([[]]);
+  return { seen, outside };
+}
+
+const wheelValues = (script: string, frames: number, registered = true) => wheelPlay(script, frames, registered).seen;
+
+test("[scenario] a scripted wheel turns over a frame that registered the wheel event once per notch with 120 away from the user and -120 toward, sent through the lockstep", () => {
+  expect(wheelValues("10 a wheel 0.3 0.2 1", 30)).toEqual(["120 0 true"]);
+  expect(wheelValues("10 a wheel 0.3 0.2 -3", 30)).toEqual(["-120 0 true", "-120 0 true", "-120 0 true"]);
+  expect(wheelValues("10 a wheel 0.3 0.2 2\n12 a wheel 0.3 0.2 -1", 30)).toEqual(["120 0 true", "120 0 true", "-120 0 true"]);
+});
+
+test("a wheel turn off the frame, over a frame that did not register it, or with no step reaches no handler, and a handler reads 0 outside a wheel event", () => {
+  expect(wheelValues("10 a wheel 0.7 0.5 1", 30)).toEqual([]);
+  expect(wheelValues("10 a wheel 0.3 0.2 1", 30, false)).toEqual([]);
+  expect(wheelValues("10 a pointer 0.3 0.2", 30)).toEqual([]);
+  const played = wheelPlay("10 a wheel 0.3 0.2 1", 30);
+  expect(played.seen).toEqual(["120 0 true"]);
+  expect(played.outside.length).toBeGreaterThan(20);
+  expect(played.outside.every((value) => value === 0)).toBe(true);
+});
+
+test("a wheel step is a whole nonzero number of notches on Warcraft's screen and reaches the reading on its frame only", () => {
+  expect(() => pointerStep(1, "wheel", ["0.3", "0.2"])).toThrow("wheel DELTA");
+  expect(() => pointerStep(1, "wheel", ["0.3", "0.2", "0"])).toThrow("wheel DELTA");
+  expect(() => pointerStep(1, "wheel", ["0.3", "0.2", "1.5"])).toThrow("wheel DELTA");
+  expect(() => pointerStep(1, "wheel", ["0.3", "0.2", "9"])).toThrow("wheel DELTA");
+  expect(() => pointerStep(1, "wheel", ["0.9", "0.2", "1"])).toThrow("pointer X runs 0..0.8");
+  const pointer = scriptedPointer(steps("5 a wheel 0.3 0.2 -2"));
+  expect(pointer(4)).toBeUndefined();
+  expect(pointer(5)?.wheel).toBe(-2);
+  expect(pointer(6)?.wheel).toBeUndefined();
+});

@@ -38,6 +38,7 @@ export const frames: Lowering = {
   eventFrame: "BlzGetTriggerFrame()",
   eventFrameEvent: "BlzGetTriggerFrameEvent()",
   eventFrameText: "BlzGetTriggerFrameText()",
+  eventFrameValue: "BlzGetTriggerFrameValue()",
   hideOriginFrames: "BlzHideOriginFrames($1)",
   loadFrameFile: "BlzLoadTOCFile($1)",
   frameColor: "BlzConvertColor($1, $2, $3, $4)",
@@ -74,6 +75,7 @@ export const framesConstants: ConstantLowering = {
     editboxTextChanged: "FRAMEEVENT_EDITBOX_TEXT_CHANGED",
     mouseEnter: "FRAMEEVENT_MOUSE_ENTER",
     mouseLeave: "FRAMEEVENT_MOUSE_LEAVE",
+    mouseWheel: "FRAMEEVENT_MOUSE_WHEEL",
   },
   TextAlignment: {
     top: "TEXT_JUSTIFY_TOP",

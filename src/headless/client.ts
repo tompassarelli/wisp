@@ -404,13 +404,13 @@ export class HeadlessClient {
     return this.frames.type(text);
   }
 
-  clickTarget(x: number, y: number): Frame | undefined {
-    const click = this.natives.FRAMEEVENT_CONTROL_CLICK;
-    return this.frames.at(x, y, (frame) => this.timers.handles(frame, click));
+  /** The topmost frame under a UI point that registered `event`. */
+  eventTarget(event: unknown, x: number, y: number): Frame | undefined {
+    return this.frames.at(x, y, (frame) => this.timers.handles(frame, event));
   }
 
-  frameEvent(sender: number, id: number, event: unknown): void {
-    this.run(() => this.timers.frameEvent(sender, id, event));
+  frameEvent(sender: number, id: number, event: unknown, value: number): void {
+    this.run(() => this.timers.frameEvent(sender, id, event, value));
   }
 
   callCount(): number {
