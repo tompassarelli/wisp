@@ -2,7 +2,7 @@
 
 # Wisp
 
-**A custom game engine that publishes natively and to Warcraft III.**
+**A game engine that publishes natively and to Warcraft III.**
 
 Write a game once in TypeScript and ship it as a native desktop game and as a Warcraft III map, with modern tooling, testing and build automation for both.
 
