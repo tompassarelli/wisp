@@ -95,7 +95,8 @@ finding, `native NAME is outside the standalone profile`; a standalone run
 (`runStandalone`, Chrome or the native window) stops on it with
 `pN frame F: native NAME is outside the standalone profile`. Inside the
 profile, an unmodeled native still fails as above. `bun test
-test/headless-coverage.test.ts` checks both the generator and the failure.
+test/standalone-profile.test.ts` checks the generator and the `standalone-profile` row of
+`test/lua32-fixtures.test.ts` the failure.
 
 ## Synchronized and local-only calls
 
@@ -1202,12 +1203,12 @@ count is 26 and shows nothing about drawing.
 `SetUnitFlyHeight` applies to any unit, with or without Crow Form: on 3.0.1 a
 ground footman set up as a fighter body (pathing off, Locust, paused) took the
 write without it. `SetUnitMoveSpeed` stores the speed as binary32. `test/unit-movement61/cases.ts` authors the cases shared by
-Bun, Lua32 and a native measurement map; the rules, and why Mak'gora relies
+Lua32 (the `unit-movement` row of `test/lua32-fixtures.test.ts`) and a native measurement map; the rules, and why Mak'gora relies
 on nothing else in collision, pathing or orders, are in
 [Warsmash notes](warsmash-notes.md#collision-pathing-and-orders).
 
 ```sh
-bun test test/headless-unit-movement.test.ts
+bun test test/lua32-fixtures.test.ts
 bun test/unit-movement61/build.ts BASE.w3m PRIVATE_OUT.w3x
 ```
 
@@ -1680,8 +1681,9 @@ The last line is always a `type: "summary"` record with `ok`,
 `schema: 1` and `command: "headless"`. A failed run retains its nonzero exit
 code, including a load or usage error before any result.
 
-The missing-native CLI fixture (`bun test test/headless-coverage.test.ts`)
-reported both clients and exited 1 in 1.51 s on 7 October 2026, below the 2 s
-target and the approximately 24 s native-check baseline in #38. The focused
-fixture also runs built-in, supplied and intentional no-op behavior in Bun
-and emitted 32-bit Lua.
+The missing-native fixture (the `coverage` row of `test/lua32-fixtures.test.ts`)
+reports both clients and runs built-in, supplied and intentional no-op behavior
+in emitted 32-bit Lua; its Bun run went with the option that gave Bun
+Warcraft's natives (wisp#238). It reported both clients and exited 1 in 1.51 s
+on 7 October 2026, below the 2 s target and the approximately 24 s
+native-check baseline in #38.

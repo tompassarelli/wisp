@@ -77,6 +77,24 @@ export function playMusic(file: string): void {
   world.sounds.playMusic(file);
 }
 
+export function playMusicFrom(file: string, from: number, fadeIn: number): void {
+  const world = boundWorld();
+  world.log?.("PlayMusicEx", [file, from, fadeIn]);
+  world.sounds.playMusic(file);
+}
+
+export function resumeMusic(): void {
+  const world = boundWorld();
+  world.log?.("ResumeMusic", []);
+  world.sounds.resumeMusic();
+}
+
+export function setMusicVolume(volume: number): void {
+  const world = boundWorld();
+  world.log?.("SetMusicVolume", [volume]);
+  world.sounds.setMusicVolume(volume);
+}
+
 export function stopMusic(fadeOut: boolean): void {
   const world = boundWorld();
   world.log?.("StopMusic", [fadeOut]);

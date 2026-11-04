@@ -646,8 +646,8 @@ and `SetUnitMoveSpeed(270)` in `platform/objectData.ts`, read back once by a
 diagnostic row. The bodies derive from `earc` (a ground unit); object data
 sets only move speed (`umvs`) among the movement fields. #57's notes above
 already settle that position writes cause no pathing push and leave orders
-alone. Fixture: `test/unit-movement61/` (two cases, Bun and 32-bit Lua in
-`test/headless-unit-movement.test.ts`, native map via its `build.ts`).
+alone. Fixture: `test/unit-movement61/` (two cases, 32-bit Lua in
+`test/lua32-fixtures.test.ts`, native map via its `build.ts`).
 
 | Behavior Mak'gora relies on | Real rule | Wisp before #61 | Verdict |
 | --- | --- | --- | --- |
@@ -669,7 +669,7 @@ alone. Fixture: `test/unit-movement61/` (two cases, Bun and 32-bit Lua in
 signed-in clients): `bun test/unit-movement61/build.ts BASE.w3m OUT.w3x`
 played in a private game wrote `fly-height-needs-crow-form=38400,38400` and
 `move-speed-set-and-read=34560` on both clients, now `EXPECTED` in
-`test/headless-unit-movement.test.ts`.
+`test/unit-movement61/expected.ts`.
 
 ### Every relied-on rule and its evidence
 
@@ -683,7 +683,7 @@ retain the exact maps, files and measured rows.
 | --- | --- | --- | --- |
 | Timer deadlines, equal-deadline order, elapsed, pause, destroy (`CreateTimer`, `TimerStart`, `GetExpiredTimer`, `TimerGetElapsed`, `PauseTimer`, `DestroyTimer`) | `platform/shell/{renderClock,betweenFrames,shell,trace,frameCost,responseProbe,rollback,analogPad}.ts` | `test/lua32-fixtures.test.ts` (timers) (`test/timers56/`) | 3.0.1, 16 rows match (#56) |
 | Body position, fly height and facing writes (`SetUnitX/Y`, `SetUnitFlyHeight`, `BlzSetUnitFacingEx`) | `platform/shell/fighterBody.ts` | `test/lua32-fixtures.test.ts` (unit-motion) (`test/unit-motion57/`) | 3.0.1, all 49 motion/facing rows match in Bun and both Lua32 modes ([#57](https://github.com/tompassarelli/wisp/issues/57#issuecomment-6053308287)) |
-| Body setup: pathing off, Locust, Crow Form, pause, move speed (`SetUnitPathing`, `UnitAdd/RemoveAbility`, `PauseUnit`, `SetUnitMoveSpeed`, `GetUnitMoveSpeed`) | `platform/shell/fighterBody.ts`, `platform/objectData.ts`, `platform/shell/objectData.ts` | `test/headless-unit-movement.test.ts` (`test/unit-movement61/`) | 3.0.1, both rows match (#61) |
+| Body setup: pathing off, Locust, Crow Form, pause, move speed (`SetUnitPathing`, `UnitAdd/RemoveAbility`, `PauseUnit`, `SetUnitMoveSpeed`, `GetUnitMoveSpeed`) | `platform/shell/fighterBody.ts`, `platform/objectData.ts`, `platform/shell/objectData.ts` | `test/lua32-fixtures.test.ts` (`test/unit-movement61/`) | 3.0.1, both rows match (#61) |
 | Unit object and state reads (`CreateUnit`, `RemoveUnit`, `GetUnitTypeId`, `ShowUnit`, `SetUnitScale`, `SetUnitVertexColor`, `Blz{Set,Get}UnitAttackCooldown`, `BlzSetUnitName`, `BlzSetUnitRealField`, `SetUnitInvulnerable`) | `platform/shell/{fighterBody,view,shell,matchStart,objectData}.ts`, `platform/objectData.ts` | `test/lua32-fixtures.test.ts` (unit-states), `test/object-data.test.ts` | 3.0.1, all 24 unit-state rows match native, Bun and Lua32 ([#44](https://github.com/tompassarelli/wisp/issues/44#issuecomment-6055269781)) |
 | Animation selection, clock, seek and blend (`SetUnitAnimation(ByIndex)`, `SetUnitTimeScale`, `SetUnitBlendTime`, `BlzSetSpecialEffect{Animation,Time,TimeScale,AnimationBlendTime}`, `BlzPlaySpecialEffect`) | `game/render/fighterPool.ts`, `platform/shell/{view,preview,matchStart}.ts`, `game/render/placedObjectEffects.ts` | `test/animation.test.ts`, `test/runtime.test.ts` (`src/game/native/animation.tests.ts`) | 3.0.1, all 20 animation rulers match; 61/61 calibration marks ([#58](https://github.com/tompassarelli/wisp/issues/58#issuecomment-6055102913)) |
 | Effect create, place, scale, colour, orientation, destroy (`AddSpecialEffect`, `DestroyEffect`, `BlzSetSpecialEffect*`) | 38 + 26 sites under `game/render/` and `platform/shell/` | `test/lua32-fixtures.test.ts` (effects) (`test/effects59/`, `test/animation58/`) | 3.0.1, 7 script rows and 10 effect rules match; five-second cleanup bracketed at 4.52–5.06 s (#59) |
@@ -696,7 +696,7 @@ retain the exact maps, files and measured rows.
 | Player slots (`Player`, `GetPlayerId`, `GetLocalPlayer`, `GetPlayerController`, `GetPlayerSlotState`) | `platform/shell/{inputs,playerFiles}.ts` and 20 files reading the local player | `player-*` rows | 3.0.1 rows match |
 | Map-made frame reads (`BlzFrameGetChildrenCount`, `BlzFrameGetChild`, `BlzFrameGetName`, `BlzFrameGetEnable`, `BlzFrameGetText`, `BlzFrameGetTextSizeLimit`, `BlzFrameIsVisible`) and frame writes | `platform/editboxJournal.ts`, `game/ui/*.ts` | `frame-*` rows | 3.0.1, 6 rows match after the fixes below. The chat box's place in Warcraft's own UI (children 2, 0, 4, 5) is not modeled: headless has no Warcraft UI, so `editboxJournal` takes its typed path |
 | Input events: chat (exact or substring), key press and release, mouse, frame clicks and edit boxes (`TriggerRegisterPlayerChatEvent`, `BlzTriggerRegisterPlayerKeyEvent`, `BlzTriggerRegisterFrameEvent`, `TriggerRegisterPlayerEvent`, `BlzIsKeyPressed`, `BlzGetTriggerPlayerKey`, mouse getters) | `platform/shell/{keys,keyEvents,inputs,analogPad}.ts`, `platform/{keyboardJournal,editboxJournal}.ts`, `game/ui/frames.ts` | `test/headless-input.test.ts` | Intentional substitution: scripted input. wisp#19's pad parity compares delivered frames |
-| Files: `Preload` output and `Preloader`'s first read per path | Wisp's FileIO and reloader; `platform/shell/{frameCost,renderClock}.ts` | `test/headless-input.test.ts`, `src/headless/natives/preloadText.tests.ts` | Native-derived ([hot reload](hot-reload.md)); each `Preload` string cut to 259 bytes ([Preload line length](#preload-line-length-wisp77)) |
+| Files: `Preload` output and `Preloader`'s first read per path | Wisp's FileIO and reloader; `platform/shell/{frameCost,renderClock}.ts` | `test/headless-input.test.ts`, `src/headless/natives/preloadText.tests.ts` (run in Lua32 by `test/runtime.test.ts`) | Native-derived ([hot reload](hot-reload.md)); each `Preload` string cut to 259 bytes ([Preload line length](#preload-line-length-wisp77)) |
 | Handle ids (`GetHandleId`): key codes, frame lookup keys, a diagnostic unit id | `platform/shell/{keys,objectData}.ts`, `game/ui/frames.ts` | `ConvertOsKeyType` returns its code; frames keep one handle each | Key codes match by declaration; unit numbers differ per runtime and are diagnostic text only |
 | Scene and presentation: camera, fog, sky, terrain, day and night, lightning, text tags, on-screen messages, fonts | `platform/shell/{view,shell,stageScenery,keys}.ts`, `game/render/{hitAreaPresentation,bearFeedback}.ts` | Scene state in `test/scene.test.ts`; the rest are declared no-ops | Pixels only; #40 and #48 own them. Not a simulation rule |
 | Map origin (`GetPlayableMapRect`, `GetRectCenter`, `GetLocationX/Y/Z`, `RemoveLocation`) | `platform/shell/shell.ts` | Mak'gora supplies its authored (0, 0, 0) | Map data, not an engine rule |

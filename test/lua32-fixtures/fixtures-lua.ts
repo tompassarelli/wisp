@@ -5,8 +5,10 @@ import { luaLockstep, readFile } from "../../src/headless/lua";
 import { MEASURED_BATTLE_NET, syncDelivery } from "../../src/headless/syncChannel";
 import { allWarcraft3Fixtures } from "../warcraft3-core/all";
 import { coverageFixture } from "../coverage/fixture";
+import { standaloneProfileRows } from "../coverage/profile";
 import { UNIT_FIXTURE } from "../unit-states/cases";
 import { UNIT_MOTION_NOOPS } from "../unit-motion57/cases";
+import { UNIT_MOVEMENT_NOOPS } from "../unit-movement61/cases";
 import { SOUND_NATIVES } from "../sounds60/cases";
 import { SHADOW_CONFIGS, SHADOW_JOURNEY } from "../shadow-strike94/configs";
 import { SHADOW_HEADLESS } from "../shadow-strike94/headless-config";
@@ -50,6 +52,7 @@ const FIXTURES: Record<string, (this: void, bundle: string) => string[]> = {
     coverageFixture();
     return ["native coverage contract passed"];
   },
+  "standalone-profile": () => standaloneProfileRows(),
   "unit-states": bundle => {
     const clients = played(luaLockstep({ filePrefix: "unit-states", unitStates: UNIT_FIXTURE }, bundle, declarations), 80);
     return diverged(clients, files(clients, ["unit-states"]));
@@ -57,6 +60,10 @@ const FIXTURES: Record<string, (this: void, bundle: string) => string[]> = {
   "unit-motion": bundle => {
     const clients = played(luaLockstep({ filePrefix: "unit-motion", intentionalNoops: UNIT_MOTION_NOOPS }, bundle, declarations), 150);
     return diverged(clients, files(clients, ["unit-motion"]));
+  },
+  "unit-movement": bundle => {
+    const clients = played(luaLockstep({ filePrefix: "unit-movement", intentionalNoops: UNIT_MOVEMENT_NOOPS }, bundle, declarations), 5);
+    return diverged(clients, files(clients, ["unit-movement"]));
   },
   "timers": bundle => {
     const clients = played(luaLockstep({ filePrefix: "timers56" }, bundle, declarations), 76);

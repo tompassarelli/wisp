@@ -1,7 +1,7 @@
 import type { EffectDeaths } from "../game/native/types";
 import { type ClientOptions, type ClientScope, type LocalNatives, type MapEntry, type IntentionalNoops, type StandaloneProfile, HeadlessClient, type NativeBehaviors, type UnitStateFixtures } from "./client";
 import type { FrameTemplate } from "../game/native/frameStore";
-import type { SyncDelivery } from "./lockstep";
+import type { LockstepOptions, SyncDelivery } from "./lockstep";
 import { parseNativeDeclarations } from "./declarations";
 import { type Journey, journeyLines, journeyProblems, runJourney } from "./journey";
 import { Lockstep } from "./lockstep";
@@ -43,6 +43,11 @@ export function readFile(path: string): string {
 /** A lone client whose natives table holds Warcraft's natives, for fixtures that call them by name in a 32-bit Lua run. */
 export function luaClient(options: Omit<ClientOptions, "warcraftNatives">): HeadlessClient {
   return new HeadlessClient({ ...options, warcraftNatives: true });
+}
+
+/** A lockstep whose natives tables hold Warcraft's natives, for fixtures that call them by name in a 32-bit Lua run. */
+export function warcraftLockstep(options: Omit<LockstepOptions, "warcraftNatives">): Lockstep {
+  return new Lockstep({ ...options, warcraftNatives: true });
 }
 
 export function luaLockstep(map: LuaHeadlessMap, bundle: string, declarations: string, scope?: ClientScope, delivery?: SyncDelivery): Lockstep {

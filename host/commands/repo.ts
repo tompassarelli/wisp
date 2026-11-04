@@ -39,7 +39,7 @@ runMainCli("bun wisp", {
   headless: {
     usage: "audio-acceptance [--sound-cues FILE] [--json]   (map sound/music calls: docs/audio.md)",
     load: async () => (await import("./headless")).makeHeadless(async () => ({
-      map: { filePrefix: "audio80", globalPrefixes: [], warcraftNatives: true },
+      map: { filePrefix: "audio80", globalPrefixes: [] },
       entry: new URL("../../test/audio80/main.ts", import.meta.url).pathname,
       journeys: { "audio-acceptance": { frames: 48, events: [] } },
     })),

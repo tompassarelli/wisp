@@ -22,6 +22,10 @@ export declare function releaseWhenDone(sound: Sound): void;
 export declare function soundFileDuration(file: string): number;
 
 export declare function playMusic(file: string): void;
+/** `PlayMusicEx`: starts the music `from` milliseconds into the file, fading in over `fadeIn` milliseconds. */
+export declare function playMusicFrom(file: string, from: number, fadeIn: number): void;
+export declare function resumeMusic(): void;
+export declare function setMusicVolume(volume: number): void;
 export declare function stopMusic(fadeOut: boolean): void;
 export declare function clearMusic(): void;
 export declare function playTheme(file: string): void;

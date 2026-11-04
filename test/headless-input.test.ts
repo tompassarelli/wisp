@@ -2,29 +2,19 @@ import { afterAll, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createTimer, startTimer } from "wisp/game/clock";
+import { localPlayer, playerSlot } from "wisp/game/players";
+import { readChunk, writeLines } from "wisp/src/map/fileio";
 import { linePreloadFile } from "../host/io/preloadRecord";
 import { installHeadless } from "../host/headless/headless";
 import { customMapData, writtenPreloadFile } from "../host/headless/headlessInput";
-import { installDispatch, on, trampoline } from "../src/map/dispatch";
-import { readChunk, writeLines } from "../src/map/fileio";
 import { configureRuntime } from "../src/runtime/config";
-import { registeredTests } from "../src/runtime/testing";
 
 declare global {
-  var __fixtureBox: framehandle | undefined;
   var __fixtureSeen: string | undefined;
 }
 
-const runtime = installHeadless({
-  filePrefix: "fixture",
-  globalPrefixes: ["__fixture"], warcraftNatives: true,
-  localNatives: {
-    BlzFrameSetFocus: "gives this client's keyboard to a frame",
-    BlzFrameSetVisible: "shows a frame on this client",
-    BlzFrameSetText: "shows text on this client",
-    BlzFrameGetText: "reads this client's text",
-  },
-});
+const runtime = installHeadless({ filePrefix: "fixture", globalPrefixes: ["__fixture"] });
 afterAll(runtime.restore);
 
 const folder = mkdtempSync(join(tmpdir(), "wisp-headless-input-"));
@@ -47,13 +37,11 @@ test("a client's CustomMapData folder: the map's files are there as Warcraft wri
   const clients = runtime.clients({
     start: () => {
       configureRuntime({ filePrefix: "fixture", readyPrefix: "FX_HRR", globalPrefix: "__fixture" });
-      installDispatch();
-      writeLines(`fixture-out-p${GetPlayerId(GetLocalPlayer())}.txt`, ["hello", "world"]);
-      on("fixture.frame", () => {
+      writeLines(`fixture-out-p${playerSlot(localPlayer())}.txt`, ["hello", "world"]);
+      startTimer(createTimer(), 1 / 60, true, () => {
         const chunk = readChunk("fixture-in.pld");
         if (chunk !== undefined) seen(chunk);
       });
-      TimerStart(CreateTimer(), 1 / 60, true, trampoline("fixture.frame"));
     },
     install: () => {},
   }, [0, 1], { files: (slot) => (slot === 0 ? customMapData(data) : undefined) });
@@ -65,7 +53,3 @@ test("a client's CustomMapData folder: the map's files are there as Warcraft wri
   clients.frames(1);
   expect(clients.clients.map(seenBy)).toEqual(["Q ", undefined]);
 });
-
-const registered = registeredTests.length;
-await import("../src/headless/natives/preloadText.tests");
-for (const rule of registeredTests.splice(registered)) test(rule.name, rule.run);

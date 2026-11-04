@@ -1,4 +1,4 @@
-import { Lockstep } from "../../src/headless/lockstep";
+import { warcraftLockstep } from "../../src/headless/lua";
 import { parseNativeDeclarations } from "../../src/headless/declarations";
 import { journeyProblems, runJourney } from "../../src/headless/journey";
 
@@ -10,8 +10,8 @@ declare function CreateTimer(this: void): timer;
 `);
 
 export function coverageFixture(this: void): void {
-  const play = (known: boolean) => runJourney(new Lockstep({
-    warcraftNatives: true, declarations, players: [0, 1], filePrefix: "coverage", modules: { entry: "map", modules: [] },
+  const play = (known: boolean) => runJourney(warcraftLockstep({
+    declarations, players: [0, 1], filePrefix: "coverage", modules: { entry: "map", modules: [] },
     localNatives: { GetRandomInt: "exercise coverage of local-only calls" },
     ...(known ? { intentionalNoops: { StopMusic: "this logic fixture has no music playback" }, natives: () => ({ GetRandomReal: () => 7 }) } : {}),
     entry: (client) => ({ start: () => {

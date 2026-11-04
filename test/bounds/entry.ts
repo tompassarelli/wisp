@@ -1,3 +1,5 @@
+import { createEffect } from "wisp/game/effects";
+import { FramePoint, OriginFrame, createFrameByType, originFrame, setFrameAbsPoint, setFrameSize, setFrameTexture } from "wisp/game/frames";
 import { configureRuntime } from "../../src/runtime/config";
 
 // One BACKDROP and one effect from a generated MDL, for `wisp headless --bounds` (wisp#125 lane 4).
@@ -7,9 +9,9 @@ export function install(this: void): void {
 
 export function start(this: void): void {
   install();
-  const bust = BlzCreateFrameByType("BACKDROP", "bust", BlzGetOriginFrame(ORIGIN_FRAME_GAME_UI, 0), "", 0);
-  BlzFrameSetAbsPoint(bust, FRAMEPOINT_TOPLEFT, 0.02625, 0.102);
-  BlzFrameSetSize(bust, 0.08, 0.08);
-  BlzFrameSetTexture(bust, "Bust.blp", 0, true);
-  AddSpecialEffect("Cube.mdl", 0, 0);
+  const bust = createFrameByType("BACKDROP", "bust", originFrame(OriginFrame.gameUi, 0), "", 0);
+  setFrameAbsPoint(bust, FramePoint.topLeft, 0.02625, 0.102);
+  setFrameSize(bust, 0.08, 0.08);
+  setFrameTexture(bust, "Bust.blp", 0, true);
+  createEffect("Cube.mdl", 0, 0);
 }

@@ -12,6 +12,7 @@ import { EXPECTED as TIMERS } from "./timers56/expected";
 import { EXPECTED as PLAYER_MOUSE } from "./player-mouse67/expected";
 import { EXPECTED as UNIT_MOTION } from "./unit-motion57/expected";
 import { EXPECTED as UNIT_STATES } from "./unit-states/expected";
+import { EXPECTED as UNIT_MOVEMENT } from "./unit-movement61/expected";
 import { EFFECT_ORDER_ROWS } from "./effects59/order";
 import { TIMER134_ROWS } from "./timer134/native";
 import { scheduleRows } from "./sync-delivery71/schedule";
@@ -25,8 +26,10 @@ const FIXTURES: readonly { readonly name: string; readonly title?: string; reado
   { name: "warcraft3", title: "[reference] every 3.0 and 3.0.1 added native runs in its warcraft3 fixture in emitted 32-bit Lua with no unmodelled call", rows: () => WARCRAFT3_NATIVES },
   { name: "sync-delivery", rows: scheduleRows },
   { name: "coverage", rows: () => ["native coverage contract passed"] },
+  { name: "standalone-profile", rows: () => ["p0 frame 0: native GetRandomReal is outside the standalone profile", "problems 1", "undeclared profile native refused"] },
   { name: "unit-states", map: "unit-states", rows: () => bothClients(UNIT_STATES) },
   { name: "unit-motion", map: "unit-motion57", rows: () => bothClients(UNIT_MOTION) },
+  { name: "unit-movement", map: "unit-movement61", rows: () => bothClients(UNIT_MOVEMENT) },
   { name: "timers", map: "timers56", rows: () => bothClients(TIMERS) },
   { name: "timer134", map: "timer134", rows: () => TIMER134_ROWS,
     title: "[native wisp#134, timer134-a/b, 3.0.0.24268] TimerGetElapsed inside 1/60 s and 1/1024 s callbacks in emitted 32-bit Lua matches native's deadlines except a pinned 280-reading residual from callback 3,364" },
