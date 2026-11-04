@@ -173,6 +173,10 @@ impl Surface for SimDisplay {
     fn blocks_on_display(&self) -> bool {
         !self.0.world.borrow().mailbox
     }
+
+    fn present_mode(&self) -> &'static str {
+        if self.0.world.borrow().mailbox { "Mailbox" } else { "Fifo" }
+    }
 }
 
 struct Sim {
@@ -398,4 +402,29 @@ fn a_window_held_in_present_while_hidden_never_shows_or_reports_more_than_sixty_
         let advanced = world.shown[last] - world.shown[first];
         assert!(advanced <= 60, "the scenes drawn within a second of {:.3} s advance {advanced} steps", *at as f64 / 1e9);
     }
+}
+
+#[test]
+fn a_window_that_starts_under_mailbox_draws_one_frame_a_vblank_and_steps_sixty_times_a_second() {
+    let quick = starts_under_mailbox(quick_step_ms);
+    let seconds = (quick.now_ns() - PERIOD_NS) as f64 / 1e9;
+    assert!((quick.stepped() as f64 - seconds * 60.0).abs() <= 2.0, "{} steps in {seconds:.2} s", quick.stepped());
+    starts_under_mailbox(scripted_step_ms);
+}
+
+fn starts_under_mailbox(step_ms: fn(u32) -> f64) -> Sim {
+    const SECONDS: u64 = 20;
+    let mut sim = Sim::new(PERIOD_NS, step_ms);
+    sim.world().mailbox = true;
+    sim.run_until(SECONDS * SECOND_NS);
+    let acquires = sim.world().acquires.clone();
+    let seconds = (sim.now_ns() - PERIOD_NS) as f64 / 1e9;
+    let rate = acquires.len() as f64 / seconds;
+    assert!((rate - 1e9 / PERIOD_NS as f64).abs() <= 1.0, "an acquire that never waits still draws at the display's rate, not unthrottled: {rate:.1} frames/s");
+    assert!(acquires.windows(2).skip(1).all(|pair| pair[1] - pair[0] >= PERIOD_NS), "no two frames share a vblank");
+    let late = sim.late();
+    let total = late.iter().filter(|late| **late).count();
+    assert!(total * WINDOW_FRAMES < 3 * late.len(), "{total} of {} frames were late, the oracle allows under 3 in {WINDOW_FRAMES}", late.len());
+    assert!(sim.pulse_lines.iter().all(|line| line.ends_with("present Mailbox")), "{:?}", sim.pulse_lines);
+    sim
 }

@@ -114,6 +114,7 @@ pub struct Beat {
     pub draw_ms: f64,
     pub gpu_ms: Vec<f64>,
     pub render_scale: Option<u8>,
+    pub present: &'static str,
 }
 
 /// The rates a player's window prints every five seconds, so a slow window says whether it lacks presents, ticks or scenes without a scripted run.
@@ -154,7 +155,7 @@ impl Pulse {
         }
         let seconds = elapsed_ns as f64 / 1e9;
         let line = format!(
-            "wisp-window: {:.1} frames/s (frame p50 {:.1} ms, p99 {:.1} ms, worst {:.1} ms), {:.1} ticks/s, acquire p99 {:.1} ms, draw p99 {:.1} ms, {}{}, {} late scenes, {} dropped samples over {seconds:.1} s",
+            "wisp-window: {:.1} frames/s (frame p50 {:.1} ms, p99 {:.1} ms, worst {:.1} ms), {:.1} ticks/s, acquire p99 {:.1} ms, draw p99 {:.1} ms, {}{}, {} late scenes, {} dropped samples over {seconds:.1} s, present {}",
             self.intervals.len() as f64 / seconds,
             percentile(&mut self.intervals, 0.5),
             percentile(&mut self.intervals, 0.99),
@@ -166,6 +167,7 @@ impl Pulse {
             beat.render_scale.map_or(String::new(), |percent| format!(", scene at {percent}%")),
             self.late,
             self.dropped,
+            beat.present,
         );
         *self = Self { began: Some((beat.presented_ns, beat.step)), ..Self::default() };
         Some(line)
@@ -190,11 +192,12 @@ mod tests {
         let mut pulse = Pulse::default();
         let mut lines = Vec::new();
         for frame in 0..=600u64 {
-            let beat = Beat { presented_ns: frame * 8_333_334, interval_ms: (frame > 0).then_some(8.333), step: frame / 2, late: false, dropped: 0, acquire_ms: 0.1, draw_ms: 2.0, gpu_ms: (frame > 2).then_some(1.5).into_iter().collect(), render_scale: Some(75) };
+            let beat = Beat { presented_ns: frame * 8_333_334, interval_ms: (frame > 0).then_some(8.333), step: frame / 2, late: false, dropped: 0, acquire_ms: 0.1, draw_ms: 2.0, gpu_ms: (frame > 2).then_some(1.5).into_iter().collect(), render_scale: Some(75), present: "Mailbox" };
             lines.extend(pulse.beat(beat));
         }
         assert_eq!(lines.len(), 1, "{lines:?}");
         assert!(lines[0].starts_with("wisp-window: 120.0 frames/s (frame p50 8.3 ms, p99 8.3 ms, worst 8.3 ms), 60.0 ticks/s"), "{}", lines[0]);
         assert!(lines[0].contains("draw p99 2.0 ms, gpu p99 1.5 ms, scene at 75%,"), "{}", lines[0]);
+        assert!(lines[0].ends_with("over 5.0 s, present Mailbox"), "{}", lines[0]);
     }
 }

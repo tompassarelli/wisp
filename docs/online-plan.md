@@ -373,6 +373,42 @@ own start, so the window's stamps and the harness's could not be compared
 Not measured here: PresentMon on Windows (no Windows host), and the netcode
 tick's phase lock under `--net`.
 
+### Mailbox by default (wisp#242, 5 November 2026)
+
+wisp#242 made `Mailbox` the native window's default present mode where the
+surface offers it (then `Fifo`, then `Immediate`), and restated the window
+share as the library's sample-to-present time (`inputToPresentMs`, p50 at most
+one frame, p95 at most two; native-window-plan.md, "Window share"). Measured
+on the laptop with the same setup as the rows above: Mak'gora's standalone
+with the Wisp change, `--start training`, a 2848x1840 window on a 2880x1920
+private labwc desktop at 59.1 Hz, High, under a quiet native lease, CPU
+pressure (some avg10) 0 to 0.4% through the run, with `WISP_WINDOW_PRESENT`
+unset.
+
+- **Press to changed pixels, windowed, default (Mailbox), 30 trials:** p50
+  70.1 ms, p95 92.4 ms, 17 counted (7 missed a grab frame). Warcraft's
+  back-to-back run of 4 November: p50 70.8 ms. The window share as first
+  written (sample to pixels) was p50 62.2 ms, p95 85.6 ms, which still counts
+  the build's two input-delay frames and the attack's lead-in.
+- **Sample to present (`inputToPresentMs`, the restated share), same run:**
+  p50 3.6 ms, p95 5.6 ms, p99 9.9 ms over the whole 36,000-frame match (the
+  window's `standalone.json`). The restated acceptance line,
+  `jq -e -s '.[0].pressMs.p50 <= .[0].warcraft.pressMs.p50 and .[1].inputToPresentMs.p50 <= 16.7 and .[1].inputToPresentMs.p95 <= 33.3' latency.json standalone.json`,
+  prints `true`, exit 0.
+- **Frame pacing at Tom's size, as wisp#145 measured it:**
+  `WISP_WINDOW_SIZE=2848x1840 bun scripts/perf-window.ts --here --resolution 2880x1920 --preset High --stage "Tomb of Sargeras"`,
+  3600 frames after 900 warmup, `presentMode: Mailbox`. Late scenes per
+  five-second pulse (300 ticks): 0 in every measured pulse but one, which
+  had 1 (the table's late / 300 ticks reads 0 / 0 / 0). Steady pulses read
+  60.0 frames/s with frame p99 16.7 ms and 59.6 to 60.0 ticks/s, so the
+  pacer holds Mailbox to one frame per vblank rather than rendering
+  unthrottled. GPU frame p50 10.5 ms, p99 14.9 ms of the 16.7 ms frame, the
+  scene at 75% of the window. `inputToPresentMs` p50 7.0 ms, p95 16.2 ms.
+
+`acquire p99` is 0.1 to 0.2 ms in every pulse (it was 17 to 27 ms under
+`Fifo`). Fullscreen was not rerun: under `Fifo` it measured the same as
+windowed, so composition is not where the frames went.
+
 ### How the harness reaches one frame
 
 Validated 30 October 2026 on gex45 against a reference page of known delay:

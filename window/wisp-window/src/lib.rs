@@ -223,7 +223,7 @@ pub unsafe extern "C" fn wisp_window_next_event(handle: *mut c_void, out: *mut f
     })
 }
 
-/// Asks for a present mode (0 Fifo, 1 Mailbox, 2 Immediate); a mode the surface does not offer leaves `Fifo`, which `wisp_window_info` reports.
+/// Asks for a present mode (0 Fifo, 1 Mailbox, 2 Immediate); a mode the surface does not offer falls back to the first offered of `Mailbox`, `Fifo` and `Immediate`, which `wisp_window_info` reports.
 ///
 /// # Safety
 /// `handle` is live.

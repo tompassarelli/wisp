@@ -141,7 +141,7 @@ impl Gpu {
         if surface.get_capabilities(&adapter).usages.contains(wgpu::TextureUsages::COPY_SRC) {
             config.usage |= wgpu::TextureUsages::COPY_SRC;
         }
-        let present = PresentSetting::Fifo;
+        let present = PresentSetting::default().offered(&surface.get_capabilities(&adapter).present_modes);
         config.present_mode = present.mode();
         config.desired_maximum_frame_latency = 1;
         surface.configure(&device, &config);

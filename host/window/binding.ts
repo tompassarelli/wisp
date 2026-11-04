@@ -81,7 +81,7 @@ export interface NativeWindowOptions {
   readonly width: number;
   readonly height: number;
   readonly library?: string | undefined;
-  /** The present mode to ask for; `WISP_WINDOW_PRESENT` (Fifo, Mailbox or Immediate) when unset. */
+  /** The present mode to ask for; `WISP_WINDOW_PRESENT` (Fifo, Mailbox or Immediate) when unset, else the library's default, Mailbox where the surface offers it. */
   readonly present?: PresentMode | undefined;
   /** Opens borderless fullscreen; `WISP_WINDOW_FULLSCREEN=1` when unset. */
   readonly fullscreen?: boolean | undefined;

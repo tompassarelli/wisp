@@ -192,7 +192,7 @@ impl Host {
             focused: AtomicBool::new(true),
             pad_slot: AtomicI32::new(-1),
             mode: AtomicU8::new(Mode::Loading as u8),
-            present: AtomicU8::new(PresentSetting::Fifo as u8),
+            present: AtomicU8::new(PresentSetting::default() as u8),
             closed: AtomicBool::new(false),
             size: AtomicU64::new(0),
             mailbox: Arc::new(Mailbox::default()),
@@ -421,6 +421,10 @@ impl Surface for WindowSurface {
         self.gpu.setting() == PresentSetting::Fifo
     }
 
+    fn present_mode(&self) -> &'static str {
+        self.gpu.setting().name()
+    }
+
     fn refresh_ms(&self) -> Option<f64> {
         self.refresh_ms
     }
@@ -469,7 +473,7 @@ fn render_loop(shared: Arc<Shared>, windows: mpsc::Receiver<Arc<Window>>, aspect
     };
     *lock(&shared.info) = info_json(&gpu);
     let reported = (gpu.setting(), gpu.image_count());
-    let surface = WindowSurface { gpu, cursor_shown: true, refresh_ms: None, requested: PresentSetting::Fifo, reported, window, shared: shared.clone() };
+    let surface = WindowSurface { gpu, cursor_shown: true, refresh_ms: None, requested: PresentSetting::default(), reported, window, shared: shared.clone() };
     let mut frames = FrameLoop::new(surface, LibraryClock, shared.mailbox.clone(), shared.metrics.clone(), steps);
     while !shared.mailbox.is_stopping() {
         if shared.closed.load(Ordering::Acquire) {

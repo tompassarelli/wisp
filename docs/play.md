@@ -257,7 +257,7 @@ removed. A game reads the flag with `standaloneWindowArgument`, which gives
 `WISP_WINDOW_LIBRARY`, else beside the executable, else `window/target/release`, else
 the build of the package's `window/` source in `~/.cache/wisp/window`, which the command builds on
 its first run ([Where a consumer gets the library](native-window-plan.md#where-a-consumer-gets-the-library-wisp130)). The library runs the
-window and a render thread; the render thread acquires the next `Fifo` image and
+window and a render thread; the render thread acquires the next image and
 samples the held keys onto a queue of 8. The game's thread takes the samples in
 order with `wisp_window_next_event`, which blocks on a Rust condvar until one is
 queued, the window closes or fails, or `wisp_window_stop` is called, so it
@@ -281,17 +281,17 @@ scene-to-present time, the p99 lateness of the render thread's own wakes (at mos
 scene that has arrived and redraws the last one when none has, so a late game
 never makes a present miss its vblank; a scene that missed its deadline is
 counted in `lateScenes` and drawn on a later frame. Above 60 Hz the game still steps 60 times a second.
-The game steps on its own 60 Hz clock thread (`stepper.rs`; wisp:docs/native-window-plan.md, "The step clock"), never on the display, so a window the compositor throttles or hides keeps stepping at 60 a second. Offline it never takes more than 60 steps in any second: a step the clock wakes too late for, or one that falls due while the game still holds the sample before it, is dropped instead of run late beside the next. Every five seconds the window prints its presented frames per second with the frame time's p50 and p99, the game's ticks per second (the steps the clock gave it), the acquire and draw p99 and the late scenes and dropped samples (the steps the clock dropped) to standard error, so a slow window says which of them is short. A game linked against a Wisp from before this gate (Mak'gora's pin until it moves) steps once per display frame and runs at double speed on a 120 Hz panel.
+The game steps on its own 60 Hz clock thread (`stepper.rs`; wisp:docs/native-window-plan.md, "The step clock"), never on the display, so a window the compositor throttles or hides keeps stepping at 60 a second. Offline it never takes more than 60 steps in any second: a step the clock wakes too late for, or one that falls due while the game still holds the sample before it, is dropped instead of run late beside the next. Every five seconds the window prints its presented frames per second, its present mode with the frame time's p50 and p99, the game's ticks per second (the steps the clock gave it), the acquire and draw p99 and the late scenes and dropped samples (the steps the clock dropped) to standard error, so a slow window says which of them is short. A game linked against a Wisp from before this gate (Mak'gora's pin until it moves) steps once per display frame and runs at double speed on a 120 Hz panel.
 
 `--emulated-calls FILE` (read with `standaloneEmulatedCallsArgument`, passed as `emulatedCalls` in `StandaloneOptions`) works in either window: when the run ends it writes the headless client's emulated-native call counts to FILE, a JSON object of Warcraft native name to count with the names in order and a native never called absent. A migrated game API family reads zero there ([game-api-plan.md](game-api-plan.md#warcraft-backend-lowering-and-the-lua-cost-rule)).
 
-`WISP_WINDOW_PRESENT` (`Fifo`, the default, `Mailbox` or `Immediate`) and
+`WISP_WINDOW_PRESENT` (`Mailbox`, the default, `Fifo` or `Immediate`) and
 `WISP_WINDOW_FULLSCREEN=1` (borderless fullscreen) set the present path of an `openNativeWindow`
-that names neither. A mode the surface does not offer falls back to `Fifo`; `standalone.json`
-reports the mode granted and `imageCount`, the distinct images `Fifo` handed back, because
+that names neither. A mode the surface does not offer falls back to the first it offers of `Mailbox`, `Fifo` and `Immediate`; the pulse line
+(`present Mailbox` at its end) and `standalone.json` report the mode granted and `imageCount`, the distinct images `Fifo` handed back, because
 wgpu clamps `desiredMaximumFrameLatency` and does not report the swapchain's size. Under
 `Mailbox` and `Immediate` the acquire does not wait, so the window sleeps to the vblank
-extrapolated from the phase a `Fifo` acquire learned. Box W1 draws only a clear colour and the step as 24 lit squares, and it
+extrapolated from the phase it learned (the last `Fifo` acquire, else its first frame), so it draws one frame a vblank, never unthrottled. `Mailbox` is the default because `Fifo` queued about three frames through Xwayland: press-to-pixels p50 114 ms against Mailbox's 68.4 ms and Warcraft's 70.8 ms ([online-plan.md](online-plan.md), wisp#242). Box W1 draws only a clear colour and the step as 24 lit squares, and it
 shows the loading and ready text in the window's title. The scene is parsed in
 the library on every frame, so the cost of encoding and parsing it is measured
 before the renderer is ported. Keyboard and pads (box W5: the left stick and the standard-layout buttons of the
@@ -313,7 +313,7 @@ env XDG_RUNTIME_DIR=/run/user/$(id -u) DBUS_SESSION_BUS_ADDRESS=unix:path=/run/u
   env -u AI_AGENT bun wisp play --standalone --map MAP.w3x
 ```
 
-Leave `WISP_WINDOW_PRESENT` unset there. Under `Fifo` a window that is not on screen presents about once a second, because the compositor (niri, for one) throttles the frame callbacks of a hidden surface, so a frame rate read while the player looks at another window says nothing about play; `Mailbox` keeps drawing at full GPU cost while hidden.
+Leave `WISP_WINDOW_PRESENT` unset there. Under the default `Mailbox` a hidden window keeps drawing one frame a vblank at full GPU cost; under `Fifo` it presents about once a second, because the compositor (niri, for one) throttles the frame callbacks of a hidden surface, so a `Fifo` frame rate read while the player looks at another window says nothing about play.
 
 Press F10 in the window for the options screen: a Low, Medium, High or Ultra graphics preset and an Original or Remastered art choice (Remastered sharpens textures and rounds silhouettes, see [Remaster at load](native-window-plan.md#remaster-at-load)), saved per player and applied at once; see [Graphics settings](native-window-plan.md#graphics-settings). `WISP_REMASTER=off|standard|high` is a developer override of the art choice.
 

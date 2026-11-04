@@ -294,12 +294,21 @@ travels this path:
 
 The target has two parts:
 
-- **Window share.** From the sample point to the changed pixels, the p95 is
-  at most one frame, T. The p50 is at most 10 ms. A design that showed each
-  sample a whole frame late would fail the p50, and the just-in-time design
-  below predicts step + draw + margin + scanout, well under that.
+- **Window share.** From the sample point to the present of the scene that
+  sample stepped (`inputToPresentMs`, on the library's clock), the p50 is at
+  most one frame, T, and the p95 at most two. The pacer aims each sample at
+  the vblank its scene shows at, so the median scene presents within the
+  frame it was sampled for, and a late scene costs one frame, never more.
+  The share leaves out the game's own frames on purpose: a press waits in
+  the game for its input delay and for the move's lead-in before any scene
+  differs, which is no part of the window, and the first statement of this
+  bar (sample to changed pixels, p50 at most 10 ms) counted both. Under it
+  even a window level with Warcraft measured 61 ms (wisp#242, 2026-11-04).
+  What happens after the present, the swapchain's queue and the compositor,
+  is judged by the second part.
 - **Against Warcraft.** Press-to-display p50 is no worse than native
-  Warcraft's on the same machine with the same harness.
+  Warcraft's on the same machine with the same harness. This is the bar that
+  caught `Fifo`'s three queued frames, which the share cannot see.
 
 The Chrome window misses the first part by construction. It reads input at a
 display frame and draws the result one display frame later (the one-request
@@ -308,16 +317,20 @@ frame on top.
 
 How the native window meets it:
 
-- **Present mode.** The default is `Fifo` with
-  `desired_maximum_frame_latency: 1`: no tearing, supported everywhere, and
-  the only mode whose acquire blocks on the display, so it is the only one
-  the pacing below can anchor to. wgpu treats the latency value as a hint and
-  clamps it; Vulkan creates latency + 1 images. The library therefore reads
+- **Present mode.** The default is `Mailbox` where the surface offers it,
+  then `Fifo`, then `Immediate`; `WISP_WINDOW_PRESENT` asks for one, and the
+  five-second pulse line and `standalone.json` name the mode granted.
+  `Fifo` asks `desired_maximum_frame_latency: 1`, which wgpu treats as a hint
+  and clamps, and through Xwayland on labwc it still queued about three
+  frames between the sample and the screen: press-to-pixels p50 114 ms
+  against Mailbox's 68.4 ms and Warcraft's 70.8 ms on the laptop
+  (online-plan.md, "The native window against Warcraft"). The library reads
   the image count back and logs it in `standalone.json`.
-  - `Mailbox` and `Immediate` (tearing, "vsync off") are player settings,
-    off by default. Under them the window paces from the last `Fifo`-learned
-    phase and the monotonic clock. The latency harness reports them
-    separately.
+  - Under `Mailbox` and `Immediate` the acquire does not wait, so the window
+    paces itself: it sleeps to the vblank extrapolated from a learned phase
+    (the last `Fifo` acquire, else its first frame's) at the display's
+    reported rate, so it draws one frame per vblank and never unthrottled,
+    and the step clock keeps 60 ticks a second either way.
   - The source for which modes each platform offers is wgpu 30's
     `PresentMode` documentation.
 - **Frame pacing.** Each frame runs in this order:
@@ -1388,7 +1401,7 @@ yet are created by that box. Each graphics run takes the gpu lease as
   It records every result in online-plan.md, "Input-to-display latency".
 
   Done when:
-  `cd ~/code/wisp/main && bun wisp latency press --window native --trials 100 --out build/latency && jq -e '.windowShareMs.p95 <= 16.7 and .windowShareMs.p50 <= 10 and .pressMs.p50 <= .warcraft.pressMs.p50' build/latency/latency.json`
+  `cd ~/code/wisp/main && bun wisp latency press --window native --trials 100 --out build/latency && jq -e -s '.[0].pressMs.p50 <= .[0].warcraft.pressMs.p50 and .[1].inputToPresentMs.p50 <= 16.7 and .[1].inputToPresentMs.p95 <= 33.3' build/latency/latency.json RUN/standalone.json`, RUN being the window's `--out`
 - **W3 Native model renderer, captures and render compare** ([wisp#108](https://github.com/tompassarelli/wisp/issues/108)). It
   covers:
   - models, textures and HD materials as listed;

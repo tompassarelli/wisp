@@ -36,6 +36,10 @@ pub trait Surface {
     fn blocks_on_display(&self) -> bool {
         true
     }
+    /// The present mode the surface granted, which the pulse line names.
+    fn present_mode(&self) -> &'static str {
+        "Fifo"
+    }
     /// The display's frame in milliseconds as the display reports its rate, or none, which the loop takes as 60 Hz. The loop never measures it from its own frames: they include its own waits, and a window the compositor held to one frame a second would keep pacing to that second.
     fn refresh_ms(&self) -> Option<f64> {
         None
@@ -141,7 +145,7 @@ impl<S: Surface, C: Clock> FrameLoop<S, C> {
         if mode != Mode::Loading {
             let times = Times { asked, acquired, drawing, drawn, presented };
             self.publish(&outcome, &times, &timings, interval, missed);
-            let beat = Beat { presented_ns: presented, interval_ms: interval, step: self.stepper.next(presented).0 as u64, late: outcome.late, dropped: outcome.dropped, acquire_ms: ms(asked, acquired), draw_ms: ms(drawing, drawn), gpu_ms: timings.gpu.iter().map(|frame| frame.span_ms).collect(), render_scale: timings.render_scale };
+            let beat = Beat { presented_ns: presented, interval_ms: interval, step: self.stepper.next(presented).0 as u64, late: outcome.late, dropped: outcome.dropped, acquire_ms: ms(asked, acquired), draw_ms: ms(drawing, drawn), gpu_ms: timings.gpu.iter().map(|frame| frame.span_ms).collect(), render_scale: timings.render_scale, present: self.surface.present_mode() };
             self.pulse_line = self.pulse.beat(beat);
         }
         self.previous_frame_late = outcome.late;
