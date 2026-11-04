@@ -9,6 +9,7 @@ import type { HeadlessClient } from "../../src/headless/client";
 import { pollFor, spawnLogged } from "../process/hostProcess";
 import { deathSeconds } from "../models/models";
 import { browserBundle } from "./browserBundle";
+import { type ChromeAngle, renderChromeArguments } from "./chromeArguments";
 import type { RenderAssetResolution, ResolvedRenderAsset } from "./renderAssets";
 import { decodeTerrain, shiftedBounds, worldBounds, type Terrain, type WorldBounds } from "../terrain/terrain";
 import { decodeDoodadFile } from "../terrain/doodads";
@@ -22,8 +23,7 @@ export type { Graphics } from "./graphicsProfiles";
 export type { UiRow } from "./screen";
 export type { DrawnPose, RenderScene, SceneEnvironment } from "./renderScene";
 
-export const CHROME_ANGLES = ["gl", "gl-egl", "vulkan", "swiftshader"] as const;
-export type ChromeAngle = (typeof CHROME_ANGLES)[number];
+export { CHROME_ANGLES, type ChromeAngle } from "./chromeArguments";
 
 export interface HeadlessRenderProject {
 
@@ -257,7 +257,7 @@ const openBrowser = (project: HeadlessRenderProject, bundle: string, angle: Chro
   const chromeLog = join(directory, "chrome.log");
   const chromeStarted = performance.now();
   console.error(`headless render: Chrome ANGLE ${angle} starting at ${new Date().toISOString()}`);
-  const chrome = yield* spawnLogged(ChildProcess.make(project.chrome ?? process.env.CHROME ?? "google-chrome-stable", ["--headless=new", "--no-first-run", "--no-default-browser-check", "--disable-background-networking", "--disable-sync", "--remote-debugging-port=0", `--user-data-dir=${directory}`, "--use-gl=angle", `--use-angle=${angle}`, ...(angle === "swiftshader" ? ["--enable-unsafe-swiftshader"] : []), ...(angle === "gl-egl" ? ["--ozone-platform=headless"] : []), `http://127.0.0.1:${server.port}/`], { env: project.chromeEnv, extendEnv: true }), { stdout: join(directory, "chrome.out"), stderr: chromeLog }).pipe(Effect.mapError(renderFailure));
+  const chrome = yield* spawnLogged(ChildProcess.make(project.chrome ?? process.env.CHROME ?? "google-chrome-stable", renderChromeArguments(directory, angle, `http://127.0.0.1:${server.port}/`), { env: project.chromeEnv, extendEnv: true }), { stdout: join(directory, "chrome.out"), stderr: chromeLog }).pipe(Effect.mapError(renderFailure));
   console.error(`headless render: Chrome ANGLE ${angle} spawned after ${Math.round(performance.now() - chromeStarted)} ms`);
   const port = yield* pollFor(10, "50 millis", Effect.gen(function*() {
     const active = yield* Effect.promise(() => readFile(join(directory, "DevToolsActivePort"), "utf8").catch(() => ""));

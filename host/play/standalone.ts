@@ -10,6 +10,7 @@ import { findReforgedInstall, STORAGE_ENV, type InstallLookup } from "../os/warc
 import { requireGpuLease } from "../render/gpuLease";
 import { captureScene, sceneWithUnits, RenderFailure } from "../render/headlessRender";
 import { browserBundle } from "../render/browserBundle";
+import { playerChromeArguments } from "../render/chromeArguments";
 import { createSoundResolver } from "../render/standaloneSound";
 import { prepareWindowLibrary } from "../window/binding";
 import { openNativeAudio } from "../window/audio";
@@ -189,11 +190,7 @@ export const openStandalone = (game: StandaloneGame, options: StandaloneOptions 
 
 const openWindow = (game: StandaloneGame, options: StandaloneOptions, url: string) => Effect.gen(function*() {
   const directory = yield* Effect.acquireRelease(attempt(() => mkdtemp(join(tmpdir(), "wisp-player-"))), (path) => Effect.promise(() => rm(path, { recursive: true, force: true })));
-  const browser = yield* spawnLogged(ChildProcess.make(game.render.chrome ?? process.env.CHROME ?? "google-chrome-stable", [
-    "--no-first-run", "--no-default-browser-check", "--disable-background-networking", "--disable-sync", "--autoplay-policy=no-user-gesture-required",
-    "--disable-renderer-backgrounding", "--disable-background-timer-throttling", `--user-data-dir=${directory}`, `--window-size=${game.render.width ?? 1280},${game.render.height ?? 720}`,
-    ...(options.headless === true ? ["--headless=new", "--use-gl=angle", ...(process.env.CI === "true" ? ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"] : ["--use-angle=gl"])] : []), `--app=${url}`,
-  ]), { stdout: join(directory, "chrome.out"), stderr: join(directory, "chrome.log") }).pipe(Effect.mapError((cause) => new RenderFailure({ cause })));
+  const browser = yield* spawnLogged(ChildProcess.make(game.render.chrome ?? process.env.CHROME ?? "google-chrome-stable", playerChromeArguments(directory, { width: game.render.width ?? 1280, height: game.render.height ?? 720 }, url, options.headless === true, process.env.CI === "true")), { stdout: join(directory, "chrome.out"), stderr: join(directory, "chrome.log") }).pipe(Effect.mapError((cause) => new RenderFailure({ cause })));
   console.log(`${game.title}: standalone window opened. Connect a controller or use the keyboard.`);
   return {
     closed: browser.handle.exitCode.pipe(

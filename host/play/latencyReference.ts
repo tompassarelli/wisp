@@ -8,6 +8,7 @@ import { Effect } from "effect";
 import { decodePpm } from "../contract/services";
 import { runTool } from "../os/warcraft/desktopClient";
 import { DesktopFailure } from "../contract/client";
+import { referenceChromeArguments } from "../render/chromeArguments";
 import { type PressLatencyOptions, pressLatency, type Rect } from "./pressLatency";
 
 /** Frames the reference page waits between the key and the pixel it changes. */
@@ -64,10 +65,7 @@ export function referenceErrors(delays: readonly ReferenceDelay[]): readonly Ref
 }
 
 const chromeFor = (chrome: string, display: string, profile: string, page: string) => Effect.acquireRelease(
-  Effect.sync(() => spawn(chrome, [
-    "--no-first-run", "--no-default-browser-check", "--disable-background-networking", "--disable-sync", "--ozone-platform=x11",
-    `--user-data-dir=${profile}`, "--window-position=0,0", "--window-size=800,600", `--app=file://${page}`,
-  ], { stdio: "ignore", env: { ...process.env, DISPLAY: display } })),
+  Effect.sync(() => spawn(chrome, referenceChromeArguments(profile, page), { stdio: "ignore", env: { ...process.env, DISPLAY: display } })),
   (child) => Effect.promise(() => new Promise<void>((resolve) => {
     if (child.exitCode !== null) return resolve();
     child.once("exit", () => resolve());
