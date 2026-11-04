@@ -73,9 +73,9 @@ const chromeFor = (chrome: string, display: string, profile: string, page: strin
   })),
 );
 
-const shown = (options: PressLatencyOptions) => Effect.gen(function*() {
+const shown = (options: PressLatencyOptions, control: Rect) => Effect.gen(function*() {
   const wayland = { XDG_RUNTIME_DIR: options.waylandRuntime, WAYLAND_DISPLAY: "wayland-0" };
-  const { x, y, width, height } = options.control;
+  const { x, y, width, height } = control;
   for (let attempt = 0; attempt < 100; attempt++) {
     const frame = decodePpm(yield* runTool(options.window, "look for the reference page", [options.grim, "-g", `${x},${y} ${width}x${height}`, "-s", "1", "-t", "ppm", "-"], wayland));
     if (frame !== undefined && frame.rgb.every((channel) => channel >= 20 && channel <= 28)) return;
@@ -112,8 +112,8 @@ export const checkPressLatency = (options: Pick<PressLatencyOptions, "display" |
       writeFileSync(page, referencePage(frames));
       const report = yield* Effect.scoped(Effect.gen(function*() {
         yield* chromeFor(chrome, options.display, join(work, "profile"), page);
-        const measured = { ...options, window: "reference" as const, sampleLog: undefined, key: "j", region: REGION, control: CONTROL, out: join(options.out, `frames-${frames}`) };
-        yield* shown(measured);
+        const measured = { ...options, window: "reference" as const, sampleLog: undefined, flash: false, inputDelayFrames: 0, key: "j", region: REGION, control: CONTROL, out: join(options.out, `frames-${frames}`) };
+        yield* shown(measured, CONTROL);
         yield* Effect.sleep(1500);
         return yield* pressLatency(measured);
       })).pipe(Effect.ensuring(Effect.sync(() => rmSync(work, { recursive: true, force: true }))));

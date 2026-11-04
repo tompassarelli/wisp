@@ -6,7 +6,7 @@ import { Effect, Fiber } from "effect";
 import type { Frame } from "../host/contract/services";
 import { checkArguments, referenceErrors } from "../host/play/latencyReference";
 import { decodePressRun, latencyReport } from "../host/play/latencyComparison";
-import { changedPixels, framePeriodMs, pressLatencyArguments, response, windowShare, type Sample } from "../host/play/pressLatency";
+import { changedPixels, framePeriodMs, pressLatencyArguments, pressToSample, response, windowShare, type Sample } from "../host/play/pressLatency";
 import { openSampleLog, parseSampleLog } from "../host/window/sampleLog";
 import { monotonicNs } from "../host/os/platform/linux/monotonic";
 import { Reader, displaySocket, fakeKey, keycodeOf, keysymOf, queryExtension } from "../host/play/xtest";
@@ -126,4 +126,14 @@ test("[boundary] a worker reads the same monotonic clock as the process that sta
   worker.terminate();
   expect(inWorker).toBeGreaterThanOrEqual(before);
   expect(inWorker).toBeLessThanOrEqual(monotonicNs());
+});
+
+test("[spec docs/online-plan.md] flash mode needs no control region, and the press-to-sample wait is the first logged press at or after the press", () => {
+  const args = ["--window", "native", "--display", ":3", "--wayland-runtime", "/run/x", "--key", "j", "--region", "1,2,30,30", "--flash", "--out", "/tmp/o", "--input-delay-frames", "1"];
+  expect(pressLatencyArguments(args, {})).toMatchObject({ flash: true, control: undefined, inputDelayFrames: 1, trials: 30 });
+  expect(typeof pressLatencyArguments(args.filter((arg) => arg !== "--flash"), {})).toBe("string");
+  expect(typeof pressLatencyArguments([...args, "--input-delay-frames", "x"], {})).toBe("string");
+  const edges = parseSampleLog('{"sampleNs":40000000,"mask":1,"pressed":true}\n');
+  expect(pressToSample(edges, 36 * ms)).toBe(4);
+  expect(pressToSample(edges, 41 * ms)).toBeUndefined();
 });

@@ -419,6 +419,70 @@ unset.
 `acquire p99` is 0.1 to 0.2 ms in every pulse (it was 17 to 27 ms under
 `Fifo`).
 
+### True press to display from the input flash (wisp#244, 5 November 2026)
+
+The jab-region method above times a press to the first changed pixel of an
+attack animation, so its number carries the frames before the jab's first pose
+differs from idle, and each trial waits for the animation to finish: about 12 s
+a trial. Mak'gora's development builds now draw an input flash, a solid block
+in the screen's top-left corner, on the sim frame whose input row carries a new
+press, which is after input delay; `-dev flash on` turns it on (standalone:
+`--dev "flash on"`, makgora `ts/src/host/loop/inputFlash.ts`), it stays up 8
+sim frames, and player builds never create it. `latency press --flash` watches
+that block instead of the fighter, so detection is exact and the next trial
+starts as soon as the block is gone.
+
+Measured on the laptop on 5 November 2026 (Wisp 8097aeaf on top of origin/main
+87d39752, Mak'gora `native-input` and standalone from the same source), each
+target alone on a private labwc desktop under a quiet native lease, CPU
+pressure 0 to 0.5%, 60 trials each, run back to back: the native window at
+borderless fullscreen on a 2880x1920 desktop at 59.1 Hz, High, present mode
+Mailbox (the default), and Classic Warcraft on LAN pair 0 (`lan solo`,
+parity 800x600) playing the `native-input` map; both in `-dev quick training`
+with `-dev flash on`, the key N, input delay 2. Each figure is the middle of
+the grab bracket the flash first appeared in; trials where the harness missed
+a grab are left out and counted below.
+
+| Target | Present mode | Press to display, p50 / p95 | Trials counted | Press to sample, p50 / p95 | Input delay | Sample to display after the delay, p50 / p95 |
+| --- | --- | --- | --- | --- | --- | --- |
+| Native window | Mailbox | 55.6 / 69.8 ms | 53 of 60 | 6.3 / 15.9 ms | 33.3 ms (2 frames) | 12.6 / 25.8 ms |
+| Native window, `-dev delay 1` | Mailbox | 40.5 / 66.0 ms | 47 of 60 | 9.7 / 30.0 ms | 16.7 ms (1 frame) | 11.4 / 33.5 ms |
+| Native window | Fifo (`WISP_WINDOW_PRESENT=Fifo`) | 94.8 / 122.9 ms | 49 of 60 | 11.2 / 33.6 ms | 33.3 ms | 52.2 / 57.4 ms |
+| Native Warcraft (lan0a) | | 68.8 / 87.4 ms | 59 of 60 | | | |
+
+- **The native window is 13 ms ahead of Warcraft under Mailbox** (55.6 against
+  68.8 ms at the median, 69.8 against 87.4 ms at p95), so Mak'gora's keyboard
+  press shows sooner in its own window than in the Warcraft build of the same
+  source. Under Fifo it is 26 ms behind (94.8 ms), the three frames wisp#242
+  removed.
+- **One frame of input delay is 15 ms of the 55.6** (40.5 against 55.6 ms at
+  the median): `-dev delay 1` moves the median by a frame, and the rest of the
+  split stays where it was.
+- **Where the 55.6 ms goes**, native window, delay 2: 6.3 ms from the key's
+  XTEST write to the window's next poll of the keyboard, 33.3 ms of input
+  delay, and 12.6 ms from there to the changed pixels (the sim step that
+  carries the press, the scene, and Mailbox's present).
+- **The flash removes the jab's lead-in.** The same window, same run, measured
+  with the jab-region method (`--region 555,680,240,240 --control 900,850,300,40`,
+  fullscreen) gave a press p50 of 75.7 ms (p95 99.6 ms, 16 of 24 counted; an earlier 12-trial jab run gave 74.4 ms). The 60-trial flash run of that window, minutes before, gave
+  56.2 ms (p50). The 19.5 ms between them, 1.2 display frames, is the frames before the jab's first pose differs from idle, which the flash does not count; the jab method's own median came from 16 counted trials, so its spread is wide.
+
+A flash trial takes 0.41 s at p50 and 0.52 s at p95 (native, 60 trials in
+25.4 s; Warcraft 0.43 and 0.54 s, 60 trials in 28.0 s), against 12.0 s for the
+jab method's trial. The breakdown of the jab method's trial from the
+harness's own timestamps (12 trials, native window, Mailbox): 9.76 s waiting
+for a quiet baseline (the 30 tries it allows, 300 ms each; the control region
+never settled), 0.72 s watching, 1.5 s settle, 12.0 s a trial and 144 s the
+run. The flash's trial: 0.23 s baseline (100 ms grab, a second one while the
+last flash is still up), 0.18 s watching, no settle.
+
+Commands, from Wisp, inside the desktop with the window up
+(`WISP_WINDOW_SAMPLE_LOG=DIR/samples.jsonl`, `--dev "flash on"`):
+`bun wisp latency press --window native --display :N --wayland-runtime RUN/runtime --key n --region 180,10,120,120 --flash --input-delay-frames 2 --sample-log DIR/samples.jsonl --trials 60 --out DIR/flash`;
+Warcraft `--window warcraft --region 6,6,38,38 --flash` on lan0a's display,
+after `-dev quick training` and `-dev flash on` typed into its chat (the first
+key tap after a window opens is sometimes dropped, so tap once before the run).
+
 ### How the harness reaches one frame
 
 Validated 30 October 2026 on gex45 against a reference page of known delay:

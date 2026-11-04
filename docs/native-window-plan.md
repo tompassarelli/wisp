@@ -408,6 +408,19 @@ How it is measured:
     it as `warcraft` when one is given. The window must already be on the
     desktop and take its input from XTEST (an X11 window); the command does not
     start it.
+  - `--flash` replaces the fighter region and its control with the game's own
+    press marker (wisp#244): a block that a development build draws in a fixed
+    corner on the sim frame whose input row carries a new press, after input
+    delay (Mak'gora's `-dev flash on`). It stays up 8 sim frames, so a trial
+    resets within a few frames instead of waiting out an attack animation. The
+    harness grabs a small region back to back, stops at the first grab that
+    shows the block, and starts the next trial once the block is gone, so a
+    trial takes about 0.4 s. The report splits press to display into
+    `split.pressToSampleMs` (the key's XTEST write to the window sample that
+    carried it), `split.inputDelayMs` (`--input-delay-frames` sim frames, 2 by
+    default) and `split.sampleToDisplayMs` (the rest, from the sample to the
+    changed pixels, less the delay), and each row and the summary carry the
+    time each phase of a trial took (`trialMs`, `trialPhasesMs`).
   - grim reads the compositor's output, not light off the panel. Scanout and
     panel response add the same constant to every target, so the comparisons
     hold.
