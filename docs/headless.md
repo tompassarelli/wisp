@@ -325,8 +325,11 @@ const clients = headless.clients({ start, install }, [0, 1]);
 const result = runJourney(clients, JOURNEY);
 ```
 
-`installHeadless` makes every declared native, constant and global variable a
-global of the process that reads the running client's; call it once per test
+`installHeadless` makes Wisp's own `Wisp*` hooks globals of the process that
+read the running client's, and the map reaches everything else through the
+game API's native backend. A map that sets `warcraftNatives: true` also gets
+every declared Warcraft native, constant and global variable that way; only
+the test fixtures that still call Warcraft raw set it. Call it once per test
 file and restore after. The globals go in at the first `clients()` call, so a
 file whose tests a `-t` filter skips (and whose `afterAll` Bun then skips too)
 installs nothing. A test can also drive the `Lockstep` directly:

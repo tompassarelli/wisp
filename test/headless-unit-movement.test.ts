@@ -4,7 +4,7 @@ import { runJourney } from "../src/headless/journey";
 import { install, start } from "./unit-movement61/main";
 import { UNIT_MOVEMENT_NOOPS } from "./unit-movement61/cases";
 
-const runtime = installHeadless({ filePrefix: "unit-movement", globalPrefixes: ["__unitMovement"], intentionalNoops: UNIT_MOVEMENT_NOOPS });
+const runtime = installHeadless({ filePrefix: "unit-movement", globalPrefixes: ["__unitMovement"], warcraftNatives: true, intentionalNoops: UNIT_MOVEMENT_NOOPS });
 afterAll(runtime.restore);
 
 export const EXPECTED = [

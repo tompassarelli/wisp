@@ -33,6 +33,7 @@ export interface HeadlessMap {
   readonly standaloneProfile?: StandaloneProfile;
 
   readonly natives?: (client: HeadlessClient) => NativeBehaviors;
+  readonly warcraftNatives?: boolean;
 
   readonly frames?: readonly FrameTemplate[];
 }
@@ -95,12 +96,12 @@ function luaFunctions(client: HeadlessClient, bundles: ReadonlyMap<string, MapEn
 
 export function installHeadless(map: HeadlessMap, declarations = readNativeDeclarations()): HeadlessRuntime {
   const prefixes = ["__wisp", ...map.globalPrefixes];
-  const names = [
+  const names = map.warcraftNatives === true ? [
     ...declarations.functions.map(([name]) => name),
     ...declarations.constants.map(([name]) => name),
     ...declarations.variables.map(([name]) => name),
     ...LUA_GLOBALS,
-  ];
+  ] : [...declarations.functions.map(([name]) => name).filter((name) => name.startsWith("Wisp")), ...LUA_GLOBALS];
   const global = globalThis as Record<string, unknown>;
   let current: HeadlessClient | undefined;
   const isOwnGlobal = (key: string | symbol): key is string => typeof key === "string" && prefixes.some((prefix) => key.startsWith(prefix));
@@ -207,6 +208,7 @@ export function installHeadless(map: HeadlessMap, declarations = readNativeDecla
         ...(map.scenery === undefined ? {} : { scenery: map.scenery }),
         ...(map.inventory === undefined ? {} : { inventory: map.inventory }),
         ...(map.playerNames === undefined ? {} : { playerNames: map.playerNames }),
+        ...(map.warcraftNatives === undefined ? {} : { warcraftNatives: map.warcraftNatives }),
         natives: (client) => ({ ...luaFunctions(client, bundles), ...map.natives?.(client) }),
       });
     },

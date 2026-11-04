@@ -4,7 +4,7 @@ import { installDispatch, on, trampoline } from "../src/map/dispatch";
 import { configureRuntime } from "../src/runtime/config";
 import { MEASURED_BATTLE_NET, MEASURED_TURN_BURSTS, syncDelivery, turnBursts } from "../src/headless/syncChannel";
 
-const FIXTURE = { filePrefix: "fixture", globalPrefixes: ["__fixture"], localNatives: { BlzFrameSetText: "shows text on this client" } };
+const FIXTURE = { filePrefix: "fixture", globalPrefixes: ["__fixture"], warcraftNatives: true, localNatives: { BlzFrameSetText: "shows text on this client" } };
 const runtime = installHeadless(FIXTURE);
 afterAll(runtime.restore);
 

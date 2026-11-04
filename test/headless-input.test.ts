@@ -17,7 +17,7 @@ declare global {
 
 const runtime = installHeadless({
   filePrefix: "fixture",
-  globalPrefixes: ["__fixture"],
+  globalPrefixes: ["__fixture"], warcraftNatives: true,
   localNatives: {
     BlzFrameSetFocus: "gives this client's keyboard to a frame",
     BlzFrameSetVisible: "shows a frame on this client",

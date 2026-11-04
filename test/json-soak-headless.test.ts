@@ -28,7 +28,7 @@ async function capture(command: Command, args: readonly string[]) {
 }
 
 const headless = (frames: number) => makeHeadless(async () => ({
-  map: { filePrefix: "fixture", globalPrefixes: ["__fixture"] },
+  map: { filePrefix: "fixture", globalPrefixes: ["__fixture"], warcraftNatives: true },
   entry: join(import.meta.dir, "headless/entry.ts"),
   journeys: { seconds: { frames, events: [] } },
 }));

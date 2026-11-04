@@ -6,7 +6,7 @@ import { createPointerFeed } from "../src/headless/pointer";
 import { ChatPanel, type ChatSlot, type ChatStyle, registerChatEvents } from "../src/ui/chatPanel";
 import { FRIZ_QUADRATA_WIDTHS } from "../src/ui/chatLog";
 
-const runtime = installHeadless({ filePrefix: "chatPanel", globalPrefixes: ["__chatPanel"] });
+const runtime = installHeadless({ filePrefix: "chatPanel", globalPrefixes: ["__chatPanel"], warcraftNatives: true });
 afterAll(runtime.restore);
 
 const STYLE: ChatStyle = {

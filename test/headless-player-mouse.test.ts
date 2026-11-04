@@ -6,7 +6,7 @@ import { EXPECTED } from "./player-mouse67/expected";
 import { PLAYER_MOUSE_JOURNEY } from "./player-mouse67/journey";
 import { install, start } from "./player-mouse67/main";
 
-const runtime = installHeadless({ filePrefix: "player-mouse67", globalPrefixes: ["__playerMouse67"] });
+const runtime = installHeadless({ filePrefix: "player-mouse67", globalPrefixes: ["__playerMouse67"], warcraftNatives: true });
 afterAll(runtime.restore);
 
 test("[scenario] a player's world-coordinate mouse move, press and release reach every client's trigger on the same frame with the same coordinates and button, under measured Battle.net delivery", () => {

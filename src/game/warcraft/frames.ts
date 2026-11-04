@@ -10,6 +10,7 @@ export const frames: Lowering = {
   frameChildCount: "BlzFrameGetChildrenCount($1)",
   frameEnabled: "BlzFrameGetEnable($1)",
   frameName: "BlzFrameGetName($1)",
+  frameId: "GetHandleId($1)",
   frameText: "BlzFrameGetText($1)",
   frameTextLimit: "BlzFrameGetTextSizeLimit($1)",
   frameVisible: "BlzFrameIsVisible($1)",
@@ -97,5 +98,6 @@ export const framesConstants: ConstantLowering = {
     heroButtonIndicator: "ORIGIN_FRAME_HERO_BUTTON_INDICATOR",
     minimap: "ORIGIN_FRAME_MINIMAP",
     minimapButton: "ORIGIN_FRAME_MINIMAP_BUTTON",
+    systemButton: "ORIGIN_FRAME_SYSTEM_BUTTON",
   },
 };

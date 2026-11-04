@@ -74,7 +74,7 @@ test("body calls lower to the natives they replaced, with a nested native, a glo
 
 test("the native backend keeps each client's bodies and locations apart and logs every row's native", () => {
   const declarations = readNativeDeclarations();
-  const make = (slot: number) => new HeadlessClient({ screen: { width: 1920, height: 1080 }, slot, humans: [0, 1], declarations, filePrefix: "game-api", localNatives: {}, network: [] });
+  const make = (slot: number) => new HeadlessClient({ warcraftNatives: true, screen: { width: 1920, height: 1080 }, slot, humans: [0, 1], declarations, filePrefix: "game-api", localNatives: {}, network: [] });
   const [first, second] = [make(0), make(1)];
   bindWorld(first.world);
   const center = nativeBodies.mapCenter();
@@ -111,7 +111,7 @@ test("the native backend keeps each client's bodies and locations apart and logs
 });
 
 test("a native-backend body shows in the client's pose list and an emulated native moves it", () => {
-  const client = new HeadlessClient({ screen: { width: 1920, height: 1080 }, slot: 0, humans: [0], declarations: readNativeDeclarations(), filePrefix: "game-api", localNatives: {}, network: [] });
+  const client = new HeadlessClient({ warcraftNatives: true, screen: { width: 1920, height: 1080 }, slot: 0, humans: [0], declarations: readNativeDeclarations(), filePrefix: "game-api", localNatives: {}, network: [] });
   bindWorld(client.world);
   const body = nativeBodies.createBody(nativePlayers.player(0), 7, 1, 2, 0);
   nativeBodies.setBodyColor(body, 5);

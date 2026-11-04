@@ -5,7 +5,7 @@ import { install, start } from "./unit-motion57/main";
 import { UNIT_MOTION_NOOPS } from "./unit-motion57/cases";
 import { EXPECTED } from "./unit-motion57/expected";
 
-const runtime = installHeadless({ filePrefix: "unit-motion", globalPrefixes: ["__unitMotion"], intentionalNoops: UNIT_MOTION_NOOPS });
+const runtime = installHeadless({ filePrefix: "unit-motion", globalPrefixes: ["__unitMotion"], warcraftNatives: true, intentionalNoops: UNIT_MOTION_NOOPS });
 afterAll(runtime.restore);
 
 test("unit position, height, facing and dash cases agree in two clients", () => {

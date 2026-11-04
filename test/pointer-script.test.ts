@@ -3,7 +3,7 @@ import { installHeadless } from "../host/headless/headless";
 import { POINTER_LEFT, createPointerFeed, uiPoint } from "../src/headless/pointer";
 import { type PointerStep, pointerStep, scriptedPointer, uiReading } from "../src/headless/pointerScript";
 
-const runtime = installHeadless({ filePrefix: "pointerScript", globalPrefixes: ["__pointerScript"] });
+const runtime = installHeadless({ filePrefix: "pointerScript", globalPrefixes: ["__pointerScript"], warcraftNatives: true });
 afterAll(runtime.restore);
 
 const steps = (script: string): PointerStep[] => script.split("\n").flatMap((line) => {

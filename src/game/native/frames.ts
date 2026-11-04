@@ -75,6 +75,11 @@ export function frameName(frame: Frame): string {
   return world.frames.name(frame);
 }
 
+export function frameId(frame: Frame): number {
+  boundWorld().log?.("GetHandleId", [frame]);
+  return asHandle(frame).id;
+}
+
 export function frameText(frame: Frame): string {
   const world = boundWorld();
   world.log?.("BlzFrameGetText", [frame]);
@@ -381,4 +386,5 @@ export const OriginFrame = {
   heroButtonIndicator: fromValue<OriginFrameType>("ORIGIN_FRAME_HERO_BUTTON_INDICATOR"),
   minimap: fromValue<OriginFrameType>("ORIGIN_FRAME_MINIMAP"),
   minimapButton: fromValue<OriginFrameType>("ORIGIN_FRAME_MINIMAP_BUTTON"),
+  systemButton: fromValue<OriginFrameType>("ORIGIN_FRAME_SYSTEM_BUTTON"),
 };

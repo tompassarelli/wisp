@@ -6,7 +6,7 @@ import * as timer134 from "./timer134/main";
 import { EXPECTED } from "./timers56/expected";
 import { NATIVE_134_STEPS } from "./timer134/native";
 
-const runtime = installHeadless({ filePrefix: "timers56", globalPrefixes: ["__timers56", "__timer134"] });
+const runtime = installHeadless({ filePrefix: "timers56", globalPrefixes: ["__timers56", "__timer134"], warcraftNatives: true });
 afterAll(runtime.restore);
 
 test("each timer rule's row agrees in two clients", () => {

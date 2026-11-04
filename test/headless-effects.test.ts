@@ -6,7 +6,7 @@ import { DYING, EFFECT_NOOPS } from "./effects59/cases";
 import { EFFECT_DEATHS, deathTimeline } from "./effects59/deaths";
 import { EXPECTED, DEATH_TIMELINE } from "./effects59/expected";
 
-const runtime = installHeadless({ filePrefix: "effects", globalPrefixes: ["__effects59"], intentionalNoops: EFFECT_NOOPS });
+const runtime = installHeadless({ filePrefix: "effects", globalPrefixes: ["__effects59"], warcraftNatives: true, intentionalNoops: EFFECT_NOOPS });
 afterAll(runtime.restore);
 
 test("[native #59] seven effect cases agree in two clients", () => {

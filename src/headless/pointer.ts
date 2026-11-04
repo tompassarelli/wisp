@@ -8,8 +8,8 @@ const UI_HALF_WIDTH = f32(0.4), UI_HEIGHT = f32(0.6);
 export function point(client: HeadlessClient, x: number, y: number, left: boolean | undefined): void {
   client.mouseScreenX = x;
   client.mouseScreenY = y;
-  if (left === true) client.heldMouseButtons.add(client.natives.MOUSE_BUTTON_TYPE_LEFT);
-  else if (left === false) client.heldMouseButtons.delete(client.natives.MOUSE_BUTTON_TYPE_LEFT);
+  if (left === true) client.heldMouseButtons.add(client.constants.MOUSE_BUTTON_TYPE_LEFT);
+  else if (left === false) client.heldMouseButtons.delete(client.constants.MOUSE_BUTTON_TYPE_LEFT);
 }
 
 export const POINTER_LEFT = 1, POINTER_RIGHT = 2;
@@ -46,7 +46,7 @@ export function screenPoint(reading: Pick<PointerReading, "x" | "y" | "width" | 
 }
 
 /** Only the frame store's `point` and the chat entry's `holds` and `open`: both classes have private members, so a consumer that sees Wisp through both its source and its published types would find the whole class incompatible with itself. */
-export type PointerClient = Pick<HeadlessClient, "natives" | "screen" | "mouseScreenX" | "mouseScreenY" | "heldMouseButtons" | "eventTarget"> & { readonly frames: Pick<Frames, "point">; readonly chatEntry: Pick<ChatEntry, "holds" | "open"> };
+export type PointerClient = Pick<HeadlessClient, "constants" | "screen" | "mouseScreenX" | "mouseScreenY" | "heldMouseButtons" | "eventTarget"> & { readonly frames: Pick<Frames, "point">; readonly chatEntry: Pick<ChatEntry, "holds" | "open"> };
 
 /** The clients a window's mouse drives; `LockstepClients` is one. */
 export interface PointerClients {
@@ -68,8 +68,8 @@ export function createPointerFeed(clients: PointerClients, slot: number): (readi
   let pressedOn: Frame | undefined;
   return (reading) => {
     const client = clients.client(slot);
-    const natives = client.natives;
-    const buttons: readonly [number, unknown][] = [[POINTER_LEFT, natives.MOUSE_BUTTON_TYPE_LEFT], [POINTER_RIGHT, natives.MOUSE_BUTTON_TYPE_RIGHT], [POINTER_MIDDLE, natives.MOUSE_BUTTON_TYPE_MIDDLE]];
+    const constants = client.constants;
+    const buttons: readonly [number, unknown][] = [[POINTER_LEFT, constants.MOUSE_BUTTON_TYPE_LEFT], [POINTER_RIGHT, constants.MOUSE_BUTTON_TYPE_RIGHT], [POINTER_MIDDLE, constants.MOUSE_BUTTON_TYPE_MIDDLE]];
     if (reading.inside) {
       const screen = screenPoint(reading, client.screen);
       client.mouseScreenX = screen.x;
@@ -80,7 +80,7 @@ export function createPointerFeed(clients: PointerClients, slot: number): (readi
       else client.heldMouseButtons.delete(button);
     }
     const at = uiPoint(reading);
-    const target = client.eventTarget(natives.FRAMEEVENT_CONTROL_CLICK, at.x, at.y);
+    const target = client.eventTarget(constants.FRAMEEVENT_CONTROL_CLICK, at.x, at.y);
     if ((reading.pressed & POINTER_LEFT) !== 0) {
       pressedOn = target;
       if (target === undefined && client.chatEntry.holds(at.x, at.y)) client.chatEntry.open();

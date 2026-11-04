@@ -14,7 +14,7 @@ test("[spec docs/play.md] standalone records scripted checksums and skips live, 
     const cases: readonly [StandaloneOptions, number, boolean?][] = [[{}, 0], [{ script }, 3], [{ script, recordChecksums: false }, 0], [{ script }, 0, true]];
     for (const [index, [options, expected, paced]] of cases.entries()) {
       let checksumCalls = 0;
-      const runtime = installHeadless({ filePrefix: "checksum-fixture", globalPrefixes: [] });
+      const runtime = installHeadless({ filePrefix: "checksum-fixture", globalPrefixes: [], warcraftNatives: true });
       const clients = runtime.clients({ install() {}, start() {} }, [0]);
       clients.start();
       const game: StandaloneGame = {
@@ -58,7 +58,7 @@ test("[spec docs/game-api-plan.md] a run given emulatedCalls writes the client's
   const directory = await mkdtemp(join(tmpdir(), "wisp-emulated-"));
   try {
     for (const [called, calls] of [[["PreloadGenEnd", "Preload", "Preload"], { Preload: 2, PreloadGenEnd: 1 }], [[], {}]] as const) {
-      const runtime = installHeadless({ filePrefix: "emulated-fixture", globalPrefixes: [] });
+      const runtime = installHeadless({ filePrefix: "emulated-fixture", globalPrefixes: [], warcraftNatives: true });
       const clients = runtime.clients({ install() {}, start() {} }, [0]);
       clients.start();
       const client = clients.client(0);
@@ -82,7 +82,7 @@ test("[spec docs/game-api-plan.md] a run given emulatedCalls writes the client's
 });
 
 test("[spec docs/play.md] each step's stages carry the game's own names and the scene build, timed by the step", async () => {
-  const runtime = installHeadless({ filePrefix: "stages-fixture", globalPrefixes: [] });
+  const runtime = installHeadless({ filePrefix: "stages-fixture", globalPrefixes: [], warcraftNatives: true });
   const clients = runtime.clients({ install() {}, start() {} }, [0]);
   clients.start();
   const client = clients.client(0);
@@ -107,7 +107,7 @@ test("[spec docs/play.md] --emulated-calls takes a file and leaves the other arg
 });
 
 test("[spec docs/native-window-plan.md] the local client reports the window's size as its screen, follows a resize, and keeps the last size while the window has no area", async () => {
-  const runtime = installHeadless({ filePrefix: "screen-fixture", globalPrefixes: [] });
+  const runtime = installHeadless({ filePrefix: "screen-fixture", globalPrefixes: [], warcraftNatives: true });
   const clients = runtime.clients({ install() {}, start() {} }, [0]);
   clients.start();
   const client = clients.client(0);

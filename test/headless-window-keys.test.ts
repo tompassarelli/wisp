@@ -3,7 +3,7 @@ import { installHeadless } from "../host/headless/headless";
 import { createKeyFeed } from "../src/headless/keyInput";
 import { unpackKey } from "../host/window/keyEvents";
 
-const runtime = installHeadless({ filePrefix: "windowKeys", globalPrefixes: ["__windowKeys"] });
+const runtime = installHeadless({ filePrefix: "windowKeys", globalPrefixes: ["__windowKeys"], warcraftNatives: true });
 afterAll(runtime.restore);
 
 const OSKEY_N = 0x4e, OSKEY_SEMICOLON = 186, OSKEY_Q = 0x51;

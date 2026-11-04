@@ -7,7 +7,7 @@ import { CAPTURE_FRAME, RULER, RULER_DEATH_SECONDS } from "./animation58/layout"
 import { install, start } from "./animation58/main";
 import { animationRows } from "./animation58/rows";
 
-const runtime = installHeadless({ filePrefix: "animation", globalPrefixes: ["__animation58"], intentionalNoops: ANIMATION_NOOPS });
+const runtime = installHeadless({ filePrefix: "animation", globalPrefixes: ["__animation58"], warcraftNatives: true, intentionalNoops: ANIMATION_NOOPS });
 afterAll(runtime.restore);
 const effectDeaths = (model: string) => (model === RULER ? RULER_DEATH_SECONDS : undefined);
 

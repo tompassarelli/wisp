@@ -2,7 +2,7 @@ import { afterAll, expect, test } from "bun:test";
 import { installHeadless } from "../host/headless/headless";
 import { POINTER_LEFT, POINTER_RIGHT, type PointerReading, createPointerFeed, screenPoint, uiPoint } from "../src/headless/pointer";
 
-const runtime = installHeadless({ filePrefix: "windowPointer", globalPrefixes: ["__windowPointer"] });
+const runtime = installHeadless({ filePrefix: "windowPointer", globalPrefixes: ["__windowPointer"], warcraftNatives: true });
 afterAll(runtime.restore);
 
 const WINDOW = { width: 1600, height: 900 };

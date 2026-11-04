@@ -8,6 +8,6 @@ for (const config of SHADOW_CONFIGS) abilityObjects[config.id] = {
 };
 
 export const SHADOW_HEADLESS = {
-  filePrefix: "shadow-strike94", globalPrefixes: ["__shadowStrike94"], abilityObjects,
+  filePrefix: "shadow-strike94", globalPrefixes: ["__shadowStrike94"], warcraftNatives: true, abilityObjects,
   unitStates: { [SUBJECT_ID]: { life: 1000, maxLife: 1000, mana: 0, maxMana: 0 } },
 };

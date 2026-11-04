@@ -51,6 +51,7 @@ export declare const OriginFrame: {
   readonly heroButtonIndicator: OriginFrame;
   readonly minimap: OriginFrame;
   readonly minimapButton: OriginFrame;
+  readonly systemButton: OriginFrame;
 };
 
 export type FrameKind = "BACKDROP" | "BUTTON" | "CHECKBOX" | "EDITBOX" | "FRAME" | "GLUEBUTTON" | "GLUETEXTBUTTON" | "HIGHLIGHT" | "SCROLLBAR" | "SLIDER" | "SPRITE" | "TEXT" | "TEXTAREA";
@@ -67,6 +68,7 @@ export declare function frameChildCount(frame: Frame): number;
 /** @local */
 export declare function frameEnabled(frame: Frame): boolean;
 export declare function frameName(frame: Frame): string;
+export declare function frameId(frame: Frame): number;
 
 /** @local */
 export declare function frameText(frame: Frame): string;

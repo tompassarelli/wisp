@@ -60,6 +60,7 @@ export function luaLockstep(map: LuaHeadlessMap, bundle: string, declarations: s
     ...(map.scenery === undefined ? {} : { scenery: map.scenery }),
     ...(map.inventory === undefined ? {} : { inventory: map.inventory }),
     ...(map.effectDeaths === undefined ? {} : { effectDeaths: map.effectDeaths }),
+    warcraftNatives: true,
     natives: (client) => {
       const environment = client.natives;
       setmetatable(environment, { __index: _G });

@@ -5,7 +5,7 @@ import { installNativeDriver, publishNativeDriverStatus, serviceNativeDriver, st
 import { configureRuntime } from "../src/runtime/config";
 import { driverCommandFile, driverReadyFile, driverStatusFile } from "../src/runtime/nativeDriver";
 
-const runtime = installHeadless({ filePrefix: "fixture", globalPrefixes: ["__fixture"] });
+const runtime = installHeadless({ filePrefix: "fixture", globalPrefixes: ["__fixture"], warcraftNatives: true });
 afterAll(runtime.restore);
 const entry = {
   install() {

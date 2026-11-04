@@ -15,6 +15,6 @@ export function applyLinkEvent(client: HeadlessClient, event: LinkEvent): void {
   else if (event.kind === "key") client.keyEvent(event.sender, event.key, event.meta, event.down);
   else if (event.kind === "mouse") client.playerMouse(event.sender, event.mouse);
   else if (event.kind === "chat") client.chat(event.sender, event.text);
-  else if (event.kind === "wheel") client.frameEvent(event.sender, event.frame, client.natives.FRAMEEVENT_MOUSE_WHEEL, event.value);
-  else client.frameEvent(event.sender, event.frame, client.natives.FRAMEEVENT_CONTROL_CLICK, 0);
+  else if (event.kind === "wheel") client.frameEvent(event.sender, event.frame, client.constants.FRAMEEVENT_MOUSE_WHEEL, event.value);
+  else client.frameEvent(event.sender, event.frame, client.constants.FRAMEEVENT_CONTROL_CLICK, 0);
 }

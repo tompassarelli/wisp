@@ -2,7 +2,7 @@ import { afterAll, expect, test } from "bun:test";
 import { installHeadless } from "../host/headless/headless";
 import { runJourney } from "../src/headless/journey";
 
-const runtime = installHeadless({ filePrefix: "observations", globalPrefixes: ["__observations"], frames: [{
+const runtime = installHeadless({ filePrefix: "observations", globalPrefixes: ["__observations"], warcraftNatives: true, frames: [{
   name: "Pips", type: "BACKDROP", width: 0.25, height: 0.125, texture: "panel.blp", children: [{
     key: "pip", type: "BACKDROP", width: 0.0625, height: 0.0625, texture: "pip.blp",
     points: [{ point: "TOPLEFT", x: 0.0625, y: -0.03125 }],

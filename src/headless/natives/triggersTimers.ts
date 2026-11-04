@@ -67,10 +67,10 @@ export interface PlayerMouse {
   readonly button: unknown;
 }
 
-export function playerMouseEvent(natives: Readonly<Record<string, unknown>>, input: PlayerMouseInput): PlayerMouse {
-  if (!("button" in input)) return { event: natives.EVENT_PLAYER_MOUSE_MOVE, x: input.x, y: input.y, button: undefined };
-  const button = input.button === "left" ? natives.MOUSE_BUTTON_TYPE_LEFT : input.button === "middle" ? natives.MOUSE_BUTTON_TYPE_MIDDLE : natives.MOUSE_BUTTON_TYPE_RIGHT;
-  return { event: input.down ? natives.EVENT_PLAYER_MOUSE_DOWN : natives.EVENT_PLAYER_MOUSE_UP, x: input.x, y: input.y, button };
+export function playerMouseEvent(constants: Readonly<Record<string, unknown>>, input: PlayerMouseInput): PlayerMouse {
+  if (!("button" in input)) return { event: constants.EVENT_PLAYER_MOUSE_MOVE, x: input.x, y: input.y, button: undefined };
+  const button = input.button === "left" ? constants.MOUSE_BUTTON_TYPE_LEFT : input.button === "middle" ? constants.MOUSE_BUTTON_TYPE_MIDDLE : constants.MOUSE_BUTTON_TYPE_RIGHT;
+  return { event: input.down ? constants.EVENT_PLAYER_MOUSE_DOWN : constants.EVENT_PLAYER_MOUSE_UP, x: input.x, y: input.y, button };
 }
 
 const MOUSE_MOVE = "EVENT_PLAYER_MOUSE_MOVE";

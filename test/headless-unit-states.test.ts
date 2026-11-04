@@ -5,7 +5,7 @@ import { install, start } from "./unit-states/main";
 import { UNIT_FIXTURE } from "./unit-states/cases";
 import { EXPECTED } from "./unit-states/expected";
 
-const runtime = installHeadless({ filePrefix: "unit-states", globalPrefixes: ["__unitStates"], unitStates: UNIT_FIXTURE });
+const runtime = installHeadless({ filePrefix: "unit-states", globalPrefixes: ["__unitStates"], warcraftNatives: true, unitStates: UNIT_FIXTURE });
 afterAll(runtime.restore);
 
 const FRAMES = 80;

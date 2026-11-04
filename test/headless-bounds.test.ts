@@ -38,7 +38,7 @@ const portrait = {
 test("[boundary] wisp headless --bounds writes frame rows with their portraits' in-frame verdict and posed model rows for every requested frame and client, without Chrome", async () => {
   const directory = mkdtempSync(join(tmpdir(), "wisp-bounds-"));
   const command = makeHeadless(async () => ({
-    map: { filePrefix: "bounds", globalPrefixes: ["__bounds"] },
+    map: { filePrefix: "bounds", globalPrefixes: ["__bounds"], warcraftNatives: true },
     entry: join(import.meta.dir, "bounds/entry.ts"),
     journeys: { still: { frames: 30, events: [] } },
     render: {
@@ -83,7 +83,7 @@ test("[boundary] wisp headless --bounds writes frame rows with their portraits' 
     [{ ...portrait, parts: { head: ["Root"], weapon: ["MissingWeapon", "MissingTip"], hand: ["MissingHand"] } }, "portrait receipt for Bust.blp: part weapon names MissingWeapon, MissingTip; part hand names MissingHand, which none of the portrait models Cube.mdl has; regenerate the portrait on the map's current models"],
   ] as const) {
     const refusal = makeHeadless(async () => ({
-      map: { filePrefix: "bounds", globalPrefixes: ["__bounds"] },
+      map: { filePrefix: "bounds", globalPrefixes: ["__bounds"], warcraftNatives: true },
       entry: join(import.meta.dir, "bounds/entry.ts"),
       journeys: { still: { frames: 30, events: [] } },
       render: { readAsset: async (path) => assets[path], portraits: { "Bust.blp": receipt } },

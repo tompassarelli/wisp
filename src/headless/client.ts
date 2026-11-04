@@ -9,7 +9,8 @@ import { Quests } from "../game/native/quests";
 import { enforceStandaloneProfile } from "./standaloneProfile";
 import { FRAMES_PER_SECOND, steppedFrames } from "../game/native/frameRate";
 import { describeNumber } from "../game/native/textFormat";
-import { checkIntentionalNoops, EmulatedCalls, loggedNative, logUnlessLocal } from "./nativeCalls";
+import { checkIntentionalNoops, EmulatedCalls, logUnlessLocal } from "./nativeCalls";
+import { NativeTable } from "./nativeTable";
 import { Lightnings } from "../game/native/lightnings";
 import { Ribbons } from "./ribbons";
 import { Weathers } from "./weather";
@@ -75,6 +76,7 @@ export interface ClientOptions {
   readonly scope?: ClientScope;
 
   readonly natives?: (this: void, client: HeadlessClient) => NativeBehaviors;
+  readonly warcraftNatives?: boolean;
   readonly files?: ClientFiles;
 
   readonly frames?: readonly FrameTemplate[];
@@ -157,6 +159,7 @@ export class HeadlessClient {
   readonly playing = new Playing();
   readonly chatEntry = new ChatEntry();
   readonly natives: Record<string, unknown> = {};
+  readonly constants: Record<string, unknown> = {};
 
   frame = 0;
   private wallSeconds: number | undefined;
@@ -206,7 +209,7 @@ export class HeadlessClient {
     this.scope = options.scope;
     this.preloadText = new PreloadText({ slot: options.slot, filePrefix: options.filePrefix, stored: options.files, files: this.files, published: this.published,
       messages: this.messages, errors: this.errors, missed: () => { this.missedLookups++; } });
-    this.frameUi = new FrameUi(() => this.frames, handle, () => this.natives.ORIGIN_FRAME_GAME_UI, this.screen);
+    this.frameUi = new FrameUi(() => this.frames, handle, () => this.constants.ORIGIN_FRAME_GAME_UI, this.screen);
     this.quests = new Quests(handle);
     this.players = new Players({ slot: options.slot, humans: options.humans, names: options.playerNames, forces: this.units });
     this.clock = new Clock(handle);
@@ -221,15 +224,13 @@ export class HeadlessClient {
       log: logUnlessLocal(log, local),
     };
 
-    const count = this.emulated.count;
-    const arity = new Map<string, number>();
+    const table = new NativeTable(this.natives, log, local, this.emulated, options.warcraftNatives === true);
     const declared = new Set<string>();
     const missing = new Set<string>();
     const noops = options.intentionalNoops ?? {};
     checkIntentionalNoops(noops, options.declarations.functions);
     for (const [name, returns, parameters] of options.declarations.functions) {
       declared.add(name);
-      arity.set(name, parameters);
       const fallback = this.defaultNative(returns);
       const behave = (behaviors[name] ?? (name.startsWith("Convert") ? (value: unknown) => value : noops[name] !== undefined ? fallback : () => {
         if (!missing.has(name)) {
@@ -238,27 +239,23 @@ export class HeadlessClient {
         }
         return fallback();
       })) as (this: void, ...args: unknown[]) => unknown;
-      this.natives[name] = local[name] === undefined ? loggedNative(log, count, name, parameters, behave) : this.emulated.counting(name, behave);
+      table.declare(name, parameters, behave);
     }
 
-    for (const [name, type] of options.declarations.constants) this.natives[name] = WARCRAFT3_ENUM_VALUES[name] ?? (type === "number" ? 0 : type === "boolean" ? name === "TRUE" : name);
-    for (const [name, type] of options.declarations.variables) this.natives[name] = this.defaultValue(type);
-    this.bodies.playableArea = this.natives.bj_mapInitialPlayableArea;
+    for (const [name, type] of options.declarations.constants) this.constants[name] = WARCRAFT3_ENUM_VALUES[name] ?? (type === "number" ? 0 : type === "boolean" ? name === "TRUE" : name);
+    for (const [name, type] of options.declarations.variables) this.constants[name] = this.defaultValue(type);
+    table.constants(this.constants);
+    this.bodies.playableArea = this.constants.bj_mapInitialPlayableArea;
     const points = new Map<unknown, readonly [number, number]>();
     for (let index = 0; index < FRAME_POINTS.length; index++) {
       const [name, fromLeft, fromTop] = FRAME_POINTS[index] ?? ["", 0, 0];
-      points.set(this.natives[name] ?? name, [fromLeft, fromTop]);
+      points.set(this.constants[name] ?? name, [fromLeft, fromTop]);
       points.set(index, [fromLeft, fromTop]);
     }
     this.frames = new Frames(points);
     this.frames.define(options.frames ?? []);
     const extra = options.natives?.(this) ?? {};
-    for (const name of Object.keys(extra)) {
-      const value = extra[name];
-      this.natives[name] = typeof value === "function" && declared.has(name) && local[name] === undefined
-        ? loggedNative(log, count, name, arity.get(name) ?? 5, value as (this: void, ...args: unknown[]) => unknown)
-        : value;
-    }
+    for (const name of Object.keys(extra)) table.extra(name, extra[name]);
     enforceStandaloneProfile(options.standaloneProfile, declared, this.natives, (native) => { this.missingNatives.push({ native, client: this.slot, frame: this.frame, outsideProfile: true }); });
   }
 
@@ -397,7 +394,7 @@ export class HeadlessClient {
   }
 
   playerMouse(sender: number, input: PlayerMouseInput): void {
-    this.run(() => this.timers.playerMouse(sender, playerMouseEvent(this.natives, input)));
+    this.run(() => this.timers.playerMouse(sender, playerMouseEvent(this.constants, input)));
   }
 
   type(text: string): boolean {

@@ -6,7 +6,7 @@ import { SOUND_NATIVES } from "./sounds60/cases";
 import * as audio80 from "./audio80/main";
 import { EXPECTED } from "./sounds60/expected";
 
-const runtime = installHeadless({ filePrefix: "sounds60", globalPrefixes: ["__sounds60"], natives: SOUND_NATIVES });
+const runtime = installHeadless({ filePrefix: "sounds60", globalPrefixes: ["__sounds60"], warcraftNatives: true, natives: SOUND_NATIVES });
 afterAll(runtime.restore);
 
 test("each sound rule's row agrees in two clients", () => {

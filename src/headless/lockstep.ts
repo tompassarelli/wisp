@@ -38,6 +38,7 @@ export interface LockstepOptions {
   readonly intentionalNoops?: IntentionalNoops;
   readonly standaloneProfile?: StandaloneProfile | undefined;
   readonly natives?: (this: void, client: HeadlessClient) => NativeBehaviors;
+  readonly warcraftNatives?: boolean;
   readonly scope?: ClientScope;
 
   readonly delivery?: SyncDelivery;
@@ -127,6 +128,7 @@ export class Lockstep {
         screen: options.screen ?? { width: 1920 + 640 * index, height: 1080 },
         ...(options.scope === undefined ? {} : { scope: options.scope }),
         ...(options.natives === undefined ? {} : { natives: options.natives }),
+        warcraftNatives: options.warcraftNatives === true,
         ...(files === undefined ? {} : { files }),
         ...(options.frames === undefined ? {} : { frames: options.frames }),
         ...(options.unitStates === undefined ? {} : { unitStates: options.unitStates }),
@@ -288,7 +290,7 @@ export class Lockstep {
 
   click(sender: number, x: number, y: number): boolean {
     const clicker = this.client(sender);
-    const frame = clicker.eventTarget(clicker.natives.FRAMEEVENT_CONTROL_CLICK, x, y);
+    const frame = clicker.eventTarget(clicker.constants.FRAMEEVENT_CONTROL_CLICK, x, y);
     if (frame === undefined) return false;
     clicker.frames.focus(frame, true);
     this.input({ sender, kind: "click", frame: frame.id });
@@ -297,7 +299,7 @@ export class Lockstep {
 
   /** A turn of the wheel over the topmost frame that registered `FRAMEEVENT_MOUSE_WHEEL`, sent through the lockstep like a click; false when no such frame is under the point. */
   wheel(sender: number, x: number, y: number, value: number): boolean {
-    const frame = this.client(sender).eventTarget(this.client(sender).natives.FRAMEEVENT_MOUSE_WHEEL, x, y);
+    const frame = this.client(sender).eventTarget(this.client(sender).constants.FRAMEEVENT_MOUSE_WHEEL, x, y);
     if (frame === undefined) return false;
     this.input({ sender, kind: "wheel", frame: frame.id, value });
     return true;

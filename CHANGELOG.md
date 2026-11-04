@@ -5,6 +5,7 @@ declares (wisp:docs/architecture.md, "Where things live").
 
 ## 0.1
 
+- `wisp/game/frames` has `OriginFrame.systemButton` (`ORIGIN_FRAME_SYSTEM_BUTTON`) and `frameId(frame)` (`GetHandleId`), a frame's number for a game's own tables, and a map on Bun reaches no Warcraft native, constant or variable: `installHeadless` installs only Wisp's `Wisp*` hooks unless its map sets `warcraftNatives: true`, and a headless client's `constants` holds the Warcraft constants its internals read.
 - `wisp/game/frames` has the stock origin kinds `OriginFrame.commandButton`, `itemButton`, `heroBar`, `heroButton`, `heroHpBar`, `heroManaBar`, `heroButtonIndicator`, `minimap` and `minimapButton` (the `ORIGIN_FRAME_*` globals of the same names), so a game that hides the stock command card, hero bar and minimap by name reads them through `originFrame` instead of `BlzGetOriginFrame`.
 - `wisp/game/frames` has `FrameEvent.mouseWheel` (`FRAMEEVENT_MOUSE_WHEEL`) and `eventFrameValue()` (`BlzGetTriggerFrameValue`, 120 a notch away from the user and -120 toward, 0 when no wheel event is firing): the native window sends a wheel turn over a frame that registered the event through the lockstep, one event per notch, and a pad script plays `wheel X Y DELTA`.
 - `wisp/game/frames` has `createSimpleFrame(template, owner, context)`, and the bindings `generateFrames` writes use the game API (`Frame`, `FramePoint`, `loadFrameFile`, `createFrame` or `createSimpleFrame`, `namedFrame`, `setFrameAbsPoint`, `setFrameLevel`, `setFrameText`, `setFrameEnabled`) instead of raw `Blz` natives.

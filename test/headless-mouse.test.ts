@@ -2,7 +2,7 @@ import { afterAll, expect, test } from "bun:test";
 import { installHeadless } from "../host/headless/headless";
 import { type Journey, runJourney } from "../src/headless/journey";
 
-const runtime = installHeadless({ filePrefix: "mouse", globalPrefixes: ["__mouse"] });
+const runtime = installHeadless({ filePrefix: "mouse", globalPrefixes: ["__mouse"], warcraftNatives: true });
 afterAll(runtime.restore);
 
 const CARD_PIXELS = 200;

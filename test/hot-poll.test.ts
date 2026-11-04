@@ -5,7 +5,7 @@ import { installDispatch } from "../src/map/dispatch";
 import { installHotReload, startHotReload } from "../src/map/hotReload";
 import { configureRuntime } from "../src/runtime/config";
 
-const runtime = installHeadless({ filePrefix: "fixture", globalPrefixes: ["__fixture"] });
+const runtime = installHeadless({ filePrefix: "fixture", globalPrefixes: ["__fixture"], warcraftNatives: true });
 afterAll(runtime.restore);
 
 const FRAMES_PER_SECOND = 60;

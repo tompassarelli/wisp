@@ -21,7 +21,7 @@ test("[reference makgora#363] HUD bust rectangles match native captures", () => 
 });
 
 test("[reference makgora#363] a BACKDROP bust reports its native rectangle and its whole texture at both resolutions", () => {
-  const client = new HeadlessClient({ slot: 0, humans: [0], declarations: readNativeDeclarations(), filePrefix: "screen", localNatives: {}, network: [], screen: { width: 1280, height: 720 } });
+  const client = new HeadlessClient({ warcraftNatives: true, slot: 0, humans: [0], declarations: readNativeDeclarations(), filePrefix: "screen", localNatives: {}, network: [], screen: { width: 1280, height: 720 } });
   const call = (name: string, ...args: unknown[]) => (client.natives[name] as (this: void, ...args: unknown[]) => unknown)(...args);
   const frame = (name: string) => {
     const created = call("BlzCreateFrameByType", "BACKDROP", name, undefined, "", 0);
@@ -43,7 +43,7 @@ test("[reference makgora#363] a BACKDROP bust reports its native rectangle and i
 
 test("[scenario] a SIMPLEFRAME texture with a TexCoord reports its sub-rectangle region and draws beneath a BACKDROP at a higher level", () => {
   const arch: FrameDefinition = { name: "Arch", type: "SIMPLEFRAME", width: 0.25, height: 0.125, textures: [{ key: "tile", layer: "BACKGROUND", file: "Tile.blp", texCoord: [0.5, 1, 0, 0.5] }] };
-  const client = new HeadlessClient({ slot: 0, humans: [0], declarations: readNativeDeclarations(), filePrefix: "screen", localNatives: {}, network: [], screen: { width: 1280, height: 720 }, frames: [arch] });
+  const client = new HeadlessClient({ warcraftNatives: true, slot: 0, humans: [0], declarations: readNativeDeclarations(), filePrefix: "screen", localNatives: {}, network: [], screen: { width: 1280, height: 720 }, frames: [arch] });
   const call = (name: string, ...args: unknown[]) => (client.natives[name] as (this: void, ...args: unknown[]) => unknown)(...args);
   const backdrop = call("BlzCreateFrameByType", "BACKDROP", "plate", undefined, "", 0);
   call("BlzFrameSetAbsPoint", backdrop, 0, 0.25, 0.75);
@@ -61,7 +61,7 @@ test("[scenario] a SIMPLEFRAME texture with a TexCoord reports its sub-rectangle
 });
 
 test("[reference wisp#125] frames125 boxes match native at 800x600 and 1280x720: frame scale and the 4:3 area", () => {
-  const client = new HeadlessClient({ screen: { width: 1920, height: 1080 }, slot: 0, humans: [0], declarations: readNativeDeclarations(), filePrefix: "frames125", localNatives: {}, network: [] });
+  const client = new HeadlessClient({ warcraftNatives: true, screen: { width: 1920, height: 1080 }, slot: 0, humans: [0], declarations: readNativeDeclarations(), filePrefix: "frames125", localNatives: {}, network: [] });
   const call = (name: string, ...args: unknown[]) => (client.natives[name] as (this: void, ...args: unknown[]) => unknown)(...args);
   const created = new Map<string, unknown>();
   const gameUi = call("BlzGetOriginFrame", client.natives.ORIGIN_FRAME_GAME_UI, 0);
@@ -139,7 +139,7 @@ test("[reference wisp#46] an effect draws at the scale and position its map set:
 });
 
 test("[reference wisp-standalone-menu] a child of a raised panel draws above a lower-level sibling, and a button's text is centred", () => {
-  const client = new HeadlessClient({ slot: 0, humans: [0], declarations: readNativeDeclarations(), filePrefix: "screen", localNatives: {}, network: [], screen: { width: 1280, height: 720 } });
+  const client = new HeadlessClient({ warcraftNatives: true, slot: 0, humans: [0], declarations: readNativeDeclarations(), filePrefix: "screen", localNatives: {}, network: [], screen: { width: 1280, height: 720 } });
   const call = (name: string, ...args: unknown[]) => (client.natives[name] as (this: void, ...args: unknown[]) => unknown)(...args);
   const frame = (type: string, name: string, owner?: unknown) => {
     const created = call("BlzCreateFrameByType", type, name, owner, "", 0);
@@ -161,7 +161,7 @@ test("[reference wisp-standalone-menu] a child of a raised panel draws above a l
 });
 
 test("[reference makgora#862] a frame painted with a signed JASS colour reaches the window as an unsigned ARGB word", () => {
-  const client = new HeadlessClient({ slot: 0, humans: [0], declarations: readNativeDeclarations(), filePrefix: "screen", localNatives: {}, network: [], screen: { width: 1280, height: 720 } });
+  const client = new HeadlessClient({ warcraftNatives: true, slot: 0, humans: [0], declarations: readNativeDeclarations(), filePrefix: "screen", localNatives: {}, network: [], screen: { width: 1280, height: 720 } });
   const call = (name: string, ...args: unknown[]) => (client.natives[name] as (this: void, ...args: unknown[]) => unknown)(...args);
   const portrait = call("BlzCreateFrameByType", "BACKDROP", "portrait", undefined, "", 0);
   call("BlzFrameSetVertexColor", portrait, -1);

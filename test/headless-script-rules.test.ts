@@ -4,7 +4,7 @@ import { runJourney } from "../src/headless/journey";
 import { install, start } from "./script-rules50/main";
 import { EXPECTED, EXPECTED_SYNC } from "./script-rules50/expected";
 
-const runtime = installHeadless({ filePrefix: "script-rules", globalPrefixes: ["__scriptRules"] });
+const runtime = installHeadless({ filePrefix: "script-rules", globalPrefixes: ["__scriptRules"], warcraftNatives: true });
 afterAll(runtime.restore);
 
 test("[native] each script rule's 3.0.1 row agrees in two clients", () => {

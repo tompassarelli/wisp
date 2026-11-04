@@ -88,7 +88,7 @@ test.skipIf(!existsSync(windowLibraryPath()))("[spec docs/native-window-plan.md]
 
 test.skipIf(!existsSync(windowLibraryPath()))("[spec docs/native-window-plan.md] a native standalone run plays its step's cues through the library and finishes with the audio counts", async () => {
   const tone = new Uint8Array(readFileSync(join(import.meta.dir, "fixtures/tone.ogg")));
-  const runtime = installHeadless({ filePrefix: "native-sound-fixture", globalPrefixes: [] });
+  const runtime = installHeadless({ filePrefix: "native-sound-fixture", globalPrefixes: [], warcraftNatives: true });
   const clients = runtime.clients({ install() {}, start() {} }, [0]);
   clients.start();
   const game: StandaloneGame = {
