@@ -68,3 +68,22 @@ test("[spec docs/native-window-plan.md] every step hands the game the window's s
     expect(screens).toEqual([{ width: 1600, height: 900 }, { width: 1280, height: 960 }]);
   }
 });
+
+test("[spec docs/native-window-plan.md] warmup frames are left out of the step, stage and render figures, so loading does not reach a run's spreads", async () => {
+  const metrics: Record<string, number[]> = { cpuEncodeMs: [], gpuFrameMs: [] };
+  const window = { ...fakeWindow({}), metric: (name: string) => Float64Array.from(metrics[name] ?? []) };
+  const player = playerOf([{ sim: 90 }, { sim: 80 }, { sim: 2 }, { sim: 3 }]);
+  const result = await new Promise<Readonly<Record<string, unknown>>>((resolve) => {
+    const loop = createFrameLoop(player, window, { scripted: true, startupMs: 0, warmupFrames: 2 }, resolve);
+    for (let frame = 0; frame < 4; frame++) {
+      loop.step(sample(frame));
+      metrics.cpuEncodeMs!.push(frame < 2 ? 50 : 1);
+      metrics.gpuFrameMs!.push(frame < 2 ? 40 : 2);
+    }
+  });
+  expect(result.warmupFrames).toBe(2);
+  expect(result.frames).toBe(4);
+  expect(result.stageMs).toEqual({ sim: { p50: 2, p95: 3, p99: 3, max: 3 } });
+  expect(result.cpuEncodeMs).toEqual({ p50: 1, p95: 1, p99: 1, max: 1 });
+  expect(result.gpuPassMs).toEqual({ frame: { p50: 2, p95: 2, p99: 2, max: 2 } });
+});

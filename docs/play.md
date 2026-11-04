@@ -215,6 +215,9 @@ draw, and poses only the bones and emitters that place something. Model initiali
 interface images, so the native window remasters both while the player is in the menus.
 `standalone.json` records startup time and the prepared asset counts separately
 from the match's frame timing.
+In the native window, `WISP_WINDOW_WARMUP_FRAMES=N` leaves the first N steps out
+of every timing figure and of `fps` (the result names them as `warmupFrames`),
+so a benchmark's spreads start once loading has settled.
 The page is cross-origin isolated (`isolated` in `standalone.json`), so its
 timers and frame timestamps are precise to 5 µs rather than 100 µs with random
 jitter. In live play the browser keeps one frame request ahead of the scene it

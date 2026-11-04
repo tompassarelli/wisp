@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import type { StandaloneFrame, StandaloneInput } from "../render/standaloneFrames";
 import type { InputSample, WindowView } from "./binding";
-import { gpuReport } from "./renderSeries";
+import { RENDER_SERIES, gpuReport } from "./renderSeries";
 import { spread, spreads } from "./stats";
 
 /** What `openStandalone` gives a window that drives the session itself: the scene before the first step, one step, and the end of the run, whose result comes back with the sound figures added. */
@@ -23,6 +23,7 @@ export interface FrameLoopOptions {
   readonly extraResult?: ((series: FrameSeries) => Record<string, unknown>) | undefined;
   /** Turns a step's scene into the text the window draws; JSON of the whole scene when absent. */
   readonly encodeScene?: ((scene: StandaloneFrame["scene"]) => string) | undefined;
+  readonly warmupFrames?: number | undefined;
 }
 
 /** Every per-frame series of a run, in milliseconds. */
@@ -52,7 +53,12 @@ const thrown = (cause: unknown) => (cause instanceof Error ? cause.message : Str
 export function createFrameLoop(player: NativePlayer, window: WindowView, options: FrameLoopOptions, finished: (result: Readonly<Record<string, unknown>>) => void): FrameLoop {
   const series: FrameSeries = { wakes: [], steps: [], encodes: [], frames: [], intervals: [], stages: {} };
   const prepared = player.prepare();
-  let ended = false, disposed = false, previous = 0, firstFrameAt = 0;
+  let ended = false, disposed = false, previous = 0, measuredAt = 0;
+  const warmup = options.warmupFrames ?? 0;
+  const lengths = (): Readonly<Record<string, number>> => Object.fromEntries([...RENDER_SERIES, "renderScalePercent"].map((name) => [name, window.metric(name).length]));
+  let renderFrom: Readonly<Record<string, number>> = {}, stagesFrom: Readonly<Record<string, number>> = {};
+  const rendered = (name: string) => Array.from(window.metric(name)).slice(renderFrom[name] ?? 0);
+  const measured = (values: readonly number[]) => values.slice(warmup);
 
   const complete = (error?: string) => {
     if (ended) return;
@@ -60,14 +66,14 @@ export function createFrameLoop(player: NativePlayer, window: WindowView, option
     if (error !== undefined) window.status(error);
     Effect.runFork(Effect.sleep(100).pipe(Effect.andThen(Effect.sync(() => {
       if (disposed) return;
-      const elapsedMs = performance.now() - firstFrameAt;
+      const elapsedMs = performance.now() - measuredAt;
       const result = error !== undefined ? { error } : {
         gpu: window.info().adapter, ...window.info(), isolated: false, startupMs: options.startupMs, prepared: { models: prepared.models.length, step: prepared.step },
-        frames: series.frames.length, elapsedMs, fps: series.frames.length * 1000 / elapsedMs,
-        frameMs: spread(series.frames), intervalMs: spread(series.intervals), presentedMs: spread(Array.from(window.metric("presentedMs"))),
-        requestMs: spread(series.steps), renderMs: spread(Array.from(window.metric("drawMs"))), cpuEncodeMs: spread(Array.from(window.metric("cpuEncodeMs"))), renderScalePercent: spread(Array.from(window.metric("renderScalePercent"))),
-        ...gpuReport((name) => Array.from(window.metric(name)), window.info().gpuTimingUnavailable), stageMs: spreads(series.stages), inputToPresentMs: spread(Array.from(window.metric("inputToPresentMs"))),
-        wakeMs: spread(series.wakes), encodeMs: spread(series.encodes), parseMs: spread(Array.from(window.metric("parseMs"))),
+        frames: series.frames.length, elapsedMs, fps: measured(series.frames).length * 1000 / elapsedMs, ...(warmup === 0 ? {} : { warmupFrames: warmup }),
+        frameMs: spread(measured(series.frames)), intervalMs: spread(series.intervals.slice(Math.max(0, warmup - 1))), presentedMs: spread(rendered("presentedMs")),
+        requestMs: spread(measured(series.steps)), renderMs: spread(rendered("drawMs")), cpuEncodeMs: spread(rendered("cpuEncodeMs")), renderScalePercent: spread(rendered("renderScalePercent")),
+        ...gpuReport(rendered, window.info().gpuTimingUnavailable), stageMs: spreads(Object.fromEntries(Object.entries(series.stages).map(([name, values]) => [name, values.slice(stagesFrom[name] ?? 0)]))), inputToPresentMs: spread(rendered("inputToPresentMs")),
+        wakeMs: spread(measured(series.wakes)), encodeMs: spread(measured(series.encodes)), parseMs: spread(rendered("parseMs")),
         audioEvents: 0, audioReadyEvents: 0, audioPlayed: 0, audioDecodedAssets: 0, missingSounds: [] as string[],
         ...options.extraResult?.(series),
       };
@@ -78,7 +84,10 @@ export function createFrameLoop(player: NativePlayer, window: WindowView, option
   const step = (sample: InputSample) => {
     if (ended) return;
     const began = performance.now();
-    if (firstFrameAt === 0) firstFrameAt = began;
+    if (series.frames.length === warmup) {
+      measuredAt = began;
+      if (warmup > 0) { renderFrom = lengths(); stagesFrom = Object.fromEntries(Object.entries(series.stages).map(([name, values]) => [name, values.length])); }
+    }
     options.onSample?.(sample);
     series.wakes.push((window.nowNs() - sample.sampleNs) / 1e6);
     if (previous !== 0) series.intervals.push(began - previous);

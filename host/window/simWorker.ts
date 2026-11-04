@@ -16,6 +16,7 @@ declare const self: Worker;
 
 const attached = Promise.withResolvers<number>();
 const READ_ASSET_EVERY = 30;
+const WARMUP_FRAMES = Number(process.env.WISP_WINDOW_WARMUP_FRAMES ?? 0);
 
 /** How a networked match's peer ended, added to the run's figures: its report, the other player leaving or going quiet, or an error. */
 interface NetEnd { readonly net?: NetReport; readonly netEnded?: string; readonly error?: string }
@@ -47,6 +48,7 @@ const run = async (init: SimWorkerInit) => {
       scripted: init.options.script !== undefined,
       onSample: sampleLogPath === undefined ? undefined : openSampleLog(sampleLogPath, view),
       encodeScene: (scene) => JSON.stringify(drawScene(scene, library)),
+      warmupFrames: WARMUP_FRAMES,
       startupMs: performance.now() - began,
       afterFrame: probe === undefined ? undefined : (count) => {
         if (count === probe.warmupFrames) {
