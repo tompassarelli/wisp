@@ -127,11 +127,12 @@ pub fn load(bytes: &[u8], quality: Quality, cache: Option<&Cache>, upscaler: &Up
     if quality != Quality::Off {
         if let Some(cache) = cache {
             let key = cache_key(bytes, quality, upscaler, edges, role);
+            let held = cache.holds(&key);
             if let Some(maps) = cache.load(&key) {
                 return Ok(Loaded { prepared: Prepared { albedo: maps.albedo, relief: Some(maps.relief) }, unbaked: false });
             }
             let decoded = crate::texture::decode(bytes)?;
-            let unbaked = decoded.width.max(decoded.height) < LARGEST_SOURCE && !cache.holds(&key);
+            let unbaked = decoded.width.max(decoded.height) < LARGEST_SOURCE && !held;
             return Ok(Loaded { prepared: Prepared { albedo: decoded, relief: None }, unbaked });
         }
     }
