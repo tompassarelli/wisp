@@ -48,8 +48,8 @@ export const prefixProcesses = (prefix: string, ownerUnit?: string) => ProcessTa
   Effect.map((processes): readonly ProcessInfo[] => processes.filter((process) => process.prefix === prefix || (process.prefix === undefined && ownerUnit !== undefined && process.ownerUnit === ownerUnit)).sort((a, b) => Number(/battle\.net/i.test(b.args.join(" "))) - Number(/battle\.net/i.test(a.args.join(" "))))),
 );
 
-export const desktopCommand = (capacity: string, desktop: string, name: string, owner: string) =>
-  CapacityAdmission.use((admission) => admission.session(capacity, desktopStem(name, owner), 1.5)).pipe(
+export const desktopCommand = (program: string, desktop: string, name: string, owner: string) =>
+  CapacityAdmission.use((admission) => admission.session(program, desktopStem(name, owner), 1.5)).pipe(
     Effect.mapError(problem),
     Effect.map((session) => [...session, "bash", desktop, "start", "--resolution", DESKTOP_RESOLUTION]),
   );

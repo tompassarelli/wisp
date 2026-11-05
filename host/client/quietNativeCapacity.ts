@@ -2,7 +2,7 @@ import { join } from "node:path";
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { Effect, FileSystem, Schedule, Schema } from "effect";
 import { ChildProcess } from "effect/process";
-import { capacityHelper } from "../render/gpuLease";
+import { capacityCommand, capacityProgram, capacitySpawn } from "../process/capacityHost";
 import { spawnLogged } from "../process/hostProcess";
 
 class QuietLeaseFailure extends Schema.TaggedError<QuietLeaseFailure, { readonly brand: unique symbol }>()("QuietLeaseFailure", {
@@ -11,18 +11,18 @@ class QuietLeaseFailure extends Schema.TaggedError<QuietLeaseFailure, { readonly
   override get message(): string { return this.problem; }
 }
 
-export const quietNativeSessionArgs = (helper: string, owner: string) => [
-  helper, "session", "--class", "native", "--new-clients", "0", "--quiet", "--memory-gib", "1", "--owner", owner,
+export const quietNativeSessionArgs = (program: string, owner: string) => [
+  ...capacityCommand(program), "session", "--class", "native", "--new-clients", "0", "--quiet", "--memory-gib", "1", "--owner", owner,
   "--", process.execPath, "-e", "setInterval(() => {}, 60_000)",
 ] as const;
 
 export const withQuietNativeCapacity = <A, E, R>(owner: string, run: Effect.Effect<A, E, R>) => Effect.scoped(Effect.gen(function*() {
-  const helper = yield* capacityHelper.pipe(Effect.provide(BunServices.layer));
-  if (helper === undefined) return yield* run;
+  const program = capacityProgram();
+  if (program === undefined) return yield* run;
   const fs = yield* FileSystem.FileSystem;
   const folder = yield* fs.makeTempDirectoryScoped({ prefix: "wisp-native-quiet-" }).pipe(Effect.mapError((cause) => new QuietLeaseFailure({ problem: String(cause) })));
   const stdout = join(folder, "stdout");
-  const child = yield* spawnLogged(ChildProcess.make(process.execPath, [helper, ...quietNativeSessionArgs(helper, owner).slice(1)], { stdin: "ignore", forceKillAfter: "5 seconds" }), {
+  const child = yield* spawnLogged(ChildProcess.make(...capacitySpawn(program, quietNativeSessionArgs(program, owner).slice(3)), { stdin: "ignore", forceKillAfter: "5 seconds" }), {
     stdout,
     stderr: join(folder, "stderr"),
   }).pipe(Effect.mapError((cause) => new QuietLeaseFailure({ problem: `starting native quiet lease: ${String(cause)}` })));

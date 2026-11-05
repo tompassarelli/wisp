@@ -15,8 +15,8 @@ import { desktopSize } from "../contract/clientProfiles";
 const argument = (name: string) => flagValues(process.argv, name)[0];
 const { pair, profile, network } = pairFlags(process.argv);
 const launcher = argument("launcher");
-const capacity = argument("capacity");
-if (capacity === undefined) throw new Error("pairSession requires --capacity MACHINE_CAPACITY_HELPER");
+const capacity = argument("capacity-bin");
+if (capacity === undefined) throw new Error("pairSession requires --capacity-bin NORTH_PROGRAM");
 if (launcher === undefined) throw new Error("pairSession takes --pair K --pool-profile parity|visual --launcher PRIVATE_DESKTOP_SH");
 const directory = pairDirectory(pair);
 mkdirSync(directory, { recursive: true });
@@ -46,7 +46,7 @@ const startDesktopB = Effect.gen(function*() {
 const session = Effect.gen(function*() {
   const desktopB = pairSides(network).includes("b") ? yield* startDesktopB : undefined;
   const command = [
-    process.execPath, join(import.meta.dir, "pairAgent.ts"), "--pair", String(pair), "--pool-profile", argument("pool-profile") ?? "parity", ...(desktopB === undefined ? [] : ["--run-b", desktopB.runB]), "--session-pid", String(process.pid), "--capacity", capacity, ...flagValues(process.argv, "fps").flatMap((fps) => ["--fps", fps]), ...(network ? ["--network"] : [])];
+    process.execPath, join(import.meta.dir, "pairAgent.ts"), "--pair", String(pair), "--pool-profile", argument("pool-profile") ?? "parity", ...(desktopB === undefined ? [] : ["--run-b", desktopB.runB]), "--session-pid", String(process.pid), "--capacity-bin", capacity, ...flagValues(process.argv, "fps").flatMap((fps) => ["--fps", fps]), ...(network ? ["--network"] : [])];
   const agent = network ? command : yield* Namespaces.use((namespaces) => namespaces.offline(command));
   const desktopA = yield* spawnLogged(ChildProcess.make(launcher, ["start", "--resolution", size, "--", ...agent], {
     stdin: "ignore", forceKillAfter: "15 seconds",

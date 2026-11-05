@@ -5,6 +5,7 @@ import * as BunServices from "@effect/platform-bun/BunServices";
 import { Console, Effect, Exit, Schema, Scope } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { pollUntil, spawnLogged } from "../process/hostProcess";
+import { capacitySpawn, northProgram } from "../process/capacityHost";
 import { releaseLocalLeases } from "./lanQueue";
 import { type Command, UsageFailure, describeCause, flagValues, wholeFlag } from "../cli/command";
 import { LanFailure } from "../lan/join";
@@ -36,10 +37,7 @@ const desktopLauncher = (args: readonly string[]) => {
   return given !== undefined ? Effect.succeed(given) : skillScript("private-desktop-development", "scripts/private-desktop.sh");
 };
 
-const capacityHelper = (args: readonly string[]) => {
-  const [given] = flagValues(args, "capacity");
-  return given !== undefined ? Effect.succeed(given) : skillScript("machine-capacity", "scripts/machine-capacity.mjs");
-};
+const capacityBin = (args: readonly string[]) => flagValues(args, "capacity-bin")[0] ?? northProgram();
 
 const AgentFile = Schema.fromJsonString(Schema.Struct({ runs: Schema.optionalKey(Schema.Struct({ a: Schema.optionalKey(Schema.String), b: Schema.optionalKey(Schema.String) })) }));
 
@@ -56,7 +54,7 @@ const startPair = (pair: number, custody: { readonly custodian: Custodian; reado
     const scope = yield* Scope.fork(yield* Effect.scope);
     return yield* Effect.gen(function*() {
 
-      const session = yield* spawnLogged(ChildProcess.make(process.execPath, [capacity, "session", "--class", "native", "--memory-gib", "1", "--new-clients", String(pairSides(network).length), ...(waitSeconds > 0 ? ["--wait-seconds", String(waitSeconds)] : []), "--owner", `wisp-lan-pair-${pair}`, "--", process.execPath, SESSION, "--pair", String(pair), "--pool-profile", profile, "--launcher", launcher, "--capacity", capacity, ...(fps === undefined ? [] : ["--fps", String(fps)]), ...(network ? ["--network"] : [])], { stdin: "ignore", forceKillAfter: "90 seconds" }), {
+      const session = yield* spawnLogged(ChildProcess.make(...capacitySpawn(capacity, [ "--class", "native", "--memory-gib", "1", "--new-clients", String(pairSides(network).length), ...(waitSeconds > 0 ? ["--wait-seconds", String(waitSeconds)] : []), "--owner", `wisp-lan-pair-${pair}`, "--", process.execPath, SESSION, "--pair", String(pair), "--pool-profile", profile, "--launcher", launcher, "--capacity-bin", capacity, ...(fps === undefined ? [] : ["--fps", String(fps)]), ...(network ? ["--network"] : [])]), { stdin: "ignore", forceKillAfter: "90 seconds" }), {
         stdout: join(directory, "session.out"),
         stderr: sessionErr,
       });
@@ -147,7 +145,7 @@ const runPool = (args: readonly string[], custodian: Custodian) => Effect.gen(fu
   if (profiles.some((name) => PROFILES[name] === undefined)) return yield* new UsageFailure({ problem: `--pool-profile takes ${Object.keys(PROFILES).join(" or ")}, or one per pair separated by commas; pool clients never sign in and draw only Classic, so Reforged needs a signed-in client` });
   const profileOf = (pair: number) => profiles[pair] ?? profiles.at(-1) ?? "parity";
   const launcher = yield* desktopLauncher(args);
-  const capacity = yield* capacityHelper(args);
+  const capacity = capacityBin(args);
   yield* ensurePackager(mapPackager());
   const sessions: { readonly exitCode: Effect.Effect<unknown, unknown> }[] = [];
   const running: number[] = [];
@@ -224,7 +222,7 @@ export const check: Command = (args) => custodianOf(args).pipe(Effect.flatMap((c
   const pair = yield* number(args, "pair", undefined);
   const [profile = "parity"] = flagValues(args, "pool-profile");
   if (PROFILES[profile] === undefined) return yield* new UsageFailure({ problem: `--pool-profile takes ${Object.keys(PROFILES).join(" or ")}` });
-  const started = yield* startPair(pair, { custodian, queued: true }, profile, yield* desktopLauncher(args), yield* capacityHelper(args), yield* number(args, "wait", 1800), false);
+  const started = yield* startPair(pair, { custodian, queued: true }, profile, yield* desktopLauncher(args), capacityBin(args), yield* number(args, "wait", 1800), false);
   recordPassed(pair);
   yield* started.stop;
   yield* Console.log(`pair ${pair}: both clients ran; healthy, and the lease queue offers it again`);

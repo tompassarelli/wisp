@@ -79,7 +79,8 @@ const leftovers = async (runner: Bun.Subprocess, box: ReturnType<typeof sandbox>
   return { code, processes: box.marked().length, sessions: box.sessions().length };
 };
 
-const capacity = join(fixtures, "capacity.ts");
+const capacity = join(tmpdir(), `wisp-host-tools-north-${process.pid}`);
+writeFileSync(capacity, `#!/bin/sh\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(join(fixtures, "capacity.ts"))} "$@"\n`, { mode: 0o755 });
 
 const poolPair = 94;
 const pool = (box: ReturnType<typeof sandbox>, extra: Record<string, string>, pair = poolPair, flags: readonly string[] = [], within: readonly string[] = []) => {
@@ -87,7 +88,7 @@ const pool = (box: ReturnType<typeof sandbox>, extra: Record<string, string>, pa
   mkdirSync(plugin, { recursive: true });
 
   writeFileSync(join(plugin, "index.ts"), "export {};\n");
-  return Bun.spawn([...within, process.execPath, join(root, "examples/sample/scripts/sample.ts"), "lan", "pool", "--pair", String(pair), "--capacity", capacity, "--desktop", join(fixtures, "desktop.sh"), ...flags, "--wait", "0"], {
+  return Bun.spawn([...within, process.execPath, join(root, "examples/sample/scripts/sample.ts"), "lan", "pool", "--pair", String(pair), "--capacity-bin", capacity, "--desktop", join(fixtures, "desktop.sh"), ...flags, "--wait", "0"], {
     env: { ...box.env, ...extra }, stdout: "pipe", stderr: "pipe",
   });
 };

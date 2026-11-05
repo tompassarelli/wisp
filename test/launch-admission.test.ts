@@ -10,11 +10,11 @@ import { clientAdmitted, readiness, waitingForCapacity } from "../host/lan/admis
 
 test("a client launch waits in the capacity helper's queue for its admission, then exits within its own limit", async () => {
   const request: LaunchRequest = {
-    bun: "bun", capacity: "capacity.mjs", client: "pair-0-a", env: "env", nsenter: "nsenter", wine: "/wine", proton: false,
+    capacity: "north", client: "pair-0-a", env: "env", nsenter: "nsenter", wine: "/wine", proton: false,
     launcher: { pid: 4242, cwd: "/home/tester", env: {} }, host: {},
   };
   const { command } = launchCommand(request);
-  expect(command.slice(command.indexOf("capacity.mjs"), command.indexOf("capacity.mjs") + 6)).toEqual(["capacity.mjs", "session", "--class", "native", "--wait-seconds", "1800"]);
+  expect(command.slice(command.indexOf("north"), command.indexOf("north") + 8)).toEqual(["north", "capacity", "host", "session", "--class", "native", "--wait-seconds", "1800"]);
 
   const said: string[] = [];
   const helper = (after: string) => ChildProcess.make("bash", ["-c", `echo '{"decision":"QUEUED","reason":"DEFER_GPU_BUSY"}' >&2; sleep 1.5; echo '{"decision":"RESERVED","reason":"RUN"}' >&2; ${after}`], { stdout: "ignore" });

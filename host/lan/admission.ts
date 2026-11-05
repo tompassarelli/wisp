@@ -69,5 +69,5 @@ export const clientAdmitted = (name: string, errFile: string, isRunning: Effect.
   }), { until: (state) => state !== undefined, every: "1 second", within: `${CLIENT_ADMISSION_WAIT_SECONDS + 60} seconds`, onTimeout: () => Effect.succeed(false) });
 };
 
-export const nativeCommand = (capacity: string, name: string, runtime: string) =>
-  CapacityAdmission.use((admission) => admission.session(capacity, `wisp-lan:${name}`, 1.5, CLIENT_ADMISSION_WAIT_SECONDS)).pipe(Effect.map((session) => [...session, "env", `XDG_RUNTIME_DIR=${runtime}`]));
+export const nativeCommand = (program: string, name: string, runtime: string) =>
+  CapacityAdmission.use((admission) => admission.session(program, `wisp-lan:${name}`, 1.5, CLIENT_ADMISSION_WAIT_SECONDS)).pipe(Effect.map((session) => [...session, "env", `XDG_RUNTIME_DIR=${runtime}`]));

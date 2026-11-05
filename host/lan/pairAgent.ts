@@ -45,7 +45,7 @@ const launchedAt = new Map<string, number>();
 
 const stopClient = (client: PoolClient) => stopClientScope(pair, client.name, (lease) => Effect.sync(() => say(`${client.name} outlived its stop (lease ${lease}); killing its scope`)));
 
-const launch = (capacity: string, client: PoolClient) => Effect.gen(function*() {
+const launch = (program: string, client: PoolClient) => Effect.gen(function*() {
   // A second runtime on a live prefix joins its wineserver and dies: a game left from before must be stopped first.
   if (!(yield* stopClient(client))) return yield* new LanFailure({ problem: `${client.name}'s last capacity scope (lease ${clientLease(pair, client.name)}) outlived its stop` });
   const left = yield* (yield* ProcessTable).games(prefixOf(client.name));
@@ -56,7 +56,7 @@ const launch = (capacity: string, client: PoolClient) => Effect.gen(function*() 
 
   const launched = yield* GameLauncher.use((launcher) => launcher.inPrefix({ root: clientRoot(client.name), exe: exeOf(client.name), args: ["-launch", "-windowmode", "windowed", "-nowfpause"], appId, sessionBus: true }));
   const gameRuntime = client.env["XDG_RUNTIME_DIR"] ?? process.env["XDG_RUNTIME_DIR"] ?? launched.env["XDG_RUNTIME_DIR"] ?? "";
-  const [command = process.execPath, ...native] = yield* nativeCommand(capacity, client.name, gameRuntime);
+  const [command = process.execPath, ...native] = yield* nativeCommand(program, client.name, gameRuntime);
   const sound = yield* AudioIsolation.use((audio) => audio.sink(client.name, audioSinkOf(client.name)));
   if (sound.problem !== undefined) say(sound.problem);
   const env = { ...client.env, ...sound.env, ...launched.env, SteamGameId: appId };
@@ -96,8 +96,8 @@ const RelayedRequest = Schema.fromJsonString(Schema.Struct({ map: Schema.String,
 
 
 const agent = Effect.gen(function*() {
-  const capacity = argument("capacity");
-  if (capacity === undefined) return yield* new LanFailure({ problem: "pairAgent requires --capacity MACHINE_CAPACITY_HELPER" });
+  const capacity = argument("capacity-bin");
+  if (capacity === undefined) return yield* new LanFailure({ problem: "pairAgent requires --capacity-bin NORTH_PROGRAM" });
   mkdirSync(directory, { recursive: true });
   writeFileSync(agentPidFile(pair), `${process.pid}\n`);
   const agentScope = yield* Effect.scope;

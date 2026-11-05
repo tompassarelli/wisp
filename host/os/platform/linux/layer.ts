@@ -8,6 +8,7 @@ import {
 } from "../../../contract/services";
 import { linuxDesktopLayer } from "./desktop";
 import * as procfs from "./procfs";
+import { capacityCommand } from "../../../process/capacityHost";
 import { startUnit, stopUnit, unitState } from "./systemd";
 import { describeCause } from "../../../contract/describeCause";
 
@@ -51,7 +52,7 @@ const audio = Layer.effect(AudioIsolation, Effect.gen(function*() {
   });
 }));
 
-// The machine-capacity helper names each lease's scope agent-capacity-<lease id without dashes>.scope.
+// North's host capacity admission names each lease's scope agent-capacity-<lease id without dashes>.scope.
 const leaseScope = (lease: string) => `agent-capacity-${lease.replaceAll("-", "")}.scope`;
 
 const userManager = (args: readonly string[]) => Effect.try({
@@ -64,8 +65,8 @@ const userManager = (args: readonly string[]) => Effect.try({
 });
 
 const admission = Layer.succeed(CapacityAdmission, CapacityAdmission.of({
-  session: (helper, owner, memoryGib, waitSeconds) => Effect.succeed([
-    process.execPath, helper, "session", "--class", "native", ...(memoryGib === undefined ? [] : ["--memory-gib", String(memoryGib)]), ...(waitSeconds === undefined ? [] : ["--wait-seconds", String(waitSeconds)]), "--owner", owner, "--",
+  session: (program, owner, memoryGib, waitSeconds) => Effect.succeed([
+    ...capacityCommand(program), "session", "--class", "native", ...(memoryGib === undefined ? [] : ["--memory-gib", String(memoryGib)]), ...(waitSeconds === undefined ? [] : ["--wait-seconds", String(waitSeconds)]), "--owner", owner, "--",
   ]),
   signalLease: (lease, signal) => userManager(["kill", `--signal=${signal}`, leaseScope(lease)]).pipe(Effect.asVoid),
   leaseLive: (lease) => userManager(["show", leaseScope(lease), "--property=ActiveState", "--value"]).pipe(

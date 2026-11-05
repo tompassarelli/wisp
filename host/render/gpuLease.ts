@@ -1,20 +1,6 @@
-import { existsSync } from "node:fs";
-import { dirname, join } from "node:path";
-import * as BunServices from "@effect/platform-bun/BunServices";
-import { Effect, Option, Schema } from "effect";
-import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import { Effect, Schema } from "effect";
 import { ResourceAccounting } from "../contract/services";
-
-/** The machine-capacity helper script, or undefined where none is installed (CI, cloud, other machines). `WISP_CAPACITY_HELPER` names it directly. */
-export const capacityHelper = Effect.gen(function*() {
-  const given = process.env["WISP_CAPACITY_HELPER"];
-  if (given !== undefined) return existsSync(given) ? given : undefined;
-  const skill = yield* ChildProcessSpawner.ChildProcessSpawner.use((spawner) => spawner.string(ChildProcess.make("agents", ["path", "machine-capacity"], { stderr: "ignore" }))).pipe(
-    Effect.option,
-  );
-  const helper = Option.map(skill, (path) => join(dirname(path.trim()), "scripts/machine-capacity.mjs"));
-  return Option.isSome(helper) && existsSync(helper.value) ? helper.value : undefined;
-});
+import { capacityCommand, capacityProgram } from "../process/capacityHost";
 
 class GpuLeaseRequired extends Schema.TaggedError<GpuLeaseRequired, { readonly brand: unique symbol }>()("GpuLeaseRequired", {
   command: Schema.String,
@@ -27,21 +13,21 @@ class GpuLeaseRequired extends Schema.TaggedError<GpuLeaseRequired, { readonly b
 const quoted = (arg: string) => (/^[\w@%+=:,./-]+$/.test(arg) ? arg : `'${arg.replaceAll("'", "'\\''")}'`);
 
 /**
- * Fails before Chrome starts when this machine has a capacity helper and the run is outside a lease, naming the
+ * Fails before Chrome starts when this machine has north's capacity admission and the run is outside a lease, naming the
  * command that reruns `argv` in a gpu lease. The lease check is the cgroup's, which doesn't tell classes apart.
  */
 export const requireGpuLease = (argv: readonly string[] = process.argv) => Effect.gen(function*() {
-  const helper = yield* capacityHelper.pipe(Effect.provide(BunServices.layer));
-  if (helper === undefined || (yield* ResourceAccounting.use((accounting) => Effect.sync(accounting.insideCapacityLease)))) return;
-  return yield* new GpuLeaseRequired({ command: leaseCommand(helper, argv).map(quoted).join(" ") });
+  const program = capacityProgram();
+  if (program === undefined || (yield* ResourceAccounting.use((accounting) => Effect.sync(accounting.insideCapacityLease)))) return;
+  return yield* new GpuLeaseRequired({ command: leaseCommand(program, argv).map(quoted).join(" ") });
 });
 
-const leaseCommand = (helper: string, argv: readonly string[]) => [process.execPath, helper, "run", "--class", "gpu", "--owner", "wisp-render", "--timeout-seconds", "900", "--", ...argv];
+const leaseCommand = (program: string, argv: readonly string[]) => [...capacityCommand(program), "run", "--class", "gpu", "--owner", "wisp-render", "--timeout-seconds", "900", "--", ...argv];
 
-/** Reruns `argv` inside a gpu lease and gives its exit code, or undefined when this run already holds one or the machine has no capacity helper. */
+/** Reruns `argv` inside a gpu lease and gives its exit code, or undefined when this run already holds one or the machine has no north. */
 export const rerunInGpuLease = (argv: readonly string[] = process.argv) => Effect.gen(function*() {
-  const helper = yield* capacityHelper.pipe(Effect.provide(BunServices.layer));
-  if (helper === undefined || (yield* ResourceAccounting.use((accounting) => Effect.sync(accounting.insideCapacityLease)))) return undefined;
-  const [command, ...rest] = leaseCommand(helper, argv);
+  const program = capacityProgram();
+  if (program === undefined || (yield* ResourceAccounting.use((accounting) => Effect.sync(accounting.insideCapacityLease)))) return undefined;
+  const [command, ...rest] = leaseCommand(program, argv);
   return yield* Effect.promise(() => Bun.spawn([command ?? "", ...rest], { stdin: "inherit", stdout: "inherit", stderr: "inherit" }).exited);
 });

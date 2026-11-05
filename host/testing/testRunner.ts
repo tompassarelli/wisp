@@ -4,7 +4,7 @@ import { join } from "node:path";
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { Cause, Effect, Exit, Fiber, Layer, Ref, Schema } from "effect";
-import { capacityHelper } from "../render/gpuLease";
+import { capacityProgram, capacitySpawn } from "../process/capacityHost";
 import { pollUntil } from "../process/hostProcess";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { platformLayer } from "../os/platform/layer";
@@ -123,19 +123,19 @@ const timingPhase = (files: readonly string[], args: readonly string[], print: (
   Effect.sync(() => mkdtempSync(join(tmpdir(), "wisp-timing-"))),
   (directory) => Effect.gen(function*() {
     const resultsFile = join(directory, "results.jsonl");
-    const helper = yield* capacityHelper;
-    if (helper === undefined) {
-      print("timing tests: no machine-capacity helper here; running them without a lease");
+    const program = capacityProgram();
+    if (program === undefined) {
+      print("timing tests: no north capacity admission here; running them without a lease");
       yield* runTimingFiles(resultsFile, files, args);
     } else if (yield* insideLease) {
       print("timing tests: already inside a machine-capacity lease; running them in it (an exclusive lease would wait for it)");
       yield* runTimingFiles(resultsFile, files, args);
     } else {
       print(`timing tests: waiting for an exclusive machine-capacity lease for ${files.length} file${files.length === 1 ? "" : "s"}`);
-      const leased = run(process.execPath, [
-        helper, "run", "--class", "exclusive", "--owner", `wisp-test:${process.pid}`, "--timeout-seconds", String(LEASE_SECONDS),
+      const leased = run(...capacitySpawn(program, [
+        "run", "--class", "exclusive", "--owner", `wisp-test:${process.pid}`, "--timeout-seconds", String(LEASE_SECONDS),
         "--", process.execPath, import.meta.path, "--timing-run", resultsFile, ...files, "--", ...args,
-      ]);
+      ]));
 
       const admission = pollUntil(Effect.sync(() => existsSync(startedFile(resultsFile))), {
         until: (started) => started, every: "2 seconds", within: `${LEASE_WAIT_MINUTES} minutes`, onTimeout: () => Effect.succeed(false),

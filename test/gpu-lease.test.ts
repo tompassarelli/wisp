@@ -5,10 +5,17 @@ import { agentRender } from "../host/play/standalone";
 import { requireGpuLease } from "../host/render/gpuLease";
 
 // The shell is the reference for quoting: it must read the named command back as the helper, the gpu class and every argument.
-test("[property seed 474] renders start only inside a gpu lease or without a capacity helper, and the named lease command gives the shell back every argument (docs/headless.md)", async () => {
-  const given = process.env["WISP_CAPACITY_HELPER"];
-  const verdict = (helper: string, inside: boolean, argv: readonly string[]) => {
-    process.env["WISP_CAPACITY_HELPER"] = helper;
+test("[property seed 474] renders start only inside a gpu lease or without north's capacity admission, and the named lease command gives the shell back every argument (docs/headless.md)", async () => {
+  const given = process.env["NORTH_BIN"];
+  const path = process.env["PATH"];
+  const verdict = (helper: string | undefined, inside: boolean, argv: readonly string[]) => {
+    if (helper === undefined) {
+      delete process.env["NORTH_BIN"];
+      process.env["PATH"] = "";
+    } else {
+      process.env["NORTH_BIN"] = helper;
+      process.env["PATH"] = path;
+    }
     const accounting = Layer.succeed(ResourceAccounting, ResourceAccounting.of({ cpuPressure: () => undefined, cpuLimit: () => undefined, insideCapacityLease: () => inside, threadCpuMillis: () => 0 }));
     return Effect.runPromise(requireGpuLease(argv).pipe(Effect.flip, Effect.map((failure) => failure.message), Effect.orElseSucceed(() => "started"), Effect.provide(accounting)));
   };
@@ -26,16 +33,17 @@ test("[property seed 474] renders start only inside a gpu lease or without a cap
   try {
     for (let run = 0; run < 40; run++) {
       const argv = Array.from({ length: next(6) }, () => Array.from({ length: 1 + next(2) }, () => pieces[next(pieces.length)]).join(""));
-      const [present, absent] = [import.meta.path, `${import.meta.path}.absent`];
+      const [present, absent] = [import.meta.path, undefined];
       expect(await verdict(present, true, argv)).toBe("started");
       expect(await verdict(absent, next(2) === 0, argv)).toBe("started");
       const refused = await verdict(present, false, argv);
       const command = refused.slice(refused.indexOf("\n  ") + 3);
-      expect(shellWords(command)).toEqual([process.execPath, present, "run", "--class", "gpu", "--owner", "wisp-render", "--timeout-seconds", "900", "--", ...argv]);
+      expect(shellWords(command)).toEqual([present, "capacity", "host", "run", "--class", "gpu", "--owner", "wisp-render", "--timeout-seconds", "900", "--", ...argv]);
     }
   } finally {
-    if (given === undefined) delete process.env["WISP_CAPACITY_HELPER"];
-    else process.env["WISP_CAPACITY_HELPER"] = given;
+    if (given === undefined) delete process.env["NORTH_BIN"];
+    else process.env["NORTH_BIN"] = given;
+    process.env["PATH"] = path;
   }
 });
 

@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-const rest = process.argv.slice(3);
+const rest = process.argv.slice(5);
 const option = (name: string) => (rest.indexOf(name) >= 0 && rest.indexOf(name) < rest.indexOf("--") ? rest[rest.indexOf(name) + 1] : undefined);
 const command = rest.slice(rest.indexOf("--") + 1);
 const owner = option("--owner") ?? "";

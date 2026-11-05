@@ -8,6 +8,7 @@ import {
   clientUnit, describeOwner, desktopCommand, desktopOwner, desktopPid, desktopUnit, liveDesktop, ownerOf, prefixProcesses, serviceState, startDesktop, stopService, writeRun,
 } from "./clientServices";
 import { ServiceProblem, skillScript } from "../process/hostProcess";
+import { northProgram } from "../process/capacityHost";
 import { ClientWatch, type WatchOptions, describeView, inState, waitFor } from "../dev/watch";
 import { unshareBehindLive } from "./clientStorage";
 
@@ -42,9 +43,8 @@ const statusLines = (clientsFile: string, names: readonly string[], watch: Watch
 export const serviceStatus = (clientsFile: string, names: readonly string[], watch: WatchOptions) => statusLines(clientsFile, names, watch);
 
 const desktopService = (name: string, owner: string) => Effect.gen(function*() {
-  const capacity = yield* skillScript("machine-capacity", "scripts/machine-capacity.mjs");
   const launcher = yield* skillScript("private-desktop-development", "scripts/private-desktop.sh");
-  return yield* startDesktop(name, yield* desktopCommand(capacity, launcher, name, owner), owner);
+  return yield* startDesktop(name, yield* desktopCommand(northProgram(), launcher, name, owner), owner);
 });
 
 const reviveDesktops = <E = never>(clientsFile: string, names: readonly string[], start: (name: string, owner: string) => Effect.Effect<string, ServiceProblem | E, Platform> = desktopService) => Effect.gen(function*() {

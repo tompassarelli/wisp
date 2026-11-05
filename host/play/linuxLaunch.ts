@@ -10,7 +10,8 @@ import { type ProcessInfo } from "../contract/processInfo";
 import { launcherProcess, listProcesses } from "../os/platform/linux/procfs";
 import { parseWords, separateInk } from "../os/warcraft/desktop";
 import { describeCause } from "../cli/command";
-import { type Collected, collect, skillScript } from "../process/hostProcess";
+import { type Collected, collect } from "../process/hostProcess";
+import { capacityCommand, northProgram } from "../process/capacityHost";
 import { decodePpm } from "../contract/services";
 import { startUnit } from "../os/platform/linux/systemd";
 import { acquireStartLock, startLockPath } from "../client/startLock";
@@ -65,7 +66,6 @@ const startDetached = (command: readonly string[], log?: string) => Effect.tryPr
 });
 
 export interface LaunchRequest {
-  readonly bun: string;
   readonly capacity: string;
   readonly client: string;
   readonly env: string;
@@ -92,7 +92,7 @@ export const launchCommand = (request: LaunchRequest) => {
   return {
     command: [...service, ...(request.client === "playtest"
       ? ["--slice=playtest.slice", "--"]
-      : ["--", request.bun, request.capacity, "session", "--class", "native", "--wait-seconds", String(LAUNCH_WAIT_SECONDS), "--owner", `wisp-game-${request.client}`, "--"]),
+      : ["--", ...capacityCommand(request.capacity), "session", "--class", "native", "--wait-seconds", String(LAUNCH_WAIT_SECONDS), "--owner", `wisp-game-${request.client}`, "--"]),
       request.env, ...unset, ...restore, request.nsenter, "-t", String(launcher.pid), "-U", "-m", "--preserve-credentials", `--wdns=${launcher.cwd}`, "--",
       request.wine, ...(request.proton ? ["runinprefix"] : []), "C:\\Program Files (x86)\\Battle.net\\Battle.net.exe", "--exec=launch W3"],
     env,
@@ -101,7 +101,7 @@ export const launchCommand = (request: LaunchRequest) => {
 
 const launchInContainer = (run: AdmittedRunner, tools: PlayTools, launcher: ProcessInfo, client: string) => Effect.gen(function*() {
   const failed = problem("couldn't ask Battle.net to launch Warcraft III");
-  const capacity = client === "playtest" ? "" : tools.capacity ?? (yield* skillScript("machine-capacity", "scripts/machine-capacity.mjs").pipe(Effect.mapError((cause) => failed(cause.problem))));
+  const capacity = client === "playtest" ? "" : tools.capacity ?? northProgram();
   const request = yield* Effect.try({
     try: (): LaunchRequest => {
       const proton = launcher.proton;
@@ -119,7 +119,7 @@ const launchInContainer = (run: AdmittedRunner, tools: PlayTools, launcher: Proc
         ...(proton === undefined ? {} : { cwd: "/", runtime: proton.command }),
       });
       return {
-        bun: process.execPath, capacity, client, env: hostNsenter("env"), nsenter: hostNsenter(tools.nsenter), wine: runtime,
+        capacity, client, env: hostNsenter("env"), nsenter: hostNsenter(tools.nsenter), wine: runtime,
         proton: proton !== undefined,
         launcher: { pid, cwd, env }, host: process.env,
       };

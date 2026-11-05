@@ -18,7 +18,7 @@ test("[native] recorded Battle.net and Steam facts: the shortcut's game id, sign
 test("a Proton launch into a clone's container unsets before it assigns, finds its directory inside, and doesn't wait for the running wineserver", () => {
   const env = Bun.which("env")!;
   const request: LaunchRequest = {
-    bun: "bun", capacity: "capacity.mjs", client: "clone-c", env, nsenter: Bun.which("true")!, wine: "/proton", proton: true,
+    capacity: "north", client: "clone-c", env, nsenter: Bun.which("true")!, wine: "/proton", proton: true,
     launcher: { pid: 4242, cwd: "/home/tester", env: { PATH: "/usr/bin:/bin" } }, host: { PATH: "/host/bin" },
   };
   const { command } = launchCommand(request);
