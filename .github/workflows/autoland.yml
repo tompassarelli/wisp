@@ -54,13 +54,22 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: main
-          sparse-checkout: host/checks
+          sparse-checkout: |
+            host/checks
+            host/process
+            host/contract
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.4
+      - run: bun install --frozen-lockfile
       - run: |
           set -uo pipefail
-          read -r action run <<< "$(bun host/checks/autolandQueue.ts)"
+          if ! choice=$(bun host/checks/autolandQueue.ts); then
+            gh workflow run autoland.yml --ref main -f branch=queue
+            echo "::error::autolandQueue.ts failed, so $BRANCH dispatched a queue run without looking for one that hasn't read its members"
+            exit 1
+          fi
+          read -r action run <<< "$choice"
           if [ "$action" = join ]; then
             echo "$BRANCH joins queue run $run, which hasn't read its members yet" >> "$GITHUB_STEP_SUMMARY"
             exit 0
