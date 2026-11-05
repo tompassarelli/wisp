@@ -370,7 +370,10 @@ has not started, since that run will still read the branch; a run already
 past reading its members gets a new `queue` run dispatched behind it
 (`joinOrDispatch` in wisp:host/checks/autolandQueue.ts). A
 `queue` run leaves out the branches a `split` run (titled `Autoland train
-...`) is testing.
+...`) is testing. The queue job runs that helper from a sparse checkout of
+main's host/checks, host/process and host/contract, which a test keeps in
+step with the helper's imports; a helper that fails still dispatches a
+`queue` run and turns the job red.
 
 The push itself only makes sure a `queue` run of main's copy of the workflow
 is waiting, so a branch made from an older main still lands with the current
