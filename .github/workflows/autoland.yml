@@ -51,13 +51,20 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          sparse-checkout: host/checks
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
       - run: |
-          for status in pending queued waiting; do
-            if [ "$(gh run list --workflow autoland.yml --status "$status" --limit 100 --json displayTitle --jq 'any(.[]; .displayTitle == "Autoland queue")')" = true ]; then
-              echo "$BRANCH joins the waiting queue run" >> "$GITHUB_STEP_SUMMARY"
-              exit 0
-            fi
-          done
+          set -uo pipefail
+          read -r action run <<< "$(bun host/checks/autolandQueue.ts)"
+          if [ "$action" = join ]; then
+            echo "$BRANCH joins queue run $run, which hasn't read its members yet" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           gh workflow run autoland.yml --ref main -f branch=queue
           echo "$BRANCH dispatched a queue run" >> "$GITHUB_STEP_SUMMARY"
 

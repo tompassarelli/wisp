@@ -365,7 +365,10 @@ a train of one tip fails and is refused with the usual `autoland` failure
 status. The halves test side by side, so a planted failure among N tips costs
 about log2(N) suite lengths while the passing halves land on the way. Dispatches
 of `queue` collapse into one pending run: a push and every
-dispatch of a branch skip the dispatch when one is pending or queued. A
+dispatch of a branch skip the dispatch only while a `queue` run's rebase job
+has not started, since that run will still read the branch; a run already
+past reading its members gets a new `queue` run dispatched behind it
+(`joinOrDispatch` in wisp:host/checks/autolandQueue.ts). A
 `queue` run leaves out the branches a `split` run (titled `Autoland train
 ...`) is testing.
 
