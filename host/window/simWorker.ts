@@ -4,7 +4,7 @@ import { openStandalone } from "../play/standalone";
 import { openNetMatch } from "../play/standaloneNet";
 import type { NetReport } from "../net/peer";
 import { adoptNativeWindow } from "./binding";
-import { createModelLibrary, drawScene, preloadAll, preloadAssets, preloadScene } from "./drawScene";
+import { createModelLibrary, drawScene, endedBeforeStart, preloadAll, preloadAssets, preloadScene } from "./drawScene";
 import { createFrameLoop, serveFrames } from "./frameLoop";
 import { loadGame } from "./gameModule";
 import { type RenderSeries, type RenderSeriesName, renderSeriesLengths, renderSeriesSince } from "./renderSeries";
@@ -51,7 +51,7 @@ const run = async (init: SimWorkerInit) => {
     );
     const library = createModelLibrary((path) => game.render.readAsset(path), view, (problem) => console.error(`native window: ${problem}`));
     const { net } = init.options;
-    const match = net === undefined ? undefined : yield* preloadAll(game.render, library).pipe(Effect.andThen(openNetMatch(game, init.options, net)));
+    const match = net === undefined ? undefined : yield* preloadAll(game.render, library, endedBeforeStart(view)).pipe(Effect.andThen(openNetMatch(game, init.options, net)));
     const player = yield* openStandalone(match?.game ?? game, { ...init.options, window: "native", library: init.library });
     const finished = Promise.withResolvers<void>();
     let measuredFrom: Readonly<Record<RenderSeriesName, number>> | undefined;
@@ -95,7 +95,7 @@ const run = async (init: SimWorkerInit) => {
         loop.complete(end.error);
       })),
     ));
-    yield* preloadScene(player.native.prepare().scene, library, () => view.assetsPending());
+    yield* preloadScene(player.native.prepare().scene, library, () => view.assetsPending(), endedBeforeStart(view));
     view.start();
     preloadAssets(game.render, library);
     return yield* serveFrames(view, loop, finished.promise, match !== undefined, () => library.loading() + reads.inFlight() > 0);

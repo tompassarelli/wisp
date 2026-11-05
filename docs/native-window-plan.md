@@ -134,6 +134,20 @@ measured on and covers four things:
   FFI;
 - a test that kills the window mid-frame.
 
+A surface error never kills the render thread. Every configure and acquire
+runs inside the swapchain (`window/wisp-window/src/swapchain.rs`) under error
+scopes, because wgpu's handler for an error no scope catches panics: on
+1 November 2026 a first configure on the laptop's Radeon 890M failed with
+"Failed to wait for GPU to come idle before reconfiguring the Surface", the
+render thread died, and Bun waited 120 s for models nobody would build
+(wisp#191). A failed configure, a lost surface or a device error at acquire is
+retried after a backoff that doubles from 16 ms to 1 s; an outdated or
+suboptimal surface is configured again at the next frame, and a timeout or a
+hidden window skips the frame. After 9 failed tries in a row (about 3 s) the
+window ends as failed with `surface error: ...` as its error text, and Bun's
+preload stops on that end and exits with the text.
+`WISP_WINDOW_FORCE_SURFACE_FAILURE=1` makes every configure fail, to watch it.
+
 Rejected: Rust hosts the window and runs Bun as a child process over shared
 memory. A cross-process wake (futex, eventfd, a Windows event) is also in the
 microsecond range, so it cannot beat 12 µs by a margin that matters at

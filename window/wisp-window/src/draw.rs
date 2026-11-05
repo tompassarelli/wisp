@@ -13,6 +13,7 @@ use crate::menu::{self, Menu};
 use crate::present::PresentSetting;
 use crate::settings::{self, Settings, Store, PRESETS};
 use crate::surface_target::SurfaceTarget;
+use crate::swapchain::{SurfaceError, Swapchain, WgpuSurface};
 use crate::render::{DrawScene, Renderer};
 use crate::ui::{is_font, UiRenderer};
 
@@ -90,8 +91,7 @@ fn percentile(sorted: &[f64], fraction: f64) -> f64 {
 }
 
 pub struct Gpu {
-    surface: wgpu::Surface<'static>,
-    config: wgpu::SurfaceConfiguration,
+    swapchain: Swapchain<WgpuSurface>,
     device: wgpu::Device,
     queue: wgpu::Queue,
     pipeline: wgpu::RenderPipeline,
@@ -144,7 +144,6 @@ impl Gpu {
         let present = PresentSetting::default().offered(&surface.get_capabilities(&adapter).present_modes);
         config.present_mode = present.mode();
         config.desired_maximum_frame_latency = 1;
-        surface.configure(&device, &config);
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: None, source: wgpu::ShaderSource::Wgsl(SHADER.into()) });
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: None, bind_group_layouts: &[], immediate_size: 0 });
         let attributes = wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x3];
@@ -181,7 +180,8 @@ impl Gpu {
         renderer.set_quality(settings.quality(settings::developer_quality()));
         let ui = UiRenderer::new(device.clone(), queue.clone(), config.format);
         let clock = GpuClock::new(&device, &queue);
-        Ok(Self { surface, config, device, queue, pipeline, vertices, renderer, ui, aspect, scene: None, capture, adapter_handle: adapter, present, settings, store, menu: Menu::default(), sweep, images: HashSet::new(), scene_bytes: Vec::new(), clock, encode_ms: None, adapter: info.name, backend: format!("{:?}", info.backend) })
+        let swapchain = Swapchain::new(WgpuSurface::new(surface, device.clone()), config);
+        Ok(Self { swapchain, device, queue, pipeline, vertices, renderer, ui, aspect, scene: None, capture, adapter_handle: adapter, present, settings, store, menu: Menu::default(), sweep, images: HashSet::new(), scene_bytes: Vec::new(), clock, encode_ms: None, adapter: info.name, backend: format!("{:?}", info.backend) })
     }
 
     /// Applies what the player did at the options screen since the last frame, saving a change.
@@ -217,46 +217,37 @@ impl Gpu {
 
     /// Reconfigures the surface to `setting`, or to `Fifo` when the surface does not offer it.
     pub fn set_present(&mut self, setting: PresentSetting) {
-        let offered = setting.offered(&self.surface.get_capabilities(&self.adapter_handle).present_modes);
+        let offered = setting.offered(&self.swapchain.surface().capabilities(&self.adapter_handle).present_modes);
         if offered != self.present {
             self.present = offered;
-            self.config.present_mode = offered.mode();
             self.images.clear();
-            self.surface.configure(&self.device, &self.config);
+            self.swapchain.reconfigure(|config| config.present_mode = offered.mode());
         }
     }
 
     pub fn resize(&mut self, width: u32, height: u32) {
-        if width == 0 || height == 0 || (width == self.config.width && height == self.config.height) {
+        let config = self.swapchain.config();
+        if width == 0 || height == 0 || (width == config.width && height == config.height) {
             return;
         }
-        self.config.width = width;
-        self.config.height = height;
-        self.surface.configure(&self.device, &self.config);
+        self.swapchain.reconfigure(|config| (config.width, config.height) = (width, height));
     }
 
-    /// Blocks until the display hands back an image under `Fifo`; `None` when the window shows nothing right now.
-    pub fn acquire(&mut self) -> Option<wgpu::SurfaceTexture> {
-        match self.surface.get_current_texture() {
-            wgpu::CurrentSurfaceTexture::Success(texture) => {
-                if self.images.len() < IMAGE_CENSUS_LIMIT {
-                    let mut hasher = DefaultHasher::new();
-                    texture.texture.hash(&mut hasher);
-                    self.images.insert(hasher.finish());
-                }
-                Some(texture)
+    /// Blocks until the display hands back an image under `Fifo`; `None` when the window shows nothing right now, and the surface error once the swapchain stopped retrying it.
+    pub fn acquire(&mut self, now_ns: u64) -> Result<Option<wgpu::SurfaceTexture>, SurfaceError> {
+        let texture = self.swapchain.acquire(now_ns)?;
+        if let Some(texture) = &texture {
+            if self.images.len() < IMAGE_CENSUS_LIMIT {
+                let mut hasher = DefaultHasher::new();
+                texture.texture.hash(&mut hasher);
+                self.images.insert(hasher.finish());
             }
-            wgpu::CurrentSurfaceTexture::Suboptimal(texture) => {
-                drop(texture);
-                self.surface.configure(&self.device, &self.config);
-                None
-            }
-            wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost => {
-                self.surface.configure(&self.device, &self.config);
-                None
-            }
-            wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded | wgpu::CurrentSurfaceTexture::Validation => None,
         }
+        Ok(texture)
+    }
+
+    fn config(&self) -> &wgpu::SurfaceConfiguration {
+        self.swapchain.config()
     }
 
     pub fn present(&self, texture: wgpu::SurfaceTexture) {
@@ -300,7 +291,7 @@ impl Gpu {
         if let Some(scene) = &self.scene {
             let frame = scene.frame;
             let mut encoder = self.device.create_command_encoder(&Default::default());
-            let size = (self.config.width, self.config.height);
+            let size = (self.config().width, self.config().height);
             self.renderer.draw_timed(&mut encoder, &mut timer, &view, size, self.aspect, scene);
             let bake = self.renderer.bake_progress().map(|progress| menu::Bake { progress, filter: progress.total > 0 && progress.ready() && self.renderer.upscales_with_filter(), playing: scene.playing, pending: self.renderer.art_pending() });
             self.ui.set_overlay(self.menu.scene(&self.settings, bake));
@@ -378,8 +369,8 @@ impl Gpu {
             let line = format!(
                 "preset {} {}x{} on {} ({}): p50 {:.2} ms, p95 {:.2} ms, max {:.2} ms over {} frames",
                 preset.name(),
-                self.config.width,
-                self.config.height,
+                self.config().width,
+                self.config().height,
                 self.adapter,
                 self.backend,
                 percentile(&sorted, 0.5),

@@ -56,19 +56,19 @@ impl Gpu {
             "{{\"window\":{info},\"preset\":{:?},\"art\":{:?},\"width\":{},\"height\":{},\"frame\":{frame},\"windowSource\":{:?}}}\n",
             self.settings.preset.name(),
             self.settings.art.name(),
-            self.config.width,
-            self.config.height,
+            self.config().width,
+            self.config().height,
             env!("WISP_WINDOW_SOURCE")
         );
         std::fs::write(folder.join("window.json"), window)?;
-        if self.config.usage.contains(wgpu::TextureUsages::COPY_SRC) {
+        if self.config().usage.contains(wgpu::TextureUsages::COPY_SRC) {
             self.write_picture(&texture.texture, &folder.join("picture.png"));
         }
         Ok(folder)
     }
 
     pub(super) fn write_picture(&self, texture: &wgpu::Texture, path: &Path) {
-        let (width, height) = (self.config.width, self.config.height);
+        let (width, height) = (self.config().width, self.config().height);
         let row = (width * 4).next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
         let buffer = self.device.create_buffer(&wgpu::BufferDescriptor { label: Some("capture"), size: (row * height) as u64, usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ, mapped_at_creation: false });
         let mut encoder = self.device.create_command_encoder(&Default::default());
@@ -81,7 +81,7 @@ impl Gpu {
         buffer.slice(..).map_async(wgpu::MapMode::Read, |_| ());
         let _ = self.device.poll(wgpu::PollType::wait_indefinitely());
         let Ok(mapped) = buffer.slice(..).get_mapped_range() else { return };
-        let bgra = matches!(self.config.format, wgpu::TextureFormat::Bgra8Unorm | wgpu::TextureFormat::Bgra8UnormSrgb);
+        let bgra = matches!(self.config().format, wgpu::TextureFormat::Bgra8Unorm | wgpu::TextureFormat::Bgra8UnormSrgb);
         let mut rgba = Vec::with_capacity((width * height * 4) as usize);
         for line in mapped.chunks(row as usize).take(height as usize) {
             for pixel in line[..(width * 4) as usize].chunks(4) {

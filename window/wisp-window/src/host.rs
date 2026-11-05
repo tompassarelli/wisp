@@ -373,7 +373,12 @@ impl Surface for WindowSurface {
         if let Some(millihertz) = self.window.current_monitor().and_then(|monitor| monitor.refresh_rate_millihertz()).filter(|millihertz| *millihertz > 0) {
             self.refresh_ms = Some(1e6 / millihertz as f64);
         }
-        let image = self.gpu.acquire();
+        let image = self.gpu.acquire(now_ns()).unwrap_or_else(|error| {
+            eprintln!("wisp-window: {error}");
+            *lock(&self.shared.error) = Some(error.to_string());
+            self.shared.finish(End::Failed);
+            None
+        });
         let shown = (self.gpu.setting(), self.gpu.image_count());
         if shown != self.reported {
             self.reported = shown;

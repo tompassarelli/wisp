@@ -32,6 +32,7 @@ mod pad;
 mod pad_sdl;
 mod pointer;
 mod surface_target;
+mod swapchain;
 mod mixer;
 pub mod gpu_time;
 pub mod post;

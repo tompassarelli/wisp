@@ -41,6 +41,23 @@ try { openNativeWindow({ title: "forced failure", width: 320, height: 200 }); } 
   expect(status).toBe(0);
 });
 
+test.skipIf(!hasDisplay)("[spec docs/native-window-plan.md] a surface that never configures ends the window as failed within seconds, with the surface error by name", async () => {
+  const script = `import { openNativeWindow } from "./host/window/binding";
+const window = openNativeWindow({ title: "forced surface failure", width: 320, height: 200 });
+const began = performance.now();
+let kind = "timeout";
+while (kind === "timeout" && performance.now() - began < 20000) kind = window.nextEvent(500).kind;
+console.log(JSON.stringify({ kind, error: window.error(), ms: Math.round(performance.now() - began) }));
+window.close();`;
+  const run = Bun.spawn([process.execPath, "-e", script], { cwd: join(import.meta.dir, ".."), env: { ...process.env, WISP_WINDOW_FORCE_SURFACE_FAILURE: "1" }, stdout: "pipe", stderr: "pipe" });
+  const [out, status] = await Promise.all([new Response(run.stdout).text(), run.exited]);
+  const ended = JSON.parse(out) as { kind: string; error: string; ms: number };
+  expect(ended.kind).toBe("failed");
+  expect(ended.error).toBe("surface error: 9 tries in a row failed, the last at configure: forced surface failure (WISP_WINDOW_FORCE_SURFACE_FAILURE)");
+  expect(ended.ms).toBeLessThan(10000);
+  expect(status).toBe(0);
+}, 30000);
+
 test.skipIf(!existsSync(windowLibraryPath()))("[spec docs/native-window-plan.md] the window library reports the window source it was built from, and one built from other source is refused before any call", () => {
   openWindowLibrary(windowLibraryPath(), { wisp_window_now_ns: { args: [], returns: "f64" } }).close();
   expect(() => openWindowLibrary(windowLibraryPath(), { wisp_window_now_ns: { args: [], returns: "f64" } }, "0000000000000000"))

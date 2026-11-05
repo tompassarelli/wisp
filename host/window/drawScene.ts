@@ -11,6 +11,7 @@ import type { LightningLook } from "../terrain/lightningData";
 import { createLightningLooks } from "./lightningLooks";
 import type { FrameSnapshot } from "../../src/game/native/frameStore";
 import type { DrawnPose, RenderScene } from "../render/renderScene";
+import type { WindowView } from "./binding";
 import { NATIVE_RISE, SKY_FAR, camera, transform } from "../render/screen";
 
 /** The pose of one model the native renderer draws (window/wisp-window/src/render/scene.rs). */
@@ -220,12 +221,26 @@ export function drawScene(scene: RenderScene, library: ModelLibrary) {
 
 const PRELOAD_MS = 120_000;
 
+/** Why the window ended while a preload waited on it, or undefined while it is open: a window that failed or closed builds nothing more, so the wait stops with that reason instead of running out. */
+export type WindowEnded = () => string | undefined;
+const stillOpen: WindowEnded = () => undefined;
+
+/** The window's end, read without waiting, for a preload before `start`: until then the window queues no samples, so a zero wait is a timeout until the window closes or fails. */
+export const endedBeforeStart = (view: Pick<WindowView, "nextEvent" | "error">): WindowEnded => () => {
+  const event = view.nextEvent(0);
+  if (event.kind === "failed") return view.error() ?? "the window failed";
+  if (event.kind === "closed" || event.kind === "stopped") return "the window closed while the game loaded";
+  return undefined;
+};
+
 /** Reads every model `scene` names and waits until the window has built them all: the visible scene loads before the game's first step. */
-export const preloadScene = (scene: RenderScene, library: ModelLibrary, pending: () => number) => Effect.gen(function*() {
+export const preloadScene = (scene: RenderScene, library: ModelLibrary, pending: () => number, ended: WindowEnded = stillOpen) => Effect.gen(function*() {
   const began = performance.now();
   for (;;) {
     const drawn = drawScene(scene, library);
     if (drawn.pending === 0 && pending() === 0) return;
+    const reason = ended();
+    if (reason !== undefined) return yield* Effect.die(new Error(reason));
     if (performance.now() - began > PRELOAD_MS) return yield* Effect.die(new Error(`the first scene's models did not load in ${PRELOAD_MS / 1000} s`));
     yield* Effect.sleep("5 millis");
   }
@@ -236,10 +251,12 @@ export const preloadScene = (scene: RenderScene, library: ModelLibrary, pending:
  * reads finish together and their parses then hold the thread for seconds (on gex45, 447 models and 1593 files held it up to 7 s), and the
  * peer on that thread would go silent to the other player.
  */
-export const preloadAll = (render: { readonly preloadModels?: readonly string[]; readonly preloadTextures?: readonly string[] }, library: ModelLibrary) => Effect.gen(function*() {
+export const preloadAll = (render: { readonly preloadModels?: readonly string[]; readonly preloadTextures?: readonly string[] }, library: ModelLibrary, ended: WindowEnded = stillOpen) => Effect.gen(function*() {
   const began = performance.now();
   preloadAssets(render, library);
   while (library.loading() > 0) {
+    const reason = ended();
+    if (reason !== undefined) return yield* Effect.die(new Error(reason));
     if (performance.now() - began > PRELOAD_MS) return yield* Effect.die(new Error(`the game's models did not load in ${PRELOAD_MS / 1000} s`));
     yield* Effect.sleep("5 millis");
   }
