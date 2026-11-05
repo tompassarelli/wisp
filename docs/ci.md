@@ -186,6 +186,7 @@ output as `wisp-ci-sample` and `wisp-ci-sample-failing-fixture`.
 wisp:examples/sample/test/failing-fixture.test.ts checks the same verdict
 locally. Wisp has no self-hosted runner, so its CI never sets
 `private-map-build`.
+Before a landing reaches main, the north lander runs `bun install --frozen-lockfile && bun run test` on a build host (north#360).
 
 The `framework` job runs `bun wisp ci post-merge` ([CI command](ci-command.md)):
 Wisp's own check, its full Bun suite (the sample's tests included, which job
