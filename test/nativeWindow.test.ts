@@ -19,10 +19,12 @@ test.skipIf(!hasDisplay)("[spec docs/native-window-plan.md] a scene Bun never ha
   const window = openNativeWindow({ title: "close mid-frame", width: 320, height: 200 });
   const lent = adoptNativeWindow(window.lend());
   window.start();
+  const anyLate = () => window.metric("lateScenes").some((late) => late === 1);
   let frames = 0;
-  for (let waits = 0; frames < 4 && waits < 20; waits++) if (window.nextEvent(500).kind === "frame") frames++;
-  expect(frames).toBe(4);
-  expect(window.metric("lateScenes").some((late) => late === 1)).toBe(true);
+  const giveUp = performance.now() + 4000;
+  while (!anyLate() && performance.now() < giveUp) if (window.nextEvent(100).kind === "frame") frames++;
+  expect(frames).toBeGreaterThan(0);
+  expect(anyLate()).toBe(true);
   const began = performance.now();
   window.close();
   expect(performance.now() - began).toBeLessThan(1000);

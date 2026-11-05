@@ -81,6 +81,73 @@ impl Surface for Unshown {
     fn present(&self, _: ()) {}
 }
 
+/// A window the compositor shows at 60 Hz: each acquire waits for the next vblank, as `Fifo`'s does.
+struct Vblanks;
+
+impl Surface for Vblanks {
+    type Image = ();
+
+    fn acquire(&mut self) -> Option<()> {
+        let now = crate::clock::now_ns();
+        thread::sleep(Duration::from_nanos((now / PERIOD_NS + 1) * PERIOD_NS - now));
+        Some(())
+    }
+
+    fn draw(&mut self, _: &(), _: u64) {}
+
+    fn present(&self, _: ()) {}
+
+    fn refresh_ms(&self) -> Option<f64> {
+        Some(PERIOD_NS as f64 / 1e6)
+    }
+}
+
+#[test]
+fn a_scene_the_game_never_hands_back_counts_as_late_and_a_stop_returns_every_thread_promptly() {
+    let mailbox = Arc::new(Mailbox::default());
+    let steps = Arc::new(Stepper::default());
+    let metrics = Arc::new(Mutex::new(Metrics::default()));
+    let consumer = {
+        let mailbox = mailbox.clone();
+        thread::spawn(move || {
+            let mut taken = 0;
+            loop {
+                match mailbox.next_event(Duration::from_secs(30)) {
+                    Event::Frame(_) => taken += 1,
+                    ended => return (taken, ended),
+                }
+            }
+        })
+    };
+    let clock_thread = {
+        let (steps, mailbox) = (steps.clone(), mailbox.clone());
+        thread::spawn(move || stepper::run(steps, RealClock, mailbox, || Some(Mode::Game), Quiet))
+    };
+    let render_thread = {
+        let (mailbox, metrics) = (mailbox.clone(), metrics.clone());
+        thread::spawn(move || {
+            let mut frames = FrameLoop::new(Vblanks, RealClock, mailbox.clone(), metrics, steps);
+            while !mailbox.is_stopping() {
+                frames.frame(Mode::Game);
+            }
+        })
+    };
+    thread::sleep(Duration::from_millis(500));
+    let stopping = Instant::now();
+    mailbox.stop();
+    render_thread.join().unwrap();
+    clock_thread.join().unwrap();
+    let (taken, ended) = consumer.join().unwrap();
+    let stopped_in = stopping.elapsed();
+    let late = lock(&metrics).series(Series::LateScenes.index() as u32).to_vec();
+    let late_frames = late.iter().filter(|flag| **flag > 0.0).count();
+    assert!(taken > 0, "the game took no step");
+    assert!(late.len() >= 10, "only {} frames presented in 500 ms at 60 Hz", late.len());
+    assert!(late_frames * 2 >= late.len(), "{late_frames} of {} frames counted late, though the game answered none of its {taken} steps", late.len());
+    assert_eq!(ended, Event::Ended(End::Stopped), "the consumer blocked in next_event is told of the stop");
+    assert!(stopped_in < Duration::from_secs(1), "the render, step clock and game threads took {stopped_in:?} to return after the stop");
+}
+
 fn answer_every_sample(mailbox: &Arc<Mailbox>) -> JoinHandle<u32> {
     let mailbox = mailbox.clone();
     thread::spawn(move || {
