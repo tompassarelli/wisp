@@ -1,5 +1,7 @@
 # Online play on Wisp (plan)
 
+Owners: wisp#103, #107, #112, #245
+
 Status: planned, 30 October 2026, and revised once after an adversarial
 review. This page plans only; each box at the end is its own issue.
 

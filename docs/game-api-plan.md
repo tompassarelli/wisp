@@ -1,5 +1,7 @@
 # Game API (plan)
 
+Owners: wisp#108, #109
+
 Status: planned, 31 October 2026, revised after an adversarial review and
 again when boxes G3 to G8 were written (see "Review"). This page plans only; each box at the end is its own issue.
 

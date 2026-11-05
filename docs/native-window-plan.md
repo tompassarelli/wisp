@@ -1,5 +1,7 @@
 # Native window (plan)
 
+Owners: wisp#105, #107, #112, #113
+
 Status: planned, 30 October 2026, and revised once after an adversarial
 review. The seam between Bun and Rust was revised again the same day, after
 W1's probe failed its bounds three times; see "Seam (revised)", which
