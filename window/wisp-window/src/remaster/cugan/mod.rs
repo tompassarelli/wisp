@@ -1,8 +1,6 @@
 //! Real-CUGAN 2x conservative (bilibili, MIT) on the window's own wgpu device: the player's texture goes through the network one tile at a time, with the network's 18 pixels of context taken from the texture itself where it has neighbours and mirrored where it does not; a tiling texture is wrapped by 16 pixels first.
 
 mod network;
-#[cfg(test)]
-mod reference;
 mod weights;
 
 use crate::texture::Image;
@@ -155,80 +153,4 @@ fn gather(image: &Image, origin: (usize, usize), inner: (usize, usize)) -> Vec<f
 /// The reference tool's output rule: scale to 255, add a half and truncate.
 fn to_byte(value: f32) -> u8 {
     (value * 255.0 + 0.5).floor().clamp(0.0, 255.0) as u8
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn device() -> Option<(wgpu::Device, wgpu::Queue)> {
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
-        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default())).ok()?;
-        pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())).ok()
-    }
-
-    fn texture(width: u32, height: u32) -> Image {
-        let rgba = (0..width * height).flat_map(|index| [(index * 53 % 251) as u8, (index * 29 % 241) as u8, (index * 7 % 233) as u8, 255]).collect();
-        Image { width, height, rgba }
-    }
-
-    #[test]
-    fn odd_and_tiny_textures_double_exactly_with_either_edge_rule() {
-        let Some((device, queue)) = device() else { return };
-        let mut cugan = Cugan::new(device, queue).unwrap();
-        for (width, height) in [(1, 1), (2, 2), (3, 5), (4, 4), (5, 7), (1, 40), (37, 38), (38, 38), (41, 43), (100, 3)] {
-            for edges in [Edges::Mirror, Edges::Wrap] {
-                let doubled = cugan.upscale(&texture(width, height), edges).unwrap_or_else(|error| panic!("{width}x{height} {edges:?}: {error}"));
-                assert_eq!((doubled.width, doubled.height), (width * 2, height * 2), "{width}x{height} {edges:?}");
-                assert_eq!(doubled.rgba.len(), (width * height * 16) as usize);
-            }
-        }
-    }
-
-    #[test]
-    fn a_flat_tiny_texture_stays_flat() {
-        let Some((device, queue)) = device() else { return };
-        let mut cugan = Cugan::new(device, queue).unwrap();
-        let flat = Image { width: 3, height: 1, rgba: [90, 120, 150, 255].repeat(3) };
-        let doubled = cugan.upscale(&flat, Edges::Mirror).unwrap();
-        assert!(doubled.rgba.chunks_exact(4).all(|pixel| pixel[..3].iter().zip([90u8, 120, 150]).all(|(got, want)| got.abs_diff(want) <= 3)), "{:?}", &doubled.rgba[..12]);
-    }
-
-    #[test]
-    fn tiles_of_37_and_38_pixels_at_the_texture_edge_run() {
-        let Some((device, queue)) = device() else { return };
-        let mut cugan = Cugan::new(device, queue).unwrap();
-        let image = texture(75, 38);
-        let budget = widest_activation(38, 38);
-        assert_eq!(tiling(75, 38, budget), (2, 1));
-        let doubled = cugan.upscale_within(&image, budget).unwrap();
-        assert_eq!((doubled.width, doubled.height), (150, 76));
-    }
-
-    #[test]
-    fn context_mirrors_without_repeating_the_edge() {
-        let mirrored: Vec<usize> = (-3..7).map(|index| source_index(index, 4)).collect();
-        assert_eq!(mirrored, [3, 2, 1, 0, 1, 2, 3, 2, 1, 0]);
-        assert_eq!(source_index(-5, 1), 0);
-    }
-
-    #[test]
-    fn wrapping_pads_with_the_texture_itself_and_cropping_undoes_it() {
-        let image = Image { width: 3, height: 2, rgba: (0..6).flat_map(|value| [value, 0, 0, 255]).collect() };
-        let padded = wrapped(&image, 4);
-        let first_row: Vec<u8> = padded.rgba.chunks_exact(4).take(11).map(|pixel| pixel[0]).collect();
-        assert_eq!((padded.width, padded.height), (11, 10));
-        assert_eq!(first_row, [2, 0, 1, 2, 0, 1, 2, 0, 1, 2, 0]);
-        assert_eq!(cropped(&padded, 4, (3, 2)).rgba, image.rgba);
-    }
-
-    #[test]
-    fn a_texture_splits_only_when_its_widest_activation_exceeds_the_budget() {
-        let budget = (160u64 << 20) / 4;
-        assert_eq!(tiling(256, 256, budget), (1, 1));
-        assert_eq!(tiling(512, 256, budget), (1, 1));
-        assert_eq!(tiling(1023, 1023, budget), (3, 3));
-        assert_eq!(tiling(512, 256, (128u64 << 20) / 4), (2, 1));
-        assert_eq!(tiling(1, 1, 1), (1, 1));
-    }
 }

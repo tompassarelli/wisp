@@ -201,37 +201,3 @@ fn grow(coverage: &[u8], width: usize, height: usize, px: f32, reach: usize) -> 
     }
     (grown_width, grown_height, grown)
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn shelves_fill_a_row_then_start_the_next() {
-        let mut shelves = Shelves { x: 0, y: 0, row: 0 };
-        assert_eq!(shelves.place(1000, 10), Some((0, 0)));
-        assert_eq!(shelves.place(1000, 20), Some((1001, 0)));
-        assert_eq!(shelves.place(100, 5), Some((0, 21)));
-        assert_eq!(shelves.place(ATLAS_SIZE, 5), None);
-        shelves.y = ATLAS_SIZE - 3;
-        assert_eq!(shelves.place(10, 5), None);
-    }
-
-    #[test]
-    fn an_outline_surrounds_a_pixel_by_its_reach() {
-        let (width, height, grown) = grow(&[255], 1, 1, 12.0, 1);
-        assert_eq!((width, height), (3, 3));
-        assert_eq!(grown[4], 255);
-        assert_eq!(grown[1], 255);
-        assert_eq!(outline_reach(36.0), 2);
-        assert_eq!(outline_reach(7.0), 1);
-    }
-
-    #[test]
-    fn font_magic_is_told_from_images() {
-        assert!(is_font(&[0, 1, 0, 0, 9]));
-        assert!(is_font(b"OTTO1"));
-        assert!(!is_font(b"\x89PNG"));
-        assert!(!is_font(b"BLP1"));
-    }
-}

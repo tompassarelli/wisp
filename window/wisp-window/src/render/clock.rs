@@ -6,16 +6,12 @@ use std::time::Instant;
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum SceneClock {
     Since(Instant),
-    #[cfg(test)]
-    At(f32),
 }
 
 impl SceneClock {
     pub(crate) fn seconds(&self) -> f32 {
         match self {
             Self::Since(started) => started.elapsed().as_secs_f32(),
-            #[cfg(test)]
-            Self::At(seconds) => *seconds,
         }
     }
 }

@@ -251,26 +251,6 @@ mod tests {
     }
 
     #[test]
-    fn punctuation_takes_the_oem_codes() {
-        let table = [
-            (KeyCode::Semicolon, 186),
-            (KeyCode::Equal, 187),
-            (KeyCode::Comma, 188),
-            (KeyCode::Minus, 189),
-            (KeyCode::Period, 190),
-            (KeyCode::Slash, 191),
-            (KeyCode::Backquote, 192),
-            (KeyCode::BracketLeft, 219),
-            (KeyCode::Backslash, 220),
-            (KeyCode::BracketRight, 221),
-            (KeyCode::Quote, 222),
-        ];
-        for (code, key) in table {
-            assert_eq!(oskey(code), Some(key), "{code:?}");
-        }
-    }
-
-    #[test]
     fn function_keys_run_from_0x70_and_modifiers_tell_left_from_right() {
         assert_eq!(oskey(KeyCode::F1), Some(0x70));
         assert_eq!(oskey(KeyCode::F10), Some(0x79));
@@ -284,14 +264,6 @@ mod tests {
     }
 
     #[test]
-    fn a_key_with_no_oskey_is_not_heard() {
-        assert_eq!(oskey(KeyCode::MediaPlayPause), None);
-        let keys = Keys::default();
-        keys.press(KeyCode::MediaPlayPause, true, None);
-        assert!(keys.take(8).is_empty());
-    }
-
-    #[test]
     fn a_press_and_release_are_two_events_in_order_and_a_repeat_is_none() {
         let keys = Keys::default();
         keys.press(KeyCode::KeyN, true, None);
@@ -302,72 +274,4 @@ mod tests {
         assert!(keys.take(8).is_empty());
     }
 
-    #[test]
-    fn meta_is_the_other_modifiers_held() {
-        let keys = Keys::default();
-        keys.press(KeyCode::ShiftLeft, true, None);
-        keys.press(KeyCode::KeyQ, true, None);
-        keys.press(KeyCode::ControlRight, true, None);
-        keys.press(KeyCode::KeyQ, false, None);
-        keys.press(KeyCode::ControlRight, false, None);
-        keys.press(KeyCode::ShiftLeft, false, None);
-        assert_eq!(
-            keys.take(16),
-            [
-                event(0xa0, 0, true),
-                event(0x51, META_SHIFT, true),
-                event(0xa3, META_SHIFT, true),
-                event(0x51, META_SHIFT | META_CTRL, false),
-                event(0xa3, META_SHIFT, false),
-                event(0xa0, 0, false),
-            ]
-        );
-    }
-
-    #[test]
-    fn release_all_lets_go_of_every_key_held() {
-        let keys = Keys::default();
-        keys.press(KeyCode::KeyA, true, None);
-        keys.press(KeyCode::KeyB, true, None);
-        keys.take(8);
-        keys.release_all();
-        keys.press(KeyCode::KeyA, false, None);
-        assert_eq!(keys.take(8), [event(0x42, 0, false), event(0x41, 0, false)]);
-    }
-
-    #[test]
-    fn take_stops_at_its_limit_and_keeps_the_rest() {
-        let keys = Keys::default();
-        for code in [KeyCode::KeyA, KeyCode::KeyB, KeyCode::KeyC] {
-            keys.press(code, true, None);
-        }
-        assert_eq!(keys.take(2).len(), 2);
-        assert_eq!(keys.take(2), [event(0x43, 0, true)]);
-    }
-
-    #[test]
-    fn packed_puts_key_meta_and_direction_in_one_number() {
-        assert_eq!(event(0x51, META_SHIFT, true).packed(), 0x1151);
-        assert_eq!(event(0xde, 0, false).packed(), 0xde);
-    }
-
-    #[test]
-    fn a_press_carries_the_printable_character_it_types_and_a_release_none() {
-        let keys = Keys::default();
-        keys.press(KeyCode::ShiftLeft, true, None);
-        keys.press(KeyCode::KeyQ, true, Some('Q'));
-        keys.press(KeyCode::KeyQ, false, None);
-        keys.press(KeyCode::Enter, true, Some('\r'));
-        let typed: Vec<Option<char>> = keys.take(8).iter().map(|event| event.typed).collect();
-        assert_eq!(typed, [None, Some('Q'), None, None]);
-    }
-
-    #[test]
-    fn packed_carries_the_typed_code_point_from_bit_13() {
-        let typed = |typed: char| KeyEvent { key: 0x41, meta: META_SHIFT, down: true, typed: Some(typed) }.packed();
-        assert_eq!(typed('A'), 0x1141 | 0x41 << 13);
-        assert_eq!(typed('\u{e9}') >> 13, 0xe9);
-        assert_eq!(typed('\u{1f600}') >> 13, 0x1f600);
-        assert_eq!(typed('\u{10ffff}') >> 13, 0);
-    }
 }

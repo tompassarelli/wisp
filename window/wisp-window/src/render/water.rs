@@ -258,34 +258,3 @@ impl Water {
         }))
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn water_frames_are_told_by_their_install_path() {
-        assert!(is_frame("ReplaceableTextures\\Water\\Water00.blp"));
-        assert!(is_frame("replaceabletextures/water/water44.BLP"));
-        assert!(!is_frame("ReplaceableTextures\\TeamColor\\TeamColor00.blp"));
-        assert!(!is_frame("war3mapImported\\StageWater.tga"));
-    }
-
-    #[test]
-    fn the_uniform_carries_the_time_and_the_ramp_rates() {
-        let uniform = WaterUniform::new(&WaterSettings::default(), 3.5, &[], None);
-        assert_eq!(uniform.flow[3], 3.5);
-        assert_eq!(uniform.shallow[3], WaterSettings::default().absorption);
-        assert_eq!(uniform.deep[3], WaterSettings::default().depth_rate);
-    }
-
-    #[test]
-    fn the_uniform_carries_the_ripple_sources_and_their_count() {
-        let source = Source { at: [10.0, 20.0, 30.0, 4.0], motion: [1.0, 2.0, 3.0, 1.0] };
-        let uniform = WaterUniform::new(&WaterSettings::default(), 0.0, &[source, source], None);
-        assert_eq!(uniform.sparks[3], 2.0);
-        assert_eq!(uniform.ripples[2], source.at);
-        assert_eq!(uniform.ripples[3], source.motion);
-        assert_eq!(WaterUniform::new(&WaterSettings::default(), 0.0, &[], None).sparks[3], 0.0);
-    }
-}

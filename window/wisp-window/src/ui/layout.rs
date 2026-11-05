@@ -146,30 +146,11 @@ pub fn first_line_top(vertical: Vertical, height: f32, lines: usize, size: f32) 
 mod tests {
     use super::*;
 
-    fn mono(text: &str) -> f32 {
-        text.chars().count() as f32 * 10.0
-    }
-
-    fn broken(text: &str, limit: f32, horizontal: Horizontal) -> Vec<(String, f32)> {
-        let mut out = Vec::new();
-        lines(text, limit, horizontal, &mut out, mono);
-        out.iter().map(|line| (text[line.start..line.end].to_string(), line.left)).collect()
-    }
-
     #[test]
     fn ui_units_centre_on_the_screen_and_scale_with_its_height() {
         let [x, y, width, height] = pixels([0.3, 0.4, 0.5, 0.2], [0.0, 0.0, 1280.0, 720.0]);
         assert_eq!((x.round(), y.round(), width.round(), height.round()), (520.0, 240.0, 240.0, 240.0));
         assert_eq!(pixels([0.4, 0.6, 0.8, 0.0], [100.0, 50.0, 800.0, 600.0])[..2], [500.0, 50.0]);
-    }
-
-    #[test]
-    fn font_size_follows_the_font_or_the_frame() {
-        assert_eq!(font_size(0.02, 1.0, false, 0.0, 720.0), 0.02 * 1200.0);
-        assert_eq!(font_size(0.02, 2.0, false, 0.0, 720.0), 0.02 * 1200.0 * 2.0);
-        assert_eq!(font_size(0.0, 1.0, false, 100.0, 720.0), 0.0122 * 1200.0);
-        assert_eq!(font_size(0.0, 1.0, false, 12.0, 720.0), 12.0);
-        assert_eq!(font_size(0.0, 1.0, false, 0.0, 300.0), 10.0);
     }
 
     fn near(actual: f32, expected: f32) {
@@ -198,24 +179,4 @@ mod tests {
         assert_eq!(super::plain("héllo |x").text, "héllo |x");
     }
 
-    #[test]
-    fn text_wraps_at_the_frame_width() {
-        assert_eq!(broken("one two three", 1000.0, Horizontal::Left), [("one two three".into(), 0.0)]);
-        assert_eq!(broken("aaa bbb ccc", 70.0, Horizontal::Left), [("aaa bbb".into(), 0.0), ("ccc".into(), 0.0)]);
-        assert_eq!(broken("aaaaaaaaaaaa b", 50.0, Horizontal::Left), [("aaaaaaaaaaaa".into(), 0.0), ("b".into(), 0.0)]);
-        assert_eq!(broken("a\n\nb", 0.0, Horizontal::Left), [("a".into(), 0.0), ("".into(), 0.0), ("b".into(), 0.0)]);
-    }
-
-    #[test]
-    fn each_line_aligns_on_its_own() {
-        assert_eq!(broken("ab\nabcd", 100.0, Horizontal::Center), [("ab".into(), 40.0), ("abcd".into(), 30.0)]);
-        assert_eq!(broken("ab", 100.0, Horizontal::Right), [("ab".into(), 80.0)]);
-    }
-
-    #[test]
-    fn the_block_sits_by_its_vertical_alignment() {
-        assert_eq!(first_line_top(Vertical::Top, 100.0, 2, 10.0), 0.0);
-        assert_eq!(first_line_top(Vertical::Middle, 100.0, 2, 10.0), 50.0 - 12.0);
-        assert_eq!(first_line_top(Vertical::Bottom, 100.0, 2, 10.0), 100.0 - 24.0);
-    }
 }

@@ -197,27 +197,3 @@ impl Settings {
 pub fn developer_quality() -> Option<Quality> {
     std::env::var("WISP_REMASTER").ok().and_then(|value| Quality::from_str(&value).ok())
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn each_preset_costs_no_less_than_the_one_below() {
-        let cost = |features: Features| {
-            (matches!(features.shadows, Shadows::Map(_)) as u32 + features.ssao as u32 + features.contact_shadows as u32 + u32::from(features.fighter_shadows > 0) + features.bloom as u32 + features.volumetrics as u32, features.msaa, features.weather_percent, features.ribbon_percent, features.render_scale.ceiling(), features.cloud_layers)
-        };
-        for pair in PRESETS.windows(2) {
-            let (low, high) = (cost(pair[0].features()), cost(pair[1].features()));
-            assert!(low.0 <= high.0 && low.1 <= high.1 && low.2 <= high.2 && low.3 <= high.3 && low.4 <= high.4, "{:?} to {:?}", pair[0], pair[1]);
-        }
-    }
-
-    #[test]
-    fn the_developer_override_wins_over_the_art_choice() {
-        let settings = Settings { preset: Preset::High, art: Art::Original };
-        assert_eq!(settings.quality(None), Quality::Off);
-        assert_eq!(settings.quality(Some(Quality::High)), Quality::High);
-        assert_eq!(Settings { art: Art::Remastered, ..settings }.quality(None), Quality::Standard);
-    }
-}

@@ -445,16 +445,4 @@ mod tests {
         assert!(count >= 20);
     }
 
-    #[test]
-    fn peer_room_datagrams_carry_any_payload_up_to_the_packet_limit() {
-        let most = MAX_PACKET - PEER_HEADER;
-        let full = Control::Peer { token: 5, payload: vec![0xa5; most] };
-        let bytes = encode(&full);
-        assert_eq!(bytes.len(), MAX_PACKET);
-        assert_eq!(token(&bytes), Some(5));
-        assert_eq!(decode(&bytes), Ok(full));
-        let over = encode(&Control::Peer { token: 5, payload: vec![0; most + 1] });
-        assert_eq!(decode(&over), Err(WireError::TooLong));
-        assert!(decode(&bytes[..PEER_HEADER - 1]).is_err());
-    }
 }

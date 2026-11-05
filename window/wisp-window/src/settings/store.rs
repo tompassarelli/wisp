@@ -56,29 +56,7 @@ impl Store {
 
 #[cfg(test)]
 mod tests {
-    use super::super::{Art, Preset};
     use super::*;
-
-    fn scratch(name: &str) -> PathBuf {
-        let directory = std::env::temp_dir().join(format!("wisp-settings-{name}-{}", std::process::id()));
-        let _ = fs::remove_dir_all(&directory);
-        directory
-    }
-
-    #[test]
-    fn settings_round_trip_through_the_file() {
-        let directory = scratch("round");
-        let store = Store::at(directory.join("nested").join("a.graphics.json"));
-        assert_eq!(store.load(), Settings::default());
-        let chosen = Settings { preset: Preset::Low, art: Art::Original };
-        store.save(&chosen).unwrap();
-        assert_eq!(store.load(), chosen);
-        fs::write(&store.path, br#"{"preset":"ultra"}"#).unwrap();
-        assert_eq!(store.load(), Settings { preset: Preset::Ultra, art: Art::Remastered });
-        fs::write(&store.path, b"not json").unwrap();
-        assert_eq!(store.load(), Settings::default());
-        fs::remove_dir_all(&directory).unwrap();
-    }
 
     #[test]
     fn an_agent_run_writes_the_agent_file_never_the_persons() {

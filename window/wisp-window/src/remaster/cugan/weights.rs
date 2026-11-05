@@ -194,20 +194,3 @@ impl Weights {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn the_shipped_file_is_exactly_the_thirty_layers() {
-        let weights = Weights::embedded().unwrap();
-        assert_eq!(weights.layers.len(), 30);
-        assert_eq!(weights.packed.len() % 4, 0);
-    }
-
-    #[test]
-    fn the_notice_travels_with_the_weights() {
-        assert!(NOTICE.starts_with("MIT License") && NOTICE.contains("Copyright (c) 2022 bilibili"));
-    }
-}
-

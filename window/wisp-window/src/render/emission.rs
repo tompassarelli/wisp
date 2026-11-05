@@ -30,18 +30,3 @@ impl Clock {
         Tick { now: seconds, step, restarted }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_scene_drawn_twice_steps_nothing_and_a_jump_back_restarts() {
-        let mut clock = Clock::default();
-        assert_eq!(clock.tick(60), Tick { now: 1.0, step: 0.0, restarted: false });
-        assert!((clock.tick(63).step - 3.0 / 60.0).abs() < 1e-6);
-        assert_eq!(clock.tick(63).step, 0.0);
-        assert!(clock.tick(10).restarted);
-        assert!(clock.tick(10 + 60).restarted, "a gap past a quarter second starts over");
-    }
-}

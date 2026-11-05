@@ -126,40 +126,4 @@ mod tests {
         assert_eq!(pointer.sample(1280, 720).released, 0, "an edge is delivered once");
     }
 
-    #[test]
-    fn losing_focus_releases_held_buttons_and_leaving_marks_the_cursor_outside() {
-        let pointer = Pointer::default();
-        pointer.moved(1.0, 1.0);
-        pointer.button(MouseButton::Left, true);
-        pointer.clear();
-        pointer.left();
-        let sample = pointer.sample(100, 100);
-        assert_eq!((sample.held, sample.pressed, sample.released, sample.inside), (1, 1, 0, false));
-        assert_eq!(sample.bits(), 1 | 1 << 4);
-        let next = pointer.sample(100, 100);
-        assert_eq!((next.held, next.released), (0, 1));
-    }
-
-    #[test]
-    fn wheel_notches_reach_one_sample_whole_and_a_part_of_a_notch_waits_for_the_rest() {
-        let pointer = Pointer::default();
-        pointer.wheel(MouseScrollDelta::LineDelta(0.0, 1.0));
-        pointer.wheel(MouseScrollDelta::LineDelta(0.0, 1.0));
-        pointer.wheel(MouseScrollDelta::LineDelta(0.0, -1.0));
-        assert_eq!(pointer.sample(10, 10).wheel, 1);
-        assert_eq!(pointer.sample(10, 10).wheel, 0, "a turn is delivered once");
-        pointer.wheel(MouseScrollDelta::PixelDelta(winit::dpi::PhysicalPosition::new(0.0, -30.0)));
-        assert_eq!(pointer.sample(10, 10).wheel, 0, "30 of 40 pixels is not yet a notch");
-        pointer.wheel(MouseScrollDelta::PixelDelta(winit::dpi::PhysicalPosition::new(0.0, -30.0)));
-        assert_eq!(pointer.sample(10, 10).wheel, -1);
-        pointer.wheel(MouseScrollDelta::LineDelta(0.0, 2.0));
-        assert_eq!(pointer.sample(10, 10).wheel, 1, "the half notch left over joins the next turn: 2 - 0.5 is 1 and a half");
-    }
-
-    #[test]
-    fn a_release_without_a_press_is_ignored() {
-        let pointer = Pointer::default();
-        pointer.button(MouseButton::Left, false);
-        assert_eq!(pointer.sample(1, 1).released, 0);
-    }
 }

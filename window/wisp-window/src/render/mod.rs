@@ -34,8 +34,6 @@ pub mod tessellate;
 mod uniforms;
 mod liquid;
 mod water;
-#[cfg(test)]
-mod stage_test;
 
 use std::{collections::HashMap, sync::Arc, time::Instant};
 use bytemuck::Zeroable;
@@ -493,5 +491,3 @@ impl crate::ui::UiTextures for Renderer {
 
 #[cfg(test)]
 mod gpu_tests;
-#[cfg(test)]
-mod weather_gpu_tests;

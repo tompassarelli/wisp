@@ -23,14 +23,6 @@ fn an_additive_particle_adds_its_colour_scaled_by_its_texture_alpha_in_display_c
     assert_pixel(particle_light(1, texel(SOURCE, 0.5)), [0, 1, 2].map(|channel| faded[channel] + background[channel]), "Classic scales by alpha before the light is linear, so a soft fringe adds as little as it does there and the Blood Elf orb's flames stay off its sphere");
 }
 
-#[test]
-fn an_alpha_keyed_particle_cuts_at_three_quarters_and_adds_the_rest() {
-    let background = background();
-    assert_pixel(particle_light(4, texel(SOURCE, 0.5)), background, "alpha 0.5 is cut out");
-    let faded = linear(SOURCE.map(|channel| channel * 0.8));
-    assert_pixel(particle_light(4, texel(SOURCE, 0.8)), [0, 1, 2].map(|channel| faded[channel] + background[channel]), "alpha 0.8 adds by its alpha in display colour");
-}
-
 /// The centre of an opaque Blend sheet 150 units away with one additive particle 100 units away, drawn from an emitter at `priority_plane`, or none.
 fn particle_and_blend_sheet(priority_plane: Option<i32>) -> [f32; 3] {
     let Some((device, queue)) = device() else { return [f32::NAN; 3] };

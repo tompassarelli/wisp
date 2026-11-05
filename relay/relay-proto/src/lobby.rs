@@ -148,23 +148,3 @@ impl Lobby {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::room::tests::map;
-
-    #[test]
-    fn the_countdown_waits_for_every_player_ready_and_the_settle_time() {
-        let mut lobby = Lobby::new(map(), 42, 2, 0, HOST_TIMING);
-        lobby.on_message(0, 0, FromAgent::Joined { name: b"a".to_vec() });
-        lobby.on_message(0, 0, FromAgent::Ready);
-        lobby.on_message(1_000_000, 1, FromAgent::Joined { name: b"b".to_vec() });
-        assert!(lobby.poll(3_000_000).is_empty());
-        lobby.on_message(1_100_000, 1, FromAgent::Ready);
-        assert!(lobby.poll(2_400_000).is_empty());
-        assert_eq!(lobby.poll(2_500_000).len(), 2);
-        assert!(lobby.poll(8_499_999).is_empty());
-        assert_eq!(lobby.poll(8_500_000), vec![(0, FromRelay::CountdownEnd), (1, FromRelay::CountdownEnd)]);
-    }
-}

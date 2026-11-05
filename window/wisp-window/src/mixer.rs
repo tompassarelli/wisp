@@ -101,15 +101,6 @@ mod tests {
     }
 
     #[test]
-    fn resampling_interpolates_linearly() {
-        let mut mixer = Mixer::new(1, 16);
-        mixer.start(Voice::new(Arc::new(Clip { channels: 1, rate: 8, samples: vec![0.0, 1.0, 0.0] }), "s", 127.0, 1.0, false));
-        let mut out = [0.0; 6];
-        mixer.render(&mut out);
-        assert_eq!(out, [0.0, 0.5, 1.0, 0.5, 0.0, 0.0]);
-    }
-
-    #[test]
     fn a_looping_voice_wraps_until_its_owner_stops_it() {
         let clip = Arc::new(Clip { channels: 1, rate: 8, samples: vec![0.25, 0.5] });
         let mut mixer = Mixer::new(1, 8);

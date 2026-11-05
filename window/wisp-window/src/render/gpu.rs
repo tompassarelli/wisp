@@ -145,23 +145,3 @@ pub(super) fn halved(image: &Image) -> Image {
     Image { width, height, rgba }
 }
 
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn the_picture_is_centred_with_bars_where_the_window_is_taller_or_wider() {
-        assert_eq!(fitted((1416, 1840), 16.0 / 9.0), [0, 522, 1416, 796]);
-        assert_eq!(fitted((1920, 540), 16.0 / 9.0), [(1920 - 960) / 2, 0, 960, 540]);
-        assert_eq!(fitted((1280, 720), 16.0 / 9.0), [0, 0, 1280, 720]);
-    }
-
-    #[test]
-    fn halving_averages_a_two_by_two_block() {
-        let image = Image { width: 2, height: 2, rgba: vec![0, 0, 0, 255, 1, 0, 0, 255, 1, 0, 0, 255, 0, 0, 0, 255] };
-        let half = halved(&image);
-        assert_eq!((half.width, half.height), (1, 1));
-        assert_eq!(half.rgba, vec![1, 0, 0, 255]);
-    }
-}

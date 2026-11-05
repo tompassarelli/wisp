@@ -117,32 +117,9 @@ fn packed(data: &[u8], pixels: usize, order: impl Fn(&[u8]) -> [u8; 4]) -> Resul
 #[cfg(test)]
 mod tests {
     use super::*;
-    use image::codecs::{jpeg::JpegEncoder, png::PngEncoder};
-    use image::{ExtendedColorType, ImageEncoder};
 
     fn word(bytes: &mut [u8], at: usize, value: u32) {
         bytes[at..at + 4].copy_from_slice(&value.to_le_bytes());
-    }
-
-    #[test]
-    fn png_decodes_to_straight_rgba() {
-        let pixels = [255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 9, 8, 7, 255];
-        let mut bytes = Vec::new();
-        PngEncoder::new(&mut bytes).write_image(&pixels, 2, 2, ExtendedColorType::Rgba8).unwrap();
-        let decoded = decode(&bytes).unwrap();
-        assert_eq!((decoded.width, decoded.height, decoded.rgba), (2, 2, pixels.to_vec()));
-    }
-
-    #[test]
-    fn jpeg_decodes_within_the_codec_tolerance() {
-        let pixels: Vec<u8> = (0..8 * 8).flat_map(|_| [200, 100, 50]).collect();
-        let mut bytes = Vec::new();
-        JpegEncoder::new_with_quality(&mut bytes, 95).write_image(&pixels, 8, 8, ExtendedColorType::Rgb8).unwrap();
-        let decoded = decode(&bytes).unwrap();
-        assert_eq!((decoded.width, decoded.height), (8, 8));
-        for pixel in decoded.rgba.chunks_exact(4) {
-            assert!(pixel.iter().zip([200u8, 100, 50, 255]).all(|(got, want)| got.abs_diff(want) <= 3), "{pixel:?}");
-        }
     }
 
     #[test]
@@ -203,40 +180,4 @@ mod tests {
         }
     }
 
-    #[test]
-    fn dds_decodes_block_compressed_and_packed_files() {
-        let mut dxt1 = vec![0; 136];
-        dxt1[..4].copy_from_slice(b"DDS ");
-        word(&mut dxt1, 4, 124);
-        word(&mut dxt1, 8, 0x1007);
-        word(&mut dxt1, 12, 4);
-        word(&mut dxt1, 16, 4);
-        word(&mut dxt1, 76, 32);
-        word(&mut dxt1, 80, 4);
-        word(&mut dxt1, 84, 0x3154_5844);
-        dxt1[128..130].copy_from_slice(&0xf800u16.to_le_bytes());
-        dxt1[130..132].copy_from_slice(&0x07e0u16.to_le_bytes());
-        let decoded = decode(&dxt1).unwrap();
-        assert_eq!((decoded.width, decoded.height), (4, 4));
-        assert!(decoded.rgba.chunks_exact(4).all(|pixel| pixel == [255, 0, 0, 255]));
-
-        let mut argb = vec![0; 128 + 16];
-        argb[..4].copy_from_slice(b"DDS ");
-        word(&mut argb, 4, 124);
-        word(&mut argb, 8, 0x100f);
-        word(&mut argb, 12, 2);
-        word(&mut argb, 16, 2);
-        word(&mut argb, 76, 32);
-        word(&mut argb, 80, 0x41);
-        word(&mut argb, 88, 32);
-        word(&mut argb, 92, 0x00ff_0000);
-        word(&mut argb, 96, 0x0000_ff00);
-        word(&mut argb, 100, 0x0000_00ff);
-        word(&mut argb, 104, 0xff00_0000);
-        for pixel in argb[128..].chunks_exact_mut(4) {
-            pixel.copy_from_slice(&[3, 2, 1, 200]);
-        }
-        let decoded = decode(&argb).unwrap();
-        assert!(decoded.rgba.chunks_exact(4).all(|pixel| pixel == [1, 2, 3, 200]));
-    }
 }

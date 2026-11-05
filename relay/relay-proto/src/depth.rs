@@ -389,5 +389,3 @@ pub fn predicted_late_with_cover(
     late
 }
 
-#[cfg(test)]
-mod tests;

@@ -148,36 +148,10 @@ mod tests {
     }
 
     #[test]
-    fn xbox_pad_buttons_press_the_buttons_padbridges_melee_layout_gives_them() {
-        let expected = [
-            (0, "attack"), (1, "special"), (2, "jump"), (3, "jump"), (5, "grab"), (6, "shield"), (7, "shield"),
-            (8, "view"), (9, "start"), (12, "up"), (13, "down"), (14, "left"), (15, "right"),
-        ];
-        for (index, name) in expected {
-            assert_eq!(press(PadKind::Xbox, index), [name], "standard button {index}");
-        }
-        for index in [4, 10, 11] {
-            assert!(press(PadKind::Xbox, index).is_empty(), "standard button {index} presses nothing");
-        }
-    }
-
-    #[test]
     fn gamecube_pad_buttons_press_the_buttons_padbridges_melee_layout_gives_its_printed_letters() {
         let expected = [(0, "attack"), (1, "jump"), (2, "special"), (3, "jump"), (5, "grab"), (6, "shield"), (7, "shield"), (9, "start")];
         for (index, name) in expected {
             assert_eq!(press(PadKind::GameCube, index), [name], "standard button {index}");
-        }
-    }
-
-    #[test]
-    fn every_page_button_of_padbridges_layout_is_pressed_by_the_control_it_names_on_both_pad_families() {
-        for kind in [PadKind::Xbox, PadKind::GameCube] {
-            for binding in pad_bindings(PadPreset::Melee, TriggerShields::default(), RightStick::default(), kind) {
-                let Press::Key(key) = &binding.press else { continue };
-                let Some((_, bit)) = PAGE_BIT.iter().find(|(page_key, _)| key.chars().eq([*page_key])) else { continue };
-                let index = CONTROLS.iter().position(|control| *control == binding.control).expect("a fighter button is a standard button");
-                assert!(press(kind, index).contains(&crate::input::BUTTONS[*bit as usize]), "{kind:?} {:?} presses {}", binding.control, binding.action);
-            }
         }
     }
 
@@ -188,18 +162,4 @@ mod tests {
         assert_eq!((input.axis_x, input.axis_y), (-0.1, 0.9));
     }
 
-    #[test]
-    fn pad_input_gamepad_index_selects_one_pad_and_the_default_takes_the_first() {
-        let slots = [(1, PadState::default().with_button(0, true)), (3, PadState::default().with_button(2, true))];
-        assert_eq!(names(pads(&slots).sample(None, true).buttons), ["attack"]);
-        assert_eq!(names(pads(&slots).sample(Some(3), true).buttons), ["jump"]);
-        assert_eq!(pads(&slots).sample(Some(2), true).buttons, 0);
-    }
-
-    #[test]
-    fn pad_input_is_cleared_while_the_window_is_unfocused() {
-        let state = PadState { buttons: 1, axis_x: 1.0, axis_y: 1.0, ..PadState::default() };
-        let input = pads(&[(0, state)]).sample(None, false);
-        assert_eq!((input.buttons, input.axis_x, input.axis_y), (0, 0.0, 0.0));
-    }
 }

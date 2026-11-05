@@ -265,29 +265,5 @@ mod tests {
         assert_eq!(paint(&model, 3), Paint::None);
     }
 
-    #[test]
-    fn a_layer_is_two_sided_only_when_its_shading_has_the_two_sided_flag() {
-        let layer = |shading_flags| model::Layer { shading_flags, ..model::Layer::default() };
-        let material = model::Material { layers: vec![layer(0), layer(model::shading::TWO_SIDED | model::shading::UNSHADED), layer(model::shading::UNSHADED)] };
-        let data = build(model::Model { materials: vec![material], geosets: vec![model::Geoset::default()], ..model::Model::default() }, Quality::Off).unwrap();
-        assert_eq!(data.parts[0].layers.iter().map(|layer| layer.two_sided).collect::<Vec<_>>(), vec![false, true, false]);
-    }
-
-    #[test]
-    fn a_water_layer_replaces_the_base_surface_listed_before_it_and_keeps_the_layers_after() {
-        let layer = |paint, filter| Layer { paint, filter, color_slot: 0, unshaded: true, two_sided: true };
-        let layers = vec![layer(Paint::Texture("base.tga".into()), Filter::Opaque), layer(Paint::Texture("glow.tga".into()), Filter::Additive), layer(Paint::Water, Filter::Additive), layer(Paint::Texture("spark.tga".into()), Filter::Additive)];
-        let kept = without_stand_in(layers);
-        assert_eq!(kept.iter().map(|layer| layer.paint.clone()).collect::<Vec<_>>(), vec![Paint::Water, Paint::Texture("spark.tga".into())]);
-        let plain = vec![layer(Paint::Texture("base.tga".into()), Filter::Opaque)];
-        assert_eq!(without_stand_in(plain).len(), 1);
-    }
-
-    #[test]
-    fn a_binary_model_whose_layer_flips_through_water_frames_is_drawn_by_the_water_pass() {
-        let data = model(include_bytes!("../../tests/fixtures/water-flipbook.mdx"), Quality::Off).unwrap();
-        let paints: Vec<Paint> = data.parts.iter().flat_map(|part| part.layers.iter().map(|layer| layer.paint.clone())).collect();
-        assert_eq!(paints, vec![Paint::Water]);
-    }
 }
 

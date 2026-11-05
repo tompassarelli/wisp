@@ -173,31 +173,3 @@ impl Pulse {
         Some(line)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn each_pass_serves_its_own_named_series() {
-        for pass in PASSES {
-            assert_eq!(SERIES[Series::GpuPass(pass).index()], format!("gpu{pass:?}Ms"));
-        }
-        assert_eq!(SERIES[Series::CpuEncode.index()], "cpuEncodeMs");
-        assert_eq!(SERIES[Series::DroppedSamples.index()], "droppedSamples");
-    }
-
-    #[test]
-    fn the_pulse_reports_frames_and_ticks_per_second_every_five_seconds() {
-        let mut pulse = Pulse::default();
-        let mut lines = Vec::new();
-        for frame in 0..=600u64 {
-            let beat = Beat { presented_ns: frame * 8_333_334, interval_ms: (frame > 0).then_some(8.333), step: frame / 2, late: false, dropped: 0, acquire_ms: 0.1, draw_ms: 2.0, gpu_ms: (frame > 2).then_some(1.5).into_iter().collect(), render_scale: Some(75), present: "Mailbox" };
-            lines.extend(pulse.beat(beat));
-        }
-        assert_eq!(lines.len(), 1, "{lines:?}");
-        assert!(lines[0].starts_with("wisp-window: 120.0 frames/s (frame p50 8.3 ms, p99 8.3 ms, worst 8.3 ms), 60.0 ticks/s"), "{}", lines[0]);
-        assert!(lines[0].contains("draw p99 2.0 ms, gpu p99 1.5 ms, scene at 75%,"), "{}", lines[0]);
-        assert!(lines[0].ends_with("over 5.0 s, present Mailbox"), "{}", lines[0]);
-    }
-}

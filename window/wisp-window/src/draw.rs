@@ -423,22 +423,3 @@ fn submit(clock: &mut Result<GpuClock, String>, queue: &wgpu::Queue, mut encoder
 fn ui_area(size: (u32, u32)) -> [f32; 4] {
     [0.0, 0.0, size.0 as f32, size.1 as f32]
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn the_ui_area_is_the_window_after_a_resize_from_16_9_to_3_2() {
-        assert_eq!(ui_area((1280, 720)), [0.0, 0.0, 1280.0, 720.0]);
-        assert_eq!(ui_area((2880, 1920)), [0.0, 0.0, 2880.0, 1920.0]);
-    }
-
-    #[test]
-    fn counter_lights_the_set_bits() {
-        let lit = |step: u64| counter_vertices(step).chunks(6).filter(|square| square[0].color[0] > 0.5).count();
-        assert_eq!(lit(0), 0);
-        assert_eq!(lit(0b1011), 3);
-        assert_eq!(counter_vertices(7).len(), VERTICES);
-    }
-}

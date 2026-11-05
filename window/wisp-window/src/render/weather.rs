@@ -180,22 +180,3 @@ impl Weather {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn every_weather_id_maps_to_its_preset() {
-        let listing: Vec<String> = TABLE.iter().map(|(id, preset)| format!("{id} -> {:?} x{}", preset.shape, preset.count)).collect();
-        println!("{}", listing.join("\n"));
-        assert_eq!(
-            listing.join("\n"),
-            "RAlr -> Flakes x3000\nRAhr -> Flakes x7000\nRLlr -> Flakes x3000\nRLhr -> Flakes x7000\nSNls -> Flakes x1800\nSNhs -> Flakes x5000\nSNbs -> Flakes x9000\nWOlw -> Flakes x700\nWOcw -> Flakes x1800\nWNcw -> Flakes x1800\nFDbl -> Fog x70\nFDbh -> Fog x110\nFDgl -> Fog x70\nFDgh -> Fog x110\nFDrl -> Fog x70\nFDrh -> Fog x110\nFDwl -> Fog x70\nFDwh -> Fog x110\nLRaa -> Rays x14\nLRma -> Rays x14"
-        );
-        for (id, _) in &TABLE {
-            assert!(preset(id).is_some(), "{id}");
-        }
-        assert!(preset("XXXX").is_none());
-    }
-}

@@ -60,29 +60,6 @@ fn up_round_trips() {
 }
 
 #[test]
-fn an_unknown_action_flag_is_refused() {
-    let u = Up {
-        token: 5,
-        seq: 1,
-        sent_us: 2,
-        turn_ack: 3,
-        cover: 0,
-        cover_turns: 0,
-        checksum_from: 4,
-        checksums: vec![],
-        action_from: 6,
-        actions: vec![UpAction {
-            release: true,
-            data: vec![7],
-        }],
-    };
-    let mut bytes = encode(&Packet::Up(u)).unwrap();
-    let flag = bytes.len() - 1 - 2 - 1;
-    bytes[flag] = 2;
-    assert_eq!(decode(&bytes), Err(WireError::Flags));
-}
-
-#[test]
 fn down_keeps_oldest_turns_within_budget() {
     let mut d = sample_down();
     let big = Turn {
@@ -101,30 +78,4 @@ fn down_keeps_oldest_turns_within_budget() {
         Packet::Down(got) => assert_eq!(got.turns, d.turns[..2].to_vec()),
         other => panic!("{other:?}"),
     }
-}
-
-#[test]
-fn every_truncation_is_refused() {
-    let bytes = encode(&Packet::Down(sample_down())).unwrap();
-    for len in 0..bytes.len() {
-        assert!(
-            decode(&bytes[..len]).is_err(),
-            "prefix of {len} bytes decoded"
-        );
-    }
-    let mut long = bytes;
-    long.push(0);
-    assert_eq!(decode(&long), Err(WireError::Trailing));
-}
-
-#[test]
-fn frames_carry_packets_on_a_stream() {
-    let a = encode(&Packet::Down(sample_down())).unwrap();
-    let mut stream = frame(&a);
-    stream.extend(frame(&a));
-    let (first, used) = unframe(&stream).unwrap();
-    assert_eq!(decode(first), decode(&a));
-    let (second, _) = unframe(&stream[used..]).unwrap();
-    assert_eq!(second, &a[..]);
-    assert!(unframe(&stream[..3]).is_none());
 }

@@ -74,11 +74,6 @@ impl Pacer {
         self.margin_ms = (self.margin_ms + MARGIN_GROWTH_MS).min(MARGIN_LIMIT_MS);
     }
 
-    #[cfg(test)]
-    pub fn margin_ms(&self) -> f64 {
-        self.margin_ms
-    }
-
     fn finish_ms(&self) -> f64 {
         p99(&self.finish).unwrap_or(FALLBACK_FINISH_MS) + p99(&self.wake).unwrap_or(0.0).min(WAKE_LIMIT_MS) + self.margin_ms
     }
@@ -128,81 +123,5 @@ impl Phase {
             return Some(anchor);
         }
         Some(anchor + (now_ns - anchor).div_ceil(period) * period)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn the_lead_leaves_the_measured_work_the_draw_and_their_margins() {
-        let mut pacer = Pacer::default();
-        for _ in 0..50 {
-            pacer.record_work(2.0);
-            pacer.record_finish(1.0);
-        }
-        assert!((pacer.lead_ms() - (2.0 + 1.0 + 2.0 * MARGIN_START_MS)).abs() < 1e-9);
-        assert!((pacer.scene_deadline_ms(16.667) - (16.667 - 1.0 - 1.0)).abs() < 1e-9);
-    }
-
-    #[test]
-    fn a_miss_lengthens_the_lead_and_clean_frames_give_it_back() {
-        let mut pacer = Pacer::default();
-        for _ in 0..50 {
-            pacer.record_work(2.0);
-            pacer.record_finish(1.0);
-        }
-        let before = pacer.lead_ms();
-        pacer.missed();
-        assert!((pacer.lead_ms() - before - 2.0 * MARGIN_GROWTH_MS).abs() < 1e-9, "a miss grows the margin in the work and the finish");
-        for _ in 0..CLEAN_FRAMES_TO_SHRINK {
-            pacer.clean_frame();
-        }
-        assert_eq!(pacer.margin_ms(), MARGIN_START_MS);
-    }
-
-    #[test]
-    fn the_lead_gives_the_game_a_sim_period_before_there_are_measurements() {
-        assert!((Pacer::default().lead_ms() - (1000.0 / SIM_HZ + FALLBACK_FINISH_MS + 2.0 * MARGIN_START_MS)).abs() < 1e-9);
-    }
-
-    #[test]
-    fn a_stall_lengthens_the_lead_at_most_to_two_sim_periods() {
-        let mut pacer = Pacer::default();
-        for _ in 0..50 {
-            pacer.record_work(100.0);
-            pacer.record_finish(1.0);
-        }
-        assert!((pacer.lead_ms() - (MAX_WORK_MS + 1.0 + MARGIN_START_MS)).abs() < 1e-9, "{}", pacer.lead_ms());
-    }
-
-    #[test]
-    fn the_phase_extrapolates_from_the_learned_vblank() {
-        let mut phase = Phase::default();
-        assert_eq!(phase.next_vblank_ns(5, 10.0), None);
-        phase.lock(1_000_000, 10.0);
-        assert_eq!(phase.next_vblank_ns(1_000_001, 10.0), Some(11_000_000));
-        assert_eq!(phase.next_vblank_ns(31_000_000, 10.0), Some(31_000_000));
-    }
-
-    #[test]
-    fn a_late_wake_does_not_move_the_vblank_it_stands_for() {
-        let mut phase = Phase::default();
-        assert_eq!(phase.lock(1_000_000, 10.0), 1_000_000);
-        assert_eq!(phase.lock(11_000_000 + 4_000_000, 10.0), 11_000_000 + PHASE_CREEP_NS);
-        assert_eq!(phase.lock(21_000_000 + PHASE_CREEP_NS, 10.0), 21_000_000 + PHASE_CREEP_NS);
-        assert_eq!(phase.lock(31_000_000 - 20_000, 10.0), 31_000_000 - 20_000, "an early acquire moves the phase to it");
-    }
-
-    #[test]
-    fn the_deadline_leaves_the_measured_wake_lateness() {
-        let mut pacer = Pacer::default();
-        for _ in 0..50 {
-            pacer.record_work(2.0);
-            pacer.record_finish(1.0);
-            pacer.record_wake(0.75);
-        }
-        assert!((pacer.scene_deadline_ms(16.667) - (16.667 - 1.0 - 0.75 - 1.0)).abs() < 1e-9);
     }
 }

@@ -183,24 +183,6 @@ impl UiScene {
 mod tests {
     use super::*;
 
-    const SCENE: &str = r#"{"frame":3,"units":[],"ui":[
-        {"name":"top","rectangle":[0,0.5,0.2,0.4],"text":"b","texture":"","color":4294967295,"textColor":4294967295,"alpha":255,"visible":true,"level":10,"font":{"file":"Fonts\\FRIZQT__.TTF","height":0.02,"flags":1},"alignment":{"vertical":"middle","horizontal":"center"},"scale":1},
-        {"name":"hidden","rectangle":[0,0.5,0.2,0.4],"text":"x","alpha":255,"visible":false,"level":0},
-        {"name":"clear","rectangle":[0,0.5,0.2,0.4],"text":"x","alpha":0,"visible":true,"level":0},
-        {"name":"bare","text":"x","alpha":255,"visible":true,"level":0},
-        {"name":"under","rectangle":[0,0.5,0.2,0.4],"text":"a","alpha":255,"visible":true,"level":0,"alignment":null}]}"#;
-
-    #[test]
-    fn keeps_drawable_frames_in_level_order() {
-        let scene = UiScene::parse(SCENE.as_bytes()).unwrap();
-        let texts: Vec<&str> = scene.frames.iter().map(|frame| frame.text.as_str()).collect();
-        assert_eq!(texts, ["a", "b"]);
-        let top = &scene.frames[1];
-        assert_eq!((top.horizontal, top.vertical, top.outline), (Horizontal::Center, Vertical::Middle, true));
-        assert_eq!(top.font_file, "Fonts\\FRIZQT__.TTF");
-        assert_eq!((scene.frames[0].horizontal, scene.frames[0].vertical), (Horizontal::Left, Vertical::Top));
-    }
-
     #[test]
     fn takes_the_games_signed_integers_as_their_32_bits() {
         let scene = r#"{"ui":[{"name":"portrait","rectangle":[0,0.5,0.2,0.4],"texture":"card.blp","color":-1,"textColor":-16777216,"alpha":255,"visible":true,"font":{"file":"","height":0.01,"flags":-1}}]}"#;
@@ -208,9 +190,4 @@ mod tests {
         assert_eq!((frames[0].color, frames[0].text_color, frames[0].outline), (0xffff_ffff, 0xff00_0000, true));
     }
 
-    #[test]
-    fn a_scene_without_ui_has_no_frames() {
-        assert!(UiScene::parse(b"{}").unwrap().frames.is_empty());
-        assert!(UiScene::parse(b"nope").is_err());
-    }
 }

@@ -124,11 +124,6 @@ impl Spawned {
         }
     }
 
-    #[cfg(test)]
-    pub(super) fn poses(&self) -> &[Pose] {
-        &self.poses
-    }
-
     /// Takes the poses out while the scene is laid out beside them, so births during the layout land in a fresh list; `restore` puts them back first.
     pub(super) fn take(&mut self) -> Vec<Pose> {
         std::mem::take(&mut self.poses)

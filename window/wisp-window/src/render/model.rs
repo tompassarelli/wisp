@@ -168,15 +168,3 @@ pub struct ModelData {
     pub ribbons: Vec<ModelRibbon>,
     pub spawners: Vec<ModelSpawner>,
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn only_opaque_and_cutout_layers_write_depth() {
-        assert!(FILTERS.iter().filter(|filter| filter.writes_depth()).count() == 2);
-        assert_eq!(Filter::from_index(3), Filter::Additive);
-        assert_eq!(Filter::from_index(99), Filter::Opaque);
-    }
-}

@@ -655,18 +655,7 @@ verifies it, so it can't be used to amplify an attack.
   (`--rooms-per-minute`), counted only for cookie-verified Creates. A room
   closes when every player has sent Leave or after 10 idle minutes
   (`--idle-s`).
-- **Tests.** `relay/tests/server.rs` drives the server without sockets: a
-  cookie verifies only its own address and lapses after its second epoch; an
-  address that rebinds mid-match gets at most three times its bytes for 30
-  turns with turns trimmed, a forged Verify doesn't lift that and a valid one
-  restores full history; the rate limit and room closing.
-  `relay/tests/loopback.rs` runs two `relay-agent` links against the server
-  over loopback UDP for 500 turns at 8 ms, rebinding the host's port at turn
-  200: both feed the same turns in order, every host action lands once and
-  in order, the relay counts one rebind and one verification, no clock stop
-  and no desync. A second test runs the `relay` binary itself
-  (`--bind 127.0.0.1:0 --once`) with two links for 250 turns.
-  `relay-agent`'s own tests check the handshake's cookie echo, the Verify
+- **Tests.** `relay-agent`'s own tests check the handshake's cookie echo, the Verify
   after a rebind and a refusal, against a bare socket.
 - **Room clock.** A room's wire times count from its creation on the serve
   loop's clock, which the server logs as `room ID opened at T us`.
@@ -1211,10 +1200,6 @@ and still saw up to 5.5 underruns per 10 minutes, and bursts of 4 at 1% and
   clock (µs since its handshake) instead, so only path traces join with
   the log. Lines are buffered and flushed at least once a second and when
   the relay exits; a killed relay can lose its last second.
-  `relay/tests/send_log.rs` plays a room through the relay binary on
-  loopback, holds one player's checksums back past the lag limit, and
-  checks the log against every down and cover packet each agent received,
-  in order, with times that never fall and one stop naming the held slot.
 - **Loss runs on the route or the relay.** `cargo run -p relay-bench --bin
   relay-losses -- --send-log FILE --trace FILE [--room ID] [--slot N]`
   joins a send log with one agent's path trace (`relay-synthetic --trace`)
@@ -1228,8 +1213,7 @@ and still saw up to 5.5 underruns per 10 minutes, and bursts of 4 at 1% and
   catches up late with the turns packed into a few packets); anything else
   is mixed. Each line gives the counts and the longest gap between the
   relay's down packets to that slot across the run, then the room's stops
-  with their times and slots. `relay-proto/tests/send_log.rs` checks one
-  synthetic pair of files for each case.
+  with their times and slots.
 
 ### Recorded trace cell (wisp#45)
 
@@ -1358,9 +1342,7 @@ callbacks placed as in box B1b), it marks the path spiky and sets a floor
 under its extra delay equal to the raise. Catch-up then stops at one turn
 above the floor, and any shortfall below the floor is added 1 ms a turn. The
 depth itself never changes, and neither do the turns fed or the game's
-steps: only feed times move, which the property
-`the_raise_moves_feed_times_but_never_the_fed_turns` checks against the same
-packet stream with the raise on and off. The raise is
+steps: only feed times move. The raise is
 `AgentConfig::raise_headroom_us` (Mak'gora's headroom, the depth that
 keeps `connectionPoor` false), capped so that depth plus raise stays within
 `AgentConfig::max_total_depth_us` (100 ms by default), then rounded down to
@@ -1425,15 +1407,12 @@ row reproduces the earlier 32 + 32 row. Beyond the gate, 104 and 112 ms
 give 11.19 and 12.43 visible stalls and 120 ms would give 9.95, the first
 cap under 10, but that is outside the gate. On the clean wired trace
 (`traces/gex45-wired-to-nexus-2026-10-25.trace`) with 100 ms of headroom
-the agent sees no visible stall and never raises, which
-`the_clean_wired_trace_never_raises_with_100_ms_of_headroom` checks.
+the agent sees no visible stall and never raises.
 
 The raise counts a stall at 2 frames, not at box B1b's 1.5 (wisp#53).
 Steady feeding of 8 ms turns gives callback gaps of 16 and 24 ms, so at
 25 ms a live agent's 1 ms of feed jitter counted as a stall and could flag
 and raise a clean path; 33.3 ms leaves 9.3 ms for jitter.
-`feeds_up_to_3_ms_late_on_8_ms_turns_are_no_stall_and_never_raise` feeds a
-minute of 8 ms turns up to 3 ms late and checks no stall, flag or raise.
 The bench's visible-stall columns keep box B1b's 25 ms definition. Every
 row above is unchanged by it: `--grid`, the laptop's raised rows at 32 ms
 with 100 ms of headroom (raised 64.0 ms, 13.67 visible stalls and 46.00

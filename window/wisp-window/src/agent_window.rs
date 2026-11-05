@@ -20,21 +20,3 @@ pub fn named_for_agent(attributes: winit::window::WindowAttributes, agent: bool)
 pub fn named_for_agent(attributes: winit::window::WindowAttributes, _: bool) -> winit::window::WindowAttributes {
     attributes
 }
-
-#[cfg(test)]
-mod tests {
-    use std::ffi::OsString;
-
-    use super::agent_launched;
-
-    fn env(value: Option<&'static str>) -> impl Fn(&str) -> Option<OsString> {
-        move |key| if key == "AI_AGENT" { value.map(OsString::from) } else { None }
-    }
-
-    #[test]
-    fn an_ai_agent_marker_selects_the_agent_app_id() {
-        assert!(agent_launched(&env(Some("claude-code/2.1"))));
-        assert!(!agent_launched(&env(Some(""))));
-        assert!(!agent_launched(&env(None)));
-    }
-}

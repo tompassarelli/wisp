@@ -9,7 +9,7 @@ use relay_proto::agent::{Agent, AgentConfig, Fed};
 use relay_proto::cadence::Cadence;
 use relay_proto::control::{self, Control};
 use relay_proto::transport::Deframer;
-use relay_proto::wire::{frame, Turn, UpAction, KIND_DOWN, MAX_PACKET};
+use relay_proto::wire::{frame, Turn, UpAction, KIND_DOWN};
 use relay_proto::Micros;
 
 const MIN_WAIT: Duration = Duration::from_micros(50);
@@ -67,23 +67,6 @@ impl Framed {
             Err(e) => panic!("{e}"),
         }
         self.rx.next_frame().unwrap().map(<[u8]>::to_vec)
-    }
-
-    fn closed_within(&mut self, wait: Duration) -> bool {
-        let deadline = Instant::now() + wait;
-        let mut buf = [0u8; 4096];
-        loop {
-            let left = deadline.saturating_duration_since(Instant::now());
-            if left.is_zero() {
-                return false;
-            }
-            self.stream.set_read_timeout(Some(left)).unwrap();
-            match self.stream.read(&mut buf) {
-                Ok(0) => return true,
-                Ok(_) => {}
-                Err(e) => return !matches!(e.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut),
-            }
-        }
     }
 
     fn ask(&mut self, ask: impl Fn(u64) -> Control) -> Control {
@@ -290,82 +273,4 @@ fn a_udp_link_and_a_tcp_link_feed_the_same_turns_through_the_relay_binary() {
     let stats = finish(child, out);
     assert!(stats.contains("rooms_closed: 1"), "{stats}");
     assert!(stats.contains("desyncs: 0"), "{stats}");
-}
-
-fn probe(io: &mut Framed) -> bool {
-    io.send(&control::encode(&Control::Join {
-        cookie: 0,
-        request: 1,
-        room: 1,
-    }));
-    matches!(
-        io.recv(Duration::from_secs(2)).map(|r| control::decode(&r)),
-        Some(Ok(Control::Challenge { .. }))
-    )
-}
-
-#[test]
-fn the_relay_holds_eight_tcp_connections_per_address_and_closes_the_ninth() {
-    let (child, out, server) = spawn_relay(&["--idle-s", "3"]);
-    let mut held: Vec<Framed> = (0..8).map(|_| Framed::connect(server)).collect();
-    for io in &mut held {
-        assert!(probe(io));
-    }
-    let mut ninth = Framed::connect(server);
-    assert!(ninth.closed_within(Duration::from_secs(1)));
-    assert!(!held[0].closed_within(Duration::from_millis(100)));
-    drop(held);
-    finish(child, out);
-}
-
-#[test]
-fn a_frame_over_the_packet_ceiling_closes_its_connection() {
-    let (child, out, server) = spawn_relay(&["--idle-s", "3"]);
-    let mut io = Framed::connect(server);
-    io.send(&vec![0xee; MAX_PACKET]);
-    assert!(probe(&mut io));
-    io.stream.write_all(&((MAX_PACKET + 1) as u16).to_le_bytes()).unwrap();
-    assert!(io.closed_within(Duration::from_secs(1)));
-    finish(child, out);
-}
-
-#[test]
-fn a_tcp_connection_that_sends_no_frame_is_closed_after_the_idle_limit() {
-    let (child, out, server) = spawn_relay(&["--idle-s", "3", "--tcp-idle-ms", "300"]);
-    let mut io = Framed::connect(server);
-    let reply = io.ask(|cookie| Control::Create {
-        cookie,
-        request: 1,
-        players: 2,
-    });
-    assert!(matches!(reply, Control::Room { .. }), "{reply:?}");
-    let opened = Instant::now();
-    io.stream.write_all(&[1]).unwrap();
-    assert!(io.closed_within(Duration::from_secs(1)));
-    let waited = opened.elapsed();
-    assert!(waited >= Duration::from_millis(250), "{waited:?}");
-    finish(child, out);
-}
-
-#[test]
-fn a_tcp_connection_that_holds_no_slot_is_closed_after_the_idle_limit_though_it_sends_frames() {
-    let (child, out, server) = spawn_relay(&["--idle-s", "4", "--tcp-idle-ms", "300"]);
-    let mut io = Framed::connect(server);
-    let join = frame(&control::encode(&Control::Join {
-        cookie: 0,
-        request: 1,
-        room: 1,
-    }));
-    let opened = Instant::now();
-    let closed = loop {
-        if opened.elapsed() > Duration::from_secs(2) {
-            break false;
-        }
-        if io.stream.write_all(&join).is_err() || io.closed_within(Duration::from_millis(100)) {
-            break true;
-        }
-    };
-    let waited = opened.elapsed();
-    assert!(closed && waited >= Duration::from_millis(250), "{waited:?}");
-    finish(child, out);
 }

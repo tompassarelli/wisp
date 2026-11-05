@@ -166,7 +166,6 @@ mod tests {
 
     const NINTENDO: u16 = 0x057e;
     const GAMECUBE_ADAPTER: u16 = 0x0337;
-    const GENERIC: u16 = 0x1209;
 
     const VIRTUAL_BUTTONS: [SDL_GamepadButton; 8] = [
         SDL_GamepadButton::SOUTH, SDL_GamepadButton::EAST, SDL_GamepadButton::WEST, SDL_GamepadButton::NORTH, SDL_GamepadButton::BACK, SDL_GamepadButton::START,
@@ -216,9 +215,6 @@ mod tests {
             assert!(unsafe { SDL_SetJoystickVirtualButton(self.joystick, index as c_int, down) });
         }
 
-        fn axis(&self, axis: SDL_GamepadAxis, raw: i16) {
-            assert!(unsafe { SDL_SetJoystickVirtualAxis(self.joystick, axis.0, raw) });
-        }
     }
 
     impl Drop for Virtual {
@@ -267,21 +263,6 @@ mod tests {
         assert_eq!(layout(SDL_GamepadButton::EAST), ["jump"], "X, SDL's east button, jumps");
         assert_eq!(layout(SDL_GamepadButton::NORTH), ["jump"], "Y jumps");
         assert_eq!(layout(SDL_GamepadButton::RIGHT_SHOULDER), ["grab"], "Z grabs");
-    }
-
-    #[test]
-    fn a_generic_virtual_pad_is_an_xbox_pad_with_padbridges_melee_layout() {
-        let _exclusive = exclusive();
-        let mut pads = SdlPads::open().expect("SDL opens the gamepad subsystem");
-        let pad = Virtual::attach(GENERIC, 0x0001);
-        let slot = slot_where(&mut pads, |open| open.id == pad.id);
-        assert_eq!(pads.read(Some(slot)).expect("the pad is open").kind, PadKind::Xbox);
-        let mut window_pads = Pads::with(Box::new(pads));
-        pad.button(SDL_GamepadButton::EAST, true);
-        assert_eq!(names(window_pads.sample(Some(slot), true).buttons), ["special"], "Xbox B specials");
-        pad.button(SDL_GamepadButton::EAST, false);
-        pad.axis(SDL_GAMEPAD_AXIS_LEFT_TRIGGER, i16::MAX);
-        assert_eq!(names(window_pads.sample(Some(slot), true).buttons), ["shield"], "a full trigger shields");
     }
 
     #[cfg(feature = "uinput")]

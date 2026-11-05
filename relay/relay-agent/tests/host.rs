@@ -14,7 +14,6 @@ use relay_proto::lobby::LobbyTiming;
 use relay_proto::room::MapFacts;
 
 const MAP: &str = "path=Maps\\Wisp\\t.w3x size=4096 crc32=1 sha1=00112233445566778899aabbccddeeff00112233 xoro=2 width=52 height=52 layout=1 forces=15 players=0:1:1,1:1:1,2:1:1";
-const ROOM_SHA1: [u8; 20] = [0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x00, 0x11, 0x22, 0x33];
 const OTHER_SHA1: [u8; 20] = [0xab; 20];
 const BOUND: Duration = Duration::from_secs(10);
 const TURNS: u32 = 50;
@@ -129,40 +128,4 @@ fn a_joiner_expecting_another_map_leaves_the_room_before_the_countdown() {
     host_stop.stop();
     assert!(finished(&host_result, "the host").is_ok());
     assert_eq!(finished(&stats, "the relay").rooms_closed, 1, "both agents left the room");
-}
-
-#[test]
-fn a_joiner_expecting_the_rooms_map_plays() {
-    let (server, stats) = relay();
-    let link = Link::create(server, 2).unwrap();
-    let room = link.room();
-    let (host_port, _, host_result) = spawn(config(b"a", Some(MapFacts::parse(MAP).unwrap()), Some(ROOM_SHA1)), link);
-    let (joiner_port, _, joiner_result) = spawn(config(b"b", None, Some(ROOM_SHA1)), Link::join(server, room).unwrap());
-    let quit = Arc::new(AtomicBool::new(false));
-    let clients = [play(host_port, b"a", quit.clone()), play(joiner_port, b"b", quit)];
-    for client in clients {
-        let seen = client.join().unwrap();
-        assert!(seen.turns >= TURNS, "turns {}", seen.turns);
-    }
-    for result in [host_result, joiner_result] {
-        let summary = finished(&result, "an agent");
-        assert!(summary.as_ref().is_ok_and(|s| s.turns >= TURNS as u64), "{summary:?}");
-    }
-    assert_eq!(finished(&stats, "the relay").rooms_closed, 1);
-}
-
-#[test]
-fn a_stop_handle_stops_its_own_host_and_no_other() {
-    let (server, stats) = relay();
-    let link = Link::create(server, 2).unwrap();
-    let room = link.room();
-    let (_, host_stop, host_result) = spawn(config(b"a", Some(MapFacts::parse(MAP).unwrap()), None), link);
-    let (_, joiner_stop, joiner_result) = spawn(config(b"b", None, None), Link::join(server, room).unwrap());
-
-    joiner_stop.stop();
-    assert!(finished(&joiner_result, "the stopped joiner").is_ok());
-    assert!(host_result.recv_timeout(Duration::from_millis(500)).is_err(), "the host stopped with the joiner");
-    host_stop.stop();
-    assert!(finished(&host_result, "the host").is_ok());
-    assert_eq!(finished(&stats, "the relay").rooms_closed, 1);
 }

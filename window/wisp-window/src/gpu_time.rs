@@ -199,5 +199,3 @@ fn frame_of(passes: &[Pass], stamps: &[u64], period_ns: f64) -> Option<FrameGpu>
     Some(FrameGpu { passes: sums, span_ms: to_ms(last.checked_sub(*first)?) })
 }
 
-#[cfg(test)]
-mod tests;

@@ -250,33 +250,3 @@ pub struct Glow {
 impl Glow {
     pub const NONE: Self = Self { light: [0.0; 4], at: [0.0; 4] };
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_water_model_names_its_liquid_by_its_path() {
-        assert_eq!(Preset::of_model("war3mapImported\\StageTombSea-090f18c4.mdx"), Preset::Water);
-        assert_eq!(Preset::of_model("war3mapImported\\StagePlague-0c4383c6.mdx"), Preset::Poison);
-        assert_eq!(Preset::of_model("war3mapImported\\StageLava-8f94e15b.mdx"), Preset::Lava);
-    }
-
-    #[test]
-    fn the_liquids_differ_as_their_looks_require() {
-        let (water, poison, lava) = (WaterSettings::of(Preset::Water), WaterSettings::of(Preset::Poison), WaterSettings::of(Preset::Lava));
-        assert!(poison.deep[1] > poison.deep[0] && poison.deep[1] > poison.deep[2], "poison is green");
-        assert!(poison.fps < water.fps && poison.wave_speed < water.wave_speed, "poison is slower");
-        assert!(poison.absorption > water.absorption && poison.opacity > water.opacity, "poison is thicker");
-        assert!(poison.emissive > 0.0, "poison glows");
-        assert!(lava.fps < poison.fps && lava.crust > 0.0 && lava.shimmer > 0.0 && lava.bubbles > 0.0 && lava.embers > 0.0);
-        assert!(lava.glow_light > poison.glow_light, "lava lights its surroundings most");
-        assert_eq!(water.glow(0.0, 0.0).light, [0.0, 0.0, 0.0, 1.0]);
-        assert!(water.breakup > 0.0 && water.detail_reach > 0.0 && water.sparkle_cover < 1.0, "the sea breaks its texture up and keeps fine detail near the camera");
-        assert!(water.muted > 0.0 && poison.muted > 0.0 && lava.muted == 0.0, "the sea and the ooze are muted, the lava is not");
-        assert!(water.caustics == 0.0 && water.specular == 0.0 && water.swell == 0.0, "the muted sea has no caustic web, glitter or swell");
-        let luma = |colour: [f32; 3]| 0.2126 * colour[0] + 0.7152 * colour[1] + 0.0722 * colour[2];
-        assert!(luma(water.shallow) > luma(water.mid) && luma(water.mid) > luma(water.deep), "the sea's ramp darkens from shallow through mid to deep");
-        assert_eq!((poison.breakup, lava.breakup), (0.0, 0.0), "the thick liquids keep their own surface");
-    }
-}

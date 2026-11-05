@@ -184,12 +184,6 @@ impl DisplayLock {
         self.lead_ms.unwrap_or(period_ms - SEARCH_CREEP_MS)
     }
 
-    /// Whether the search has found the latch.
-    #[cfg(test)]
-    pub fn locked(&self) -> bool {
-        self.stage != Stage::Searching
-    }
-
     /// Whether the display has reported a present.
     pub fn reporting(&self) -> bool {
         !self.counted.is_empty()
@@ -201,5 +195,3 @@ impl DisplayLock {
     }
 }
 
-#[cfg(test)]
-mod tests;

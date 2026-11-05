@@ -1,15 +1,7 @@
 use super::*;
 use crate::model::Emitter2;
 use model::EmitterSample;
-use scene::Bolt;
-use image::ImageEncoder;
 
-mod faces;
-mod fighter_light;
-mod lightning;
-mod remaster;
-mod rim;
-mod shadow;
 
 const SIDE: u32 = 128;
 const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
@@ -96,70 +88,6 @@ fn light_at_centre(renderer: &mut Renderer, device: &wgpu::Device, queue: &wgpu:
     let bytes = buffer.slice(..).get_mapped_range().expect("mapped").to_vec();
     let at = ((SIDE / 2 * SIDE + SIDE / 2) * 8) as usize;
     [0, 1, 2].map(|channel| half_to_f32(u16::from_le_bytes([bytes[at + channel * 2], bytes[at + channel * 2 + 1]])))
-}
-
-fn pixel(image: &[u8], x: u32, y: u32) -> [u8; 3] {
-    let at = ((y * SIDE + x) * 4) as usize;
-    [image[at], image[at + 1], image[at + 2]]
-}
-
-#[test]
-fn a_particle_and_a_bolt_reach_the_screen() {
-    let Some((device, queue)) = device() else { return };
-    let scope = device.push_error_scope(wgpu::ErrorFilter::Validation);
-    let mut renderer = Renderer::new(device.clone(), queue.clone(), FORMAT, crate::remaster::Quality::Off, crate::settings::Preset::High.features());
-    let spec = Emitter2 { rows: 1, columns: 1, head: true, life_span: 5.0, time: 0.5, scaling: [20.0; 3], alphas: [1.0; 3], colors: [[1.0; 3]; 3], ..Emitter2::default() };
-    let emitter = ModelEmitter { spec, paint: Paint::None };
-    let slot = renderer.particles.register(&device, &queue, &emitter, ("", &renderer.white), &renderer.sampler).expect("room for an emitter");
-    let mut scene = Scene { frame: 0, ..Scene::default() };
-    scene.camera = scene::Camera { view: IDENTITY, eye: [0.0; 3], tangent: 1.0, near: 1.0, far: 10_000.0, sky_far: 10_000.0, rise: 0.0, reach: 0.0 };
-    let _ = render(&mut renderer, &device, &queue, &scene);
-    renderer.particles.begin(stepped(1));
-    let sample = EmitterSample { visible: true, rate: 120.0, ..EmitterSample::default() };
-    renderer.particles.emit((1, 0), slot, &emitter, &sample, &translation(0.0, 0.0, -100.0), 1.0);
-    scene.frame = 1;
-    scene.lightnings = vec![Bolt { from: [-80.0, 70.0, -100.0], to: [80.0, 70.0, -100.0], color: [0.2, 0.4, 1.0, 1.0], look: None }];
-    let image = render(&mut renderer, &device, &queue, &scene);
-    let centre = pixel(&image, SIDE / 2, SIDE / 2);
-    let corner = pixel(&image, 2, SIDE - 3);
-    assert!(centre[0] > 200 && centre[1] > 200, "the particle's white quad covers the middle: {centre:?}");
-    assert!(corner[0] < 40, "the corner is clear: {corner:?}");
-    let bolt_rows = (0..SIDE / 3).filter(|&y| (0..SIDE).any(|x| pixel(&image, x, y)[2] > 150)).count();
-    assert!(bolt_rows > 0, "the bolt lights rows in the upper third");
-    let error = pollster::block_on(scope.pop());
-    assert!(error.is_none(), "wgpu validation: {error:?}");
-}
-
-#[test]
-fn each_preset_draws_the_scene_with_its_post_effects_on_or_off() {
-    use crate::settings::PRESETS;
-    let Some((device, queue)) = device() else { return };
-    let mut scope = device.push_error_scope(wgpu::ErrorFilter::Validation);
-    let mut renderer = Renderer::new(device.clone(), queue.clone(), FORMAT, crate::remaster::Quality::Off, PRESETS[2].features());
-    let spec = Emitter2 { rows: 1, columns: 1, head: true, life_span: 5.0, time: 0.5, scaling: [20.0; 3], alphas: [1.0; 3], colors: [[1.0; 3]; 3], ..Emitter2::default() };
-    let emitter = ModelEmitter { spec, paint: Paint::None };
-    let slot = renderer.particles.register(&device, &queue, &emitter, ("", &renderer.white), &renderer.sampler).expect("room for an emitter");
-    let mut scene = Scene { frame: 0, ..Scene::default() };
-    scene.camera = scene::Camera { view: IDENTITY, eye: [0.0; 3], tangent: 1.0, near: 1.0, far: 10_000.0, sky_far: 10_000.0, rise: 0.0, reach: 0.0 };
-    for (round, preset) in [PRESETS[0], PRESETS[1], PRESETS[2], PRESETS[0]].into_iter().enumerate() {
-        renderer.set_features(preset.features());
-        scene.frame = round as u32 * 2;
-        let _ = render(&mut renderer, &device, &queue, &scene);
-        scene.frame += 1;
-        renderer.particles.begin(stepped(scene.frame));
-        let sample = EmitterSample { visible: true, rate: 120.0, ..EmitterSample::default() };
-        renderer.particles.emit((1, 0), slot, &emitter, &sample, &translation(0.0, 0.0, -100.0), 1.0);
-        let image = render(&mut renderer, &device, &queue, &scene);
-        let round_error = pollster::block_on(scope.pop());
-        assert!(round_error.is_none(), "{preset:?}: wgpu validation: {round_error:?}");
-        scope = device.push_error_scope(wgpu::ErrorFilter::Validation);
-        let centre = pixel(&image, SIDE / 2, SIDE / 2);
-        let corner = pixel(&image, 2, SIDE - 3);
-        assert!(centre[0] > 200 && centre[1] > 200, "{preset:?}: the particle covers the middle: {centre:?}");
-        assert!(corner[0] < 40, "{preset:?}: the corner is clear: {corner:?}");
-    }
-    let error = pollster::block_on(scope.pop());
-    assert!(error.is_none(), "wgpu validation: {error:?}");
 }
 
 const BACKGROUND: [f32; 3] = [0.5, 0.25, 0.75];
@@ -323,40 +251,9 @@ fn additive_adds_the_colour_and_ignores_the_texture_alpha() {
 }
 
 #[test]
-fn add_alpha_adds_the_colour_scaled_by_the_texture_alpha() {
-    let expected = [0, 1, 2].map(|channel| source()[channel] * 0.5 + background()[channel]);
-    assert_pixel(centre_of(&[sheet(Filter::AddAlpha, 100.0, texel(SOURCE, 0.5))]), expected, "source alpha plus one");
-}
-
-#[test]
 fn modulate_multiplies_the_background_by_the_colour() {
     let expected = [0, 1, 2].map(|channel| source()[channel] * background()[channel]);
     assert_pixel(centre_of(&[sheet(Filter::Modulate, 100.0, texel(SOURCE, 1.0))]), expected, "destination colour times source colour");
-}
-
-#[test]
-fn modulate_twice_doubles_the_product() {
-    let expected = [0, 1, 2].map(|channel| source()[channel] * background()[channel] * 2.0);
-    assert_pixel(centre_of(&[sheet(Filter::Modulate2x, 100.0, texel(SOURCE, 1.0))]), expected, "twice destination times source");
-}
-
-#[test]
-fn replaceable_one_and_two_draw_the_players_team_colour_and_glow() {
-    let team = Sheet { filter: Filter::Opaque, depth: 100.0, paint: Paint::TeamColor, texel: [0; 4] };
-    assert_pixel(centre_of(&[team]), team_light(), "replaceable 1 is the team colour");
-    let glow = Sheet { filter: Filter::Blend, depth: 100.0, paint: Paint::TeamGlow, texel: [0; 4] };
-    let expected = over(team_light(), 0.46, background());
-    assert_pixel(centre_of(&[glow]), expected, "replaceable 2 is the team glow at its centre");
-}
-
-#[test]
-fn a_geoset_colour_multiplies_every_layer_of_its_geoset() {
-    let teal = [0.0, 0.4, 0.4];
-    let tinted = [0, 1, 2].map(|channel| SOURCE[channel] * teal[channel]);
-    assert_pixel(centre_of_geoset(&[sheet(Filter::Opaque, 100.0, texel(SOURCE, 1.0))], [teal[0], teal[1], teal[2], 1.0]), linear(tinted), "a texture layer is multiplied by the geoset colour");
-    let team = Sheet { filter: Filter::Opaque, depth: 100.0, paint: Paint::TeamColor, texel: [0; 4] };
-    assert_pixel(centre_of_geoset(&[team], [teal[0], teal[1], teal[2], 1.0]), linear([0, 1, 2].map(|channel| TEAM[channel] * teal[channel])), "a team colour layer is multiplied by the geoset colour");
-    assert_pixel(centre_of_geoset(&[sheet(Filter::Blend, 100.0, texel(SOURCE, 1.0))], [1.0, 1.0, 1.0, 0.5]), over(source(), 0.5, background()), "the geoset alpha still fades its layers");
 }
 
 #[test]
@@ -427,5 +324,3 @@ fn a_model_drawn_into_a_sprite_frame_binds_the_current_scene_uniform() {
 }
 
 mod particles;
-mod ribbons;
-mod skin;

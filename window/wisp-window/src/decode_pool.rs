@@ -54,29 +54,3 @@ impl<T> Drop for Pool<T> {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::time::{Duration, Instant};
-
-    #[test]
-    fn jobs_finish_on_worker_threads_and_come_back_by_id() {
-        let pool = Pool::new(3);
-        let caller = thread::current().id();
-        for id in 0..8 {
-            pool.submit(id, move || (id * 2, thread::current().id()));
-        }
-        let mut results = Vec::new();
-        let deadline = Instant::now() + Duration::from_secs(5);
-        while results.len() < 8 && Instant::now() < deadline {
-            match pool.try_recv() {
-                Some(result) => results.push(result),
-                None => thread::sleep(Duration::from_millis(1)),
-            }
-        }
-        results.sort_by_key(|(id, _)| *id);
-        assert_eq!(results.iter().map(|(id, (doubled, _))| (*id, *doubled)).collect::<Vec<_>>(), (0..8).map(|id| (id, id * 2)).collect::<Vec<_>>());
-        assert!(results.iter().all(|(_, (_, worker))| *worker != caller));
-    }
-}

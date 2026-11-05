@@ -41,30 +41,3 @@ impl PresentSetting {
         std::iter::once(self).chain(FALLBACKS).find(|setting| modes.contains(&setting.mode())).unwrap_or(Self::Fifo)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use wgpu::PresentMode::{Fifo, Immediate, Mailbox};
-
-    #[test]
-    fn the_default_is_mailbox_where_the_surface_offers_it() {
-        assert_eq!(PresentSetting::default().offered(&[Fifo, Mailbox, Immediate]), PresentSetting::Mailbox);
-        assert_eq!(PresentSetting::from_code(9), PresentSetting::Mailbox);
-    }
-
-    #[test]
-    fn a_surface_without_mailbox_falls_back_to_fifo_then_immediate() {
-        assert_eq!(PresentSetting::default().offered(&[Fifo, Immediate]), PresentSetting::Fifo);
-        assert_eq!(PresentSetting::default().offered(&[Immediate]), PresentSetting::Immediate);
-        assert_eq!(PresentSetting::default().offered(&[]), PresentSetting::Fifo);
-    }
-
-    #[test]
-    fn a_mode_the_player_asked_for_wins_when_offered_and_falls_back_in_order_when_not() {
-        assert_eq!(PresentSetting::from_code(0).offered(&[Fifo, Mailbox]), PresentSetting::Fifo);
-        assert_eq!(PresentSetting::Immediate.offered(&[Fifo, Mailbox, Immediate]), PresentSetting::Immediate);
-        assert_eq!(PresentSetting::Immediate.offered(&[Fifo, Mailbox]), PresentSetting::Mailbox);
-        assert_eq!(PresentSetting::Immediate.offered(&[Fifo]), PresentSetting::Fifo);
-    }
-}

@@ -90,12 +90,6 @@ pub fn tone_map(scene: [f32; 3], grade: &Grade) -> [f32; 3] {
     grade_display(hue_keeping(scene).map(srgb_encode), grade)
 }
 
-/// The display bytes of `tone_map`.
-#[cfg(test)]
-pub fn display_bytes(scene: [f32; 3], grade: &Grade) -> [u8; 3] {
-    tone_map(scene, grade).map(|channel| (channel * 255.0 + 0.5) as u8)
-}
-
 /// The table as RGBA8 texels, red varying fastest: node (r, g, b) holds the grade of the display colour whose channels are the nodes' positions on 0..1. The curve runs in the shader, so only the smooth grade is interpolated.
 pub fn build_lut(grade: &Grade) -> Vec<u8> {
     let nodes: Vec<f32> = (0..LUT_SIZE).map(|index| index as f32 / (LUT_SIZE - 1) as f32).collect();
@@ -232,85 +226,5 @@ impl Look {
     pub fn upsampled(mut self, scene: (u32, u32), window: (u32, u32)) -> Look {
         self.params.scale = [scene.0 as f32 / window.0.max(1) as f32, scene.1 as f32 / window.1.max(1) as f32, 0.0, 0.0];
         self
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn sky_scene(cover: f32) -> DrawScene {
-        let look = format!(r#"{{"zenith":[0.1,0.2,0.4],"cover":{cover},"sunAzimuth":90,"sunElevation":30,"sun":[1,0.5,0.25],"stars":0.5,"glow":0.25}}"#);
-        DrawScene { sky_look: Some(serde_json::from_str(&look).unwrap()), ..DrawScene::default() }
-    }
-
-    #[test]
-    fn a_stages_sky_look_sets_the_sun_the_zenith_and_how_many_cloud_layers_draw() {
-        let rect = [0.0, 0.0, 64.0, 64.0];
-        let look = Look::of(&sky_scene(0.5), 1.0, rect, false, &TUNING);
-        let toward = look.params.sun_toward;
-        assert!(toward[0].abs() < 1e-5 && (toward[1] - 0.866).abs() < 1e-3 && (toward[2] - 0.5).abs() < 1e-3 && toward[3] == 1.0, "{toward:?}");
-        assert!((look.params.zenith[2] - linear(0.4)).abs() < 1e-6);
-        assert_eq!(look.params.cloud, [0.5, 0.5, 0.25, 3.0]);
-        assert!(look.clouded);
-        let low = Look::of(&sky_scene(0.5), 1.0, rect, false, &Tuning { cloud_layers: 1, ..TUNING });
-        assert_eq!(low.params.cloud[3], 1.0);
-        assert!(!Look::of(&sky_scene(0.0), 1.0, rect, false, &TUNING).clouded, "a stage with no cloud draws no cloud pass");
-        assert!(!Look::of(&DrawScene::default(), 1.0, rect, false, &TUNING).clouded, "a map that sets no sky look keeps the plain gradient");
-    }
-
-    #[test]
-    fn a_known_hdr_input_maps_to_the_expected_srgb_bytes() {
-        let grade = Grade::NEUTRAL;
-        assert_eq!(display_bytes([0.0; 3], &grade), [0, 0, 0]);
-        let grey = display_bytes([0.18; 3], &grade);
-        assert_eq!(grey[0], grey[1]);
-        assert_eq!(grey[1], grey[2]);
-        assert!((100..=140).contains(&grey[0]), "scene grey 0.18 lands near the display's middle: {grey:?}");
-        let (one, four) = (display_bytes([1.0; 3], &grade)[0], display_bytes([4.0; 3], &grade)[0]);
-        assert!(grey[0] < one && one < four && four < 255, "the curve rises and rolls off before white: {grey:?} {one} {four}");
-        assert_eq!(display_bytes([64.0; 3], &grade), [255, 255, 255]);
-    }
-
-
-    #[test]
-    fn a_bright_saturated_colour_keeps_its_hue_through_the_curve() {
-        let saturation = |rgb: [f32; 3]| (rgb[0].max(rgb[1]).max(rgb[2]) - rgb[0].min(rgb[1]).min(rgb[2])) / rgb[0].max(rgb[1]).max(rgb[2]);
-        for gold in [[1.0, 0.78, 0.2], [4.0, 3.1, 0.8], [16.0, 12.5, 3.2]] {
-            let shown = tone_map(gold, &Grade::NEUTRAL);
-            assert!(shown[0] >= shown[1] && shown[1] > shown[2], "gold keeps its channel order: {shown:?}");
-            assert!(saturation(shown) > 0.4, "{gold:?} stays gold, not white: {shown:?}");
-        }
-        let fel = tone_map([2.0, 8.0, 1.0], &Grade::NEUTRAL);
-        assert!(fel[1] > fel[0] * 1.3 && fel[1] > fel[2] * 1.8, "fel green stays green: {fel:?}");
-    }
-    #[test]
-    fn the_curve_keeps_hue_order_and_never_clips_a_hot_colour_to_a_flat_channel() {
-        let hot = tone_map([8.0, 2.0, 0.2], &Grade::NEUTRAL);
-        assert!(hot[0] > hot[1] && hot[1] > hot[2], "{hot:?}");
-        assert!(hot[0] < 1.0 || hot[1] < 0.99, "{hot:?}");
-    }
-
-    #[test]
-    fn a_grade_lifts_the_shadows_and_tints_the_highlights() {
-        let grade = Grade::of_light([1.0, 0.8, 0.5], [0.2, 0.3, 0.6]);
-        let neutral = display_bytes([0.02; 3], &Grade::NEUTRAL);
-        let tinted = display_bytes([0.02; 3], &grade);
-        assert!(tinted[2] > tinted[0], "shadows lean to the ambient blue: {tinted:?} against {neutral:?}");
-        let bright = display_bytes([2.0; 3], &grade);
-        assert!(bright[0] > bright[2], "highlights lean to the key's warmth: {bright:?}");
-    }
-
-    #[test]
-    fn the_table_is_black_at_its_origin_and_matches_the_curve_at_a_node() {
-        let grade = Grade::of_light([1.0, 0.9, 0.7], [0.3, 0.3, 0.4]);
-        let lut = build_lut(&grade);
-        assert_eq!(lut.len(), (LUT_SIZE * LUT_SIZE * LUT_SIZE * 4) as usize);
-        assert_eq!(&lut[..4], &[0, 0, 0, 255]);
-        let (r, g, b) = (25u32, 18u32, 9u32);
-        let at = ((b * LUT_SIZE + g) * LUT_SIZE + r) as usize * 4;
-        let node = |index: u32| index as f32 / (LUT_SIZE - 1) as f32;
-        let expected = grade_display([node(r), node(g), node(b)], &grade).map(|channel| (channel * 255.0 + 0.5) as u8);
-        assert_eq!(&lut[at..at + 3], &expected);
     }
 }

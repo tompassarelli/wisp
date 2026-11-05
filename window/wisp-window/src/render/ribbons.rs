@@ -380,12 +380,6 @@ impl Ribbons {
         }
     }
 
-    /// How many quads draw this scene, laid and tail.
-    #[cfg(test)]
-    pub(super) fn drawn(&self) -> usize {
-        self.rings.iter().map(|ring| ring.live + ring.tail.len()).sum()
-    }
-
     /// Draws every ring's live quads and its tail, after the particles, with the particles' frame bound.
     pub(super) fn draw<'a>(&'a self, pass: &mut wgpu::RenderPass<'a>, particles: &'a Particles) {
         let mut bound = false;

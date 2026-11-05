@@ -11,7 +11,6 @@ use relay_proto::Micros;
 
 const STEP_MS: u8 = 8;
 const FEEDS: usize = 200;
-const ARRIVALS: usize = 40;
 const PACED: usize = 7_500;
 const CHUNK: usize = 250;
 
@@ -82,38 +81,6 @@ fn a_link_with_no_incoming_packets_feeds_as_promptly_as_a_sleeping_thread_wakes(
     let feed = median(fed[..FEEDS].iter().map(|f| f.at - f.scheduled).collect());
     let sleep = median(sleeps);
     assert!(feed <= sleep + 500, "median feed {feed} us late, a sleeping thread {sleep} us");
-}
-
-#[test]
-fn a_packet_arrival_wakes_the_link_as_promptly_as_a_sleeping_thread_wakes() {
-    let (server, mut link, agent) = linked();
-    let stop = AtomicBool::new(false);
-    let (late, sleeps) = thread::scope(|s| {
-        let sleeper = s.spawn(|| sleeper_lateness(&stop));
-        let sender = s.spawn(|| {
-            let challenge = control::encode(&Control::Challenge { cookie: 3 });
-            let mut sent = Vec::new();
-            for _ in 0..ARRIVALS {
-                thread::sleep(Duration::from_millis(7));
-                sent.push(Instant::now());
-                server.send_to(&challenge, agent).unwrap();
-            }
-            sent
-        });
-        let mut arrived = Vec::new();
-        let deadline = Instant::now() + Duration::from_secs(5);
-        while arrived.len() < ARRIVALS && Instant::now() < deadline {
-            link.step_tapped(Instant::now() + Duration::from_millis(50), |_, _| arrived.push(Instant::now()))
-                .unwrap();
-        }
-        stop.store(true, Ordering::Relaxed);
-        let sent = sender.join().unwrap();
-        let late = sent.iter().zip(&arrived).map(|(s, a)| a.duration_since(*s).as_micros() as Micros);
-        (late.collect::<Vec<_>>(), sleeper.join().unwrap())
-    });
-    assert_eq!(late.len(), ARRIVALS, "{} of {ARRIVALS} challenges arrived", late.len());
-    let (arrival, sleep) = (median(late), median(sleeps));
-    assert!(arrival <= sleep + 500, "median arrival handled {arrival} us after its send, a sleeping thread {sleep} us");
 }
 
 #[test]

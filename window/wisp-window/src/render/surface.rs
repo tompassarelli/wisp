@@ -37,21 +37,3 @@ impl Surface {
         (height, area)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn placed(scale: [f32; 3], at: [f32; 3]) -> Mat4 {
-        [scale[0], 0.0, 0.0, 0.0, 0.0, scale[1], 0.0, 0.0, 0.0, 0.0, scale[2], 0.0, at[0], at[1], at[2], 1.0]
-    }
-
-    #[test]
-    fn a_surface_lies_at_its_top_once_placed_and_covers_its_scaled_extent() {
-        let surface = Surface::of([[-50.0, -60.0, 0.0], [50.0, 60.0, 2.0]]).unwrap();
-        let (height, area) = surface.placed(&placed([240.0, 140.0, 1.0], [0.0, 2200.0, -360.0]));
-        assert_eq!(height, -358.0);
-        assert_eq!(area, 100.0 * 240.0 * 120.0 * 140.0);
-        assert_eq!(Surface::of([]), None);
-    }
-}

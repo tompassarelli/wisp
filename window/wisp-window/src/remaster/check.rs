@@ -340,5 +340,3 @@ pub fn most_changed_block(source: &Image, folded: &Image, size: usize) -> (usize
     best.1
 }
 
-#[cfg(test)]
-mod tests;

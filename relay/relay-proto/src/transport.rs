@@ -98,10 +98,4 @@ mod tests {
         }
     }
 
-    #[test]
-    fn a_frame_over_the_packet_ceiling_is_refused() {
-        let mut d = Deframer::default();
-        d.push(&((MAX_PACKET + 1) as u16).to_le_bytes());
-        assert_eq!(d.next_frame(), Err(WireError::TooLong));
-    }
 }

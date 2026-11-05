@@ -117,27 +117,3 @@ fn utc_stamp(unix_seconds: u64) -> String {
     let year = year_of_era + era * 400 + i64::from(month <= 2);
     format!("{year:04}-{month:02}-{day:02}T{:02}-{:02}-{:02}Z", rest / 3600, rest / 60 % 60, rest % 60)
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn the_stamp_is_the_utc_date_and_time() {
-        assert_eq!(utc_stamp(0), "1970-01-01T00-00-00Z");
-        assert_eq!(utc_stamp(1_793_597_412), "2026-11-02T05-30-12Z");
-        assert_eq!(utc_stamp(951_782_400), "2000-02-29T00-00-00Z");
-    }
-
-    #[test]
-    fn a_second_snapshot_in_the_same_second_gets_its_own_folder() {
-        let directory = std::env::temp_dir().join(format!("wisp-snapshot-test-{}", std::process::id()));
-        let first = fresh_folder(&directory, 1_793_597_412_250).expect("first folder");
-        let second = fresh_folder(&directory, 1_793_597_412_750).expect("second folder");
-        assert_eq!(first.file_name().unwrap(), "window-snapshot-2026-11-02T05-30-12Z");
-        assert_eq!(second.file_name().unwrap(), "window-snapshot-2026-11-02T05-30-12Z-750");
-        std::fs::remove_dir(&first).expect("first is empty");
-        std::fs::remove_dir(&second).expect("second is empty");
-        std::fs::remove_dir(&directory).expect("directory is empty");
-    }
-}

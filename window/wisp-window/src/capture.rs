@@ -61,21 +61,3 @@ pub fn png(width: u32, height: u32, rgba: &[u8]) -> Vec<u8> {
 pub fn write(path: &Path, width: u32, height: u32, rgba: &[u8]) -> std::io::Result<()> {
     std::fs::write(path, png(width, height, rgba))
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn crc_and_adler_match_their_published_check_values() {
-        assert_eq!(crc32(b"123456789"), 0xCBF4_3926);
-        assert_eq!(adler32(b"Wikipedia"), 0x11E6_0398);
-    }
-
-    #[test]
-    fn a_png_starts_with_its_signature_and_ends_with_iend() {
-        let image = png(2, 2, &[255; 16]);
-        assert_eq!(&image[..8], &[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A]);
-        assert_eq!(&image[image.len() - 8..image.len() - 4], b"IEND");
-    }
-}

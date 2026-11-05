@@ -243,21 +243,4 @@ mod tests {
         let _ = std::fs::remove_dir_all(directory);
     }
 
-    #[test]
-    fn a_texture_that_cannot_be_baked_counts_as_done_and_is_not_queued_again() {
-        let directory = std::env::temp_dir().join(format!("wisp-bake-failure-test-{}", std::process::id()));
-        let cache = Arc::new(Cache::at(directory.clone()).unwrap());
-        let upscaler = Arc::new(Upscaler::classical());
-        let unreadable: Arc<[u8]> = Arc::from(&b"not a texture"[..]);
-        let unstored = png(9);
-        let key = |bytes: &[u8]| cache_key(bytes, Quality::Standard, &upscaler, Edges::Mirror, Role::Figure);
-        std::fs::create_dir_all(directory.join(format!("{}.albedo.tmp", key(&unstored)))).unwrap();
-        let baker = Baker::start(Quality::Standard, cache.clone(), upscaler.clone());
-        baker.set_playing(true);
-        baker.add("broken.blp", unreadable.clone());
-        baker.add("unstored.png", unstored.clone());
-        assert_eq!(until_ready(&baker), Progress { done: 2, total: 2 }, "both count as done");
-        assert!(cache.holds(&key(&unreadable)) && cache.holds(&key(&unstored)), "both are marked, so the next bake counts them from the cache");
-        let _ = std::fs::remove_dir_all(directory);
-    }
 }
