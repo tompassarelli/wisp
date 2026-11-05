@@ -202,7 +202,7 @@ mod tests {
         assert_eq!(data.parts[0].index_count as usize, data.indices.len());
         assert_eq!(data.vertices[..6].iter().map(|vertex| vertex.position).collect::<Vec<_>>(), octahedron().vertices.iter().map(|vertex| vertex.position).collect::<Vec<_>>());
         for added in &data.vertices[6..] {
-            assert!(length(added.position) > 0.7071 + 1e-4, "midpoint at {:?} did not bulge", added.position);
+            assert!(length(added.position) > std::f32::consts::FRAC_1_SQRT_2 + 1e-4, "midpoint at {:?} did not bulge", added.position);
             assert!(length(added.position) < 1.0);
             assert!((length(added.normal) - 1.0).abs() < 1e-5);
         }

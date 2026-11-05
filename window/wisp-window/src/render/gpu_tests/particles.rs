@@ -12,7 +12,7 @@ fn particle_light(filter_mode: u32, texel: [u8; 4]) -> [f32; 3] {
     let _ = render(&mut renderer, &device, &queue, &scene);
     renderer.particles.begin(1);
     let sample = EmitterSample { visible: true, rate: 60.0, ..EmitterSample::default() };
-    renderer.particles.emit(1, 0, slot, &emitter, &sample, &translation(0.0, 0.0, -100.0), 1.0);
+    renderer.particles.emit((1, 0), slot, &emitter, &sample, &translation(0.0, 0.0, -100.0), 1.0);
     scene.frame = 1;
     light_at_centre(&mut renderer, &device, &queue, &scene)
 }
@@ -52,7 +52,7 @@ fn particle_and_blend_sheet(priority_plane: Option<i32>) -> [f32; 3] {
         let slot = renderer.particles.register(&device, &queue, &emitter, ("flame", &view), &renderer.sampler).expect("room for an emitter");
         renderer.particles.begin(1);
         let sample = EmitterSample { visible: true, rate: 60.0, ..EmitterSample::default() };
-        renderer.particles.emit(1, 0, slot, &emitter, &sample, &translation(0.0, 0.0, -100.0), 1.0);
+        renderer.particles.emit((1, 0), slot, &emitter, &sample, &translation(0.0, 0.0, -100.0), 1.0);
     }
     scene.frame = 1;
     light_at_centre(&mut renderer, &device, &queue, &scene)

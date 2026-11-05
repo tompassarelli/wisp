@@ -109,8 +109,10 @@ fn paint(model: &model::Model, texture_id: i32) -> Paint {
     }
 }
 
+type MaterialDraws = Vec<Vec<(Option<i32>, u32)>>;
+
 /// The layers a geoset draws, a layer that cycles through water frames counting as one water draw.
-fn layers_of(model: &model::Model, material: usize, layer_draws: &[Vec<Vec<(Option<i32>, u32)>>], geoset_index: usize) -> Vec<Layer> {
+fn layers_of(model: &model::Model, material: usize, layer_draws: &[MaterialDraws], geoset_index: usize) -> Vec<Layer> {
     let Some(found) = model.materials.get(material) else {
         return vec![Layer { paint: Paint::None, filter: Filter::Opaque, color_slot: geoset_index as u32, unshaded: false, two_sided: true }];
     };
@@ -146,7 +148,7 @@ pub(super) fn build(parsed: model::Model, quality: Quality) -> Result<ModelData,
     // A model lives as long as the window does, and its pose borrows it, so it is leaked rather than made self-referential.
     let model: &'static model::Model = Box::leak(Box::new(parsed));
     let mut slots = Vec::new();
-    let mut layer_draws: Vec<Vec<Vec<(Option<i32>, u32)>>> = Vec::new();
+    let mut layer_draws: Vec<MaterialDraws> = Vec::new();
     for (material_index, material) in model.materials.iter().enumerate() {
         let mut layers = Vec::new();
         for (layer_index, layer) in material.layers.iter().enumerate() {

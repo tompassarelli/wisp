@@ -14,7 +14,7 @@ const SALT: u32 = 7;
 const RIG: &[u8] = include_bytes!("../tests/fixtures/rig.mdx");
 
 fn texture(index: u32, salt: u32) -> Vec<u8> {
-    let side = if index % 10 == 0 { 256 } else { 128 };
+    let side = if index.is_multiple_of(10) { 256 } else { 128 };
     let pixels: Vec<u8> = (0..side * side).flat_map(|at| [((at % side) ^ index) as u8, ((at / side) ^ salt) as u8, (index.wrapping_mul(7) ^ salt) as u8, 255]).collect();
     let mut png = Vec::new();
     image::codecs::png::PngEncoder::new(&mut png).write_image(&pixels, side, side, image::ExtendedColorType::Rgba8).unwrap();

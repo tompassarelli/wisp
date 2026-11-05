@@ -119,8 +119,8 @@ fn peer_room_forwards_only_between_verified_addresses() {
     assert_eq!(reply(&out, moved), Control::Relayed { from: 1, payload: b"after".to_vec() });
     let out = say(&mut s, 9, moved, &datagram(members[0].token, b"hello"));
     assert_eq!(out.len(), 2);
-    assert_eq!(s.holds(moved.into()), true);
-    assert_eq!(s.holds(members[0].addr.into()), false);
+    assert!(s.holds(moved.into()));
+    assert!(!s.holds(members[0].addr.into()));
 }
 
 #[test]

@@ -113,8 +113,8 @@ mod tests {
     fn mean(picture: &image::RgbaImage) -> [f32; 3] {
         let mut sum = [0f32; 3];
         for pixel in picture.pixels() {
-            for channel in 0..3 {
-                sum[channel] += pixel.0[channel] as f32;
+            for (total, value) in sum.iter_mut().zip(pixel.0) {
+                *total += value as f32;
             }
         }
         sum.map(|total| total / (picture.width() * picture.height()) as f32)

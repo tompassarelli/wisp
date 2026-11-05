@@ -16,7 +16,7 @@ use relay_proto::Micros;
 use crate::game_room::GameRoom;
 use crate::path::{bind, Path};
 use crate::results::{self, Report};
-use crate::room::{Body, Clocked, Room, Slot};
+use crate::room::{Body, Clocked, GameClock, Room, Slot};
 
 mod members;
 mod turns;
@@ -313,13 +313,13 @@ impl Server {
         let body = if peer {
             Body::Peer(vec![None; players as usize])
         } else {
-            Body::Clocked(Clocked {
+            Body::Clocked(Box::new(Clocked {
                 relay: Relay::new(self.cadence.clone(), &tokens, now),
                 game: GameRoom::new(seed, &tokens, self.cfg.game_timing),
                 next_report: 0,
                 full_at: (players == 1).then_some(now),
                 started: false,
-            })
+            }))
         };
         let room = Room {
             body,
@@ -403,7 +403,7 @@ impl Server {
         let mut closing = Vec::new();
         for (&id, room) in &mut self.rooms {
             let mark = out.len();
-            room.poll_game(id, now, self.cfg.lobby_us, &self.cadence, out, &mut self.log);
+            room.poll_game(id, GameClock { now, lobby_us: self.cfg.lobby_us, cadence: &self.cadence }, out, &mut self.log);
             if matches!(&room.body, Body::Clocked(c) if c.relay.next_wake() <= now) {
                 turns::send_turns(room, id, now, out, &mut self.stats, self.sends.as_mut());
             }

@@ -111,7 +111,7 @@ fn a_particle_and_a_bolt_reach_the_screen() {
     let _ = render(&mut renderer, &device, &queue, &scene);
     renderer.particles.begin(1);
     let sample = EmitterSample { visible: true, rate: 120.0, ..EmitterSample::default() };
-    renderer.particles.emit(1, 0, slot, &emitter, &sample, &translation(0.0, 0.0, -100.0), 1.0);
+    renderer.particles.emit((1, 0), slot, &emitter, &sample, &translation(0.0, 0.0, -100.0), 1.0);
     scene.frame = 1;
     scene.lightnings = vec![Bolt { from: [-80.0, 70.0, -100.0], to: [80.0, 70.0, -100.0], color: [0.2, 0.4, 1.0, 1.0], look: None }];
     let image = render(&mut renderer, &device, &queue, &scene);
@@ -143,7 +143,7 @@ fn each_preset_draws_the_scene_with_its_post_effects_on_or_off() {
         scene.frame += 1;
         renderer.particles.begin(scene.frame);
         let sample = EmitterSample { visible: true, rate: 120.0, ..EmitterSample::default() };
-        renderer.particles.emit(1, 0, slot, &emitter, &sample, &translation(0.0, 0.0, -100.0), 1.0);
+        renderer.particles.emit((1, 0), slot, &emitter, &sample, &translation(0.0, 0.0, -100.0), 1.0);
         let image = render(&mut renderer, &device, &queue, &scene);
         let round_error = pollster::block_on(scope.pop());
         assert!(round_error.is_none(), "{preset:?}: wgpu validation: {round_error:?}");

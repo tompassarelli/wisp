@@ -8,7 +8,6 @@ license = "MIT"
 publish = false
 
 [workspace.lints.clippy]
-all = { level = "allow", priority = -1 }
 redundant_clone = "warn"
 implicit_clone = "warn"
 unnecessary_to_owned = "warn"

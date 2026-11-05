@@ -115,10 +115,11 @@ fn run(inputs: &[(String, PathBuf)], quality: Quality, upscaler: &Upscaler) -> V
     let results = Mutex::new(Vec::new());
     std::thread::scope(|scope| {
         for _ in 0..THREADS {
-            scope.spawn(|| loop {
-                let Some((name, path)) = inputs.get(next.fetch_add(1, Ordering::Relaxed)) else { break };
-                let outcome = check(name, path, quality, upscaler);
-                results.lock().expect("results lock").push(outcome);
+            scope.spawn(|| {
+                while let Some((name, path)) = inputs.get(next.fetch_add(1, Ordering::Relaxed)) {
+                    let outcome = check(name, path, quality, upscaler);
+                    results.lock().expect("results lock").push(outcome);
+                }
             });
         }
     });

@@ -160,7 +160,7 @@ mod tests {
     use super::*;
 
     fn checker(size: u32) -> Image {
-        let rgba = (0..size * size).flat_map(|index| if (index % size / 2 + index / size / 2) % 2 == 0 { [220, 40, 40, 255] } else { [30, 30, 200, 255] }).collect();
+        let rgba = (0..size * size).flat_map(|index| if (index % size / 2 + index / size / 2).is_multiple_of(2) { [220, 40, 40, 255] } else { [30, 30, 200, 255] }).collect();
         Image { width: size, height: size, rgba }
     }
 

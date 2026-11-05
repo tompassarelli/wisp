@@ -35,7 +35,17 @@ pub(super) fn instance_storage(device: &wgpu::Device, count: usize) -> wgpu::Buf
     device.create_buffer(&wgpu::BufferDescriptor { label: Some("instances"), size: (count * size_of::<Instance>()) as u64, usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false })
 }
 
-pub(super) fn frame_group(device: &wgpu::Device, layout: &wgpu::BindGroupLayout, frame: &wgpu::Buffer, bones: &wgpu::Buffer, colors: &wgpu::Buffer, uv_rows: &wgpu::Buffer, sun: (&wgpu::TextureView, &wgpu::Sampler), fighters: &wgpu::TextureView) -> wgpu::BindGroup {
+/// The uniform and the three storage buffers a frame group binds.
+#[derive(Clone, Copy)]
+pub(super) struct FrameBuffers<'a> {
+    pub(super) frame: &'a wgpu::Buffer,
+    pub(super) bones: &'a wgpu::Buffer,
+    pub(super) colors: &'a wgpu::Buffer,
+    pub(super) uv_rows: &'a wgpu::Buffer,
+}
+
+pub(super) fn frame_group(device: &wgpu::Device, layout: &wgpu::BindGroupLayout, buffers: FrameBuffers, sun: (&wgpu::TextureView, &wgpu::Sampler), fighters: &wgpu::TextureView) -> wgpu::BindGroup {
+    let FrameBuffers { frame, bones, colors, uv_rows } = buffers;
     device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("frame"),
         layout,

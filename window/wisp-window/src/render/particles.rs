@@ -209,7 +209,7 @@ impl Particles {
                 self.rings.len() - 1
             }
         };
-        let flags = u32::from(spec.head) * HEAD | u32::from(spec.tail) * TAIL | u32::from(spec.flags & XY_QUAD != 0) * FLAT | u32::from(spec.filter_mode == 4) * KEYED | u32::from(blend_index(spec.filter_mode) == 1) * ADDITIVE;
+        let flags = (u32::from(spec.head) * HEAD) | (u32::from(spec.tail) * TAIL) | (u32::from(spec.flags & XY_QUAD != 0) * FLAT) | (u32::from(spec.filter_mode == 4) * KEYED) | (u32::from(blend_index(spec.filter_mode) == 1) * ADDITIVE);
         let color = |at: usize| [spec.colors[at][0], spec.colors[at][1], spec.colors[at][2], spec.alphas[at]];
         let record = Spec {
             colors: [color(0), color(1), color(2)],
@@ -259,7 +259,7 @@ impl Particles {
     }
 
     /// Births the particles an emitter owes for the time since the last scene. `world` places the emitter's node in the world.
-    pub(super) fn emit(&mut self, id: u32, index: usize, slot: Slot, emitter: &ModelEmitter, sample: &EmitterSample, world: &Mat4, alpha: f32) {
+    pub(super) fn emit(&mut self, (id, index): (u32, usize), slot: Slot, emitter: &ModelEmitter, sample: &EmitterSample, world: &Mat4, alpha: f32) {
         let state = self.running.entry((id, index as u32)).or_default();
         state.seen = self.generation;
         let step_ms = self.step * 1000.0;

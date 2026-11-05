@@ -29,7 +29,7 @@ impl Progress {
         if self.total == 0 {
             100
         } else {
-            self.done * 100 / self.total
+            (self.done * 100).checked_div(self.total).unwrap_or(100)
         }
     }
 }

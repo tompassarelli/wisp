@@ -6,11 +6,12 @@
 
 use serde::Deserialize;
 
-use super::gpu::{bone_storage, frame_group, frame_uniform_buffer, instance_storage, color_storage, uv_storage};
+use super::gpu::{bone_storage, frame_group, FrameBuffers, frame_uniform_buffer, instance_storage, color_storage, uv_storage};
 use super::math::{Mat4, IDENTITY};
 use super::model::{Part, Vertex};
 use super::scene::{Camera, Light, Scene};
 use super::liquid::Glow;
+use super::frame::Viewport;
 use crate::model::Facing;
 use super::{Instance, Renderer, DEPTH, HDR};
 
@@ -183,7 +184,7 @@ impl Renderer {
         let color_capacity = 64;
         let colors = color_storage(&self.device, color_capacity);
         let uv_rows = uv_storage(&self.device, color_capacity);
-        let group = frame_group(&self.device, &self.frame_layout, &frame, &bones, &colors, &uv_rows, self.shadow.bound(), &self.fighters.view);
+        let group = frame_group(&self.device, &self.frame_layout, FrameBuffers { frame: &frame, bones: &bones, colors: &colors, uv_rows: &uv_rows }, self.shadow.bound(), &self.fighters.view);
         let resolved = make(HDR, 1, wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING, "sprite");
         Slot {
             size,
@@ -241,17 +242,17 @@ impl Renderer {
         let aspect = size.0 as f32 / size.1 as f32;
         let (camera, light) = framing(bounds, aspect, scene_light);
         let far = camera.far;
-        let uniform = Self::scene_frame(&Scene { camera, light: Some(light), ..Scene::default() }, aspect, aspect, far, size, 0.0, false, Glow::NONE, super::Lit::Ambient);
+        let uniform = Self::scene_frame(&Scene { camera, light: Some(light), ..Scene::default() }, Viewport { aspect, window: aspect, far, size }, 0.0, false, Glow::NONE, super::Lit::Ambient);
         if bones > slot.bone_capacity {
             slot.bone_capacity = bones.next_power_of_two();
             slot.bones = bone_storage(&self.device, slot.bone_capacity);
-            slot.group = frame_group(&self.device, &self.frame_layout, &slot.frame, &slot.bones, &slot.colors, &slot.uv_rows, self.shadow.bound(), &self.fighters.view);
+            slot.group = frame_group(&self.device, &self.frame_layout, FrameBuffers { frame: &slot.frame, bones: &slot.bones, colors: &slot.colors, uv_rows: &slot.uv_rows }, self.shadow.bound(), &self.fighters.view);
         }
         if colors.len() > slot.color_capacity {
             slot.color_capacity = colors.len().next_power_of_two();
             slot.colors = color_storage(&self.device, slot.color_capacity);
             slot.uv_rows = uv_storage(&self.device, slot.color_capacity);
-            slot.group = frame_group(&self.device, &self.frame_layout, &slot.frame, &slot.bones, &slot.colors, &slot.uv_rows, self.shadow.bound(), &self.fighters.view);
+            slot.group = frame_group(&self.device, &self.frame_layout, FrameBuffers { frame: &slot.frame, bones: &slot.bones, colors: &slot.colors, uv_rows: &slot.uv_rows }, self.shadow.bound(), &self.fighters.view);
         }
         let queue = &self.queue;
         let team = [shot.team[0], shot.team[1], shot.team[2], 1.0];

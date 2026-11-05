@@ -124,7 +124,7 @@ fn gray(image: &Image) -> Gray {
 
 /// The upscale averaged back to the source's size, in premultiplied alpha so a silhouette edge folds the way it was drawn.
 pub fn fold(upscaled: &Image, width: u32, height: u32) -> Result<Image, String> {
-    if width == 0 || height == 0 || upscaled.width % width != 0 || upscaled.height % height != 0 || upscaled.width / width != upscaled.height / height {
+    if width == 0 || height == 0 || !upscaled.width.is_multiple_of(width) || !upscaled.height.is_multiple_of(height) || upscaled.width / width != upscaled.height / height {
         return Err(format!("{}x{} is not a whole multiple of {width}x{height}", upscaled.width, upscaled.height));
     }
     let factor = (upscaled.width / width) as usize;
@@ -137,8 +137,8 @@ pub fn fold(upscaled: &Image, width: u32, height: u32) -> Result<Image, String> 
                 for dx in 0..factor {
                     let at = ((y * factor + dy) * upscaled.width as usize + x * factor + dx) * 4;
                     let alpha = f32::from(upscaled.rgba[at + 3]) / 255.0;
-                    for channel in 0..3 {
-                        sum[channel] += f32::from(upscaled.rgba[at + channel]) / 255.0 * alpha;
+                    for (channel, total) in sum.iter_mut().take(3).enumerate() {
+                        *total += f32::from(upscaled.rgba[at + channel]) / 255.0 * alpha;
                     }
                     sum[3] += alpha;
                 }

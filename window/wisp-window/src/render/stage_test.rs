@@ -245,7 +245,9 @@ fn pixel(rgba: &[u8], width: u32, x: u32, y: u32) -> [u8; 3] {
     [rgba[at], rgba[at + 1], rgba[at + 2]]
 }
 
-fn drawn(preset: Preset, label: &str) -> Option<(Vec<Vec<u8>>, (u32, u32))> {
+type Frames = (Vec<Vec<u8>>, (u32, u32));
+
+fn drawn(preset: Preset, label: &str) -> Option<Frames> {
     let size = (960, 640);
     let mut stage = Stage::new(size)?;
     let mut rendered = Vec::new();

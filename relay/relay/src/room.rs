@@ -28,8 +28,15 @@ pub(crate) struct Clocked {
 
 #[derive(Debug)]
 pub(crate) enum Body {
-    Clocked(Clocked),
+    Clocked(Box<Clocked>),
     Peer(Vec<Option<Report>>),
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct GameClock<'a> {
+    pub(crate) now: Micros,
+    pub(crate) lobby_us: Micros,
+    pub(crate) cadence: &'a Cadence,
 }
 
 #[derive(Debug)]
@@ -62,9 +69,9 @@ impl Room {
         }
     }
 
-    pub(crate) fn poll_game(&mut self, id: u64, now: Micros, lobby_us: Micros, cadence: &Cadence, out: &mut Out, log: &mut Vec<String>) {
+    pub(crate) fn poll_game(&mut self, id: u64, clock: GameClock, out: &mut Out, log: &mut Vec<String>) {
         if let Body::Clocked(c) = &mut self.body {
-            c.poll_game(id, now, lobby_us, cadence, &mut self.slots, out, log);
+            c.poll_game(id, clock, &mut self.slots, out, log);
         }
     }
 
@@ -85,7 +92,8 @@ impl Room {
 }
 
 impl Clocked {
-    fn poll_game(&mut self, id: u64, now: Micros, lobby_us: Micros, cadence: &Cadence, slots: &mut [Slot], out: &mut Out, log: &mut Vec<String>) {
+    fn poll_game(&mut self, id: u64, clock: GameClock, slots: &mut [Slot], out: &mut Out, log: &mut Vec<String>) {
+        let GameClock { now, lobby_us, cadence } = clock;
         let ready = if self.game.hosted() { self.game.playing() } else { self.full_at.is_some_and(|t| now >= t + lobby_us) };
         if !self.started && ready {
             self.relay.start(now);

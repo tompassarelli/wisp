@@ -122,16 +122,28 @@ fn module(device: &wgpu::Device, label: &str, sources: &[&str]) -> wgpu::ShaderM
     device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some(label), source: wgpu::ShaderSource::Wgsl([&[COMMON], sources].concat().concat().into()) })
 }
 
-fn pipeline(device: &wgpu::Device, label: &str, module: &wgpu::ShaderModule, layout: &wgpu::BindGroupLayout, fragment: &str, target: wgpu::ColorTargetState, multisample: u32, depth: Option<wgpu::TextureFormat>) -> wgpu::RenderPipeline {
+struct Target {
+    colour: wgpu::ColorTargetState,
+    multisample: u32,
+    depth: Option<wgpu::TextureFormat>,
+}
+
+impl Target {
+    fn single(colour: wgpu::ColorTargetState) -> Self {
+        Self { colour, multisample: 1, depth: None }
+    }
+}
+
+fn pipeline(device: &wgpu::Device, label: &str, module: &wgpu::ShaderModule, layout: &wgpu::BindGroupLayout, fragment: &str, target: Target) -> wgpu::RenderPipeline {
     let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some(label), bind_group_layouts: &[Some(layout)], immediate_size: 0 });
     device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
         label: Some(label),
         layout: Some(&layout),
         vertex: wgpu::VertexState { module, entry_point: Some("vertex_fullscreen"), compilation_options: Default::default(), buffers: &[] },
-        fragment: Some(wgpu::FragmentState { module, entry_point: Some(fragment), compilation_options: Default::default(), targets: &[Some(target)] }),
+        fragment: Some(wgpu::FragmentState { module, entry_point: Some(fragment), compilation_options: Default::default(), targets: &[Some(target.colour)] }),
         primitive: wgpu::PrimitiveState::default(),
-        depth_stencil: depth.map(|format| wgpu::DepthStencilState { format, depth_write_enabled: Some(false), depth_compare: Some(wgpu::CompareFunction::Always), stencil: Default::default(), bias: Default::default() }),
-        multisample: wgpu::MultisampleState { count: multisample, mask: !0, alpha_to_coverage_enabled: false },
+        depth_stencil: target.depth.map(|format| wgpu::DepthStencilState { format, depth_write_enabled: Some(false), depth_compare: Some(wgpu::CompareFunction::Always), stencil: Default::default(), bias: Default::default() }),
+        multisample: wgpu::MultisampleState { count: target.multisample, mask: !0, alpha_to_coverage_enabled: false },
         multiview_mask: None,
         cache: None,
     })
@@ -189,18 +201,18 @@ impl Post {
         let composite = module(device, "composite", &[composite_source.as_str()]);
         let sky_layout = &layouts.sky;
         let pipelines = Pipelines {
-            cloud: pipeline(device, "cloud", &cloud, &layouts.cloud, "cloud_main", colour(BLOOM_FORMAT, None), 1, None),
-            sky: pipeline(device, "sky", &sky, sky_layout, "sky_main", colour(scene_format, None), samples, Some(depth_format)),
-            reflected_sky: pipeline(device, "reflected sky", &sky, sky_layout, "reflected_sky_main", colour(scene_format, None), samples, Some(depth_format)),
-            depth: pipeline(device, "depth", &depth, &layouts.depth, "depth_main", colour(DEPTH_FORMAT, None), 1, None),
-            half_depth: pipeline(device, "half depth", &half_depth, &layouts.occlusion, "half_depth_main", colour(DEPTH_FORMAT, None), 1, None),
-            occlusion: pipeline(device, "occlusion", &occlusion, &layouts.occlusion, "occlusion_main", colour(OCCLUSION_FORMAT, None), 1, None),
-            denoise_across: pipeline(device, "denoise across", &denoise, &layouts.occlusion, "denoise_across", colour(OCCLUSION_FORMAT, None), 1, None),
-            denoise_down: pipeline(device, "denoise down", &denoise, &layouts.occlusion, "denoise_down", colour(OCCLUSION_FORMAT, None), 1, None),
-            prefilter: pipeline(device, "prefilter", &bloom, &layouts.bloom, "prefilter_main", colour(BLOOM_FORMAT, None), 1, None),
-            down: pipeline(device, "bloom down", &bloom, &layouts.bloom, "down_main", colour(BLOOM_FORMAT, None), 1, None),
-            up: pipeline(device, "bloom up", &bloom, &layouts.bloom, "up_main", colour(BLOOM_FORMAT, Some(ADDITIVE)), 1, None),
-            composite: pipeline(device, "composite", &composite, &layouts.composite, "composite_main", colour(surface, None), 1, None),
+            cloud: pipeline(device, "cloud", &cloud, &layouts.cloud, "cloud_main", Target::single(colour(BLOOM_FORMAT, None))),
+            sky: pipeline(device, "sky", &sky, sky_layout, "sky_main", Target { colour: colour(scene_format, None), multisample: samples, depth: Some(depth_format) }),
+            reflected_sky: pipeline(device, "reflected sky", &sky, sky_layout, "reflected_sky_main", Target { colour: colour(scene_format, None), multisample: samples, depth: Some(depth_format) }),
+            depth: pipeline(device, "depth", &depth, &layouts.depth, "depth_main", Target::single(colour(DEPTH_FORMAT, None))),
+            half_depth: pipeline(device, "half depth", &half_depth, &layouts.occlusion, "half_depth_main", Target::single(colour(DEPTH_FORMAT, None))),
+            occlusion: pipeline(device, "occlusion", &occlusion, &layouts.occlusion, "occlusion_main", Target::single(colour(OCCLUSION_FORMAT, None))),
+            denoise_across: pipeline(device, "denoise across", &denoise, &layouts.occlusion, "denoise_across", Target::single(colour(OCCLUSION_FORMAT, None))),
+            denoise_down: pipeline(device, "denoise down", &denoise, &layouts.occlusion, "denoise_down", Target::single(colour(OCCLUSION_FORMAT, None))),
+            prefilter: pipeline(device, "prefilter", &bloom, &layouts.bloom, "prefilter_main", Target::single(colour(BLOOM_FORMAT, None))),
+            down: pipeline(device, "bloom down", &bloom, &layouts.bloom, "down_main", Target::single(colour(BLOOM_FORMAT, None))),
+            up: pipeline(device, "bloom up", &bloom, &layouts.bloom, "up_main", Target::single(colour(BLOOM_FORMAT, Some(ADDITIVE)))),
+            composite: pipeline(device, "composite", &composite, &layouts.composite, "composite_main", Target::single(colour(surface, None))),
         };
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor { mag_filter: wgpu::FilterMode::Linear, min_filter: wgpu::FilterMode::Linear, address_mode_u: wgpu::AddressMode::ClampToEdge, address_mode_v: wgpu::AddressMode::ClampToEdge, address_mode_w: wgpu::AddressMode::ClampToEdge, ..Default::default() });
         let params = device.create_buffer(&wgpu::BufferDescriptor { label: Some("post params"), size: size_of::<Params>() as u64, usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });

@@ -42,8 +42,9 @@ use crate::model::Facing;
 use crate::remaster::{self, Baker, Cache, Edges, Quality, Role, Upscaler};
 use crate::settings::{Features, Shadows};
 use math::{multiply, Mat4, IDENTITY};
-use gpu::{bone_storage, frame_group, frame_uniform_buffer, instance_storage, color_storage, repeat_sampler, upload, uv_storage, white};
+use gpu::{bone_storage, frame_group, FrameBuffers, frame_uniform_buffer, instance_storage, color_storage, repeat_sampler, upload, uv_storage, white};
 use {lightning::Lightning, weather::Weather};
+use frame::Viewport;
 use model::{Filter, ModelData, ModelEmitter, Paint, Vertex};
 use groups::Group;
 use {shadow::Shadow, targets::{samples_of, Targets}};
@@ -112,7 +113,7 @@ impl FrameSet {
     /// A frame uniform labelled `label`, bound with `storage` (the bone, opacity and texture-coordinate buffers), the sun's map and the fighters' map.
     fn new(device: &wgpu::Device, layout: &wgpu::BindGroupLayout, label: &str, storage: [&wgpu::Buffer; 3], sun: (&wgpu::TextureView, &wgpu::Sampler), fighters: &wgpu::TextureView) -> Self {
         let buffer = frame_uniform_buffer(device, label);
-        let group = frame_group(device, layout, &buffer, storage[0], storage[1], storage[2], sun, fighters);
+        let group = frame_group(device, layout, FrameBuffers { frame: &buffer, bones: storage[0], colors: storage[1], uv_rows: storage[2] }, sun, fighters);
         FrameSet { buffer, group }
     }
 }
@@ -390,7 +391,7 @@ impl Renderer {
                 for (index, ((emitter, slot), sample)) in model.emitters.iter().zip(model.rig.emitters()).enumerate() {
                     let Some(slot) = *slot else { continue };
                     let Some(bone) = self.bone_scratch.get(base + emitter.spec.node) else { continue };
-                    self.particles.emit(pose.id, index, slot, emitter, sample, &multiply(&pose.matrix, bone), pose.alpha);
+                    self.particles.emit((pose.id, index), slot, emitter, sample, &multiply(&pose.matrix, bone), pose.alpha);
                 }
             }
         }
@@ -439,10 +440,10 @@ impl Renderer {
         let sun = scene.light.as_ref().filter(|light| light.key.iter().any(|&channel| channel > 0.0)).filter(|_| self.shadow.side > 0).and_then(|light| scene.camera.sun_corners(aspect).map(|corners| shadow::sun(corners, light.toward, self.shadow.side)));
         let fighters = sun.as_ref().and_then(|_| self.fighter_sun(scene));
         let lit = sun.as_ref().map_or(Lit::Ambient, |sun| Lit::Sunlit(sun, fighters.as_ref()));
-        let main = Self::scene_frame(scene, aspect, window, scene.camera.far, size, plane, false, glow, lit);
+        let main = Self::scene_frame(scene, Viewport { aspect, window, far: scene.camera.far, size }, plane, false, glow, lit);
         let frames = [(&self.main, scene.camera.far, false, lit), (&self.sky, scene.camera.sky_far, false, Lit::Unlit), (&self.mirror, scene.camera.far, true, lit), (&self.mirror_sky, scene.camera.sky_far, true, Lit::Unlit)];
         for (set, far, mirror, lit) in frames {
-            self.queue.write_buffer(&set.buffer, 0, bytemuck::bytes_of(&Self::scene_frame(scene, aspect, window, far, size, plane, mirror, glow, lit)));
+            self.queue.write_buffer(&set.buffer, 0, bytemuck::bytes_of(&Self::scene_frame(scene, Viewport { aspect, window, far, size }, plane, mirror, glow, lit)));
         }
         if let Some(sun) = &sun {
             self.shadow.write(&self.queue, sun);

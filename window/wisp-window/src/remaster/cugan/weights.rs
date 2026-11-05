@@ -183,7 +183,7 @@ impl Weights {
                 Kind::Dense => packed.extend_from_slice(&weights),
             }
             layer.bias = (packed.len() / 4) as u32;
-            packed.extend(bias.iter().copied().chain(std::iter::repeat(0.0).take(stride - outputs_n)));
+            packed.extend(bias.iter().copied().chain(std::iter::repeat_n(0.0, stride - outputs_n)));
             debug_assert!(packed.len() % 4 == 0);
             layers.push(layer);
         }

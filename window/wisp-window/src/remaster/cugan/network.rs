@@ -290,7 +290,7 @@ impl Network {
 
     /// `run` in submissions of at most `budget` multiply-adds each, with no more than one waiting behind the one the GPU is running; also returns the multiply-adds of each submission.
     fn run_sliced(&mut self, planes: &[f32], width: u32, height: u32, budget: u64) -> Result<(Vec<f32>, Vec<u64>), String> {
-        if width % 2 != 0 || height % 2 != 0 || width <= CONTEXT * 2 + 4 || height <= CONTEXT * 2 + 4 {
+        if !width.is_multiple_of(2) || !height.is_multiple_of(2) || width <= CONTEXT * 2 + 4 || height <= CONTEXT * 2 + 4 {
             return Err(format!("a {width}x{height} tile is not even or has no pixels inside its context"));
         }
         let input = self.tensor(3, width, height);

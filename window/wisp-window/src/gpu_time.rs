@@ -98,7 +98,7 @@ impl GpuClock {
             return Err("the adapter does not offer TIMESTAMP_QUERY".to_string());
         }
         let period_ns = queue.get_timestamp_period() as f64;
-        if !(period_ns > 0.0) {
+        if period_ns.is_nan() || period_ns <= 0.0 {
             return Err(format!("the adapter's timestamp period is {period_ns} ns"));
         }
         let size = QUERIES as u64 * STAMP_BYTES;

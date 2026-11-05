@@ -9,9 +9,19 @@ use super::Renderer;
 /// How much of the key light a fighter's own shadow takes: a fighter in its own shadow still reads, as a Warcraft unit does.
 pub(super) const FIGHTER_SELF_SHADOW: f32 = 0.35;
 
+/// The shape of the picture a frame is built for: its aspect, the window it fills, the far plane and the target size.
+#[derive(Clone, Copy)]
+pub(super) struct Viewport {
+    pub(super) aspect: f32,
+    pub(super) window: f32,
+    pub(super) far: f32,
+    pub(super) size: (u32, u32),
+}
+
 impl Renderer {
     /// `mirror` is set when the frame is the mirrored copy drawn for the reflection, whose geometry below `plane` is cut away; `lit` says how the light and the sun's and the fighters' maps reach what the frame draws.
-    pub(super) fn scene_frame(scene: &Scene, aspect: f32, window: f32, far: f32, size: (u32, u32), plane: f32, mirror: bool, glow: Glow, lit: Lit) -> SceneFrame {
+    pub(super) fn scene_frame(scene: &Scene, view: Viewport, plane: f32, mirror: bool, glow: Glow, lit: Lit) -> SceneFrame {
+        let Viewport { aspect, window, far, size } = view;
         let camera = &scene.camera;
         let view = camera.view;
         let (light_toward, light_key, light_ambient) = match (&scene.light, lit) {
