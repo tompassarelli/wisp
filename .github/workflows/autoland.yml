@@ -275,7 +275,7 @@ jobs:
           SHA: ${{ needs.rebase.outputs.sha }}
         run: |
           set +e -uo pipefail
-          bun "$RUNNER_TEMP/north/harness/code-health/cli.ts" gate "$BASE" "$SHA" > gate.log 2>&1
+          "$CODE_HEALTH_NORTH_BIN" code-health gate "$BASE" "$SHA" > gate.log 2>&1
           code=$?
           cat gate.log
           case "$code" in 0) verdict=pass ;; 1) verdict=debt ;; *) verdict=error ;; esac

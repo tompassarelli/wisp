@@ -244,7 +244,7 @@ jobs:
           BEFORE: ${{ github.event.before }}
         run: |
           if [ "$EVENT" = push ] && [ "$REF" = refs/heads/main ]; then base=$BEFORE; else base=$(git merge-base origin/main HEAD); fi
-          bun "$RUNNER_TEMP/north/harness/code-health/cli.ts" gate "$base" HEAD
+          "$CODE_HEALTH_NORTH_BIN" code-health gate "$base" HEAD
 
   # Autoland dispatches this workflow after a landing, and a dispatched run
   # starts no workflow_run, so it hands its own result to "Main is red".
