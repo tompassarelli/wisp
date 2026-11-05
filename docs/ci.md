@@ -419,7 +419,9 @@ job and summary say whether it landed. To retry a branch without a new
 commit: `gh workflow run autoland.yml -f branch=claude/NAME`. A commit that
 changes `.github/workflows/` can't land this way (the workflow token may not
 push workflow changes); the run's summary says so, and it lands through a
-normal `safe-push`.
+normal `safe-push`. The check reads the rebase job, not the run: a `queue`
+run reads its members within a few minutes of starting, yet GitHub can list
+the run as unfinished for many minutes after it landed them.
 
 ## Effect upgrades
 
