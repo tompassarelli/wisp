@@ -228,6 +228,14 @@ fix it and land it again with `Follows:`. A revert is never itself
 reverted. Main's GitHub CI still runs the whole suite and the window crate
 after every landing, and a red run there still reverts itself (below).
 
+Measured on 2026-11-06 on whiterabbit: queue to main took 7 s (fa8643bc),
+37 s (27acce21, an Effect upgrade whose lockfile change made the candidate's
+`bun install` fetch packages), 9 s (537fde2b) and 9 s (5688123f). The
+clean-room check takes about 6 s of that with a fresh worktree's install. The
+after-landing `ci pre-merge` took 177 s on fa8643bc (75 of 142 test files)
+and passed. A restart of the lander kills an after-landing run that has not
+finished, and nothing reruns it yet (north#639).
+
 ## Main stays green
 
 Each finished CI run on `main` opens, updates or closes one issue titled
