@@ -1,9 +1,19 @@
-use std::sync::OnceLock;
+use std::cell::OnceCell;
+use std::sync::{Mutex, MutexGuard, OnceLock};
 
 type Shared = Option<(wgpu::AdapterInfo, wgpu::Device, wgpu::Queue)>;
 
-/// The one device every GPU test in the process uses: tests that each open their own run their devices at once, which crashes WARP (STATUS_ACCESS_VIOLATION on Windows CI, wisp#143). `WISP_GPU` names the adapter to use.
-pub(crate) fn with_info() -> Shared {
+static TURN: Mutex<()> = Mutex::new(());
+
+thread_local! {
+    static HELD: OnceCell<MutexGuard<'static, ()>> = const { OnceCell::new() };
+}
+
+/// The one device every GPU test in the process uses, held by one test at a time: WARP fails and corrupts its heap when tests open their own devices at once (STATUS_ACCESS_VIOLATION, wisp#143) or build pipelines on the shared one at once (E_FAIL from CreatePipelineState, then STATUS_HEAP_CORRUPTION, wisp#236). The turn lasts until the test's thread ends. `WISP_GPU` names the adapter to use.
+fn with_info() -> Shared {
+    HELD.with(|held| {
+        held.get_or_init(|| crate::sync::lock(&TURN));
+    });
     static SHARED: OnceLock<Shared> = OnceLock::new();
     SHARED
         .get_or_init(|| {
