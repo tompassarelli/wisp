@@ -132,8 +132,8 @@ const timingPhase = (files: readonly string[], args: readonly string[], print: (
       yield* runTimingFiles(resultsFile, files, args);
     } else {
       print(`timing tests: waiting for an exclusive machine-capacity lease for ${files.length} file${files.length === 1 ? "" : "s"}`);
-      const leased = run(...capacitySpawn(program, [
-        "run", "--class", "exclusive", "--owner", `wisp-test:${process.pid}`, "--timeout-seconds", String(LEASE_SECONDS),
+      const leased = run(...capacitySpawn(program, "run", [
+        "--class", "exclusive", "--owner", `wisp-test:${process.pid}`, "--timeout-seconds", String(LEASE_SECONDS),
         "--", process.execPath, import.meta.path, "--timing-run", resultsFile, ...files, "--", ...args,
       ]));
 

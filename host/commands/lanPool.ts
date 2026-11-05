@@ -54,7 +54,7 @@ const startPair = (pair: number, custody: { readonly custodian: Custodian; reado
     const scope = yield* Scope.fork(yield* Effect.scope);
     return yield* Effect.gen(function*() {
 
-      const session = yield* spawnLogged(ChildProcess.make(...capacitySpawn(capacity, [ "--class", "native", "--memory-gib", "1", "--new-clients", String(pairSides(network).length), ...(waitSeconds > 0 ? ["--wait-seconds", String(waitSeconds)] : []), "--owner", `wisp-lan-pair-${pair}`, "--", process.execPath, SESSION, "--pair", String(pair), "--pool-profile", profile, "--launcher", launcher, "--capacity-bin", capacity, ...(fps === undefined ? [] : ["--fps", String(fps)]), ...(network ? ["--network"] : [])]), { stdin: "ignore", forceKillAfter: "90 seconds" }), {
+      const session = yield* spawnLogged(ChildProcess.make(...capacitySpawn(capacity, "session", ["--class", "native", "--memory-gib", "1", "--new-clients", String(pairSides(network).length), ...(waitSeconds > 0 ? ["--wait-seconds", String(waitSeconds)] : []), "--owner", `wisp-lan-pair-${pair}`, "--", process.execPath, SESSION, "--pair", String(pair), "--pool-profile", profile, "--launcher", launcher, "--capacity-bin", capacity, ...(fps === undefined ? [] : ["--fps", String(fps)]), ...(network ? ["--network"] : [])]), { stdin: "ignore", forceKillAfter: "90 seconds" }), {
         stdout: join(directory, "session.out"),
         stderr: sessionErr,
       });

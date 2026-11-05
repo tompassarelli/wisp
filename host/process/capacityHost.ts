@@ -10,8 +10,11 @@ export const capacityProgram = (): string | undefined => {
   return Bun.which("north", { PATH: process.env["PATH"] ?? "" }) === null ? undefined : "north";
 };
 
-/** `capacityCommand` followed by `args`, split into the program and its arguments for a spawn. */
-export const capacitySpawn = (program: string | undefined, args: readonly string[]) => {
-  const [command = "", ...rest] = [...capacityCommand(program), ...args];
+/** A verb `north capacity host` admits through; without one it prints its usage and exits 2. */
+export type CapacityVerb = "session" | "run";
+
+/** `capacityCommand`, `verb` and `args`, split into the program and its arguments for a spawn. */
+export const capacitySpawn = (program: string | undefined, verb: CapacityVerb, args: readonly string[]) => {
+  const [command = "", ...rest] = [...capacityCommand(program), verb, ...args];
   return [command, rest] as const;
 };

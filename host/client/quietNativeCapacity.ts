@@ -22,7 +22,7 @@ export const withQuietNativeCapacity = <A, E, R>(owner: string, run: Effect.Effe
   const fs = yield* FileSystem.FileSystem;
   const folder = yield* fs.makeTempDirectoryScoped({ prefix: "wisp-native-quiet-" }).pipe(Effect.mapError((cause) => new QuietLeaseFailure({ problem: String(cause) })));
   const stdout = join(folder, "stdout");
-  const child = yield* spawnLogged(ChildProcess.make(...capacitySpawn(program, quietNativeSessionArgs(program, owner).slice(3)), { stdin: "ignore", forceKillAfter: "5 seconds" }), {
+  const child = yield* spawnLogged(ChildProcess.make(...capacitySpawn(program, "session", quietNativeSessionArgs(program, owner).slice(4)), { stdin: "ignore", forceKillAfter: "5 seconds" }), {
     stdout,
     stderr: join(folder, "stderr"),
   }).pipe(Effect.mapError((cause) => new QuietLeaseFailure({ problem: `starting native quiet lease: ${String(cause)}` })));
