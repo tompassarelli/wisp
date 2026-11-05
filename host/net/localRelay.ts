@@ -19,6 +19,8 @@ const freePort = Effect.tryPromise({
   catch: (cause) => new NetFailure({ problem: `finding a free UDP port: ${String(cause)}` }),
 });
 
+const withLinker = (command: readonly string[]) => Bun.which("cc") !== null ? [...command] : ["nix", "shell", "nixpkgs#gcc", "--command", ...command];
+
 /** The relay binary `WISP_RELAY_BIN` names, else the one cargo builds from relay/ with its pinned toolchain (wisp:docs/relay.md). */
 export const relayBinary = Effect.gen(function*() {
   const named = process.env["WISP_RELAY_BIN"];
@@ -31,8 +33,8 @@ export const relayBinary = Effect.gen(function*() {
   if (cargo === undefined) {
     return yield* new NetFailure({ problem: `no cargo on PATH or in rustup's pinned toolchain; run \`${buildCommand}\` in ${relayDirectory} and set WISP_RELAY_BIN to ${binary}` });
   }
-  const [command, ...leading] = cargo.command;
-  const build = yield* collect(ChildProcess.make(command!, [...leading, "build", "--release", "-p", "relay"], {
+  const [command, ...leading] = withLinker([...cargo.command, "build", "--release", "-p", "relay"]);
+  const build = yield* collect(ChildProcess.make(command!, leading, {
     cwd: relayDirectory, stdin: "ignore", extendEnv: true,
     ...(cargo.path === undefined ? {} : { env: { PATH: pathWith(cargo.path, process.env["PATH"]) } }),
   })).pipe(

@@ -208,6 +208,26 @@ Every 5 minutes wisp:.github/workflows/farm-load.yml samples the load of the
 newest sample and sends shards to hosted runners while it is missing, stale
 or over the box's cores ([Where shards run](farm.md#where-shards-run)).
 
+## Land first, check after
+
+A local lane lands through north's lander (`north land serve`), which reads
+wisp:.safe-push. Before the push it runs only what finishes in seconds and
+cannot be taken back once main is public: the outgoing scans and trailer
+gates, and the clean-room check (`land.check`), on the lander host
+(`land.check-local`). The push follows at once.
+
+The slow checks are one `land.after` line, run once per landed batch on
+the new main: `bun wisp ci pre-merge --base` the main the batch landed on,
+which is the type and number-rule check, every test the batch reaches and
+the 32-bit Lua determinism stage under both `LUA` and `TOWARD_ZERO_LUA`
+([The CI command](ci-command.md)), under capacity admission
+(`landing.capacity`). When it fails, the lander reruns it on each prefix of
+the batch to find the first red lane, queues `git revert` of exactly that
+lane's commits ahead of every other ticket, and tells the lane's session to
+fix it and land it again with `Follows:`. A revert is never itself
+reverted. Main's GitHub CI still runs the whole suite and the window crate
+after every landing, and a red run there still reverts itself (below).
+
 ## Main stays green
 
 Each finished CI run on `main` opens, updates or closes one issue titled
