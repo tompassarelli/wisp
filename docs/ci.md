@@ -329,8 +329,9 @@ it locally. Local lanes don't come through here: wisp's .safe-push sets no
    a test is new unless main's result also had one in that suite.
    Beside the suite, a `code-health` job runs north's
    `harness/code-health/cli.ts gate BASE SHA` on the rebased commit (Bun
-   1.4.4, ast-grep 0.42.1); new debt (exit 1) or a gate error (exit 2)
-   refuses the branch. The gate passes without `structure.toml`.
+   1.4.4, ast-grep 0.42.1); new debt (exit 1) refuses the branch, while a
+   gate error (exit 2) or a job that ends without a result holds it (step 6).
+   The gate passes without `structure.toml`.
    `structure.toml` also carries the Rust size gates (north#259):
    `[crate_lines]` caps each crate in `relay/` and `window/` at 25,000
    non-test lines, and 10,000 for a hub crate that 3 or more workspace
@@ -378,6 +379,19 @@ it locally. Local lanes don't come through here: wisp's .safe-push sets no
    autoland.yml --branch claude/NAME` and `gh run view RUN_ID`. Push a fix to
    the same branch and it tries again.
 
+   A gate that reaches no verdict on its own account doesn't refuse: a suite
+   or CI run that ends without a result, a code-health gate that errors
+   (exit 2) or never runs (it builds north from north's main), or a baseline
+   or CI comparison with main that fails. The run fails, but it sets the
+   tip's `autoland` status to error rather than failure and the summary says
+   the branch stays queued, so the next `queue` run takes the same tip again
+   (`stall` and `hold` in the judge, `hold_member` in
+   wisp:host/checks/autolandLib.sh). A lone tip's suite, CI or exit-2 gate
+   without a result is held; in a train of several tips it splits the train
+   as a failure does, since one tip can be what kept the suite from finishing.
+   A failure outside the candidate (code-health never ran, or main's baseline
+   or CI comparison failed) holds every tip of the train without splitting.
+
 **Train.** A run's `branch` input is `queue`, or with `split` set (Autoland's
 own dispatches of halves and deferred tips) one branch or several separated by
 spaces; any other dispatch only makes sure a `queue` run is waiting. `queue` is every `claude/` branch ahead of main whose tip
@@ -391,7 +405,7 @@ its own after the train (a `split` run). When the stack fails its checks, the su
 jobs or the gate, the judge refuses no one: it dispatches the first and second
 half of the stack as two trains (`halves`), each running the same steps, until
 a train of one tip fails and is refused with the usual `autoland` failure
-status. The halves test side by side, so a planted failure among N tips costs
+status, or held with error when no gate reached a verdict on it. The halves test side by side, so a planted failure among N tips costs
 about log2(N) suite lengths while the passing halves land on the way. Dispatches
 of `queue` collapse into one pending run: a push and every
 dispatch of a branch skip the dispatch only while a `queue` run's rebase job
@@ -415,8 +429,11 @@ or Windows workflow of its own: Autoland runs ci.yml on each train's rebased
 commit, and after each landing dispatches CI and Windows on main. The hosted-job limit below still applies: when
 several runs' shards exceed it, the shards wait in GitHub's queue. The run's own status is red
 whenever a suite shard fails, main's known failures included; its `land`
-job and summary say whether it landed. To retry a branch without a new
-commit: `gh workflow run autoland.yml -f branch=claude/NAME`. A commit that
+job and summary say whether it landed. The next `queue` run retakes every tip whose
+`autoland` status is missing, pending or error, so a held tip is retried
+without a new commit by starting one: `gh workflow run autoland.yml -f
+branch=claude/NAME`, or any push to a `claude/` branch. A refused tip
+(failure) stays out of every queue run until a new commit on its branch. A commit that
 changes `.github/workflows/` can't land this way (the workflow token may not
 push workflow changes); the run's summary says so, and it lands through a
 normal `safe-push`. The check reads the rebase job, not the run: a `queue`

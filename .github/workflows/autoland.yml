@@ -346,8 +346,8 @@ jobs:
           . host/checks/autolandLib.sh
           mapfile -t members <<< "$MEMBERS"
           names=("${members[@]%%$'\t'*}")
-          refuse() {
-            for member in "${members[@]}"; do IFS=$'\t' read -r name tip _ <<< "$member"; refuse_member "$name" "$tip" "$1" "$2"; done
+          each() {
+            for member in "${members[@]}"; do IFS=$'\t' read -r name tip _ <<< "$member"; "$1" "$name" "$tip" "$2" "$3"; done
             exit 1
           }
           # A failing train of several tips is not refused as a whole: each half is tested on its own, down to the tip at fault.
@@ -360,16 +360,18 @@ jobs:
             [ -z "$DEFERRED" ] || dispatch "$DEFERRED"
             exit 0
           }
-          fail() { if [ "${#names[@]}" -gt 1 ]; then split "$@"; else refuse "$@"; fi; }
+          fail() { if [ "${#names[@]}" -gt 1 ]; then split "$@"; else each refuse_member "$@"; fi; }
+          stall() { if [ "${#names[@]}" -gt 1 ]; then split "$@"; else each hold_member "$@"; fi; }
+          hold() { each hold_member "$@"; }
           case "$VERDICT" in
             none) exit 0 ;;
             check) fail "the checks failed:" "$(printf '```\n%s\n```' "$DETAIL")" ;;
           esac
-          [ -f candidate/summary.json ] || fail "the suite run ended without a result." ""
+          [ -f candidate/summary.json ] || stall "the suite run ended without a result." ""
           if [ ! -f baseline/summary.json ] && [ "$SUITE" = success ] && jq -e '.failures == [] and .problems == []' candidate/summary.json > /dev/null; then
             mkdir -p baseline && echo '{"failures":[],"problems":[]}' > baseline/summary.json
           fi
-          [ -f baseline/summary.json ] || fail "main's baseline run ended without a result." ""
+          [ -f baseline/summary.json ] || hold "main's baseline run ended without a result." ""
           # A shard that failed without naming a test is new unless main's run had one in the same suite.
           compare() {
             jq -rn --slurpfile c candidate/summary.json --slurpfile b baseline/summary.json '
@@ -391,9 +393,9 @@ jobs:
           fi
           if [ "$CI_RESULT" != success ]; then
             bun install --frozen-lockfile > /dev/null
-            bun host/checks/ciBaseline.ts "$GITHUB_RUN_ID" > ci-verdict.json || fail "couldn't compare the failed CI jobs with main's" ""
+            bun host/checks/ciBaseline.ts "$GITHUB_RUN_ID" > ci-verdict.json || hold "couldn't compare the failed CI jobs with main's" ""
             line() { jq -r --arg key "$1" '.[$key][] | "- [\(.name)](\(.url))" + (if (.tests | length) > 0 then ":\n" + (.tests | map("    - " + .) | join("\n")) else " (no test named: a crash or a failed step)" end)' ci-verdict.json; }
-            [ "$(jq '.known + .fresh | length' ci-verdict.json)" != 0 ] || fail "CI ended $CI_RESULT with no failed job to compare" ""
+            [ "$(jq '.known + .fresh | length' ci-verdict.json)" != 0 ] || stall "CI ended $CI_RESULT with no failed job to compare" ""
             [ "$(jq '.known | length' ci-verdict.json)" = 0 ] || printf "CI jobs main's last runs fail too, not held against this landing:\n%s\n" "$(line known)" >> "$GITHUB_STEP_SUMMARY"
             if [ "$(jq '.fresh | length' ci-verdict.json)" != 0 ]; then
               fail "CI jobs failed on the rebased commit that main's last runs pass: $(jq -r '[.fresh[] | .name | ltrimstr("ci / ")] | join(", ")' ci-verdict.json)" "$(line fresh)"
@@ -402,8 +404,8 @@ jobs:
           case "$CODE_HEALTH:$CODE_HEALTH_VERDICT" in
             success:pass) ;;
             success:debt) fail "it adds code-health debt:" "$(printf '```\n%s\n```' "$CODE_HEALTH_DETAIL")" ;;
-            success:*) fail "the code-health gate failed to run:" "$(printf '```\n%s\n```' "$CODE_HEALTH_DETAIL")" ;;
-            *) fail "the code-health gate ended without a result." "" ;;
+            success:*) stall "the code-health gate failed to run:" "$(printf '```\n%s\n```' "$CODE_HEALTH_DETAIL")" ;;
+            *) hold "the code-health gate ended without a result." "" ;;
           esac
           echo "go=true" >> "$GITHUB_OUTPUT"
 
