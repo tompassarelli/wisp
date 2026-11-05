@@ -7,7 +7,7 @@ export function queued(entries: readonly Entry[], inTrain: readonly string[] = [
     .map((entry) => entry.name);
 }
 
-export function halves<T>(names: readonly T[]): [T[], T[]] {
+function halves<T>(names: readonly T[]): [T[], T[]] {
   const first = Math.ceil(names.length / 2);
   return [names.slice(0, first), names.slice(first)];
 }
