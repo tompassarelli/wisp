@@ -643,6 +643,41 @@ fills 160,0 to 319,159) and 232,72,116,115 windowed (213,53 to 366,205).
 For Warcraft: `--window warcraft --region 6,6,38,38 --flash --input-delay-frames N`
 on lan0a's display.
 
+### Runs 6 to 11: the acceptance runs with skipped vblanks counted (wisp#242, wisp#244, 6 November 2026)
+
+Runs 1 to 5 dropped 13 to 22 native trials each as missed grabs. Those were
+the presses whose frame skipped a vblank ("What a missed grab is on the
+native window"). These six runs repeat them with the harness that counts
+those trials (15a07873) and refuses a sample with more than 2% uncounted.
+Measured on the laptop between 4:47 and 5:03 AM, one sitting, with the same
+Mak'gora (a5be2536b2), desktops, sizes, delays and commands as runs 1 to 5.
+Other sessions were kept off native windows and GPU runs for the sitting.
+
+| Run | Target | Delay | Press to display, p50 / p95 | Responded | Missed a grab | Press to sample, p50 / p95 | Sample to display after the delay, p50 / p95 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 6 | Warcraft (lan0a) | 2 | 64.8 / 82.1 ms | 99 of 100 | 0 | | |
+| 7 | Native, windowed | 2 | 59.3 / 83.4 ms | 99 of 100 | 0 | 9.3 / 16.6 ms | 15.4 / 37.5 ms |
+| 8 | Native, fullscreen | 2 | 58.9 / 82.1 ms | 99 of 100 | 0 | 7.4 / 16.5 ms | 15.8 / 38.0 ms |
+| 9 | Native, windowed | 1 | 42.8 / 66.7 ms | 99 of 100 | 0 | 9.0 / 16.1 ms | 18.1 / 35.2 ms |
+| 10 | Native, fullscreen | 1 | 42.8 / 65.5 ms | 99 of 100 | 0 | 9.3 / 16.2 ms | 14.6 / 37.9 ms |
+| 11 | Warcraft (lan0a) | 1 | 45.4 / 73.5 ms | 99 of 100 | 0 | | |
+
+- **No trial is lost.** Every run counted 99 of 100: trial 0 is the
+  dropped first tap. No grab was missed, so no median stands on survivors.
+- **The native window stays ahead of Warcraft at both delays.** At delay 2
+  it is 5.5 ms ahead windowed and 5.9 ms fullscreen at the median; at p95
+  it is 1.3 ms behind windowed and level fullscreen. At delay 1 it is 2.6 ms ahead both ways, and 6.8 to
+  8.0 ms ahead at p95. wisp#242's acceptance line holds windowed and
+  fullscreen.
+- **Counting the skipped presses moved the native medians up, as runs 1
+  to 5 predicted.** Fullscreen delay 2 went from 55.9 to 58.9 ms, and
+  delay 1 from 40.3 and 40.4 to 42.8 ms. At delay 1 the p95 rose by 9 to
+  13 ms, because the restored trials are the ones a vblank late. Windowed
+  delay 2 kept its 59.3 ms median.
+- **The skipped vblanks themselves stay open in wisp#245.** Windowed, about
+  half of all vblanks are skipped while the harness grabs. These medians
+  include that cost.
+
 ### The native-Wayland path (makgora#1122 part 9, 5 November 2026)
 
 Every figure above is from an Xwayland window driven through XTEST. On Tom's
