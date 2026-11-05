@@ -1,0 +1,253 @@
+{
+  "absent": [
+    "Units\\Human\\HeroBloodElf\\HeroBloodElfReady1.flac",
+    "Units\\Human\\HeroBloodElf\\HeroBloodElfWarcry1.flac",
+    "RiflemanDeath"
+  ],
+  "present": [
+    {
+      "ask": "Sound/Buildings/Orc/PeonJobDone.flac",
+      "stored": "sound/buildings/orc/peonjobdone.ogg"
+    },
+    {
+      "ask": "Sound/Dialogue/NightElfCampaign/NightElf07/N07Archimonde04.flac",
+      "stored": "sound/dialogue/nightelfcampaign/nightelf07/n07archimonde04.mp3"
+    },
+    {
+      "ask": "Sound/Dialogue/TutorialCampaign/Tutorial01/T01Medivh02.flac",
+      "stored": "sound/dialogue/tutorialcampaign/tutorial01/t01medivh02.mp3"
+    },
+    {
+      "ask": "Sound/Dialogue/TutorialCampaign/Tutorial01/T01Medivh59.flac",
+      "stored": "sound/dialogue/tutorialcampaign/tutorial01/t01medivh59.mp3"
+    },
+    {
+      "ask": "Sound/Dialogue/UndeadCampaign/Undead08/U08Archimonde20.flac",
+      "stored": "sound/dialogue/undeadcampaign/undead08/u08archimonde20.mp3"
+    },
+    {
+      "ask": "Units/Creeps/BeastMaster/OgreBeastMasterReady1.flac",
+      "stored": "units/creeps/beastmaster/ogrebeastmasterready1.ogg"
+    },
+    {
+      "ask": "Units/Creeps/BeastMaster/OgreBeastMasterWarcry1.flac",
+      "stored": "units/creeps/beastmaster/ogrebeastmasterwarcry1.ogg"
+    },
+    {
+      "ask": "Units/Creeps/HeroFlameLord/HeroFireLordReady1.flac",
+      "stored": "units/creeps/heroflamelord/herofirelordready1.ogg"
+    },
+    {
+      "ask": "Units/Creeps/HeroFlameLord/HeroFireLordWarcry1.flac",
+      "stored": "units/creeps/heroflamelord/herofirelordwarcry1.ogg"
+    },
+    {
+      "ask": "Units/Creeps/HeroGoblinAlchemist/HeroAlchemistReady1.flac",
+      "stored": "units/creeps/herogoblinalchemist/heroalchemistready1.ogg"
+    },
+    {
+      "ask": "Units/Creeps/HeroGoblinAlchemist/HeroAlchemistWarcry1.flac",
+      "stored": "units/creeps/herogoblinalchemist/heroalchemistwarcry1.ogg"
+    },
+    {
+      "ask": "Units/Creeps/HeroTinker/HeroTinkerReady1.flac",
+      "stored": "units/creeps/herotinker/herotinkerready1.ogg"
+    },
+    {
+      "ask": "Units/Creeps/PandarenBrewmaster/PandarenBrewmasterReady1.flac",
+      "stored": "units/creeps/pandarenbrewmaster/pandarenbrewmasterready1.ogg"
+    },
+    {
+      "ask": "Units/Creeps/PandarenBrewmaster/PandarenBrewmasterWarcry1.flac",
+      "stored": "units/creeps/pandarenbrewmaster/pandarenbrewmasterwarcry1.ogg"
+    },
+    {
+      "ask": "Units/Demon/HeroPitLord/HPitLordReady1.flac",
+      "stored": "units/demon/heropitlord/hpitlordready1.ogg"
+    },
+    {
+      "ask": "Units/Demon/HeroPitLord/HPitLordWarcry1.flac",
+      "stored": "units/demon/heropitlord/hpitlordwarcry1.ogg"
+    },
+    {
+      "ask": "Units/Human/HeroMountainKing/HeroMountainKingReady1.flac",
+      "stored": "units/human/heromountainking/heromountainkingready1.ogg"
+    },
+    {
+      "ask": "Units/Human/HeroMountainKing/HeroMountainKingWarcry1.flac",
+      "stored": "units/human/heromountainking/heromountainkingwarcry1.ogg"
+    },
+    {
+      "ask": "Units/Human/HeroPaladin/HeroPaladinReady1.flac",
+      "stored": "units/human/heropaladin/heropaladinready1.ogg"
+    },
+    {
+      "ask": "Units/Human/HeroPaladin/HeroPaladinWarcry1.flac",
+      "stored": "units/human/heropaladin/heropaladinwarcry1.ogg"
+    },
+    {
+      "ask": "Units/Human/Jaina/JainaWarcry1.flac",
+      "stored": "units/human/jaina/jainawarcry1.ogg"
+    },
+    {
+      "ask": "Units/Human/Jaina/JainaWhat1.flac",
+      "stored": "units/human/jaina/jainawhat1.ogg"
+    },
+    {
+      "ask": "Units/Human/Kael/KaelReady1.flac",
+      "stored": "units/human/kael/kaelready1.ogg"
+    },
+    {
+      "ask": "Units/Human/Kael/KaelWarcry1.flac",
+      "stored": "units/human/kael/kaelwarcry1.ogg"
+    },
+    {
+      "ask": "Units/Naga/LadyVashj/LadyVashjReady1.flac",
+      "stored": "units/naga/ladyvashj/ladyvashjready1.ogg"
+    },
+    {
+      "ask": "Units/Naga/LadyVashj/LadyVashjWarcry1.flac",
+      "stored": "units/naga/ladyvashj/ladyvashjwarcry1.ogg"
+    },
+    {
+      "ask": "Units/NightElf/Furion/FurionWarcry1.flac",
+      "stored": "units/nightelf/furion/furionwarcry1.ogg"
+    },
+    {
+      "ask": "Units/NightElf/Furion/FurionWhat1.flac",
+      "stored": "units/nightelf/furion/furionwhat1.ogg"
+    },
+    {
+      "ask": "Units/NightElf/HeroDemonHunter/HeroDemonHunterReady1.flac",
+      "stored": "units/nightelf/herodemonhunter/herodemonhunterready1.ogg"
+    },
+    {
+      "ask": "Units/NightElf/HeroDemonHunter/HeroDemonHunterWarcry1.flac",
+      "stored": "units/nightelf/herodemonhunter/herodemonhunterwarcry1.ogg"
+    },
+    {
+      "ask": "Units/NightElf/HeroMoonPriestess/HeroMoonPriestessReady1.flac",
+      "stored": "units/nightelf/heromoonpriestess/heromoonpriestessready1.ogg"
+    },
+    {
+      "ask": "Units/NightElf/HeroMoonPriestess/HeroMoonPriestessWarcry1.flac",
+      "stored": "units/nightelf/heromoonpriestess/heromoonpriestesswarcry1.ogg"
+    },
+    {
+      "ask": "Units/NightElf/HeroWarden/HeroWardenReady1.flac",
+      "stored": "units/nightelf/herowarden/herowardenready1.ogg"
+    },
+    {
+      "ask": "Units/NightElf/HeroWarden/HeroWardenWarcry1.flac",
+      "stored": "units/nightelf/herowarden/herowardenwarcry1.ogg"
+    },
+    {
+      "ask": "Units/Orc/Cairne/CairneReady1.flac",
+      "stored": "units/orc/cairne/cairneready1.ogg"
+    },
+    {
+      "ask": "Units/Orc/Cairne/CairneWarcry1.flac",
+      "stored": "units/orc/cairne/cairnewarcry1.ogg"
+    },
+    {
+      "ask": "Units/Orc/Hellscream/GromReady1.flac",
+      "stored": "units/orc/hellscream/gromready1.ogg"
+    },
+    {
+      "ask": "Units/Orc/Hellscream/GromWarcry1.flac",
+      "stored": "units/orc/hellscream/gromwarcry1.ogg"
+    },
+    {
+      "ask": "Units/Orc/HeroBladeMaster/HeroBladeMasterReady1.flac",
+      "stored": "units/orc/heroblademaster/heroblademasterready1.ogg"
+    },
+    {
+      "ask": "Units/Orc/HeroBladeMaster/HeroBladeMasterWarcry1.flac",
+      "stored": "units/orc/heroblademaster/heroblademasterwarcry1.ogg"
+    },
+    {
+      "ask": "Units/Orc/HeroShadowHunter/ShadowHunterReady1.flac",
+      "stored": "units/orc/heroshadowhunter/shadowhunterready1.ogg"
+    },
+    {
+      "ask": "Units/Orc/HeroShadowHunter/ShadowHunterWarcry1.flac",
+      "stored": "units/orc/heroshadowhunter/shadowhunterwarcry1.ogg"
+    },
+    {
+      "ask": "Units/Orc/Peon/PeonReady1.flac",
+      "stored": "units/orc/peon/peonready1.ogg"
+    },
+    {
+      "ask": "Units/Orc/Peon/PeonWarcry1.flac",
+      "stored": "units/orc/peon/peonwarcry1.ogg"
+    },
+    {
+      "ask": "Units/Orc/Peon/PeonYes3.flac",
+      "stored": "units/orc/peon/peonyes3.ogg"
+    },
+    {
+      "ask": "Units/Orc/Thrall/ThrallReady1.flac",
+      "stored": "units/orc/thrall/thrallready1.ogg"
+    },
+    {
+      "ask": "Units/Orc/Thrall/ThrallWarcry1.flac",
+      "stored": "units/orc/thrall/thrallwarcry1.ogg"
+    },
+    {
+      "ask": "Units/Other/DranaiAkama/AkamaReady1.flac",
+      "stored": "units/other/dranaiakama/akamaready1.ogg"
+    },
+    {
+      "ask": "Units/Other/DranaiAkama/AkamaWarcry1.flac",
+      "stored": "units/other/dranaiakama/akamawarcry1.ogg"
+    },
+    {
+      "ask": "Units/Undead/Abomination/AbominationReady1.flac",
+      "stored": "units/undead/abomination/abominationready1.ogg"
+    },
+    {
+      "ask": "Units/Undead/Abomination/AbominationWarcry1.flac",
+      "stored": "units/undead/abomination/abominationwarcry1.ogg"
+    },
+    {
+      "ask": "Units/Undead/EvilArthas/EvilArthasWarcry1.flac",
+      "stored": "units/undead/evilarthas/evilarthaswarcry1.ogg"
+    },
+    {
+      "ask": "Units/Undead/EvilArthas/EvilArthasWhat1.flac",
+      "stored": "units/undead/evilarthas/evilarthaswhat1.ogg"
+    },
+    {
+      "ask": "Units/Undead/EvilSylvanas/EvilSylvanasReady1.flac",
+      "stored": "units/undead/evilsylvanas/evilsylvanasready1.ogg"
+    },
+    {
+      "ask": "Units/Undead/EvilSylvanas/EvilSylvanasWarcry1.flac",
+      "stored": "units/undead/evilsylvanas/evilsylvanaswarcry1.ogg"
+    },
+    {
+      "ask": "Units/Undead/HeroCryptLord/NerubianCryptLordReady1.flac",
+      "stored": "units/undead/herocryptlord/nerubiancryptlordready1.ogg"
+    },
+    {
+      "ask": "Units/Undead/HeroCryptLord/NerubianCryptLordWarcry1.flac",
+      "stored": "units/undead/herocryptlord/nerubiancryptlordwarcry1.ogg"
+    },
+    {
+      "ask": "Units/Undead/HeroDreadLord/HeroDreadLordReady1.flac",
+      "stored": "units/undead/herodreadlord/herodreadlordready1.ogg"
+    },
+    {
+      "ask": "Units/Undead/HeroDreadLord/HeroDreadLordWarcry1.flac",
+      "stored": "units/undead/herodreadlord/herodreadlordwarcry1.ogg"
+    },
+    {
+      "ask": "Units/Undead/HeroLich/HeroLichReady1.flac",
+      "stored": "units/undead/herolich/herolichready1.ogg"
+    },
+    {
+      "ask": "Units/Undead/HeroLich/HeroLichWarcry1.flac",
+      "stored": "units/undead/herolich/herolichwarcry1.ogg"
+    }
+  ]
+}

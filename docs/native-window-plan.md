@@ -1510,7 +1510,9 @@ yet are created by that box. Each graphics run takes the gpu lease as
   - the audio counts in `standalone.json`.
 
   Done when:
-  `cd ~/code/makgora/main/ts && bun wisp play --standalone --window native --script test/native/pads/cpu-expert.pad --frames 1070 --out build/native-audio && jq -e '.missingSounds == [] and .audioPlayed > 0' build/native-audio/standalone.json`
+  `cd ~/code/makgora/main/ts && bun wisp play --standalone --window native --script test/native/pads/cpu-expert.pad --frames 1070 --out build/native-audio && jq -e --slurpfile stock ~/code/wisp/main/test/fixtures/stock-sounds.json '(.missingSounds - ($stock[0].absent | map("missing sound: " + .))) == [] and .audioPlayed > 0' build/native-audio/standalone.json`
+
+  `test/fixtures/stock-sounds.json` lists the three sounds the install lacks (two Blood Elf hero lines and the `RiflemanDeath` label, whose row names no placeable file) and the 61 it holds under `_locales/enus.w3mod`, listed against 2026-11-05 casc-extract lookups; the check fails on any other miss.
 - **W7 wisp-window in CI on Linux and Windows** ([wisp#106](https://github.com/tompassarelli/wisp/issues/106)). It adds:
   - `cargo build --release` and `cargo test` for `window/` in ci.yml and
     windows.yml;

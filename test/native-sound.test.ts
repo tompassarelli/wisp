@@ -151,3 +151,19 @@ test.skipIf(!existsSync(windowLibraryPath()) || !packagerAvailable)("[spec docs/
     rmSync(work, { recursive: true, force: true });
   }
 });
+
+const stockSounds = JSON.parse(readFileSync(join(import.meta.dir, "fixtures/stock-sounds.json"), "utf8")) as { absent: string[]; present: { ask: string; stored: string }[] };
+
+test("[native] every stock sound the cpu-expert run asks for resolves to the file the install holds under its locale mod, and each one the install lacks resolves to nothing", async () => {
+  const held = new Map(stockSounds.present.map(({ stored }) => [stored, new Uint8Array([1])]));
+  const slk = ['ID;PWXL;N;E', 'C;X1;Y1;K"SoundName"', 'C;X2;K"AnimationEventCode"', 'C;X3;K"FileNames"', 'C;X1;Y2;K"RiflemanDeath"', 'C;X2;K"DDTH"', 'C;X3;K"RiflemanDeath1"', 'E'].join("\n");
+  const resolve = createSoundResolver(async (path) => path === "UI/SoundInfo/AnimSounds.slk" ? new TextEncoder().encode(slk) : held.get(path.toLowerCase()));
+  for (const [index, { ask, stored }] of stockSounds.present.entries()) {
+    const found = await resolve(cue({ source: ask.replaceAll("/", "\\"), handle: { kind: "sound", id: index } }));
+    expect(found?.path.toLowerCase()).toBe(stored);
+  }
+  for (const [index, name] of stockSounds.absent.entries()) {
+    const asked = name.includes("\\") ? cue({ source: name, handle: { kind: "sound", id: index } }) : cue({ source: undefined, label: name, handle: { kind: "sound", id: index } });
+    expect(await resolve(asked)).toBeUndefined();
+  }
+});
