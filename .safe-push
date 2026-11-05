@@ -6,3 +6,8 @@
 	check-local = true
 	check = ** :: bun install --frozen-lockfile --silent && bun host/checks/cleanRoom.ts
 	after = ** :: bun install --frozen-lockfile --silent && bun wisp ci pre-merge --base ${SAFE_PUSH_LAND_BASE}
+[test-admission]
+	contract = lua-determinism :: a game's Lua must give every client the same result for the same inputs
+	contract = netcode-replay :: a recorded match or pad replays to the same frames
+	contract = file-or-wire-format :: a format Warcraft III, a client or a past build writes or reads
+	contract = engine-limits :: a Warcraft III or native engine limit a published game must stay inside, such as handle, string or frame budgets
