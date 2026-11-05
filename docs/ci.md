@@ -302,7 +302,8 @@ change touches a listed test, and if your commit broke main, fix it first.
 Cloud workers can push only to `claude/` branches. A push to `claude/NAME`
 lands it on main by itself when it passes
 (wisp:.github/workflows/autoland.yml); nobody has to fetch, rebase or test
-it locally.
+it locally. Local lanes don't come through here: wisp's .safe-push sets no
+`landing.queue`, so safe-push lands them through the north lander instead.
 
 0. **Deny-list attestation.** The branch tip needs a `denylist` commit status
    of success, posted by a machine outside this repository, before anything
