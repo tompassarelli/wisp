@@ -302,6 +302,15 @@ it locally.
    `harness/code-health/cli.ts gate BASE SHA` on the rebased commit (Bun
    1.4.4, ast-grep 0.42.1); new debt (exit 1) or a gate error (exit 2)
    refuses the branch. The gate passes without `structure.toml`.
+   `structure.toml` also carries the Rust size gates (north#259):
+   `[crate_lines]` caps each crate in `relay/` and `window/` at 25,000
+   non-test lines, and 10,000 for a hub crate that 3 or more workspace
+   crates depend on (relay-proto); one `[[build_time]]` per Rust workspace
+   caps the leaf-edit `cargo test --no-run` at 10 s, timed by
+   `north code-health build-time --repo .` (north:docs/rationale/rust-build-times.md).
+   Baseline 2026-11-05: relay-proto 3,816 lines, relay 1,426, relay-agent
+   2,063, relay-bench 1,114, wisp-window 14,190; relay leaf test build 1.3 s,
+   window 5.4 s (the SDL C build by sdl3-sys is outside the leaf edit).
    A `ci` job runs wisp:.github/workflows/ci.yml itself on the rebased commit
    (`ref` the commit, `base` the main it was rebased onto, `bun-tests: skip`
    because the farm run above is the Bun suites): `bun run check`, clean room,

@@ -160,6 +160,23 @@ producer = "host/toolchain/natives.ts"
 [ignore]
 paths = ["vendor/**", "node_modules/**", "builds/**", "repos/**", "**/fixtures/**"]
 
+[crate_lines]
+cap = 25000
+hub_cap = 10000
+hub_dependents = 3
+
+[[build_time]]
+workspace = "relay"
+leaf = "relay-agent/src/wait.rs"
+hub = "relay-proto/src/wire.rs"
+test_no_run_seconds = 10
+
+[[build_time]]
+workspace = "window"
+leaf = "wisp-window/src/mixer.rs"
+hub = "wisp-window/src/settings/mod.rs"
+test_no_run_seconds = 10
+
 [rust_habits]
 checks = ["shared-mutability", "single-impl-trait"]
 
