@@ -1,8 +1,8 @@
 //! Runs the remaster's measured gates over texture files and reports, per texture, palette drift, wrap-edge seam error, and detail kept and added against the Classic original.
 //! Usage: `remaster_check --out DIR [--quality standard|high] [--worst N] [--classical] (--imports MAP_IMPORTS_DIR | TEXTURE...)`.
 //! It measures the upscaler the window would run: Real-CUGAN on the machine's GPU, or the edge-directed filter with `--classical` or when only a software adapter exists.
-//! `MAP_IMPORTS_DIR` is one unpacked map under `$XDG_CACHE_HOME/wisp/map-imports`. Terrain art (`terrainart/` paths, or `war3.w3mod_terrainart_*` file names from an install extract) is sampled with wrap, which turns on the seam gate. Each texture's role picks its upscaler: figures take Real-CUGAN, scenery (terrain, doodads, `Stage*` imports) the edge-directed filter.
-//! Side-by-side crops of the worst N textures are written to DIR as `remaster-check-NAME.png`, outside any repository. Exits 1 when a texture fails.
+//! `MAP_IMPORTS_DIR` is one unpacked map under `$XDG_CACHE_HOME/wisp/map-imports`. Terrain art (`terrainart/` paths, or `war3.w3mod_terrainart_*` file names from an install extract) is sampled with wrap, which turns on the seam gate. Each texture's role picks its upscaler: figures take Real-CUGAN, scenery (terrain, doodads, `Stage*` imports) and interface art (buttons, portraits, cards, menu and HUD art) the edge-directed filter. A failure listed in `WAIVERS` is printed as waived with its reason and does not fail the run.
+//! Side-by-side crops of the worst N textures are written to DIR as `remaster-check-NAME.png`, outside any repository. Exits 1 when a texture fails a gate it has no waiver for.
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -10,7 +10,7 @@ use std::sync::Mutex;
 
 use image::imageops::{resize, FilterType};
 use image::RgbaImage;
-use wisp_window::remaster::check::{fold, measure, most_changed_block, limits_for, Report, FIGURE_LIMITS, LIMITS};
+use wisp_window::remaster::check::{fold, measure, most_changed_block, limits_for, Gate, Report, INTERFACE_LIMITS, LIMITS};
 use wisp_window::remaster::{device_limits, enhance, Edges, Quality, Role, Upscaler};
 use wisp_window::texture::{decode, Image};
 
@@ -19,6 +19,23 @@ const CROP: usize = 32;
 const PANEL: u32 = 256;
 const MIN_SIDE: u32 = 8;
 const TEXTURE_EXTENSIONS: [&str; 4] = [".blp", ".dds", ".tga", ".png"];
+/// Texture, gate, and why its failure is accepted; the names carry the content hash, so a changed texture is judged again (remaster gates in native-window-plan.md, wisp#187).
+const WAIVERS: [(&str, &str, &str); 2] = [
+    (
+        "war3mapImported\\FighterWhite-b2db194a30905b6a5de69d7030470a63a808ee60d089e25b367bc29eada568a3.tga",
+        "alpha",
+        "a field of one-pixel specks with no mask interior: the filter's ringing clamp cuts the negative lobes around each speck, so the specks soften and total alpha rises 4.3% under either upscaler",
+    ),
+    (
+        "war3mapImported\\ParasolShaft-4d59f7fb542ccd4a6649955878a0d38de3417432d41bc8316aa0df2931bff506.tga",
+        "detail kept",
+        "a four-colour 16x64 generated shaft: Real-CUGAN moves its one-pixel bands by half a source pixel; routing flat-colour art to the filter needs the decoded image before the cache lookup",
+    ),
+];
+
+fn waiver(name: &str, gate: &Gate) -> Option<&'static str> {
+    WAIVERS.iter().find(|(texture, waived, _)| *texture == name && *waived == gate.name).map(|(_, _, reason)| *reason)
+}
 
 struct Row {
     name: String,
@@ -190,6 +207,37 @@ fn describe(report: &Report) -> String {
     format!("{:5.2} {:6.4} {seam} {:6.4} {:6.4} {:6.4}", report.hue_degrees, report.saturation, report.detail_kept, report.detail_added, report.alpha_moved)
 }
 
+#[derive(Default)]
+struct Tally {
+    failing: usize,
+    waived: usize,
+    by_gate: std::collections::BTreeMap<&'static str, usize>,
+    reasons: Vec<String>,
+}
+
+/// Prints one row per texture with its verdict against its role's limits and the waivers, and counts the textures that fail.
+fn judge(rows: &[Row]) -> Tally {
+    println!("{:<48} {:>9}  {:>5} {:>6} {:>6} {:>6} {:>6} {:>6}  verdict", "texture", "size", "hue", "sat", "seam", "kept", "added", "alpha");
+    let mut tally = Tally::default();
+    let names = |gates: &[Gate]| gates.iter().map(|gate| gate.name).collect::<Vec<_>>().join(", ");
+    for row in rows {
+        let (waived, failures): (Vec<Gate>, Vec<Gate>) = row.report.failures(limits_for(row.role)).into_iter().partition(|gate| waiver(&row.name, gate).is_some());
+        tally.failing += usize::from(!failures.is_empty());
+        tally.waived += usize::from(failures.is_empty() && !waived.is_empty());
+        for gate in &failures {
+            *tally.by_gate.entry(gate.name).or_default() += 1;
+        }
+        tally.reasons.extend(waived.iter().filter_map(|gate| waiver(&row.name, gate).map(|reason| format!("{} {}: {reason}", row.name, gate.name))));
+        let verdict = match (failures.is_empty(), waived.is_empty()) {
+            (true, true) => "ok".into(),
+            (true, false) => format!("waived {}", names(&waived)),
+            (false, _) => format!("FAIL {}", names(&failures)),
+        };
+        println!("{:<48} {:>4}x{:<4}  {}  {verdict}", row.name, row.size.0, row.size.1, describe(&row.report));
+    }
+    tally
+}
+
 fn main() {
     let Arguments { out, quality, worst, classical, inputs } = arguments();
     let upscaler = upscaler(classical);
@@ -208,24 +256,19 @@ fn main() {
             }
         }
     }
-    for (role, label) in [(Role::Figure, "figures (fighters, effects)"), (Role::Scenery, "scenery (stages, terrain)")] {
+    for (role, label) in [(Role::Figure, "figures (fighters, effects)"), (Role::Scenery, "scenery (stages, terrain)"), (Role::Interface, "interface art (buttons, portraits, cards)")] {
         println!("upscaler for {label}: {} on {} textures", upscaler.method(role), rows.iter().filter(|row| row.role == role).count());
     }
     rows.sort_by(|a, b| b.report.worst(limits_for(b.role)).ratio().total_cmp(&a.report.worst(limits_for(a.role)).ratio()).then_with(|| a.name.cmp(&b.name)));
-    println!("limits: hue {}deg (figures {}deg), saturation {}, seam {}, detail kept >= {}, detail added <= {}, alpha moved {}", LIMITS.hue_degrees, FIGURE_LIMITS.hue_degrees, LIMITS.saturation, LIMITS.seam, LIMITS.detail_kept, LIMITS.detail_added, LIMITS.alpha_moved);
-    println!("{:<48} {:>9}  {:>5} {:>6} {:>6} {:>6} {:>6} {:>6}  verdict", "texture", "size", "hue", "sat", "seam", "kept", "added", "alpha");
-    let mut failing = 0;
-    let mut by_gate = std::collections::BTreeMap::<&str, usize>::new();
-    for row in &rows {
-        let failures = row.report.failures(limits_for(row.role));
-        failing += usize::from(!failures.is_empty());
-        for gate in &failures {
-            *by_gate.entry(gate.name).or_default() += 1;
-        }
-        let verdict = if failures.is_empty() { "ok".into() } else { format!("FAIL {}", failures.iter().map(|gate| gate.name).collect::<Vec<_>>().join(", ")) };
-        println!("{:<48} {:>4}x{:<4}  {}  {verdict}", row.name, row.size.0, row.size.1, describe(&row.report));
+    println!(
+        "limits: hue {}deg (interface {}deg), saturation {} (interface {}), seam {}, detail kept >= {}, detail added <= {}, alpha moved {}",
+        LIMITS.hue_degrees, INTERFACE_LIMITS.hue_degrees, LIMITS.saturation, INTERFACE_LIMITS.saturation, LIMITS.seam, LIMITS.detail_kept, LIMITS.detail_added, LIMITS.alpha_moved
+    );
+    let tally = judge(&rows);
+    println!("\n{} textures measured, {} fail, {} waived, {left} left alone, {unreadable} unreadable; failures by gate: {:?}", rows.len(), tally.failing, tally.waived, tally.by_gate);
+    for reason in &tally.reasons {
+        println!("waived {reason}");
     }
-    println!("\n{} textures measured, {failing} fail, {left} left alone, {unreadable} unreadable; failures by gate: {by_gate:?}", rows.len());
     println!("\nworst {worst} (crops: original | remaster | colour error x4):");
     for row in rows.iter().take(worst) {
         let gate = row.report.worst(limits_for(row.role));
@@ -234,7 +277,7 @@ fn main() {
             Err(error) => eprintln!("crop for {} failed: {error}", row.name),
         }
     }
-    if failing > 0 {
+    if tally.failing > 0 {
         std::process::exit(1);
     }
 }

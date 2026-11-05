@@ -1,4 +1,4 @@
-//! Chooses how a texture doubles by its role: figures take Real-CUGAN on the window's GPU when the adapter is real hardware and the network runs, scenery and every texture otherwise take the edge-directed filter of `upscale.rs`, which also supplies the alpha either way so cutout and team-colour edges are the same under both.
+//! Chooses how a texture doubles by its role: figures take Real-CUGAN on the window's GPU when the adapter is real hardware and the network runs, scenery, interface art and every texture otherwise take the edge-directed filter of `upscale.rs`, which also supplies the alpha either way so cutout and team-colour edges are the same under both.
 
 use std::io::Write;
 use std::sync::{Mutex, OnceLock};
@@ -56,7 +56,7 @@ impl Upscaler {
     fn learned_for(&self, role: Role) -> Option<&Mutex<Cugan>> {
         match role {
             Role::Figure => self.learned(),
-            Role::Scenery => None,
+            Role::Scenery | Role::Interface => None,
         }
     }
 

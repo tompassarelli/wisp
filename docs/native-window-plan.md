@@ -1260,6 +1260,22 @@ Worst under Real-CUGAN: stage water and sky, where the network paints streaks in
 
 Findings filed: a 2x2 texture makes Real-CUGAN stop for every later texture (wisp#150, with the stage-water finding). Not measured: atlas island borders bleeding (the check has no island map), and the Real-CUGAN 4x path.
 
+#### Roles and waivers (wisp#187, 5 November 2026)
+
+Each texture's role (`remaster/role.rs`, read from its path) picks its upscaler and its limits (`check::limits_for`). Routing by role (wisp#150) sent fighter skins and effects to Real-CUGAN and stages, doodads and terrain to the edge-directed filter, and the hue limit for figures was raised to 8 degrees for skins said to drift 6 to 7 degrees. Six textures still failed. Measured again on gex45's RTX PRO 4000 over the same 721-texture map (706 measured, the same six failures as the 890M): all 24 textures Real-CUGAN put past 6 degrees of hue were interface art, not skins. They were the Lich King, Lady Vashj and Illidan stock icons, cards and busts, the selection hand labels, `BTNLichKing` (11.05) and the score-screen portrait (9.78). So were all three saturation failures and one of the two detail-kept failures. The 85 fighter skins and effects drift at most 4.2 degrees under the network.
+
+- **Interface art is its own role and takes the edge-directed filter.** Command and passive buttons, `UI\` art, the score-screen portrait, and Mak'gora's fighter stock icons, cards, busts and tiles, selection, menu-frame and HUD art, markers, name plates, previews, pings and stage cards, chips and backdrop are all drawn flat on screen. They are mostly 64 px paintings where every texel shows. Real-CUGAN reshapes their armour ridges (the error panel lights up the whole icon) and pushes their cool palettes; the filter keeps them within 6.52 degrees of hue, 0.0413 saturation and structure similarity of at least 0.977 over the 599 interface textures. Their limits are hue 8 degrees and saturation 0.05, past the filter's own outputs. The filter keeps every sample within its four nearest source texels, so it cannot bring in a colour; what it moves on `BTNLichKing` (6.52 degrees) and `DISBTNLichKing` (0.0413) is the chroma noise of near-grey texels it averages away, and the crops show no palette change.
+- **Figures go back to the 6 degree hue limit**, since the drift that set 8 was interface art. Figures and scenery share `LIMITS`.
+- **`FighterWhite-b2db194a…` (alpha moved 0.0429) is waived.** It is a field of one-pixel specks with no mask interior. The filter, which makes the alpha under both upscalers, clamps each sample to its four nearest texels so it never rings. Around a lone speck that clamp cuts the cubic's negative lobes, so the specks soften and total alpha rises 4.3%. No mask grows or fills.
+- **`ParasolShaft-4d59f7fb…` (detail kept 0.9277) is waived.** It is a four-colour 16x64 generated texture of a fighter's parasol shaft. Real-CUGAN moves its one-pixel dark bands by half a source pixel, and the filter keeps it at 0.992. Fixing it means routing flat-colour art (a handful of colours) to the filter by content, which needs the decoded image before the cache lookup that today hashes only the bytes and the path's role. That is worth doing if more such textures appear.
+
+Waivers live in `remaster_check`'s `WAIVERS` with their reasons. Each names the texture with its content hash, so a changed texture is judged again. The check prints a waived row as `waived GATE`, lists the reasons and exits 0 when every failure is waived.
+
+| map | upscaler (figures / scenery / interface) | measured | fail | waived |
+|---|---|---|---|---|
+| 721 textures, 31 Oct (the issue's) | Real-CUGAN 85 / filter 22 / filter 599 | 706 | 0 | 2 |
+| 830 textures, 2 Nov (newest) | Real-CUGAN 87 / filter 22 / filter 695 | 804 | 0 | 2 |
+
 ### Silhouette before and after (one subdivision, bind pose, orthographic)
 
 Pixels of a 512x512 mask of the model's bind-pose silhouette, scaled to the same bounds; "only before" is area the tessellated model lost, "only after" area it gained. Models are Mak'gora's `LichKing2.mdx`, `IllidanTimelineBody` and `PeonTimelineBody` from the map imports (612, 590, 629 in the unpacked cache). Overlay PNGs (grey both, red only before, green only after) come from `cargo run --release -p wisp-window --example silhouette_report -- OUT_DIR MODELS...` and stay outside the repository.
