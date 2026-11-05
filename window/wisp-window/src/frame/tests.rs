@@ -3,6 +3,7 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use crate::input::Input;
+use crate::mailbox::Sample;
 use crate::stepper::{self, Seam, Stepper};
 
 const PERIOD_NS: u64 = 16_666_667;
@@ -10,7 +11,7 @@ const PERIOD_NS: u64 = 16_666_667;
 struct Quiet;
 
 impl Seam for Quiet {
-    fn input(&self) -> Input {
+    fn input(&mut self) -> Input {
         Input::default()
     }
 }

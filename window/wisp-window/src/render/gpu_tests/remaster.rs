@@ -6,7 +6,7 @@ const RIG: &[u8] = include_bytes!("../../../tests/fixtures/rig.mdx");
 #[test]
 fn a_window_that_starts_on_original_art_swaps_the_remaster_in_when_it_is_built() {
     let Some((device, queue)) = device() else { return };
-    let mut renderer = Renderer::new(device.clone(), queue.clone(), FORMAT, crate::remaster::Quality::Off, crate::settings::Preset::High.features());
+    let mut renderer = Renderer::new(device, queue, FORMAT, crate::remaster::Quality::Off, crate::settings::Preset::High.features());
     renderer.set_quality(crate::remaster::Quality::Standard);
     let mut png = Vec::new();
     let pixels: Vec<u8> = (0..8 * 8).flat_map(|index| [index as u8 * 3, 40, 200, 255]).collect();

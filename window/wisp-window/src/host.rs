@@ -1,4 +1,3 @@
-use std::cell::RefCell;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64, AtomicU8, Ordering};
@@ -243,7 +242,7 @@ impl Host {
         let step_thread = {
             let shared = shared.clone();
             guarded(&shared.clone(), move || {
-                let seam = InputSeam { shared: shared.clone(), pads: RefCell::new(Pads::open()) };
+                let seam = InputSeam { shared: shared.clone(), pads: Pads::open() };
                 let mode = || (!shared.closed.load(Ordering::Acquire)).then(|| mode_of(&shared));
                 stepper::run(steps, LibraryClock, shared.mailbox.clone(), mode, seam);
             })
@@ -428,14 +427,14 @@ impl Surface for WindowSurface {
 
 struct InputSeam {
     shared: Arc<Shared>,
-    pads: RefCell<Pads>,
+    pads: Pads,
 }
 
 impl Seam for InputSeam {
-    fn input(&self) -> Input {
+    fn input(&mut self) -> Input {
         let slot = usize::try_from(self.shared.pad_slot.load(Ordering::Acquire)).ok();
         let size = self.shared.size.load(Ordering::Acquire);
-        let input = self.pads.borrow_mut().sample(slot, self.shared.focused.load(Ordering::Acquire));
+        let input = self.pads.sample(slot, self.shared.focused.load(Ordering::Acquire));
         Input { pointer: self.shared.pointer.sample((size >> 32) as u32, size as u32), ..input }
     }
 }

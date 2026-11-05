@@ -146,11 +146,14 @@ impl Drop for SdlPads {
 
 #[cfg(test)]
 mod tests {
-    use std::ffi::{c_void, CStr};
+    use std::ffi::c_void;
+    #[cfg(feature = "uinput")]
+    use std::ffi::CStr;
     use std::sync::{Mutex, MutexGuard};
     use std::thread::sleep;
     use std::time::{Duration, Instant};
 
+    #[cfg(feature = "uinput")]
     use sdl3_sys::gamepad::SDL_GetGamepadName;
     use sdl3_sys::init::{SDL_InitSubSystem, SDL_INIT_JOYSTICK};
     use sdl3_sys::joystick::{

@@ -112,7 +112,7 @@ fn every_truncation_is_refused() {
             "prefix of {len} bytes decoded"
         );
     }
-    let mut long = bytes.clone();
+    let mut long = bytes;
     long.push(0);
     assert_eq!(decode(&long), Err(WireError::Trailing));
 }

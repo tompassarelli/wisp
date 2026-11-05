@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::clock::Clock;
 use crate::metrics::{ms, Beat, Metrics, Pulse, Series, Timings};
-pub use crate::mailbox::{End, Event, Mailbox, Sample, Submission};
+pub use crate::mailbox::{End, Event, Mailbox, Submission};
 use crate::pacing::{Pacer, Phase};
 use crate::present::PresentSetting;
 use crate::stepper::{Aim, Mode, Stepper, STEP_NS};

@@ -1,4 +1,4 @@
-use super::{DrawScene, Gpu};
+use super::Gpu;
 
 impl Gpu {
     pub fn cursor_shown(&self) -> bool {
@@ -12,6 +12,7 @@ fn shown(hidden: bool, menu_open: bool) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use super::super::DrawScene;
     use super::*;
 
     #[test]

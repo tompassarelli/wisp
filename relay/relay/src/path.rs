@@ -122,7 +122,7 @@ pub(crate) fn send_down(path: &mut Path, bytes: Vec<u8>, out: &mut Out) -> Deliv
     }
     let head = Down {
         turns: Vec::new(),
-        ..down.clone()
+        ..down
     };
     let (trimmed, _) = wire::encode_down(&head, &down.turns, budget);
     path.send(trimmed, out);

@@ -91,6 +91,7 @@ pub fn tone_map(scene: [f32; 3], grade: &Grade) -> [f32; 3] {
 }
 
 /// The display bytes of `tone_map`.
+#[cfg(test)]
 pub fn display_bytes(scene: [f32; 3], grade: &Grade) -> [u8; 3] {
     tone_map(scene, grade).map(|channel| (channel * 255.0 + 0.5) as u8)
 }

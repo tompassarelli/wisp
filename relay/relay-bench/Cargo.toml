@@ -6,6 +6,9 @@ license.workspace = true
 publish.workspace = true
 default-run = "relay-bench"
 
+[lints]
+workspace = true
+
 [dependencies]
 relay-proto = { path = "../relay-proto" }
 relay-agent = { path = "../relay-agent" }

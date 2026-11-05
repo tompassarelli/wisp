@@ -26,7 +26,7 @@ pub enum Mode {
 
 /// How the step clock reads input.
 pub trait Seam {
-    fn input(&self) -> Input;
+    fn input(&mut self) -> Input;
 }
 
 /// The phase the display asks the clock to sample at: the times `at_ns + k * every_ns`, as asked at `asked_ns`.
@@ -138,7 +138,7 @@ impl Stepper {
     }
 
     /// Takes the step due at or before `now_ns`, if one is: reads the input and queues it for the game, or answers it with an empty scene in the baseline; while loading, the clock runs and nothing is queued. A step whose game is still busy with the sample before it is dropped with its input left unread, so a stalled game loses the steps it could not take instead of running them all at once afterwards.
-    pub fn tick(&self, now_ns: u64, mode: Mode, seam: &impl Seam, mailbox: &Mailbox) {
+    pub fn tick(&self, now_ns: u64, mode: Mode, seam: &mut impl Seam, mailbox: &Mailbox) {
         let (frame, due) = {
             let mut state = lock(&self.state);
             let due = state.cadence.due_ns(now_ns);
@@ -173,13 +173,13 @@ impl Stepper {
 }
 
 /// The step clock's thread: sleeps to each due time and takes the step in the mode `mode` reads, until the mailbox stops or `mode` reads none, as once the window has closed.
-pub fn run(stepper: Arc<Stepper>, clock: impl Clock, mailbox: Arc<Mailbox>, mode: impl Fn() -> Option<Mode>, seam: impl Seam) {
+pub fn run(stepper: Arc<Stepper>, clock: impl Clock, mailbox: Arc<Mailbox>, mode: impl Fn() -> Option<Mode>, mut seam: impl Seam) {
     while !mailbox.is_stopping() {
         clock.sleep_until(stepper.due_ns(clock.now_ns()));
         let Some(mode) = mode() else {
             return;
         };
-        stepper.tick(clock.now_ns(), mode, &seam, &mailbox);
+        stepper.tick(clock.now_ns(), mode, &mut seam, &mailbox);
     }
 }
 

@@ -7,6 +7,16 @@ edition = "2021"
 license = "MIT"
 publish = false
 
+[workspace.lints.clippy]
+all = { level = "allow", priority = -1 }
+redundant_clone = "warn"
+implicit_clone = "warn"
+unnecessary_to_owned = "warn"
+redundant_allocation = "warn"
+rc_buffer = "warn"
+rc_mutex = "warn"
+cloned_instead_of_copied = "warn"
+
 [profile.release]
 debug = false
 

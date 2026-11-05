@@ -113,8 +113,8 @@ fn describe(trace: &Trace, windows: &[(usize, usize)]) -> String {
         "rescan windows: {} starting at {} s, median start to start {every:.2} s, {:.1}–{:.1} s long; {} of {} packets cut\n",
         windows.len(),
         starts.join(", "),
-        lens.iter().cloned().fold(f64::INFINITY, f64::min),
-        lens.iter().cloned().fold(0.0, f64::max),
+        lens.iter().copied().fold(f64::INFINITY, f64::min),
+        lens.iter().copied().fold(0.0, f64::max),
         windows.iter().map(|w| w.1 - w.0).sum::<usize>(),
         trace.delays_us.len(),
     )

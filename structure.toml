@@ -159,3 +159,21 @@ producer = "host/toolchain/natives.ts"
 
 [ignore]
 paths = ["vendor/**", "node_modules/**", "builds/**", "repos/**", "**/fixtures/**"]
+
+[rust_habits]
+checks = ["shared-mutability", "single-impl-trait"]
+
+[[rust_habits.allow]]
+rule = "shared-mutability"
+path = "window/wisp-window/src/audio.rs"
+reason = "The voice receiver is read by the cpal output callback or, when no stream can be built, by the silent mixer; building the stream consumes the callback, so the receiver cannot be handed back."
+
+[[rust_habits.allow]]
+rule = "shared-mutability"
+path = "window/wisp-window/src/frame.rs"
+reason = "Frame metrics are written by the render thread and read by the host's API thread."
+
+[[rust_habits.allow]]
+rule = "shared-mutability"
+path = "window/wisp-window/src/host.rs"
+reason = "Frame metrics are shared between the render thread and the host's API thread."

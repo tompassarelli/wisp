@@ -1,2 +1,6 @@
 [ci]
 	budget = farm-test.yml 104
+[land]
+	check = relay/,window/rust-toolchain.toml,window/flake.nix :: nix develop ./window --command cargo clippy --all-targets --locked --manifest-path relay/Cargo.toml -- -D warnings
+	check = window/ :: nix develop ./window --command cargo clippy --all-targets --locked --manifest-path window/Cargo.toml -- -D warnings
+	check = relay/,window/,structure.toml :: north code-health habits --repo .

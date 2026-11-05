@@ -166,7 +166,7 @@ fn palette(image: &Image) -> Palette {
     let mut hues = [0.0f32; HUE_BINS];
     let (mut chroma_sum, mut value_sum, mut alpha_sum) = (0.0f32, 0.0f32, 0.0f32);
     for pixel in pixels(image) {
-        let (high, low) = (pixel[..3].iter().cloned().fold(0.0, f32::max), pixel[..3].iter().cloned().fold(1.0, f32::min));
+        let (high, low) = (pixel[..3].iter().copied().fold(0.0, f32::max), pixel[..3].iter().copied().fold(1.0, f32::min));
         let chroma = high - low;
         alpha_sum += pixel[3];
         value_sum += pixel[3] * high;

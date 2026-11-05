@@ -85,7 +85,7 @@ impl SimClock {
             }
             self.world.borrow_mut().now_ns = due;
             self.serve();
-            self.stepper.tick(due, Mode::Game, &Quiet, &self.mailbox);
+            self.stepper.tick(due, Mode::Game, &mut Quiet, &self.mailbox);
             self.serve();
         }
         let mut world = self.world.borrow_mut();

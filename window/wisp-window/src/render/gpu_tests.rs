@@ -313,13 +313,13 @@ fn blend_is_source_alpha_over_with_no_depth_write() {
 
 #[test]
 fn additive_adds_the_colour_and_ignores_the_texture_alpha() {
-    let expected = [0, 1, 2].map(|channel| (source()[channel] + background()[channel]));
+    let expected = [0, 1, 2].map(|channel| source()[channel] + background()[channel]);
     assert_pixel(centre_of(&[sheet(Filter::Additive, 100.0, texel(SOURCE, 0.25))]), expected, "one plus one");
 }
 
 #[test]
 fn add_alpha_adds_the_colour_scaled_by_the_texture_alpha() {
-    let expected = [0, 1, 2].map(|channel| (source()[channel] * 0.5 + background()[channel]));
+    let expected = [0, 1, 2].map(|channel| source()[channel] * 0.5 + background()[channel]);
     assert_pixel(centre_of(&[sheet(Filter::AddAlpha, 100.0, texel(SOURCE, 0.5))]), expected, "source alpha plus one");
 }
 
@@ -331,7 +331,7 @@ fn modulate_multiplies_the_background_by_the_colour() {
 
 #[test]
 fn modulate_twice_doubles_the_product() {
-    let expected = [0, 1, 2].map(|channel| (source()[channel] * background()[channel] * 2.0));
+    let expected = [0, 1, 2].map(|channel| source()[channel] * background()[channel] * 2.0);
     assert_pixel(centre_of(&[sheet(Filter::Modulate2x, 100.0, texel(SOURCE, 1.0))]), expected, "twice destination times source");
 }
 
