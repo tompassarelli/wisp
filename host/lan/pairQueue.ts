@@ -92,7 +92,7 @@ const atLimit = (world: QueueWorld, host: QueueHost, leases: readonly Lease[]) =
   host.clientLimit !== undefined && (pairsInUse(world, host, leases) + 1) * 2 > host.clientLimit;
 
 /** The first unleased healthy slot a pool of the requester's own fleet `session` holds, which adds no clients; else the first healthy slot that no lease and no outside holder has, on the available host with the fewest pairs in use (listed order breaks ties). */
-export const nextFree = (world: QueueWorld, leases: readonly Lease[], session = ""): Slot | undefined => {
+const nextFree = (world: QueueWorld, leases: readonly Lease[], session = ""): Slot | undefined => {
   const byUse = [...world.hosts].filter((host) => host.available).sort((left, right) => pairsInUse(world, left, leases) - pairsInUse(world, right, leases));
   const slots = (hosts: readonly QueueHost[]) => hosts.flatMap((host) => [...host.pairs].sort((left, right) => left - right).map((pair) => ({ host: host.name, pair }))).filter((slot) => offered(world, slot));
   const own = session === "" ? undefined : slots(byUse).find((slot) => !leased(leases, slot) && world.holder(slot) === session);

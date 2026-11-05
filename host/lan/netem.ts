@@ -17,9 +17,9 @@ const BURST_RECOVERY = 25;
 
 const decimal = (value: number) => String(Number(value.toFixed(4)));
 
-export const perSendLoss = (roundTrip: number) => 100 * (1 - Math.sqrt(1 - roundTrip / 100));
+const perSendLoss = (roundTrip: number) => 100 * (1 - Math.sqrt(1 - roundTrip / 100));
 
-export const burstModel = (perSend: number) => ({ enter: perSend * BURST_RECOVERY / (100 - perSend), leave: BURST_RECOVERY });
+const burstModel = (perSend: number) => ({ enter: perSend * BURST_RECOVERY / (100 - perSend), leave: BURST_RECOVERY });
 
 const lossArguments = ({ loss, burst }: Impairment) => {
   const perSend = perSendLoss(loss);

@@ -130,7 +130,7 @@ export interface TurnClock {
   readonly sleep: (ms: number) => Effect.Effect<void>;
 }
 
-export const pacedTurns = <E, R>(steps: readonly number[], speed: number, clock: TurnClock, turn: (step: number) => Effect.Effect<void, E, R>) => Effect.suspend(() => {
+const pacedTurns = <E, R>(steps: readonly number[], speed: number, clock: TurnClock, turn: (step: number) => Effect.Effect<void, E, R>) => Effect.suspend(() => {
   const start = clock.now();
   let gameMs = 0;
   let next = 0;

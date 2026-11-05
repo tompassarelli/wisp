@@ -41,7 +41,7 @@ const chunk = (type: string, data: Uint8Array): Uint8Array => {
 };
 
 /** A deterministic `size`-square RGB checker of `cell`-pixel cells, shaded by a diagonal ramp so filtering and mip selection have gradients to blur. */
-export const checkerPng = (size: number, cell: number): Uint8Array => {
+const checkerPng = (size: number, cell: number): Uint8Array => {
   const raw = new Uint8Array((size * 3 + 1) * size);
   for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
     const on = (Math.floor(x / cell) + Math.floor(y / cell)) % 2 === 0, ramp = Math.round(255 * (x + y) / (2 * size - 2)), at = y * (size * 3 + 1) + 1 + x * 3;

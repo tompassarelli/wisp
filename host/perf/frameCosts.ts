@@ -36,7 +36,7 @@ function parseSpread(text: string): Spread {
 const window = (frames: number, lua: string, natives: string, catchUp: string): FrameWindow =>
   ({ frames, lua: lua === "none" ? undefined : parseSpread(lua), natives: parseSpread(natives), catchUp: parseSpread(catchUp) });
 
-export const decodeFrameCostReport = (file: string, text: string): Effect.Effect<FrameCostReport, MalformedGameFile> =>
+const decodeFrameCostReport = (file: string, text: string): Effect.Effect<FrameCostReport, MalformedGameFile> =>
   FrameCostReportFile.decode(file, text).pipe(Effect.map((fields) => ({
     version: Number(fields.version.slice(1)),
     previous: Number(fields.previous.slice(1)),

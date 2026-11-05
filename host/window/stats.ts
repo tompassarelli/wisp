@@ -6,7 +6,7 @@ export interface Spread {
 }
 
 /** The value at `fraction` of the sorted samples by the nearest-rank rule, as the page's `standalone.json` figures use. */
-export const percentile = (values: readonly number[], fraction: number): number =>
+const percentile = (values: readonly number[], fraction: number): number =>
   [...values].sort((a, b) => a - b)[Math.max(0, Math.ceil(values.length * fraction) - 1)] ?? 0;
 
 export const spread = (values: readonly number[]): Spread => ({

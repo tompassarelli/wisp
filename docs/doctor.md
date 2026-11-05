@@ -232,7 +232,7 @@ start lock, `~/.local/state/wisp/online/client-start.lock`, and holds it until
 that client reaches its menus or doctor stops, or 300 s pass. A second start
 waits, printing who holds the lock; a client already running is unaffected.
 On 8 October clone-a crashed 1.8 s after clone-d's game started beside it
-(wisp:host/client/startLock.ts, wisp:test/startLock.test.ts).
+(wisp:host/client/startLock.ts).
 
 ## Declare it
 

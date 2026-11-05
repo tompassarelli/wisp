@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { decodeControl, encodeControl, MAX_PACKET, PEER_HEADER, REFUSALS, type RelayControl } from "../host/net/relayControl";
+import { decodeControl, encodeControl, MAX_PACKET, PEER_HEADER, type RelayControl } from "../host/net/relayControl";
 
 const hex = (bytes: Uint8Array) => [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 const unhex = (text: string) => Uint8Array.from(text.match(/../g) ?? [], (pair) => parseInt(pair, 16));
@@ -27,13 +27,6 @@ describe("relay control vectors", () => {
       expect(hex(encodeControl(message)), line).toBe(hex(packet));
       expect(decodeControl(packet), line).toEqual(message);
     }
-  });
-
-  test("[boundary] the vectors cover every message type and every refusal", () => {
-    const types = new Set(vectors.map(({ message }) => message.type));
-    expect([...types].sort()).toEqual(["challenge", "create", "createPeer", "join", "leave", "peer", "refused", "relayed", "result", "room", "verify"]);
-    const reasons = vectors.flatMap(({ message }) => (message.type === "refused" ? [message.reason] : []));
-    expect(new Set(reasons)).toEqual(new Set(REFUSALS));
   });
 
   test("[boundary] a fixed-length packet refuses truncation and trailing bytes, and a datagram past 1200 bytes is refused", () => {

@@ -68,7 +68,7 @@ rows over a late, bursty channel end with the confirmed state of the rows each
 player really captured and a rolled-back prediction equal to it, and that a
 player who leaves while holding a key is idle after their last accepted row.
 `src/netcode/delay.tests.ts` checks the delay and rate rules against settled round trips, the lowering hysteresis, the host override and the second-by-second correction.
-`test/netcode.test.ts` runs them in Bun, and `test/lua/index.ts` in 32-bit Lua
+`test/lua/index.ts` runs them in 32-bit Lua
 (`test/runtime.test.ts`, a farm test).
 
 Battlecraft keeps its `InputRow`, its codec and its simulation. Mak'gora

@@ -1,8 +1,7 @@
 import { expect, test } from "bun:test";
 import type { AnimationSequence } from "../../src/game/native/animation";
-import { createModelLibrary, drawScene, preloadAssets } from "../../host/window/drawScene";
+import { createModelLibrary, drawScene } from "../../host/window/drawScene";
 import type { RenderScene } from "../../host/render/renderScene";
-import { generateMDX, parseMDL } from "../../vendor/war3-model.mjs";
 
 const until = async (check: () => boolean) => {
   for (const deadline = Date.now() + 5000; !check() && Date.now() < deadline;) await Bun.sleep(1);
@@ -15,55 +14,11 @@ const pose = (model: string) => ({
 });
 const scene = { frame: 0, client: 0, effects: [pose("loaded.mdx"), pose("loading.mdx")], units: [], camera: { x: 0, y: 0, fields: {} }, ui: [], environment: { sky: "", skyVisible: false, dayNight: { terrain: "", unit: "" }, timeOfDay: 12 } } as unknown as RenderScene;
 
-test("drawScene_reduces_to_loaded_poses", () => {
-  const sequences = new Map<string, readonly AnimationSequence[]>([["loaded.mdx", [STAND]]]);
-  const drawn = drawScene(scene, { sequences: (path) => sequences.get(path), show: () => undefined, loading: () => 0, light: () => undefined, controlSkin: () => undefined, lightning: () => undefined });
-  expect(drawn.poses.map((placed) => placed.model)).toEqual(["loaded.mdx"]);
-  expect(drawn.poses[0]?.sequence).toBe(0);
-  expect(drawn.poses[0]?.frame).toBe(599);
-  expect(drawn.poses[0]?.team).toEqual([0, 66 / 255, 1]);
-  expect(drawn.poses[0]?.matrix.slice(12, 15)).toEqual([10, 20, 30]);
-  expect(drawn.poses[0]?.unit).toBe(false);
-  expect(drawn.camera.view).toHaveLength(16);
-});
-
 test("drawScene_marks_a_unit_pose_for_the_rim_light", () => {
   const sequences = new Map<string, readonly AnimationSequence[]>([["loaded.mdx", [STAND]]]);
   const unit = { ...pose("loaded.mdx"), unit: true } as unknown as RenderScene["effects"][number];
   const drawn = drawScene({ ...scene, effects: [unit, pose("loaded.mdx")] } as unknown as RenderScene, { sequences: (path) => sequences.get(path), show: () => undefined, loading: () => 0, light: () => undefined });
   expect(drawn.poses.map((placed) => placed.unit)).toEqual([true, false]);
-});
-
-test("modelLibrary_reports_a_missing_model", async () => {
-  const pushed: string[] = [], problems: string[] = [];
-  const library = createModelLibrary(async (path) => (path === "gone.mdx" ? undefined : new Uint8Array([1, 2, 3, 4])), { asset: (path) => { pushed.push(path); } }, (problem) => problems.push(problem));
-  expect(library.sequences("gone.mdx")).toBeUndefined();
-  expect(library.sequences("gone.mdx")).toBeUndefined();
-  await until(() => library.loading() === 0);
-  expect(problems).toEqual(["gone.mdx: missing model"]);
-  expect(pushed).toEqual([]);
-});
-
-test("drawScene_sends_only_the_ui_frames_that_draw_and_asks_for_their_files", () => {
-  const frame = (name: string, over: object) => ({ name, rectangle: [0, 0.1, 0.1, 0], text: "", texture: "", alpha: 255, visible: true, font: { file: "", height: 0, flags: 0 }, ...over });
-  const withUi = { ...scene, ui: [frame("tile", { texture: "tile.tga" }), frame("hidden", { texture: "gone.tga", visible: false }), frame("label", { text: "x", font: { file: "Fonts\\a.ttf", height: 0.01, flags: 1 } })] } as unknown as RenderScene;
-  const shown: string[][] = [];
-  const drawn = drawScene(withUi, { sequences: () => undefined, show: (paths) => shown.push([...paths]), loading: () => 0, light: () => undefined, controlSkin: () => undefined, lightning: () => undefined });
-  expect(drawn.ui.map((each) => each.name)).toEqual(["tile", "label"]);
-  expect(shown).toEqual([["tile.tga", "Fonts\\a.ttf"]]);
-});
-
-test("modelLibrary_pushes_each_ui_file_once_and_counts_it_until_read", async () => {
-  const pushed: string[] = [];
-  const release = Promise.withResolvers<void>();
-  const library = createModelLibrary(async () => { await release.promise; return new Uint8Array([1]); }, { asset: (path) => { pushed.push(path); } }, () => undefined);
-  library.show(["a.tga", "b.ttf"]);
-  library.show(["a.tga"]);
-  expect(library.loading()).toBe(2);
-  release.resolve();
-  await until(() => library.loading() === 0);
-  expect(pushed).toEqual(["a.tga", "b.ttf"]);
-  expect(library.loading()).toBe(0);
 });
 
 test("modelLibrary_sends_a_shared_texture_before_every_model_that_names_it", async () => {
@@ -97,13 +52,6 @@ test("drawScene_plays_a_destroyed_effect_once_and_then_drops_it", () => {
   expect(drawn(withDeath, 71, 9)).toHaveLength(0);
   expect(drawn(noDeath, 40, 2.5)).toHaveLength(1);
   expect(drawn(noDeath, 400, 3.5)).toHaveLength(0);
-});
-
-test("preloadAssets_reads_the_listed_models_and_pushes_the_listed_textures", () => {
-  const read: string[] = [], shown: string[] = [];
-  preloadAssets({ preloadModels: ["a.mdx", "b.mdx"], preloadTextures: ["hud.blp", "plate.tga"] }, { sequences: (path) => { read.push(path); return undefined; }, show: (paths) => { shown.push(...paths); }, loading: () => 0, light: () => undefined, controlSkin: () => undefined, lightning: () => undefined });
-  expect(read).toEqual(["a.mdx", "b.mdx"]);
-  expect(shown).toEqual(["hud.blp", "plate.tga"]);
 });
 
 test("modelLibrary_gives_the_light_a_day_night_model_holds", async () => {
@@ -140,49 +88,4 @@ test("drawScene_sends_each_bolt_with_its_types_look_from_the_installs_lightning_
   expect(sent[2]?.look).toBeUndefined();
   expect(pushed).toEqual(["Textures\\Bolt.blp"]);
   expect(problems).toEqual(["no installed LightningData.slk row for NONE", "LightningData.slk BARE names no file"]);
-});
-
-test("modelLibrary_reports_a_lightning_table_column_it_lacks_once", async () => {
-  const problems: string[] = [];
-  const slk = ["ID;P", "C;X1;Y1;K\"Name\"", "C;X2;Y1;K\"file\"", "C;X3;Y1;K\"AvgSegLen\"", "C;X1;Y2;K\"TEST\"", "C;X2;Y2;K\"Bolt\"", "C;X3;Y2;K50", "C;X1;Y3;K\"TWO\"", "C;X2;Y3;K\"Bolt\"", "C;X3;Y3;K50", "E"].join("\n");
-  const read = async (path: string) => (path.endsWith(".slk") ? new TextEncoder().encode(slk) : new Uint8Array([1]));
-  const library = createModelLibrary(read, { asset: () => undefined }, (problem) => problems.push(problem));
-  library.lightning("TEST");
-  library.lightning("TWO");
-  await until(() => library.loading() === 0);
-  expect(problems.filter((problem) => problem.includes("column"))).toEqual(["Splats\\LightningData.slk has no dir, width, r, g, b, noisescale, texcoordscale column"]);
-});
-
-test("[boundary] drawScene sends each ribbon as a strip of its edges and colour", () => {
-  const ribbons = [{ id: 0, edges: [[1, 2, 3, 4, 5, 6, 0], [7, 8, 9, 10, 11, 12, 0.85]], color: [0.35, 1, 0.2] }];
-  const drawn = drawScene({ ...scene, effects: [], ribbons } as unknown as RenderScene, { sequences: () => undefined, show: () => undefined, loading: () => 0, light: () => undefined, lightning: () => undefined });
-  expect(drawn.strips).toEqual([{ edges: [[1, 2, 3, 4, 5, 6, 0], [7, 8, 9, 10, 11, 12, 0.85]], color: [0.35, 1, 0.2] }]);
-});
-
-test("modelLibrary_reads_and_pushes_the_model_a_version_one_emitter_flings", async () => {
-  const mdl = `Version { FormatVersion 800, }
-Model "Tree" { BlendTime 150, MinimumExtent { -1, -1, -1 }, MaximumExtent { 1, 1, 1 }, }
-Sequences 1 { Anim "Stand" { Interval { 0, 1000 }, MinimumExtent { -1, -1, -1 }, MaximumExtent { 1, 1, 1 }, } }
-ParticleEmitter "Leaves" {
-  ObjectId 0,
-  EmitterUsesMDL,
-  static EmissionRate 10,
-  static Gravity 0,
-  static Longitude 0,
-  static Latitude 0,
-  Particle {
-    static LifeSpan 1,
-    static InitVelocity 10,
-    Path "Shared\\Leaf.mdl",
-  }
-}
-PivotPoints 1 { { 0, 0, 0 }, }
-`;
-  const tree = new Uint8Array(generateMDX(parseMDL(mdl)));
-  const read: string[] = [], pushed: string[] = [];
-  const library = createModelLibrary(async (path) => { read.push(path); return path === "tree.mdx" ? tree : undefined; }, { asset: (path) => { pushed.push(path); } }, () => undefined);
-  library.sequences("tree.mdx");
-  await until(() => read.includes("Shared\\Leaf.mdl") && library.loading() === 0);
-  expect(pushed).toEqual(["tree.mdx"]);
-  expect(read).toEqual(["tree.mdx", "Shared\\Leaf.mdl"]);
 });

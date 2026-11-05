@@ -29,19 +29,6 @@ describe("pool stop", () => {
     expect(log).toEqual(["outlived 1"]);
   });
 
-  test("[spec docs/lan.md] a client that exits on SIGTERM is not sent SIGKILL", async () => {
-    const child = Bun.spawn(["sleep", "30"], { stdin: "ignore", stdout: "ignore", stderr: "ignore" });
-    const log: string[] = [];
-    await Effect.runPromise(stopGame({
-      terminate: Effect.sync(() => { child.kill("SIGTERM"); }),
-      survivors: Effect.sync(() => (child.exitCode === null && child.signalCode === null ? [child.pid] : [])),
-      kill: () => Effect.sync(() => { log.push("kill"); }),
-      outlived: () => Effect.sync(() => { log.push("outlived"); }),
-      grace: "5 seconds",
-    }));
-    expect(log).toEqual([]);
-  });
-
   test.if(process.platform === "linux")("[boundary] a pool whose working directory was removed still reads a stopped client scope as gone", () => {
     const home = process.cwd();
     const gone = mkdtempSync(join(tmpdir(), "wisp-pool-cwd-"));

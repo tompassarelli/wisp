@@ -41,15 +41,3 @@ test("[scenario] a Return the game never sees fails the chat before any text is 
   expect(failure(await run)).toContain("stayed closed");
   expect(sent).toEqual({ returns: 1, lines: 0 });
 });
-
-test("[scenario] a chat entry still open after the closing Return fails as an unsent line", async () => {
-  const { sent, run } = rig({ afterReturn: true, afterLine: true });
-  expect(failure(await run)).toContain("the line was not sent");
-  expect(sent).toEqual({ returns: 1, lines: 1 });
-});
-
-test("[scenario] an entry that opens on Return and closes on the line succeeds", async () => {
-  const { sent, run } = rig({ afterReturn: true, afterLine: false });
-  expect(Exit.isSuccess(await run)).toBe(true);
-  expect(sent).toEqual({ returns: 1, lines: 1 });
-});

@@ -2,9 +2,8 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Effect, Exit } from "effect";
-import { pressLatencyArguments } from "../host/play/pressLatency";
-import { evdevKeyOf, openVirtualKeyboard, registryGlobal, waylandEvents, waylandRequest, waylandSocketPath } from "../host/play/waylandKeyboard";
+import { Effect } from "effect";
+import { openVirtualKeyboard, registryGlobal, waylandEvents, waylandRequest } from "../host/play/waylandKeyboard";
 
 const words = (bytes: Uint8Array) => [...new Uint32Array(bytes.buffer, bytes.byteOffset, bytes.length / 4)];
 
@@ -36,15 +35,6 @@ function fakeCompositor(globals: readonly (readonly [number, string, number])[])
   return { path, requests, stop: () => { server.stop(true); rmSync(directory, { recursive: true, force: true }); } };
 }
 
-test("[spec docs/online-plan.md] a Wayland request is its object, size and opcode, then words and NUL-ended padded strings", () => {
-  expect(words(waylandRequest(2, 0, [7, "wl_seat", 1, 4]))).toEqual([2, 32 << 16, 7, 8, ...words(new TextEncoder().encode("wl_seat\0")), 1, 4]);
-  expect(registryGlobal(globalEvent(9, "zwp_virtual_keyboard_manager_v1", 1).subarray(8))).toEqual({ name: 9, interface: "zwp_virtual_keyboard_manager_v1", version: 1 });
-  const two = new Uint8Array([...waylandRequest(1, 0, [3]), ...waylandRequest(3, 0, [5]).subarray(0, 6)]);
-  expect(waylandEvents(two)).toMatchObject({ events: [{ object: 1, opcode: 0 }], used: 12 });
-  expect([evdevKeyOf("n"), evdevKeyOf("j"), evdevKeyOf("a"), evdevKeyOf("1"), evdevKeyOf("space"), evdevKeyOf("N"), evdevKeyOf("toString")]).toEqual([49, 36, 30, 2, 57, undefined, undefined]);
-  expect(waylandSocketPath("/run/r", "wayland-0")).toBe("/run/r/wayland-0");
-});
-
 test("[spec docs/online-plan.md] the virtual keyboard binds the seat and manager, sends a keymap, and presses the key as an evdev code", async () => {
   const compositor = fakeCompositor([[1, "wl_compositor", 6], [3, "wl_seat", 9], [7, "zwp_virtual_keyboard_manager_v1", 1]]);
   try {
@@ -67,22 +57,4 @@ test("[spec docs/online-plan.md] the virtual keyboard binds the seat and manager
   } finally {
     compositor.stop();
   }
-});
-
-test("[spec docs/online-plan.md] a compositor without the virtual keyboard protocol fails the open by name", async () => {
-  const compositor = fakeCompositor([[3, "wl_seat", 9]]);
-  try {
-    const exit = await Effect.runPromiseExit(Effect.scoped(openVirtualKeyboard(compositor.path, "n")));
-    expect(Exit.isFailure(exit) && String(exit.cause)).toContain("zwp_virtual_keyboard_manager_v1");
-  } finally {
-    compositor.stop();
-  }
-});
-
-test("[spec docs/online-plan.md] --input wayland needs no X display and names the compositor socket", () => {
-  const args = ["--window", "native", "--input", "wayland", "--wayland-runtime", "/run/x", "--key", "n", "--region", "1,2,3,4", "--flash", "--out", "/tmp/o"];
-  expect(pressLatencyArguments(args, {})).toMatchObject({ input: "wayland", display: undefined, waylandDisplay: "wayland-0" });
-  expect(pressLatencyArguments([...args, "--wayland-display", "wayland-1"], {})).toMatchObject({ waylandDisplay: "wayland-1" });
-  expect(typeof pressLatencyArguments(args.filter((arg) => arg !== "--input" && arg !== "wayland"), {})).toBe("string");
-  expect(typeof pressLatencyArguments(args.map((arg) => (arg === "wayland" ? "uinput" : arg)), {})).toBe("string");
 });

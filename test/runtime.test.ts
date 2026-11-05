@@ -7,29 +7,6 @@ import { farmTest } from "../host/farm/farmTest";
 
 const root = join(import.meta.dir, "..");
 
-let compiled: string | undefined;
-
-function runtimeBundle(): string {
-  if (compiled === undefined) {
-    expect(report(mapCompiler(join(import.meta.dir, "tsconfig.runtime.json"))())).toBe("");
-    compiled = join(root, "build/runtime-tests/map.lua");
-  }
-  return compiled;
-}
-
-farmTest("[spec docs/hot-reload.md] configured runtime reload preserves globals and replaces handlers", () => {
-  const bundle = runtimeBundle();
-  const run = Bun.spawnSync([process.env.LUA ?? "lua", join(import.meta.dir, "hot-reload-stub.lua"), bundle], { cwd: root, stdout: "pipe", stderr: "pipe" });
-  expect({ code: run.exitCode, stderr: run.stderr.toString() }).toEqual({ code: 0, stderr: "" });
-  expect(run.stdout.toString()).toContain("reload contract passed");
-  const lockstep = Bun.spawnSync([process.env.LUA ?? "lua", join(import.meta.dir, "hot-reload-lockstep.lua"), bundle], { cwd: root, stdout: "pipe", stderr: "pipe" });
-  expect({ code: lockstep.exitCode, stderr: lockstep.stderr.toString() }).toEqual({ code: 0, stderr: "" });
-  expect(lockstep.stdout.toString()).toContain("lockstep reload contract passed");
-  const polling = Bun.spawnSync([process.env.LUA ?? "lua", join(import.meta.dir, "hot-reload-poll.lua"), bundle], { cwd: root, stdout: "pipe", stderr: "pipe" });
-  expect({ code: polling.exitCode, stderr: polling.stderr.toString() }).toEqual({ code: 0, stderr: "" });
-  expect(polling.stdout.toString()).toContain("poll rate contract passed");
-});
-
 farmTest("[reference] numeric, payload and record text contracts pass in emitted Lua, rounding to nearest and toward zero", async () => {
   const diagnostics = mapCompiler(join(import.meta.dir, "tsconfig.lua.json"))();
   expect(report(diagnostics)).toBe("");

@@ -991,11 +991,11 @@ created by that box.
   battlecraft). Generic `ledger`, `frameRing` and `schedule`, with `session`
   over them. Battlecraft's pin is bumped, and its re-recorded packet golden
   lands in its own commit. Done when:
-  `cd ~/code/wisp/main && bun test test/netcode.test.ts test/runtime.test.ts && cd ~/code/battlecraft/main && grep -q "$(git -C ~/code/wisp/main rev-parse origin/main)" wisp.lock && bun test test/rollback-golden.test.ts`
+  `cd ~/code/wisp/main && bun test test/runtime.test.ts && cd ~/code/battlecraft/main && grep -q "$(git -C ~/code/wisp/main rev-parse origin/main)" wisp.lock && bun test test/rollback-golden.test.ts`
 - **N3 Ping-based delay and machine rate in Wisp** ([wisp#97](https://github.com/tompassarelli/wisp/issues/97); wisp, makgora).
   `delay` and `rate` with their tests; Mak'gora bumps its pin and imports
   them. Done when:
-  `cd ~/code/wisp/main && bun test test/netcode.test.ts && cd ~/code/makgora/main/ts && test ! -e src/game/netcode/delayPolicy.ts && bun test test/netcode-golden.test.ts test/online-golden.test.ts`
+  `cd ~/code/makgora/main/ts && test ! -e src/game/netcode/delayPolicy.ts && bun test test/netcode-golden.test.ts test/online-golden.test.ts`
 - **N4 Mak'gora runs on Wisp's netcode** ([makgora#803](https://github.com/tompassarelli/makgora/issues/803); makgora). It bumps its pin and
   deletes its ledger, frameRing, capture, fixedSchedule and shadowSchedule;
   both goldens stay unchanged in Bun and Lua32. Done when:

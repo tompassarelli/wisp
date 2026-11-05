@@ -209,8 +209,7 @@ one after it, such as a match's first:
   before calling it, which counted 30 B per hook call (0.30 B per instruction
   at a step of 100) until Wisp 0.0.x of 20 October 2026. Allocation-free code
   requests 0 B under a hook every 1, 100 or 1000 instructions, in a coroutine
-  too, and 1000 new tables request 1000 times one table
-  (wisp:test/requested-bytes.test.ts).
+  too, and 1000 new tables request 1000 times one table.
 - **Allocation by function**: `allocationSampler()` (wisp:src/headless/luaPerf.ts)
   hooks every instruction between a `ClientScope`'s `enter` and `leave` and
   charges each instruction's requested bytes to the map function that ran
@@ -219,7 +218,7 @@ one after it, such as a match's first:
   headless runtime, emulated natives included, go to `OUTSIDE_MAP` (-1),
   never to the map function that called the native. A fixture charging 50
   tables a frame is charged exactly 50 tables a frame, its caller nothing of
-  its own, and an allocation-free function nothing (wisp:test/alloc-profile.test.ts).
+  its own, and an allocation-free function nothing.
   A game's profiler maps the lines to names, as Mak'gora's
   `perf profile RUN --alloc` does.
 - **Allocated KB**: the bytes the map's code asked for, which Wisp's Lua32
@@ -231,7 +230,7 @@ one after it, such as a match's first:
   It leaves out the string table, stacks and call frames, which the collector
   shrinks and the next request regrows. So a frame's figure depends neither on
   what else the program holds nor on when the heap was last collected: an
-  inert, never-called function moves no frame (wisp:test/requested-bytes.test.ts),
+  inert, never-called function moves no frame,
   where a heap delta once moved single frames by up to 8 KB at equal
   instruction counts (makgora#26). Automatic collection stays stopped
   throughout profiling, including between client callbacks. Between callbacks

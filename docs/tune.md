@@ -134,8 +134,8 @@ again, and a change refuses a tunable whose literal is gone.
 
 ## Headless
 
-wisp:test/tune.test.ts applies a value through `Tune` to a compiled fixture
-map and plays the result in two 32-bit Lua clients: a delta of the
+A value applied through `Tune` to a compiled fixture map plays in two 32-bit
+Lua clients as a delta of the
 declaration's module alone, installed on the same tick in both, whose step
 changes alike in both from then on. In Bun, where a reload installs an entry
 rather than Lua modules, `runtime.modules(entry)` ([headless](headless.md#hot-reload))

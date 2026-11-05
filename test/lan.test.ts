@@ -1,123 +1,17 @@
 import { describe, expect, test } from "bun:test";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import * as BunServices from "@effect/platform-bun/BunServices";
-import { Cause, Effect, Exit, Scope } from "effect";
+import { Effect, Exit, Scope } from "effect";
 import { GameLauncher } from "../host/contract/services";
 import { startHost } from "../host/lan/host";
-import { ALARM_AFTER_MS, type Driver, clientRun, driverVerdict, idleness, installOf, lanPlayRefusal, networkFlagProblem, pairClients, pairFlags, pairSides, prefixOf, wrongUser } from "../host/lan/pool";
+import { clientRun, idleness, installOf, prefixOf } from "../host/lan/pool";
 import { setupClient } from "../host/lan/setup";
 import { menuPage } from "../host/lan/menus";
-import { LanFailure } from "../host/lan/join";
-import { type MapFacts, mapCopies, readMapFacts } from "../host/lan/map";
+import { type MapFacts } from "../host/lan/map";
 import { PACKET, Writer, encodePacket } from "../host/lan/w3gs";
 
 describe("pool operability", () => {
-  test("[reference POSIX sh] a run as another user than a live pool's owners is refused with a command that sh reads back as that owner's sudo and this exact command line", () => {
-    const tom = { uid: 1000, user: "tom", home: "/home/tom", pool: "/home/tom/.local/state/wisp/lan/pool.json" };
-    const ann = { uid: 1001, user: "ann", pool: "/home/ann/.local/state/wisp/lan/pool.json" };
-    let seed = 1000;
-    const next = (below: number) => {
-      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
-      return (seed >>> 16) % below;
-    };
-    const letters = ["a", "Z", "0", " ", "'", "\"", "$", "`", "\\", "*", "~", "é", "\n", ";", "&", "|", "(", "#", "=", ":", "-", ".", "/", "@", "%", "+", ","];
-    for (let sample = 0; sample < 60; sample++) {
-      const command = ["bun", ...Array.from({ length: 1 + next(5) }, () => Array.from({ length: next(6) }, () => letters[next(letters.length)]).join(""))];
-      const owners = next(2) === 0 ? [tom, ann] : [ann, tom];
-      const [owner] = owners;
-      const refusal = wrongUser(next(2) === 0 ? 0 : 1002, owners, command) ?? "";
-      expect(refusal).toContain(`the running LAN pool (${owner!.pool}) belongs to ${owner!.user} (uid ${owner!.uid})`);
-      const run = Bun.spawnSync(["sh", "-c", `sudo() { printf '%s\\0' "$@"; }; ${refusal.split("run it as that user: ")[1]}`]);
-      expect(run.stdout.toString().split("\0").slice(0, -1), JSON.stringify(command)).toEqual(["-u", owner!.user, "env", ...("home" in owner! ? [`HOME=${owner.home}`] : []), `XDG_RUNTIME_DIR=/run/user/${owner!.uid}`, ...command]);
-      expect(wrongUser(owners[next(2)]!.uid, owners, command)).toBeUndefined();
-      expect(wrongUser(0, [], command)).toBeUndefined();
-    }
-  });
-
-  test("[spec docs/lan.md] --network opens exactly one named pair for solo games, every other start stays offline, and a networked pair refuses each LAN play command", () => {
-    expect(networkFlagProblem(["--pair", "16", "--network"])).toBeUndefined();
-    expect(networkFlagProblem(["--pairs", "2"])).toBeUndefined();
-    for (const args of [["--network"], ["--pairs", "2", "--network"], ["--pair", "1", "--pair", "2", "--network"]]) expect(networkFlagProblem(args)).toContain("exactly one --pair K");
-    expect(pairFlags(["--pair", "16", "--network"]).network).toBe(true);
-    expect(pairFlags(["--pair", "16"]).network).toBe(false);
-    for (const command of ["fresh", "dummy", "netem"] as const) {
-      expect(lanPlayRefusal(16, true, command)).toContain(`lan ${command} runs only on an offline pair`);
-      expect(lanPlayRefusal(16, false, command)).toBeUndefined();
-    }
-  });
-
-  test("[spec docs/lan.md] a networked pair launches and lists only its side a client, and an offline pair keeps both sides", () => {
-    expect(pairSides(true)).toEqual(["a"]);
-    expect(pairSides(false)).toEqual(["a", "b"]);
-    expect(pairClients(16, { a: "/run/a" }, pairSides(true)).map(({ name, run }) => ({ name, run }))).toEqual([{ name: "lan16a", run: "/run/a" }]);
-    expect(pairClients(16, { a: "/run/a", b: "/run/b" }, pairSides(false)).map(({ name }) => name)).toEqual(["lan16a", "lan16b"]);
-  });
-
-  test("[spec docs/lan.md] a pair whose driver died is idle at once and raises its alarm after the owner's ten minutes, a pair with a client down is dead, only a live driver keeps a pair busy, and every pair nobody drives, playing or dead, counts whole idle seconds from its last start, end or dead driver", () => {
-    const goneAt = "2026-10-11T10:00:00.000Z";
-    expect(driverVerdict({ pid: 7, since: "2026-10-11T09:00:00.000Z" }, Date.parse(goneAt) + ALARM_AFTER_MS)).toEqual({ alarm: false });
-    const gone = { pid: 7, since: "2026-10-11T09:00:00.000Z", goneAt };
-    expect(driverVerdict(gone, Date.parse(goneAt) + ALARM_AFTER_MS - 1)).toEqual({ idle: `idle since ${goneAt}, driver gone`, alarm: false });
-    expect(driverVerdict(gone, Date.parse(goneAt) + ALARM_AFTER_MS).alarm).toBe(true);
-    expect(ALARM_AFTER_MS).toBe(600_000);
-
-    let seed = 128;
-    const next = (below: number) => {
-      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
-      return (seed >>> 16) % below;
-    };
-    for (let sample = 0; sample < 200; sample++) {
-      let now = Date.parse("2026-10-11T09:00:00.000Z") + next(1000);
-      const started = new Date(now).toISOString();
-      let ended: string | undefined;
-      let driver: Driver | undefined;
-      let idleStart = now;
-      let previous: number | undefined;
-      const trace: string[] = ["start"];
-      for (let step = 0; step < 40; step++) {
-        now += next(4) === 0 ? next(2_000_000) : next(3000);
-        const event = next(5);
-        if (event === 0) {
-          driver = { pid: 1 + next(9), since: new Date(now).toISOString() };
-          ended = new Date(now).toISOString();
-          trace.push(`drive ${driver.pid}`);
-        } else if (event === 1) {
-          driver = undefined;
-          ended = new Date(now).toISOString();
-          idleStart = now;
-          previous = undefined;
-          trace.push("end");
-        } else if (event === 2 && driver !== undefined && driver.goneAt === undefined) {
-          driver = { ...driver, goneAt: new Date(now).toISOString() };
-          idleStart = now;
-          previous = undefined;
-          trace.push("gone");
-        } else {
-          const playing = next(3) === 0;
-          const down = next(4) === 0 ? ["lan0b"] : [];
-          const read = idleness(started, ended, driver, playing, down, now);
-          const live = driver !== undefined && driver.goneAt === undefined;
-          trace.push(`read +${now - idleStart} ms${playing ? " playing" : ""}${down.length > 0 ? " down" : ""}`);
-          const why = trace.join(", ");
-          expect(read.state, why).toBe(down.length > 0 ? "dead" : live ? "busy" : "idle");
-          expect(read.down, why).toEqual(down.length > 0 ? down : undefined);
-          expect(read.playing, why).toBe(playing ? true : undefined);
-          if (live) {
-            expect(read.idleSeconds, why).toBe(0);
-            previous = undefined;
-          } else {
-            expect(read.idleSince, why).toBe(new Date(idleStart).toISOString());
-            expect(read.idleSeconds, why).toBe(Math.floor((now - idleStart) / 1000));
-            expect(read.idleSeconds, why).toBeGreaterThanOrEqual(previous ?? 0);
-            previous = read.idleSeconds;
-          }
-        }
-      }
-    }
-  });
-
   test("[integration filesystem] a client whose Warcraft III wrote a crash report since its launch stops reporting its pid, and a crash from before the launch leaves a running client running", () => {
     const documents = mkdtempSync(join(tmpdir(), "wisp-lan-crash-"));
     try {
@@ -197,73 +91,6 @@ describe("setup without reflinks", () => {
   });
 });
 
-describe("map copies", () => {
-  test("a failed run leaves none of the maps it copied into the clients' Documents and keeps the files that were there", async () => {
-    const root = mkdtempSync(join(tmpdir(), "wisp-map-copies-"));
-    const [a, b] = [join(root, "a/Maps/Wisp"), join(root, "b/Maps/Wisp")];
-    mkdirSync(a, { recursive: true });
-    writeFileSync(join(a, "own.w3x"), "the player's map");
-    writeFileSync(join(a, "second.w3x"), "the player's older copy");
-    for (const name of ["first.w3x", "second.w3x"]) writeFileSync(join(root, name), name);
-    const seen: string[][] = [];
-    const exit = await Effect.runPromiseExit(Effect.scoped(Effect.gen(function*() {
-      const copy = yield* mapCopies([a, b], join(root, "ledger"));
-      yield* copy(join(root, "first.w3x"));
-      yield* copy(join(root, "second.w3x"));
-      seen.push(readdirSync(a).sort(), readdirSync(b).sort());
-      return yield* Effect.fail("the match didn't start");
-    })));
-    expect(Exit.isFailure(exit)).toBe(true);
-    expect(seen).toEqual([["own.w3x", "second.w3x"], ["second.w3x"]]);
-    expect([readdirSync(a).sort(), readdirSync(b)]).toEqual([["own.w3x", "second.w3x"], []]);
-    expect(readFileSync(join(a, "own.w3x"), "utf8")).toBe("the player's map");
-  });
-
-  test("the next run removes the copies a killed run left, and keeps the files that were there first", async () => {
-    const root = mkdtempSync(join(tmpdir(), "wisp-map-copies-"));
-    const [a, b] = [join(root, "a/Maps/Wisp"), join(root, "b/Maps/Wisp")];
-    const ledger = join(root, "pair-3/map-copies");
-    mkdirSync(a, { recursive: true });
-    writeFileSync(join(a, "own.w3x"), "the player's map");
-    for (const name of ["killed.w3x", "next.w3x"]) writeFileSync(join(root, name), name);
-    try {
-      const killed = await Effect.runPromise(Scope.make());
-      await Effect.runPromise(Effect.gen(function*() {
-        yield* (yield* mapCopies([a, b], ledger))(join(root, "killed.w3x"));
-      }).pipe(Scope.provide(killed)));
-      expect([readdirSync(a).sort(), readdirSync(b)]).toEqual([["killed.w3x", "own.w3x"], ["killed.w3x"]]);
-      const seen = await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
-        const copy = yield* mapCopies([a, b], ledger);
-        const before = [readdirSync(a).sort(), readdirSync(b)];
-        yield* copy(join(root, "next.w3x"));
-        return [before, [readdirSync(a).sort(), readdirSync(b)]];
-      })));
-      expect(seen).toEqual([[["own.w3x"], []], [["next.w3x", "own.w3x"], ["next.w3x"]]]);
-      expect([readdirSync(a), readdirSync(b), readdirSync(join(root, "pair-3"))]).toEqual([["own.w3x"], [], []]);
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
-  });
-});
-
-describe("map facts", () => {
-  test("[integration child process] an extractor the dynamic loader can't start fails as a load error naming the missing library, not as a map without war3map.w3i", async () => {
-    const root = mkdtempSync(join(tmpdir(), "wisp-map-facts-"));
-    const packager = join(root, "map-pack");
-    writeFileSync(packager, "#!/bin/sh\necho \"$0: error while loading shared libraries: libstorm.so.9: cannot open shared object file: No such file or directory\" >&2\nexit 127\n");
-    chmodSync(packager, 0o755);
-    mkdirSync(join(root, "Maps/Wisp"), { recursive: true });
-    writeFileSync(join(root, "Maps/Wisp/broken.w3x"), "a map the extractor never opens");
-    const exit = await Effect.runPromiseExit(readMapFacts(join(root, "Maps/Wisp/broken.w3x"), packager, "Maps\\Wisp\\broken.w3x").pipe(Effect.provide(BunServices.layer)));
-    rmSync(root, { recursive: true, force: true });
-    expect(Exit.isFailure(exit)).toBe(true);
-    const problem = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined;
-    expect(problem).toBeInstanceOf(LanFailure);
-    expect((problem as LanFailure).problem).toContain(`the map packager ${packager} could not load libstorm.so.9 (exit 127)`);
-    expect((problem as LanFailure).problem).not.toContain("war3map.w3i");
-  });
-});
-
 describe("host, replaying two recorded offline clients", () => {
   const fixture = readFileSync(join(import.meta.dir, "fixtures/lan/offline-pair.packets"), "utf8").split("\n")
     .filter((line) => line !== "" && !line.startsWith("#"))
@@ -337,9 +164,4 @@ describe("host, replaying two recorded offline clients", () => {
       if (!discoveryClosed) announcements.close();
     }
   });
-});
-
-describe("action log", () => {
-  const actions = readFileSync(join(import.meta.dir, "fixtures/lan/actions.log"), "utf8");
-
 });

@@ -55,7 +55,7 @@ export interface ReferenceError {
  * Compares each delayed reference's median press-to-pixel against the undelayed one: the page adds exactly `frames` display frames,
  * so the medians must differ by `frames` periods. Whatever the browser adds to both cancels; what remains is the method's error.
  */
-export function referenceErrors(delays: readonly ReferenceDelay[]): readonly ReferenceError[] {
+function referenceErrors(delays: readonly ReferenceDelay[]): readonly ReferenceError[] {
   const base = delays.find((delay) => delay.frames === 0);
   if (base === undefined) return [];
   return delays.filter((delay) => delay.frames > 0).map((delay) => {

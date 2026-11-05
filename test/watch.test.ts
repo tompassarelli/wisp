@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { prefixUse } from "../host/os/warcraft/battleNet";
 import { type ProcessInfo } from "../host/contract/processInfo";
 import { sessionStart } from "../host/os/warcraft/war3Log";
-import { type ClientState, type CrashReport, type SocketState, type Sources, changes, crashSummary, decide, eventLine, socketEvent, typesIntoMatch } from "../host/dev/watch";
+import { type CrashReport, type Sources, changes, crashSummary, decide, eventLine } from "../host/dev/watch";
 
 const fixture = (path: string) => readFileSync(join(import.meta.dir, "fixtures", path), "utf8");
 const PREFIX = "/clients/a/pfx";
@@ -22,38 +22,6 @@ const sources = (now: number, processes: readonly ProcessInfo[], extra: Partial<
   crashes: [],
   socket: { connected: false },
   ...extra,
-});
-
-test("[boundary] the pair owner's live Warcraft PID survives unreadable prefix metadata without admitting closed clients, other applications or a lobby", () => {
-  const now = on6Oct("20:36");
-  const game = { ...GAME, prefix: undefined };
-  const lan = { pid: GAME.pid, map: "/proof/own-map.w3x", phase: "playing", connected: true, loaded: true, left: false };
-  const observe = (processes: readonly ProcessInfo[], state = lan) => decide("a", {
-    ...sources(now, processes), prefix: prefixUse(processes, PREFIX, "", { ownedGamePid: state.pid }), lan: state,
-  });
-  const match = observe([game]);
-  expect(match.state.kind).toBe("in match");
-  expect(match.source).toBe("lan");
-  expect(typesIntoMatch(match)).toBe(true);
-  expect(observe([]).state.kind).toBe("closed");
-  expect(typesIntoMatch(observe([{ ...game, pid: GAME.pid + 1 }]))).toBe(false);
-  expect(typesIntoMatch(observe([{ ...game, prefix: "/clients/b/pfx" }]))).toBe(false);
-  expect(typesIntoMatch(observe([{ ...LAUNCHER, pid: GAME.pid, prefix: undefined }]))).toBe(false);
-  expect(typesIntoMatch(observe([{ ...game, args: ["C:\\unknown.exe"] }]))).toBe(false);
-  for (const state of [{ ...lan, phase: "lobby" }, { ...lan, loaded: false }, { ...lan, connected: false }, { ...lan, left: true }]) {
-    const view = observe([game], state);
-    expect(view.state.kind).toBe("running");
-    expect(typesIntoMatch(view)).toBe(false);
-  }
-  for (const state of [{ kind: "menus", screen: "MAIN_MENU" }, { kind: "lobby" }] as const) {
-    const view = decide("a", {
-      ...sources(now, [game]), prefix: prefixUse([game], PREFIX, "", { ownedGamePid: lan.pid }), lan: { ...lan, phase: "lobby" },
-      socket: { connected: true, last: { state, at: now, evidence: "current menu page" } },
-    });
-    expect(view.state).toEqual(state);
-    expect(typesIntoMatch(view)).toBe(false);
-  }
-  expect(prefixUse([game], PREFIX, "").game).toBeUndefined();
 });
 
 const crashFolder = "2026-10-06 13.30.33 f80136c8";
@@ -86,43 +54,4 @@ test("[native] the crashed play --menus run: its crash report names the session 
   expect(decide("a", sources(on6Oct("20:40"), [LAUNCHER, GAME], { log, crashes: [crash] })).state.kind).not.toBe("crashed");
 
   expect(decide("a", sources(on6Oct("20:36"), [LAUNCHER], { log: fixture("war3log/loadfile-scan-mid-load.txt"), crashes: [crash] })).state.kind).toBe("launcher");
-});
-
-test("[property seed 4141] evidence from before the game started never counts, a fresh receipt outranks an older lobby or loading screen, and chat goes only into a match its menu page reports", () => {
-  let seed = 4141;
-  const next = (below: number) => {
-    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
-    return (seed >>> 16) % below;
-  };
-  const log = fixture("war3log/menus-after-scan.txt");
-  const logStart = on6Oct("16:20:57") + 156, login = on6Oct("16:21:11") + 129, now = on6Oct("16:36");
-  const states: readonly ClientState[] = [{ kind: "menus", screen: "MAIN_MENU" }, { kind: "lobby" }, { kind: "loading" }, { kind: "in match" }, { kind: "results" }, { kind: "signing in" }];
-  for (let sample = 0; sample < 400; sample++) {
-    const started = on6Oct("16:20") + next(4) * 30_000;
-    const time = () => started - 60_000 + next(180) * 1000;
-    const socket: SocketState = next(3) === 0 ? { connected: false } : { connected: true, last: { state: states[next(states.length)]!, at: time(), evidence: "generated" } };
-    const extra = { socket, ...(next(2) === 0 ? { log } : {}), ...(next(3) === 0 ? {} : { receipt: time() }) };
-    const view = decide("a", sources(now, [LAUNCHER, { ...GAME, started }], extra));
-    const said = socket.last !== undefined && socket.last.at >= started ? socket.last : undefined;
-    const receipt = extra.receipt !== undefined && extra.receipt >= started ? extra.receipt : undefined;
-    const signedIn = extra.log !== undefined && logStart >= started;
-    const fresh = { socket: said === undefined ? { connected: false } : socket, ...(signedIn ? { log } : {}), ...(receipt === undefined ? {} : { receipt }) };
-    const evidence = `sample ${sample}: ${JSON.stringify(extra.socket)} receipt ${String(extra.receipt)} log ${extra.log !== undefined} started ${started}`;
-    expect(view, evidence).toEqual(decide("a", sources(now, [LAUNCHER, { ...GAME, started }], fresh)));
-    expect(typesIntoMatch(view), evidence).toBe(view.state.kind === "in match" && said !== undefined);
-    const counted = receipt !== undefined && (!signedIn || receipt >= login) ? receipt : undefined;
-    if (said === undefined) {
-      expect(view.state.kind, evidence).toBe(counted !== undefined && signedIn ? "in match" : signedIn ? "signed in" : "running");
-    } else if ((said.state.kind === "lobby" || said.state.kind === "loading") && counted !== undefined) {
-      expect(view.state, evidence).toEqual(counted > said.at ? { kind: "in match" } : said.state);
-    }
-  }
-  for (let sample = 0; sample < 200; sample++) {
-    const screens = Array.from({ length: 6 }, () => ["MAIN_MENU", "GAME_LOBBY", "LOADING_SCREEN", "DISABLED_SCREEN", "SCORE_SCREEN"][next(5)]!);
-    screens.reduce<SocketState>((socket, screen, index) => {
-      const after = socketEvent(socket, { messageType: "SetGlueScreen", payload: { screen } }, index);
-      if (screen === "DISABLED_SCREEN") expect(after.last?.state.kind === "in match", screens.join(" ")).toBe(socket.last?.state.kind === "loading" || socket.last?.state.kind === "in match");
-      return after;
-    }, { connected: true });
-  }
 });

@@ -241,7 +241,7 @@ const DECIDED = /"decision":"(?:RESERVED|DEFER)"/;
 const STDERR_GRACE = "1 second";
 
 /** Runs a command the capacity helper admits: up to `admission` for the helper to admit or defer it, or for it to exit, then up to `exit` for it to exit. */
-export const admittedRunner = Effect.gen(function*() {
+const admittedRunner = Effect.gen(function*() {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   return ((command, { admission, exit, waiting }) => Effect.scoped(Effect.gen(function*() {
     const handle = yield* command;

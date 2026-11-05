@@ -62,7 +62,7 @@ test/stack/entry.ts:10: in invoke
 test/stack/entry.ts:14: in nested
 ```
 
-The example paths are compiler output from wisp:test/stack/entry.ts. The game
+The example paths are compiler output from a since-removed fixture. The game
 displays the error message and writes the detailed report to CustomMapData.
 The consumer's hot watcher prints that report. Compiler-recorded frames already
 contain TypeScript positions; ordinary `map-KEY:LINE` and `hot-KEY:LINE` Lua

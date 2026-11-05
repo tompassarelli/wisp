@@ -40,7 +40,7 @@ const clientLimit = (command: readonly string[]) => Effect.promise(async () => {
   return await run.exited === 0 && Number.isInteger(limit) ? limit : undefined;
 }).pipe(Effect.orElseSucceed(() => undefined));
 
-export const PEER_STATE_SCRIPT = "state=\"${XDG_STATE_HOME:-$HOME/.local/state}/wisp/lan\"; data=\"${XDG_DATA_HOME:-$HOME/.local/share}/wisp/lan\"; me=$(hostname)\nlive() { kill -0 \"$1\" 2>/dev/null; }\nnum() { sed -n \"s/.*\\\"$1\\\": *\\([0-9]*\\).*/\\1/p\" \"$2\" | head -n 1; }\nstr() { sed -n \"s/.*\\\"$1\\\": *\\\"\\([^\\\"]*\\)\\\".*/\\1/p\" \"$2\" | head -n 1; }\nfor f in \"$state\"/queue/leases/\"$me\"-*.json; do [ -f \"$f\" ] || continue; live \"$(num pid \"$f\")\" && echo \"busy $(num pair \"$f\")\"; done\nfor f in \"$state\"/pair-*/claim.json; do [ -f \"$f\" ] || continue; pair=$(basename \"$(dirname \"$f\")\"); live \"$(num pid \"$f\")\" && echo \"busy ${pair#pair-} $(str session \"$f\")\"; done\nfor f in \"$state\"/pair-*/health.json; do [ -f \"$f\" ] || continue; pair=$(basename \"$(dirname \"$f\")\"); echo \"health ${pair#pair-} $(num failures \"$f\")\"; done\nfor d in \"$data\"/clients/lan*a/pfx/drive_c/\"Program Files (x86)\"/\"Warcraft III\"; do [ -f \"$d/.build.info\" ] || continue; k=${d#*/clients/lan}; k=${k%%a/*}\n  echo \"build $k $(awk -F'|' 'NR==1{for(i=1;i<=NF;i++){split($i,a,\"!\"); if(a[1]==\"Version\")v=i; if(a[1]==\"Active\")c=i}} NR>1 && $c==1 && !done {print $v; done=1}' \"$d/.build.info\")\"; done\ntrue";
+const PEER_STATE_SCRIPT = "state=\"${XDG_STATE_HOME:-$HOME/.local/state}/wisp/lan\"; data=\"${XDG_DATA_HOME:-$HOME/.local/share}/wisp/lan\"; me=$(hostname)\nlive() { kill -0 \"$1\" 2>/dev/null; }\nnum() { sed -n \"s/.*\\\"$1\\\": *\\([0-9]*\\).*/\\1/p\" \"$2\" | head -n 1; }\nstr() { sed -n \"s/.*\\\"$1\\\": *\\\"\\([^\\\"]*\\)\\\".*/\\1/p\" \"$2\" | head -n 1; }\nfor f in \"$state\"/queue/leases/\"$me\"-*.json; do [ -f \"$f\" ] || continue; live \"$(num pid \"$f\")\" && echo \"busy $(num pair \"$f\")\"; done\nfor f in \"$state\"/pair-*/claim.json; do [ -f \"$f\" ] || continue; pair=$(basename \"$(dirname \"$f\")\"); live \"$(num pid \"$f\")\" && echo \"busy ${pair#pair-} $(str session \"$f\")\"; done\nfor f in \"$state\"/pair-*/health.json; do [ -f \"$f\" ] || continue; pair=$(basename \"$(dirname \"$f\")\"); echo \"health ${pair#pair-} $(num failures \"$f\")\"; done\nfor d in \"$data\"/clients/lan*a/pfx/drive_c/\"Program Files (x86)\"/\"Warcraft III\"; do [ -f \"$d/.build.info\" ] || continue; k=${d#*/clients/lan}; k=${k%%a/*}\n  echo \"build $k $(awk -F'|' 'NR==1{for(i=1;i<=NF;i++){split($i,a,\"!\"); if(a[1]==\"Version\")v=i; if(a[1]==\"Active\")c=i}} NR>1 && $c==1 && !done {print $v; done=1}' \"$d/.build.info\")\"; done\ntrue";
 
 export interface PeerState {
   /** Each busy pair's holder session: a pool claim's fleet session, "" for the peer's own lease or a claim that names none. */
@@ -50,7 +50,7 @@ export interface PeerState {
   readonly failures: ReadonlyMap<number, number>;
 }
 
-export const parsePeerState = (output: string): PeerState => {
+const parsePeerState = (output: string): PeerState => {
   const rows = output.split("\n").map((line) => line.trim().split(/\s+/));
   const busy = new Map<number, string>();
   for (const [kind, pair, session = ""] of rows) if (kind === "busy" && Number.isInteger(Number(pair)) && busy.get(Number(pair)) !== "") busy.set(Number(pair), session);
@@ -61,7 +61,7 @@ export const parsePeerState = (output: string): PeerState => {
   };
 };
 
-export const poolablePairs = (pairs: readonly number[], builds: ReadonlyMap<number, string>) =>
+const poolablePairs = (pairs: readonly number[], builds: ReadonlyMap<number, string>) =>
   pairs.filter((pair) => {
     const version = builds.get(pair);
     return version !== undefined && lanPoolSupported(version);
@@ -88,7 +88,7 @@ const IDLE_PAIRS_SCRIPT = "state=\"${XDG_STATE_HOME:-$HOME/.local/state}/wisp/la
 const PairState = Schema.Struct({ idleSeconds: Schema.Finite });
 const decodePairState = Schema.decodeUnknownOption(Schema.fromJsonString(PairState));
 
-export const parseIdle = (output: string): ReadonlyMap<number, number> => new Map(output.split("\n").flatMap((line) => {
+const parseIdle = (output: string): ReadonlyMap<number, number> => new Map(output.split("\n").flatMap((line) => {
   const [pair, status = ""] = line.split("\t");
   const number = Number.parseInt(pair ?? "", 10);
   if (!Number.isInteger(number)) return [];
@@ -117,7 +117,7 @@ const idleness = (local: string) => (leases: readonly Lease[]) => Effect.gen(fun
 });
 
 /** The fleet session of the live pool holding this host's pair K; a pool whose custodian has exited holds it for nobody. */
-export const localHolder = (pair: number) => {
+const localHolder = (pair: number) => {
   const claim = readClaim(pair);
   return claim !== undefined && alive(claim.pid) && !orphaned(claim) ? claim.session : undefined;
 };
@@ -143,7 +143,7 @@ const world = (any: boolean) => Effect.gen(function*() {
 export const releaseLocalLeases = (pairs: readonly number[]) => Effect.forEach(pairs, (pair) => releasePair(leaseDirectory(), { host: hostname(), pair }), { discard: true });
 
 /** Stops the pool still holding pair K after its custodian exited and waits until it has exited, so the lease is granted only once the pair has no live pool and the pool the new lease starts gets the pair's lock. */
-export const reclaimOrphan = (pair: number, seconds = ORPHAN_STOP_SECONDS) => Effect.suspend(() => {
+const reclaimOrphan = (pair: number, seconds = ORPHAN_STOP_SECONDS) => Effect.suspend(() => {
   const claim = readClaim(pair);
   if (claim === undefined || !alive(claim.pid) || !orphaned(claim)) return Effect.void;
   return Console.error(`pair ${pair}: stopping ${claim.owner}'s pool ${claim.pid}, whose custodian ${claim.agent?.pid} has exited`).pipe(

@@ -91,10 +91,6 @@ export function response(samples: readonly Sample[], region: Rect, threshold: nu
   return undefined;
 }
 
-/** The display frame period the grabs saw: the median gap between consecutive grab stamps. */
-export function framePeriodMs(samples: readonly Sample[]): number {
-  return percentile(samples.slice(1).map((sample, index) => (sample.afterNs - samples[index]!.afterNs) / 1e6), 0.5);
-}
 
 export interface Shown {
   readonly lowerMs: number;

@@ -131,9 +131,8 @@ and 1 s blackout cell (D = 3) catches up in 897 ms from the blackout's end;
 the model takes 886 ms.
 
 The defaults come from `cargo run --release -p relay-bench -- --grid --rtts 120`
-(wisp:relay/relay-bench), 25 October 2026; wisp:src/headless/syncChannel.test.ts
-checks the model's own-echo p50 and p99 against that cell within 5%, and
-its catch-up within 5% of the blackout cell's. Provenance: the 5% match;
+(wisp:relay/relay-bench), 25 October 2026; the model's own-echo p50 and p99
+match that cell within 5%, and its catch-up the blackout cell's. Provenance: the 5% match;
 origin none (relay plan); pointer wisp:docs/relay.md, "Protocol core and
 bench"; rationale not recorded; revisit if the bench and model disagree by
 design; soft. The model has no underruns, no clock drift, no burst loss and

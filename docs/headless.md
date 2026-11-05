@@ -94,9 +94,8 @@ models it, recorded once per client with its frame as an `outside-profile`
 finding, `native NAME is outside the standalone profile`; a standalone run
 (`runStandalone`, Chrome or the native window) stops on it with
 `pN frame F: native NAME is outside the standalone profile`. Inside the
-profile, an unmodeled native still fails as above. `bun test
-test/standalone-profile.test.ts` checks the generator and the `standalone-profile` row of
-`test/lua32-fixtures.test.ts` the failure.
+profile, an unmodeled native still fails as above. The `standalone-profile` row of
+`test/lua32-fixtures.test.ts` checks the failure.
 
 ## Synchronized and local-only calls
 
@@ -127,8 +126,7 @@ export const MAP: HeadlessMap = {
 ([what a reload sends](hot-reload.md#what-a-reload-sends)): the host marker,
 payload files, then the manifest, in every client's CustomMapData, with a delta
 from the previous version when every client acknowledged it.
-`reload(modules)` publishes another module set, such as a later compile's;
-wisp:test/modules.test.ts plays full and incremental reloads that way, and
+`reload(modules)` publishes another module set, such as a later compile's, and
 `client.preloadedFiles()` shows which payload each client read. `start()` has already put the marker there, as `wisp fresh` does
 before a match, so the map's own reloader finds the manifest on its next poll;
 `start({ hostFolder: false })` simulates clients no host has touched, which
@@ -554,7 +552,7 @@ instead: the frame its scene report's `frame()` returns (Mak'gora's
 first client frame that reads it, with images named `p0-match-N.png`. A
 journey that starts its match at client frame 30 reaches match frame 410 at
 client frame 440; one that ends first fails, naming the frames it never
-reached (wisp:test/headless-observations.test.ts).
+reached.
 `--journey FILE.json` replaces the named journey with `{ frames, events }`;
 key events may include `down: true` and a later `down: false` to hold a key.
 
@@ -656,8 +654,7 @@ one image per requested frame and client with its `frame` (and `matchFrame`),
 `client`, `ui` rows and `models` rows. `--render` adds the same model rows
 to each image in `render.json` as `bounds`. Both need the map's `render.readAsset`; the
 command reads models and UI textures through `render.resolveAsset` when the
-map supplies it (wisp:host/commands/headless.ts, checked end to end by
-wisp:test/headless-bounds.test.ts).
+map supplies it (wisp:host/commands/headless.ts).
 
 - **Screen size.** Rows are measured at `--resolution WxH`, the size every
   client also reports to `BlzGetLocalClientWidth/Height`; without it, at the
@@ -722,8 +719,7 @@ wisp:test/headless-bounds.test.ts).
   the texture's centre, the Wisp renderer's black edge, and the row says
   `teamGlow: "disc"`; another texture the bounds can't read (DDS, an
   animated texture or texture coordinates) counts the whole surface.
-  Particle and ribbon emitters are not counted. Checked by a property
-  (wisp:test/screen-bounds.test.ts): an alpha-keyed quad with a transparent
+  Particle and ribbon emitters are not counted. An alpha-keyed quad with a transparent
   border bounds its opaque texels within 1 px, one-sided it bounds nothing
   when its back faces the eye, and a radial glow texture bounds at its
   threshold radius.
@@ -757,8 +753,7 @@ wisp:test/headless-bounds.test.ts).
   part node absent from all portrait models also fails, naming the texture,
   part, missing nodes and model paths; a node that exists but shows no pixels still measures 0. The
   rows are numbers only: the game declares the pass rules and thresholds.
-  Checked by a property over random cubes (wisp:test/screen-bounds.test.ts):
-  coverage equals the projected polygon's area within 1 px per edge, the box
+  Coverage equals the projected polygon's area within 1 px per edge, the box
   matches the pixel centres that polygon holds, a cube skinned to a named
   node's child counts toward that node's part, texels under half opacity
   count exactly as a crop ending above them, a cube behind another
@@ -777,8 +772,7 @@ wisp:test/headless-bounds.test.ts).
   `compareEdges(wisp, native)` gives native minus Wisp per edge and `within`
   when all four are within 4 px, the per-frame test of wisp#125 box 3 (at
   1920x1080, 19 of 20 frames). The command prints the native box and the
-  edges, or one JSON object with `--json`. Checked by a property over random
-  backgrounds (wisp:test/screen-bounds.test.ts): with noise of |Δ| up to 24 on
+  edges, or one JSON object with `--json`. With noise of |Δ| up to 24 on
   every pixel and a distractor blob outside `near`, the box equals the drawn
   connected blob's exactly.
 

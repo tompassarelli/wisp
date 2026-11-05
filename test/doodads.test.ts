@@ -1,5 +1,4 @@
 import { expect, test } from "bun:test";
-import { join } from "node:path";
 import { decodeDoodads } from "../host/terrain/doodads";
 import { sceneWithUnits, type RenderScene } from "../host/render/headlessRender";
 

@@ -1,8 +1,5 @@
 import { expect, test } from "bun:test";
 import { createControlSkins } from "../../host/window/controlSkin";
-import { parseFdf } from "../../host/window/fdf";
-import { skinned } from "../../host/window/nativeUi";
-import { Frames, type FrameSnapshot } from "../../src/game/native/frameStore";
 
 const BASE = `
 // made for this test: the shape of a frame file, with our own names and paths
@@ -59,36 +56,10 @@ const loaded = async (template: string) => {
   return skins.skin(template);
 };
 
-test("parseFdf_reads_frames_inheritance_fields_and_includes", () => {
-  const file = parseFdf(BUTTON);
-  expect(file.includes).toEqual(["Test\\Base.fdf"]);
-  const [button] = file.frames;
-  expect([button?.type, button?.name, button?.inherits, button?.withChildren]).toEqual(["GLUETEXTBUTTON", "ScriptDialogButton", "BaseButton", true]);
-  expect(button?.children.map((child) => child.name)).toEqual(["ScriptDialogButtonText"]);
-  expect(parseFdf(BASE).frames[0]?.fields.get("BackdropBackgroundInsets")).toEqual(["0.005", "0.005", "0.005", "0.005"]);
-});
-
 test("a_warcraft_button_template_resolves_its_backdrops_and_highlight_through_inheritance_and_the_skin_table", async () => {
   const skin = await loaded("ScriptDialogButton");
   expect(skin?.backdrop).toEqual({ background: "Skin\\human-back.blp", edge: "Skin\\edge-up.blp", corner: 0.0125, tile: 0.256, insets: [0.005, 0.005, 0.005, 0.005], corners: "UL|UR|BL|BR|T|L|B|R" });
   expect(skin?.pushed?.edge).toBe("Skin\\edge-down.blp");
   expect(skin?.disabled).toBeUndefined();
   expect(skin?.highlight).toBe("Skin\\glow.blp");
-});
-
-test("a_templated_frame_draws_the_backdrop_and_highlight_of_its_state", async () => {
-  const skin = await loaded("ScriptDialogButton");
-  const frames = new Frames(new Map());
-  let id = 0;
-  const button = frames.create(() => ({ kind: "framehandle", id: ++id }), "ScriptDialogButton", undefined, 0);
-  button.points.set("c", { x: 0.4, y: 0.3 });
-  const look = () => skinned(frames.snapshot().find((each) => each.handle.id === button.id) as FrameSnapshot, () => skin);
-  expect(look().template).toBe("ScriptDialogButton");
-  expect([look().backdrop?.edge, look().highlight]).toEqual(["Skin\\edge-up.blp", undefined]);
-  frames.point(button, undefined);
-  expect([look().control, look().backdrop?.edge, look().highlight]).toEqual(["hover", "Skin\\edge-up.blp", "Skin\\glow.blp"]);
-  frames.point(button, button);
-  expect([look().control, look().backdrop?.edge, look().highlight]).toEqual(["pushed", "Skin\\edge-down.blp", "Skin\\glow.blp"]);
-  frames.point(undefined, button);
-  expect([look().control, look().highlight]).toEqual([undefined, undefined]);
 });

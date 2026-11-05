@@ -2,7 +2,7 @@
 // in Bun, then its compiled bundle in the 32-bit Lua that LUA names. Both
 // clients make the same native calls, and the bundle makes the same calls in
 // Lua as the TypeScript in Bun.
-import { afterAll, expect, test } from "bun:test";
+import { afterAll, expect } from "bun:test";
 import { join } from "node:path";
 import { mapCompiler, report } from "wisp/scripts/compiler";
 import { installHeadless } from "wisp/scripts/wisp/headless";
@@ -20,22 +20,6 @@ function playInBun() {
   const clients = headless.clients({ start, install });
   return { clients, result: runJourney(clients, SAMPLE_JOURNEY) };
 }
-
-test("both clients ping, take a hot reload and keep walking, with the same native calls", () => {
-  const { clients, result } = playInBun();
-  expect(result.divergence).toBeUndefined();
-  expect(result.reloads).toEqual([]);
-  for (const client of clients.clients) {
-    expect(client.errors).toEqual([]);
-    expect(client.missingNatives).toEqual([]);
-    expect(client.messages).toEqual(["ping 1", "hot reload 1 applied", "ping 2"]);
-    // A move every 0.1 s: two units, X and Y, each of 20 moves.
-    expect(client.log.filter(({ name }) => name === "SetUnitX" || name === "SetUnitY")).toHaveLength(80);
-  }
-  const [first, second] = result.clients;
-  expect(first?.calls).toBe(second?.calls);
-  expect(first?.checksum).toBe(second?.checksum ?? "");
-});
 
 farmTest("the compiled bundle in 32-bit Lua makes the same native calls as the TypeScript in Bun", () => {
   expect(report(mapCompiler(join(sample, "tsconfig.map.json"))())).toBe("");

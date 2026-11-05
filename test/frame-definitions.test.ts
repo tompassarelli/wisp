@@ -1,6 +1,5 @@
 import { expect, test } from "bun:test";
 import { frameDefinitionProblems, generateFrames, type FrameDefinition } from "../host/compile/frames";
-import { opponentSettings } from "./fixtures/frames/opponentSettings";
 
 const arch: FrameDefinition = {
   name: "RaceArch",
@@ -80,17 +79,4 @@ test("[scenario] a SIMPLEFRAME definition generates its FDF by layer with TexCoo
     { key: "under", layer: "BACKGROUND" },
   ] })).toEqual([]);
   expect(() => generateFrames(bad)).toThrow('unknown layer "MIDDLE"');
-});
-
-test("[scenario] a FRAME definition's bindings use the game API: loadFrameFile, createFrame, setFrameAbsPoint, setFrameLevel, namedFrame, setFrameText and setFrameEnabled over Frame handles", () => {
-  const lines = generateFrames(opponentSettings).bindings.split("\n");
-  expect(lines[0]).toBe('import { createFrame, Frame, FramePoint, loadFrameFile, namedFrame, setFrameAbsPoint, setFrameEnabled, setFrameLevel, setFrameText } from "wisp/game/frames";');
-  expect(lines).toContain('  if (!loadFrameFile(OPPONENTSETTINGS_TOC)) return undefined;');
-  expect(lines).toContain('  const root = createFrame("OpponentSettings", parent, 0, context);');
-  expect(lines).toContain("  setFrameAbsPoint(root, FramePoint.topLeft, 0.11999999731779099, 0.4399999976158142);");
-  expect(lines).toContain("  setFrameLevel(root, 100);");
-  expect(lines).toContain('    close: namedFrame("OpponentSettingsClose", context),');
-  expect(lines).toContain('  setFrameText(frames.close, "Close");');
-  expect(lines).toContain("  setFrameEnabled(frames.title, false);");
-  expect(lines.join("\n")).not.toContain("Blz");
 });

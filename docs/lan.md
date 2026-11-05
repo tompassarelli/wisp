@@ -869,11 +869,7 @@ absolute deadline, so a late wake shortens the next wait instead of shifting
 every later turn, and game time stays on wall time. Effect 4.0.3's
 `Schedule.fixed` is not used for turns: with a fractional period such as
 16.6667 ms it fired 107 times a second instead of 60 (24 October 2026), and
-the game ran at 1.54 times wall speed. wisp:test/lanPacing.test.ts drives the pacer on a
-virtual clock whose wakes run late by up to 0.9 of a turn, for 25, 30 and
-17/17/16 cycles at speeds 1 to 16, and checks that every turn goes out within
-one wake of the wall time its summed game milliseconds reach.
-
+the game ran at 1.54 times wall speed. 
 Measured on 24 October 2026 (Mak'gora integrity build, 3.0.0.24268, LAN
 pair 0), the default ran 39.94 turns a second of exactly 25 ms at game pace
 0.998, and `--turn-ms 17,17,16` ran 60.00 turns a second at game pace 1.000

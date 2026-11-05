@@ -1,6 +1,6 @@
 /** Fields per edge a map passes to `WispSetRibbon`: one end x, y, z, the other end x, y, z, alpha. */
 const RIBBON_EDGE_FIELDS = 7;
-export const MAX_RIBBON_EDGES = 32;
+const MAX_RIBBON_EDGES = 32;
 const MAX_RIBBONS = 8;
 
 export interface RibbonPose {

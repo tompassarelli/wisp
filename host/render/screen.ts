@@ -45,7 +45,8 @@ export function camera(scene: RenderScene, aspect: number) {
 export const SKY_FAR = 1_000_000;
 
 /** Build 3.0.0.24268 at 1920x1080 draws the world 1/1.0472 the size the FOV gives, about the screen centre, and 0.00633 of the half-height higher (wisp#125 box 3). */
-export const NATIVE_SPREAD = 1.0472, NATIVE_RISE = 0.00633;
+const NATIVE_SPREAD = 1.0472;
+export const NATIVE_RISE = 0.00633;
 function nativeProjection(tangent: number, near: number, far: number, aspect: number): Matrix {
   const out = perspective(tangent, near, far, aspect);
   out[9] = -NATIVE_RISE;

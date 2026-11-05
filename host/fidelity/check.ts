@@ -61,7 +61,7 @@ function metricsFor(lever: string, settings: Readonly<Record<string,number>>): r
     default: throw new Error(`no decided fidelity bound for lever ${lever}`);
   }
 }
-export function measureImages(metric: Metric, reference: readonly Image[], candidate: readonly Image[], region: Region): { bound: number; spread: number; error: number; verdict: Verdict } {
+function measureImages(metric: Metric, reference: readonly Image[], candidate: readonly Image[], region: Region): { bound: number; spread: number; error: number; verdict: Verdict } {
   if (reference.length < 3 || candidate.length === 0) throw new Error("need three reference images and at least one candidate image");
   const first = reference[0];
   if (first === undefined) throw new Error("missing reference");

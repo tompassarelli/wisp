@@ -21,21 +21,21 @@ const nowNs = monotonicNs;
 const padded = (length: number) => (length + 3) & ~3;
 
 /** The X keysym for a key name: one Latin-1 character, a named key, or `0x` hex. */
-export function keysymOf(name: string): number | undefined {
+function keysymOf(name: string): number | undefined {
   if (name.length === 1) return name.charCodeAt(0);
   if (/^0x[0-9a-f]+$/i.test(name)) return Number(name);
   return NAMED_KEYSYMS[name];
 }
 
 /** The X display's unix socket path: `:4` and `:4.0` both name `/tmp/.X11-unix/X4`. */
-export function displaySocket(display: string): string | undefined {
+function displaySocket(display: string): string | undefined {
   const number = /^:(\d+)(?:\.\d+)?$/.exec(display)?.[1];
   return number === undefined ? undefined : `/tmp/.X11-unix/X${number}`;
 }
 
 const connectionSetup = () => Uint8Array.of(0x6c, 0, 11, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 
-export function queryExtension(name: string): Uint8Array {
+function queryExtension(name: string): Uint8Array {
   const bytes = new Uint8Array(8 + padded(name.length));
   const view = new DataView(bytes.buffer);
   bytes[0] = QUERY_EXTENSION;
@@ -55,7 +55,7 @@ function getKeyboardMapping(first: number, count: number): Uint8Array {
 }
 
 /** The XTEST FakeInput request that presses or releases `keycode`. */
-export function fakeKey(extensionOpcode: number, keycode: number, down: boolean): Uint8Array {
+function fakeKey(extensionOpcode: number, keycode: number, down: boolean): Uint8Array {
   const bytes = new Uint8Array(36);
   new DataView(bytes.buffer).setUint16(2, 9, true);
   bytes[0] = extensionOpcode;
@@ -66,7 +66,7 @@ export function fakeKey(extensionOpcode: number, keycode: number, down: boolean)
 }
 
 /** The lowest keycode whose unshifted keysym is `keysym`, from a GetKeyboardMapping reply body. */
-export function keycodeOf(keysym: number, firstKeycode: number, keysymsPerKeycode: number, keysyms: Uint32Array): number | undefined {
+function keycodeOf(keysym: number, firstKeycode: number, keysymsPerKeycode: number, keysyms: Uint32Array): number | undefined {
   for (let index = 0; index * keysymsPerKeycode < keysyms.length; index++) {
     if (keysyms[index * keysymsPerKeycode] === keysym) return firstKeycode + index;
   }

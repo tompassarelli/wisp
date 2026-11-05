@@ -44,7 +44,7 @@ const KEYMAP = `xkb_keymap {
 const padded = (length: number) => (length + 3) & ~3;
 
 /** The evdev code of a key name: a lowercase letter, a digit, or one of the named keys the X path also takes. */
-export function evdevKeyOf(name: string): number | undefined {
+function evdevKeyOf(name: string): number | undefined {
   return Object.hasOwn(EVDEV_KEYS, name) ? EVDEV_KEYS[name] : undefined;
 }
 

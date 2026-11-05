@@ -79,15 +79,3 @@ export function shrinkSoakRepro(project: SoakProject, game: SoakGame, repro: Soa
     runtime.restore();
   }
 }
-
-export function assertSoakReproFixed(project: SoakProject, game: SoakGame, repro: SoakRepro): void {
-  const runtime = installHeadless(project.map);
-  try {
-    const result = playSoakMatch(runtime, game, project, repro.match, repro.inputs);
-    const kind = repro.findings[0]?.kind;
-    const failure = result.findings.find(finding => finding.kind === kind);
-    if (failure !== undefined) throw new Error(`${failure.kind} at frame ${failure.frame}: ${failure.text}`);
-  } finally {
-    runtime.restore();
-  }
-}

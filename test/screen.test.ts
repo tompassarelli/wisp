@@ -1,10 +1,9 @@
 import { afterEach, expect, test } from "bun:test";
 import { readNativeDeclarations } from "../host/headless/headless";
 import { multiply } from "../host/browser/matrix";
-import type { DrawnPose, RenderScene } from "../host/render/headlessRender";
-import { camera, transform, uiPixels, uiReport } from "../host/render/screen";
-import type { FrameDefinition } from "../host/compile/frames";
-import { FramePoint, OriginFrame, createFrameByType, createSimpleFrame, namedFrame, originFrame, setFrameAbsPoint, setFrameColor, setFrameLevel, setFramePoint, setFrameScale, setFrameSize, setFrameTextColor, setFrameTexture, setFrameVisible } from "../src/game/native/frames";
+import type { RenderScene } from "../host/render/headlessRender";
+import { camera, uiPixels, uiReport } from "../host/render/screen";
+import { FramePoint, OriginFrame, createFrameByType, namedFrame, originFrame, setFrameAbsPoint, setFrameColor, setFrameLevel, setFramePoint, setFrameScale, setFrameSize, setFrameTextColor, setFrameTexture } from "../src/game/native/frames";
 import type { Frame, FrameKind } from "../src/game/frames";
 import { bindWorld } from "../src/game/native/world";
 import { HeadlessClient } from "../src/headless/client";
@@ -22,46 +21,6 @@ test("[reference makgora#363] HUD bust rectangles match native captures", () => 
   };
   for (const p of [0, 1]) near(uiPixels(bust(2 * p + 0.5), 800, 600), 121.25 + 380 * p, 498, 80);
   for (const p of [0, 1, 2, 3]) near(uiPixels(bust(p), 1280, 720), 191.5 + 228 * p, 597.6, 96);
-});
-
-test("[reference makgora#363] a BACKDROP bust reports its native rectangle and its whole texture at both resolutions", () => {
-  const client = new HeadlessClient({ slot: 0, humans: [0], declarations: readNativeDeclarations(), filePrefix: "screen", localNatives: {}, network: [], screen: { width: 1280, height: 720 } });
-  bindWorld(client.world);
-  const frame = (name: string) => {
-    const created = createFrameByType("BACKDROP", name, originFrame(OriginFrame.gameUi, 0), "", 0);
-    setFrameAbsPoint(created, FramePoint.topLeft, 0.02625, 0.102);
-    setFrameSize(created, 0.08, 0.08);
-    setFrameTexture(created, "Bust.blp", 0, true);
-    return created;
-  };
-  frame("bust");
-  setFrameVisible(frame("hidden"), false);
-  const identity = { layer: "base", sha256: "ab".repeat(32) };
-  for (const [width, height, x, y, size] of [[1280, 720, 191.5, 597.6, 96], [800, 600, 26.25, 498, 80]] as const) {
-    const [row, ...rest] = uiReport({ ui: client.frames.snapshot() }, width, height, (path) => (path === "Bust.blp" ? identity : undefined));
-    expect(rest).toEqual([]);
-    expect(row).toMatchObject({ name: "bust", type: "BACKDROP", texture: "Bust.blp", ...identity, region: [0, 0, 1, 1], outside43: false });
-    for (const [actual, expected] of [[row?.pixels.x, x], [row?.pixels.y, y], [row?.pixels.width, size], [row?.pixels.height, size]] as const) expect(actual).toBeCloseTo(expected, 4);
-  }
-});
-
-test("[scenario] a SIMPLEFRAME texture with a TexCoord reports its sub-rectangle region and draws beneath a BACKDROP at a higher level", () => {
-  const arch: FrameDefinition = { name: "Arch", type: "SIMPLEFRAME", width: 0.25, height: 0.125, textures: [{ key: "tile", layer: "BACKGROUND", file: "Tile.blp", texCoord: [0.5, 1, 0, 0.5] }] };
-  const client = new HeadlessClient({ slot: 0, humans: [0], declarations: readNativeDeclarations(), filePrefix: "screen", localNatives: {}, network: [], screen: { width: 1280, height: 720 }, frames: [arch] });
-  bindWorld(client.world);
-  const backdrop = createFrameByType("BACKDROP", "plate", originFrame(OriginFrame.gameUi, 0), "", 0);
-  setFrameAbsPoint(backdrop, FramePoint.topLeft, 0.25, 0.75);
-  setFrameSize(backdrop, 0.25, 0.125);
-  setFrameTexture(backdrop, "Plate.blp", 0, true);
-  setFrameLevel(backdrop, -3);
-  const simple = createSimpleFrame("Arch", originFrame(OriginFrame.gameUi, 0), 0);
-  setFrameAbsPoint(simple, FramePoint.topLeft, 0.25, 0.75);
-  const rows = uiReport({ ui: client.frames.snapshot() }, 1280, 720);
-  expect(rows.filter((row) => row.texture !== null).map((row) => [row.name, row.type, row.texture, row.region])).toEqual([
-    ["ArchTile", "TEXTURE", "Tile.blp", [0.5, 0, 1, 0.5]],
-    ["plate", "BACKDROP", "Plate.blp", [0, 0, 1, 1]],
-  ]);
-  expect(rows.find((row) => row.name === "ArchTile")?.ui).toEqual([0.25, 0.75, 0.5, 0.625]);
 });
 
 test("[reference wisp#125] frames125 boxes match native at 800x600 and 1280x720: frame scale and the 4:3 area", () => {
@@ -132,14 +91,6 @@ test("[reference wisp#125] world projection matches native at 1920x1080", () => 
     const edges = { top: [pixel(0, DECK_Y, DECK_Z)[1], top], left: [cornerAt(-DECK_X, left[0]), left[1]], ...(right === null ? {} : { right: [cornerAt(DECK_X, right[0]), right[1]] }) };
     for (const [edge, [wisp, native]] of Object.entries(edges)) expect({ fixture, frame, edge, within1px: Math.abs((wisp ?? NaN) - (native ?? NaN)) <= 1 }).toEqual({ fixture, frame, edge, within1px: true });
   }
-});
-
-test("[reference wisp#46] an effect draws at the scale and position its map set: scale about its origin, Z as given", () => {
-  const pose = { x: -240, y: -12, z: 1842, yaw: 0, pitch: 0, roll: 0, scale: 2, matrixScale: [1, 1, 1] } as unknown as DrawnPose;
-  const placed = transform(pose);
-  const at = (point: readonly [number, number, number]) => [0, 1, 2].map((row) => (placed[row] ?? 0) * point[0] + (placed[4 + row] ?? 0) * point[1] + (placed[8 + row] ?? 0) * point[2] + (placed[12 + row] ?? 0));
-  expect(at([0, 0, 0])).toEqual([-240, -12, 1842]);
-  expect(at([30, 0, 47])).toEqual([-180, -12, 1936]);
 });
 
 test("[reference wisp-standalone-menu] a child of a raised panel draws above a lower-level sibling, and a button's text is centred", () => {

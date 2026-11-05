@@ -3,7 +3,7 @@ const VERSION = 1;
 export const MAX_PACKET = 1200;
 export const PEER_HEADER = 3 + 8;
 
-export const REFUSALS = ["rateLimited", "noRoom", "full", "players", "busy"] as const;
+const REFUSALS = ["rateLimited", "noRoom", "full", "players", "busy"] as const;
 type Refusal = (typeof REFUSALS)[number];
 
 export type RelayControl =

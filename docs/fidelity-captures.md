@@ -4,8 +4,8 @@ Each reference or candidate directory contains `manifest.json`. The public
 validator in `host/fidelity/manifest.ts` exports `readManifest(directory)`
 and `decodeManifest(unknown)` as Effect programs. Provide `BunServices.layer` when
 reading files. `bun wisp fidelity check` validates both directories before any
-comparison. The file-format acceptance check runs with
-`bun run test test/fidelity-manifest.test.ts` on public synthetic inputs.
+comparison. Its file-format acceptance test on public synthetic inputs was removed in the
+2026-11-06 test cull.
 
 Version 1 has a frozen `split` and a nonempty `slices` array. Freeze the split
 before fitting: `frozenAt` is its timestamp; `fit`, `heldOut` and `retired` are
@@ -60,8 +60,9 @@ directory. Duplicate pairs, undeclared controls/frames and omitted captures
 are rejected. The gate reads the images; manifest validation only checks the
 declared capture inventory.
 
-`test/fidelity-manifest.test.ts` contains complete inline synthetic examples:
-one scene, two frames, own-lever controls and three runs. They contain
-no private captures, calibrated native values, asset data or image payloads.
+The manifest's synthetic examples (one scene, two frames, own-lever controls
+and three runs) held no private captures, calibrated native values, asset data
+or image payloads; the test that held them was removed in the 2026-11-06 test
+cull.
 The same schema accepts a per-lever slice first and a larger stage collection
 later; scenes omitted from a per-lever directory can remain in the frozen split.

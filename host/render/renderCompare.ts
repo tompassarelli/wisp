@@ -12,7 +12,7 @@ const DIFFERING_LEVELS = 2;
 /** A reference pixel is on an edge when a neighbour in its 3x3 block differs from it by more than this many levels. */
 const EDGE_LEVELS = 16;
 /** The bound is the measured spread times this, so a rerun's jitter stays inside it. */
-export const HEADROOM = 1.5;
+const HEADROOM = 1.5;
 
 export interface RegionReport {
   readonly name: string;
@@ -45,7 +45,7 @@ const deltasByArea = (reference: Image, candidate: Image): Record<Area, number[]
   return deltas;
 };
 
-export const measure = (deltas: readonly number[]): Measures => {
+const measure = (deltas: readonly number[]): Measures => {
   if (deltas.length === 0) return { maxDelta: 0, p99Delta: 0, meanDelta: 0, differingFraction: 0 };
   const sorted = Uint8Array.from(deltas).sort();
   let sum = 0, differing = 0;
@@ -56,7 +56,7 @@ export const measure = (deltas: readonly number[]): Measures => {
 const rounded = (value: number, step: number, ceiling: number) => Math.min(ceiling, Math.max(0, Math.ceil(value / step - 1e-9)) * step);
 
 /** Levels round up to a whole level (at most 255) and the fraction up to a thousandth (at most 1), so the recorded bound is a stable number. */
-export const boundOf = (measured: Measures): Measures => ({
+const boundOf = (measured: Measures): Measures => ({
   maxDelta: rounded(measured.maxDelta * HEADROOM, 1, 255),
   p99Delta: rounded(measured.p99Delta * HEADROOM, 1, 255),
   meanDelta: rounded(measured.meanDelta * HEADROOM, 0.001, 255),

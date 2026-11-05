@@ -183,8 +183,7 @@ headless journey against wisp:examples/sample/test/fixtures/desync.ts, where
 only the first client creates an extra unit, with `expect-failure: true`,
 so it passes only when the journey reports the desync. Both upload their
 output as `wisp-ci-sample` and `wisp-ci-sample-failing-fixture`.
-wisp:examples/sample/test/failing-fixture.test.ts checks the same verdict
-locally. Wisp has no self-hosted runner, so its CI never sets
+Wisp has no self-hosted runner, so its CI never sets
 `private-map-build`.
 Before a landing reaches main, the north lander runs `bun install --frozen-lockfile && bun run test` on a build host (north#360).
 

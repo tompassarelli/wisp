@@ -24,7 +24,7 @@ const CaptureManifestSchema = Schema.Struct({
 });
 export type CaptureManifest = typeof CaptureManifestSchema.Type;
 export type CaptureSlice = typeof Slice.Type;
-export type CaptureControl = typeof Control.Type;
+type CaptureControl = typeof Control.Type;
 
 class ManifestFailure extends Schema.TaggedError<ManifestFailure, { readonly brand: unique symbol }>()("ManifestFailure", { problem: Schema.String }) {
   override get message(): string { return this.problem; }
@@ -98,7 +98,7 @@ function manifestProblems(manifest: CaptureManifest): string[] {
   return problems;
 }
 
-export const decodeManifest = (input: unknown) => Schema.decodeUnknownEffect(CaptureManifestSchema)(input).pipe(
+const decodeManifest = (input: unknown) => Schema.decodeUnknownEffect(CaptureManifestSchema)(input).pipe(
   Effect.mapError((cause) => new ManifestFailure({ problem: `invalid capture manifest: ${String(cause)}` })),
   Effect.flatMap((manifest) => {
     const problems = manifestProblems(manifest);

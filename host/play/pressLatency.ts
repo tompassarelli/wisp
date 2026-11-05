@@ -97,13 +97,13 @@ function parseRect(text: string): Rect | undefined {
 
 /** The sample that carried the press is the first logged press (a new pad button or a key going down) at or after it; the window's share is from that sample to the middle of the bracket the change appeared in. */
 
-export function windowShare(edges: readonly SampleEdge[], pressNs: number, changed: Pick<Response, "lowerMs" | "upperMs">): number | undefined {
+function windowShare(edges: readonly SampleEdge[], pressNs: number, changed: Pick<Response, "lowerMs" | "upperMs">): number | undefined {
   const sampled = edges.find((edge) => edge.sampleNs >= pressNs && edge.pressed);
   if (sampled === undefined) return undefined;
   return (pressNs - sampled.sampleNs) / 1e6 + (changed.lowerMs + changed.upperMs) / 2;
 }
 
-export function pressToSample(edges: readonly SampleEdge[], pressNs: number): number | undefined {
+function pressToSample(edges: readonly SampleEdge[], pressNs: number): number | undefined {
   const sampled = edges.find((edge) => edge.sampleNs >= pressNs && edge.pressed);
   return sampled === undefined ? undefined : (sampled.sampleNs - pressNs) / 1e6;
 }
@@ -136,7 +136,7 @@ function followSummary(region: Rect, seen: readonly Trial[]) {
 }
 
 /** The run's figures from its trials, refused as `CensoredSample` when more than 2% of trials were not counted, so no median stands on the survivors; `windowShareMs` is present only for a run that read a sample log. */
-export const pressResult = (options: PressLatencyOptions, trials: readonly Trial[]): Effect.Effect<PressReport, CensoredSample> => {
+const pressResult = (options: PressLatencyOptions, trials: readonly Trial[]): Effect.Effect<PressReport, CensoredSample> => {
   const missed = trials.filter((trial) => !counted(trial)).length;
   return censored(missed, trials.length) ? Effect.fail(new CensoredSample({ missed, trials: trials.length })) : Effect.succeed(pressReport(options, trials));
 };

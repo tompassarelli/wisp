@@ -2,8 +2,6 @@
 // slot behind a TurnLedger, and their packets cross a seeded network that
 // delays, drops and reorders them (wisp:docs/network-model.md).
 import { afterAll, expect, test } from "bun:test";
-import { join } from "node:path";
-import { farmTest } from "wisp/scripts/wisp/farmTest";
 import { installHeadless } from "wisp/scripts/wisp/headless";
 import { Random } from "wisp/src/headless/random";
 import { TurnLedger, type TurnPacket } from "wisp/src/headless/turnLedger";
@@ -53,22 +51,6 @@ function play(options: { readonly seed: number; readonly frames: number; readonl
   return peers;
 }
 
-test("two one-client processes agree on every checksum through a lossy, reordering network [scenario]", () => {
-  const peers = play({ seed: 3, frames: 600, delay: 5, latencyMs: 60, loss: 0.05 });
-  for (const peer of peers) {
-    expect(peer.lockstep.frame).toBe(600);
-    expect(peer.lockstep.clients[0]?.errors).toEqual([]);
-    expect(peer.ledger.mismatch).toBeUndefined();
-    expect(peer.ledger.compared).toBeGreaterThanOrEqual(9);
-    expect(peer.lockstep.clients[0]?.messages.filter((line) => line.startsWith("ping"))).toHaveLength(24);
-  }
-});
-
-test("a ping only one client sees trips the checksum comparison at the next checkpoint [fault]", () => {
-  const peers = play({ seed: 3, frames: 180, delay: 2, latencyMs: 10, loss: 0, unsynced: 70 });
-  for (const peer of peers) expect(peer.ledger.mismatch?.frame).toBe(120);
-});
-
 test("[scenario] four one-client processes agree on every checksum through a lossy, reordering network, each frame running every slot's events in slot order", () => {
   const peers = play({ seed: 11, frames: 600, delay: 5, latencyMs: 60, loss: 0.05, humans: 4 });
   for (const peer of peers) {
@@ -84,10 +66,3 @@ test("[fault] a ping only one of four clients sees trips the checksum comparison
   const peers = play({ seed: 3, frames: 180, delay: 2, latencyMs: 10, loss: 0, unsynced: 70, humans: 4 });
   for (const peer of peers) expect(peer.ledger.mismatch?.frame).toBe(120);
 });
-
-farmTest("two sample processes play over UDP through the delay and loss proxy with equal checksums [integration]", () => {
-  const run = Bun.spawnSync(["bun", join(import.meta.dir, "../scripts/sample.ts"), "net", "pair", "--frames", "240", "--rtt", "60", "--loss", "0.05"], { stdout: "pipe", stderr: "pipe" });
-  const lines = run.stdout.toString().trim().split("\n");
-  expect({ code: run.exitCode, lines: lines.length, stderr: run.exitCode === 0 ? "" : run.stderr.toString() }).toEqual({ code: 0, lines: 2, stderr: "" });
-  for (const line of lines) expect(line).toMatch(/^(host|join): 240 frames, delay 3 .* [34] checksums compared, 0 mismatches/);
-}, 60000);

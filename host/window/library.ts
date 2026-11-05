@@ -27,10 +27,10 @@ const cacheRoot = () => join(cacheHome(), "wisp/window");
 const cacheDirectory = (windowDirectory: string) => join(cacheRoot(), sourceHash(windowDirectory));
 
 /** The one folder every revision builds in, so cargo and rustc reuse the previous revision's artifacts and incremental state; a copied folder loses the incremental state (rebuilding the crate took 26 s instead of 3 s). */
-export const workingTarget = () => join(cacheRoot(), "target");
+const workingTarget = () => join(cacheRoot(), "target");
 
 /** Moves a finished library to `path` in one rename, so a reader never sees a partial file. */
-export const publishLibrary = (built: string, path: string) => {
+const publishLibrary = (built: string, path: string) => {
   mkdirSync(dirname(path), { recursive: true });
   const staging = `${path}.publishing`;
   copyFileSync(built, staging);

@@ -27,14 +27,14 @@ export const textChecksum: Hash = (text) => checksum(text.length, (index) => tex
 
 export const moduleHashText = (name: string, text: string) => `${name}\n${text}`;
 
-export function moduleIndex(entry: string, hashes: readonly (readonly [name: string, hash: string])[]): string {
+function moduleIndex(entry: string, hashes: readonly (readonly [name: string, hash: string])[]): string {
   const lines = [entry];
   for (const [name, hash] of hashes) lines.push(`${hash} ${name}`);
   return `${lines.join("\n")}\n`;
 }
 
 /** The index, a blank line, a line per carried module (its byte length and name), a blank line, then their texts. */
-export function modulePayload(index: string, carried: readonly HotModule[]): string {
+function modulePayload(index: string, carried: readonly HotModule[]): string {
   const lines: string[] = [];
   const texts: string[] = [];
   for (const module of carried) {
