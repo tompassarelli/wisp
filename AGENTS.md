@@ -82,3 +82,4 @@ What Tom approved (north-data locked.toml) changes only with his sign-off: safe-
 Use owned lanes, named staging and safe-push. Preserve current immutable pins.
 A change lands once: its regenerated records, re-recorded tests or goldens, doc lines and mutant names go into the lane before `safe-push`, which lands the lane as one commit, never as follow-up landings; a check that can only write its record after landing folds it into the next landing.
 Native client control belongs to the accountable parent run for this extraction.
+Keep the goals in `goals.toml` true: each is a named check with an oracle and a class, contract or debt-allowed; run them with `north goals check wisp`.
