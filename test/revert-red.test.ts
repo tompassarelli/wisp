@@ -6,11 +6,12 @@ import { Effect } from "effect";
 import {
   type Landing, type MainRun, REVERT_AFTER_MS, failureComment, gitIn, previousFinished, pushRevert, referencedIssues, revertMessage, settle, triage,
 } from "../host/checks/revertRed";
+import { cargoInputs, scopeJob } from "../host/checks/jobInputs";
 
 const MINUTE = 60_000;
 const T0 = Date.UTC(2026, 9, 31, 8, 5);
 const run = (id: number, sha: string, conclusion: string, minutes: number, status = "completed"): MainRun => ({ id, sha, conclusion, status, finishedAt: T0 + minutes * MINUTE });
-const landing = (sha: string, message = "Render compare (Fixes #7)", extra: Partial<Landing> = {}): Landing => ({ sha, message, parents: 1, workflowFiles: [], ...extra });
+const landing = (sha: string, message = "Render compare (Fixes #7)", extra: Partial<Landing> = {}): Landing => ({ sha, message, parents: 1, files: ["host/a.ts"], ...extra });
 
 const green = run(10, "a".repeat(40), "success", -30);
 const bad = run(11, "b".repeat(40), "failure", 0);
@@ -19,7 +20,7 @@ const history = [bad, green, run(9, "9".repeat(40), "failure", -90)];
 test("[invariant] a red main whose parent is green is watched; a red parent, an unverified parent, a revert or a workflow change is not", () => {
   const previous = { ...previousFinished(history, bad)!, ancestor: true };
   expect(previous.id).toBe(10);
-  const base = { run: bad, previous, landed: 1, landing: landing(bad.sha) };
+  const base = { run: bad, previous, landed: 1, landing: landing(bad.sha), failed: [] };
   expect(triage(base)).toEqual({ kind: "watch" });
 
   const parentRed = { ...previousFinished([bad, run(10, "a".repeat(40), "failure", -30)], bad)!, ancestor: true };
@@ -29,8 +30,28 @@ test("[invariant] a red main whose parent is green is watched; a red parent, an 
   expect(triage({ ...base, previous: undefined }).kind).toBe("none");
   expect(triage({ ...base, run: { ...bad, conclusion: "success" } }).kind).toBe("none");
   expect(triage({ ...base, landing: landing(bad.sha, 'Revert "Render compare"\n\nReverts: abc') }).kind).toBe("none");
-  expect(triage({ ...base, landing: landing(bad.sha, "x", { workflowFiles: [".github/workflows/ci.yml"] }) }).kind).toBe("none");
+  expect(triage({ ...base, landing: landing(bad.sha, "x", { files: [".github/workflows/ci.yml"] }) }).kind).toBe("none");
   expect(triage({ ...base, landing: landing(bad.sha, "x", { parents: 2 }) }).kind).toBe("none");
+});
+
+test("[invariant] a landing that touches no path a failing cargo step builds is not reverted; one that reaches the crate, an include outside it, or a failing non-cargo step is watched", () => {
+  const root = join(import.meta.dir, "..");
+  const inputs = cargoInputs(root, "window");
+  expect(inputs).toContain("window/");
+  expect(inputs).toContain("test/fixtures/tone.ogg");
+  const windowJob = (steps: string[]) => scopeJob({ name: "window", steps }, (crate) => cargoInputs(root, crate));
+  const cargoTest = windowJob(["Run cargo test --release --locked"]);
+  const previous = { ...green, ancestor: true };
+  const frames = landing("601b2c7e".padEnd(40, "0"), "Share the frames constant", { files: ["src/game/frames.d.ts", "src/game/native/frames.ts", "src/game/warcraft/frames.ts"] });
+  const base = { run: bad, previous, landed: 1, landing: frames, failed: [cargoTest] };
+  const verdict = triage(base);
+  expect(verdict.kind).toBe("none");
+  expect(verdict.kind === "none" && verdict.why).toContain("failing job window (window/");
+
+  expect(triage({ ...base, landing: { ...frames, files: ["window/wisp-window/src/render/assets.rs"] } })).toEqual({ kind: "watch" });
+  expect(triage({ ...base, landing: { ...frames, files: ["test/fixtures/tone.ogg"] } })).toEqual({ kind: "watch" });
+  expect(triage({ ...base, failed: [windowJob(["Headless probe on lavapipe"])] })).toEqual({ kind: "watch" });
+  expect(triage({ ...base, failed: [cargoTest, scopeJob({ name: "framework", steps: ["Run bun run check"] }, () => [])] })).toEqual({ kind: "watch" });
 });
 
 test("[invariant] a red main reverts only once 15 minutes pass with no green main run; a fix inside the window, a revert already on main or a rerun that passed reverts nothing", () => {

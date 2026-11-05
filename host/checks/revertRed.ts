@@ -1,6 +1,7 @@
 import { appendFileSync } from "node:fs";
 import { Console, Effect, Schema } from "effect";
 import { captureProcess } from "../process/hostProcess";
+import { type ScopedJob, cargoInputs, scopeJob, touches } from "./jobInputs";
 import { landedFrom } from "./mainRed";
 
 class RevertRedFailure extends Schema.TaggedError<RevertRedFailure, { readonly brand: unique symbol }>()("RevertRedFailure", { command: Schema.String, problem: Schema.String }) {
@@ -15,9 +16,11 @@ const POLL = "60 seconds";
 const CI_WORKFLOW = "ci.yml";
 
 export interface MainRun { readonly id: number; readonly sha: string; readonly conclusion: string; readonly status: string; readonly finishedAt: number }
-export interface Landing { readonly sha: string; readonly message: string; readonly parents: number; readonly workflowFiles: readonly string[] }
+export interface Landing { readonly sha: string; readonly message: string; readonly parents: number; readonly files: readonly string[] }
 export type Triage = { readonly kind: "watch" } | { readonly kind: "none"; readonly why: string };
 export type Settle = { readonly kind: "wait" | "revert" } | { readonly kind: "none"; readonly why: string };
+
+const workflowFiles = (landing: Landing) => landing.files.filter((file) => file.startsWith(".github/workflows/"));
 
 const finished = (run: { readonly conclusion: string }) => run.conclusion === "success" || run.conclusion === "failure";
 
@@ -30,8 +33,9 @@ export function triage(input: {
   readonly previous: (MainRun & { readonly ancestor: boolean }) | undefined;
   readonly landed: number;
   readonly landing: Landing | undefined;
+  readonly failed: readonly ScopedJob[];
 }): Triage {
-  const { run, previous, landed, landing } = input;
+  const { run, previous, landed, landing, failed } = input;
   const none = (why: string): Triage => ({ kind: "none", why });
   if (run.conclusion !== "failure") return none(`run ${run.id} ${run.conclusion || "unfinished"}: nothing to revert`);
   if (previous === undefined) return none("no earlier finished run on main to show the parent green");
@@ -40,7 +44,12 @@ export function triage(input: {
   if (landed !== 1 || landing === undefined) return none(`${landed} commits landed since the green run: the parent of ${run.sha.slice(0, 10)} was never verified green`);
   if (landing.parents !== 1) return none(`${landing.sha.slice(0, 10)} is a merge commit`);
   if (/^Revert /.test(landing.message) || /^(?:Sheriff-)?Reverts: /m.test(landing.message)) return none(`${landing.sha.slice(0, 10)} is a revert: never revert a revert`);
-  if (landing.workflowFiles.length > 0) return none(`${landing.sha.slice(0, 10)} changes ${landing.workflowFiles.join(", ")}, which the workflow token can't push back`);
+  if (workflowFiles(landing).length > 0) return none(`${landing.sha.slice(0, 10)} changes ${workflowFiles(landing).join(", ")}, which the workflow token can't push back`);
+  const scoped = failed.flatMap((job) => job.inputs === undefined ? [] : [{ name: job.name, inputs: job.inputs }]);
+  if (failed.length > 0 && scoped.length === failed.length && !scoped.some((job) => touches(landing.files, job.inputs))) {
+    const builds = scoped.map((job) => `${job.name} (${job.inputs.join(", ")})`).join(" and ");
+    return none(`${landing.sha.slice(0, 10)} touches no path the failing job ${builds} builds: an intermittent failure there isn't its`);
+  }
   return { kind: "watch" };
 }
 
@@ -140,7 +149,7 @@ const RunRow = Schema.Struct({ databaseId: Schema.Finite, headSha: Schema.String
 const RunView = Schema.Struct({
   ...RunRow.fields,
   headBranch: Schema.String, workflowName: Schema.String, url: Schema.String,
-  jobs: Schema.Array(Schema.Struct({ name: Schema.String, conclusion: Schema.String })),
+  jobs: Schema.Array(Schema.Struct({ name: Schema.String, conclusion: Schema.String, steps: Schema.Array(Schema.Struct({ name: Schema.String, conclusion: Schema.String })) })),
 });
 const Repository = Schema.Struct({ nameWithOwner: Schema.String });
 const IssueState = Schema.Struct({ state: Schema.String, url: Schema.String });
@@ -155,14 +164,14 @@ const landingsOf = (sha: string, prior: string) => Effect.gen(function*() {
   const entries = (yield* git("log", "--first-parent", "-z", "--format=%H%x1f%P%x1f%B", `${prior}..${sha}`)).split("\0").filter((text) => text.trim() !== "");
   return yield* Effect.forEach(entries, (entry) => Effect.gen(function*() {
     const [commit = "", parents = "", message = ""] = entry.split("\x1f");
-    const workflowFiles = (yield* git("diff", "--name-only", `${commit.trim()}~1`, commit.trim(), "--", ".github/workflows")).split("\n").filter(Boolean);
-    return { sha: commit.trim(), message: message.trim(), parents: parents.trim().split(" ").filter(Boolean).length, workflowFiles } satisfies Landing;
+    const files = (yield* git("diff", "--name-only", `${commit.trim()}~1`, commit.trim())).split("\n").filter(Boolean);
+    return { sha: commit.trim(), message: message.trim(), parents: parents.trim().split(" ").filter(Boolean).length, files } satisfies Landing;
   }));
 });
 const landingOf = (sha: string, prior: string) => landingsOf(sha, prior).pipe(Effect.map(([landing]) => landing));
 
 export const alongsideOf = (landings: readonly Landing[]): readonly Landing[] =>
-  landings.some((landing) => landing.parents !== 1 || landing.workflowFiles.length > 0) ? [] : landings;
+  landings.some((landing) => landing.parents !== 1 || workflowFiles(landing).length > 0) ? [] : landings;
 
 const alreadyReverted = (sha: string) => git("log", "-z", "--format=%B", `${sha}..origin/main`).pipe(
   Effect.map((log) => log.split("\0").some((message) => new RegExp(`^(?:Sheriff-)?Reverts:.*${sha}|^This reverts commit ${sha}`, "m").test(message))),
@@ -204,7 +213,9 @@ export const revertRed = (runId: string) => Effect.gen(function*() {
   const ancestor = previous === undefined ? false : yield* git("merge-base", "--is-ancestor", previous.sha, failing.sha).pipe(Effect.as(true), Effect.orElseSucceed(() => false));
   const landed = previous === undefined || !ancestor ? 0 : (yield* git("rev-list", "--first-parent", "--count", `${previous.sha}..${failing.sha}`)).trim();
   const landing = previous !== undefined && Number(landed) === 1 ? yield* landingOf(failing.sha, previous.sha) : undefined;
-  const verdict = triage({ run: failing, previous: previous === undefined ? undefined : { ...previous, ancestor }, landed: Number(landed), landing });
+  const failed = view.jobs.filter((job) => job.conclusion === "failure")
+    .map((job) => scopeJob({ name: job.name, steps: job.steps.filter((step) => step.conclusion === "failure").map((step) => step.name) }, (crate) => cargoInputs(process.cwd(), crate)));
+  const verdict = triage({ run: failing, previous: previous === undefined ? undefined : { ...previous, ancestor }, landed: Number(landed), landing, failed });
   if (verdict.kind === "none" || landing === undefined) {
     return yield* summary(`${failing.sha.slice(0, 10)}: not reverting: ${verdict.kind === "none" ? verdict.why : "no landing"} (${view.url})`);
   }
