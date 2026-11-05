@@ -161,8 +161,8 @@ producer = "host/toolchain/natives.ts"
 paths = ["vendor/**", "node_modules/**", "builds/**", "repos/**", "**/fixtures/**"]
 
 [crate_lines]
-cap = 25000
-hub_cap = 10000
+default = 25000
+hub = 10000
 hub_dependents = 3
 
 [[build_time]]
