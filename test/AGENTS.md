@@ -24,4 +24,4 @@
 - Fakes stand only for what Wisp doesn't control (Warcraft's menu socket, a
   capture tool, a clock) and enter as input; never fake a Wisp service layer.
 - Source-policy lints run in `effect-kit check` (wisp:effect-kit.json),
-  not in the suite. `../docs/test-audit.md` records the #104 audit.
+  not in the suite.
