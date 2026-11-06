@@ -19,13 +19,13 @@ name = "tests"
 thresholds = { function_lines = 150, function_complexity = 30 }
 paths = ["test/**", "**/*.test.ts", "**/*.tests.ts", "examples/**"]
 responsibility = "Bun and Lua tests, numbered fixture maps and examples."
-may_use = ["num", "ui", "natives", "runtime", "netcode", "map", "headless", "cli", "process", "os", "build", "lan", "net", "render", "host", "commands", "plugins", "contract", "game"]
+may_use = ["num", "ui", "natives", "runtime", "netcode", "map", "headless", "cli", "process", "os", "build", "lan", "net", "render", "host", "commands", "plugins", "contract", "game", "window", "native"]
 
 [[module]]
 name = "num"
 paths = ["src/num/**", "src/sim/**"]
 responsibility = "binary32 soft-float, f32 helpers and integer math."
-may_use = []
+may_use = ["native"]
 
 [[module]]
 name = "natives"
@@ -103,7 +103,7 @@ may_use = ["process", "runtime", "num", "plugins"]
 name = "lan"
 paths = ["host/lan/**"]
 responsibility = "Offline LAN pair pool: netns pairs, W3GS host, dummy, admission, and the menu driver that hosts, joins and starts games through Warcraft's own menu page."
-may_use = ["cli", "process", "os", "build", "contract"]
+may_use = ["cli", "process", "os", "build", "contract", "relay"]
 
 [[module]]
 name = "net"
@@ -115,25 +115,25 @@ may_use = ["process", "headless", "runtime", "num", "game"]
 name = "render"
 paths = ["host/render/**", "host/browser/**", "host/fidelity/**", "host/models/**", "host/terrain/**"]
 responsibility = "WebGL headless and standalone renderer, models, terrain, GPU lease and fidelity metrics."
-may_use = ["process", "os", "headless", "runtime", "num", "contract", "game"]
+may_use = ["process", "os", "headless", "runtime", "num", "contract", "game", "window"]
 
 [[module]]
 name = "commands"
 paths = ["host/commands/**"]
 responsibility = "Command factories a game instantiates and Wisp's own CLI entries."
-may_use = ["host", "render", "net", "lan", "build", "os", "cli", "process", "headless", "map", "runtime", "num", "contract", "game"]
+may_use = ["host", "render", "net", "lan", "build", "os", "cli", "process", "headless", "map", "runtime", "num", "contract", "game", "window"]
 
 [[module]]
 name = "host"
 paths = ["host/**"]
 responsibility = "Feature services: play, doctor, menus, lobby, accept, soak, farm, dev loop, test runner, models, scenes."
-may_use = ["render", "net", "lan", "build", "os", "cli", "process", "headless", "map", "runtime", "num", "natives", "contract", "game"]
+may_use = ["render", "net", "lan", "build", "os", "cli", "process", "headless", "map", "runtime", "num", "natives", "contract", "game", "window"]
 
 [[module]]
 name = "plugins"
 paths = ["plugins/**"]
 responsibility = "TSTL plugins and tsserver/lint plugins."
-may_use = ["game"]
+may_use = ["game", "num"]
 
 [[module]]
 name = "relay"
