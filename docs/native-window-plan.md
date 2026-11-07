@@ -1523,6 +1523,19 @@ yet are created by that box. Each graphics run takes the gpu lease as
   - the libraries uploaded as the `wisp-window` artifact;
   - the check of whether `bun build --compile` can embed the library.
 
+  The Windows probe's window close hung on WARP on some runs: the probe printed
+  its last measured frame and then neither exited nor failed (wisp#106 closed on
+  a green run that did not reproduce it, so that closing did not settle it).
+  `Host::stop` sent the window thread its exit before it joined the render
+  thread, so the window could be destroyed under the render thread's present or
+  swapchain drop. It now joins the render and step clock threads first and
+  exits the window thread last (a7b283a4); Windows run 42387194749 is the first
+  green run on it. `window probe` also ends its child and fails with the log's
+  last lines when the window has not closed 30 s after the run completed, the
+  library prints which thread `stop` is waiting for, and every `window` job
+  step has its own timeout, so a hang fails in minutes and names its thread
+  (wisp#256).
+
   Done when:
   `gh run list -R tompassarelli/wisp -w windows.yml -b main -L 1 --json conclusion -q '.[0].conclusion' | grep -x success`
 - **W8 Native window becomes the default** ([wisp#112](https://github.com/tompassarelli/wisp/issues/112)). `--window native`
