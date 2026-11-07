@@ -157,8 +157,7 @@ menus start | leave
   listed.
 - `listen` holds the report port, so run it alone.
 - The library form is `hostLobby`, `joinLobby`, `startLobby` and `leaveLobby`
-  on a `connectMenus` socket. wisp:test/menus.test.ts plays each one against
-  a fake game.
+  on a `connectMenus` socket.
 - `startLobby` sends `LobbyStart` no sooner than `LOBBY_SETTLE_MS` (2.5 s)
   after the same socket's `hostLobby` was confirmed. On 7 Oct 2026,
   Warcraft III 3.0.0.24268 crashed while loading (a read of 0x500) in 6 of 6
@@ -247,7 +246,7 @@ decision.
 | W3Champions launcher, `~/code/resources/w3champions/launcher` | `src/update-handling/WindowsLauncher.ts` and `MacLauncher.ts` set `Allow Local Files`; `src/update-handling/LauncherStrategy.ts` unpacks W3Champions' page into `_retail_`; `src/game/ingame-bridge.ts` and `game.types.ts` are the bridge between that page and the launcher on `127.0.0.1:38123`, the launcher's own messages, not the game's. Deprecated; its successor (w3champions/launcher-e-release) is closed. | No licence: read only, nothing copied. |
 | [kgallimore/wc3MultiTool](https://github.com/kgallimore/wc3MultiTool) | `packages/main/src/globals/gameSocket.ts` (request and event names, `CreateLobby` payload); `buildResources/webui.html`, `index.js` (a page that takes the GUID from its URL) | No licence: read only. |
 | [Promises/wc3-slop-lan](https://github.com/Promises/wc3-slop-lan) | `harness/webui/index.html` (host, join, LAN join and start sequences); `activator/src/menus.rs`, `harness/webui/bridge.py` (an outside socket client); `docs/porting.md` §2.2 (the Windows build) | No licence: read only. |
-| Wisp | wisp:host/lan/menus.ts, wisp:host/commands/menus.ts, wisp:test/menus.test.ts | MIT. Written from the observed protocol: message names and JSON shapes are the interface, not copied code. |
+| Wisp | wisp:host/lan/menus.ts, wisp:host/commands/menus.ts | MIT. Written from the observed protocol: message names and JSON shapes are the interface, not copied code. |
 
 ## 2. LAN hosting: offline clients and Wisp's host
 

@@ -67,7 +67,6 @@ rows survive a message round trip within 200 bytes, that two sessions trading
 rows over a late, bursty channel end with the confirmed state of the rows each
 player really captured and a rolled-back prediction equal to it, and that a
 player who leaves while holding a key is idle after their last accepted row.
-`src/netcode/delay.tests.ts` checks the delay and rate rules against settled round trips, the lowering hysteresis, the host override and the second-by-second correction.
 `test/lua/index.ts` runs them in 32-bit Lua
 (`test/runtime.test.ts`, a farm test).
 

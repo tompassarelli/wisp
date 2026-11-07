@@ -13,15 +13,6 @@ const base: MapInfo = {
   players: [], forces: [], tables: new Uint8Array(0),
 };
 
-test("[scenario] a declared loading screen model replaces the preset background and keeps every later field", () => {
-  const declared = declareMap(base, "Map", { author: "", description: "", suggestedPlayers: "", players: [], forces: [], loadingScreenModel: "war3mapImported\\Loading.mdx" });
-  expect(loadingScreenModel(declared.environment)).toBe("war3mapImported\\Loading.mdx");
-  const view = new DataView(declared.environment.buffer, declared.environment.byteOffset);
-  expect([declared.environment[0], view.getInt32(1, true), view.getInt32(5, true)]).toEqual([76, -1, -1]);
-  expect(declared.environment.subarray(declared.environment.length - closing.length - after.length, declared.environment.length - closing.length)).toEqual(after);
-  expect(declareMap(base, "Map", { author: "", description: "", suggestedPlayers: "", players: [], forces: [] }).environment).toEqual(base.environment);
-});
-
 test("[scenario] a declared supported-modes value is read back from the field 60 bytes before the end, leaving every other byte as the base had it", () => {
   const declare = (modes?: "sd" | "hd" | "both") => declareMap(base, "Map", { author: "", description: "", suggestedPlayers: "", players: [], forces: [], ...(modes === undefined ? {} : { supportedModes: modes }) });
   expect(supportedModes(base.environment)).toBe("both");

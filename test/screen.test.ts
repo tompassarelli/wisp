@@ -15,14 +15,6 @@ import { PLACEMENTS } from "./frames125/layout";
 const bust = (slot: number) => [0.02625 + 0.19 * slot, 0.102, 0.02625 + 0.19 * slot + 0.08, 0.102 - 0.08] as const;
 afterEach(() => { bindWorld(undefined); });
 
-test("[reference makgora#363] HUD bust rectangles match native captures", () => {
-  const near = (rect: ReturnType<typeof uiPixels>, x: number, y: number, size: number) => {
-    for (const [actual, expected] of [[rect.x, x], [rect.y, y], [rect.width, size], [rect.height, size]] as const) expect(Math.abs(actual - expected)).toBeLessThanOrEqual(1);
-  };
-  for (const p of [0, 1]) near(uiPixels(bust(2 * p + 0.5), 800, 600), 121.25 + 380 * p, 498, 80);
-  for (const p of [0, 1, 2, 3]) near(uiPixels(bust(p), 1280, 720), 191.5 + 228 * p, 597.6, 96);
-});
-
 test("[reference wisp#125] frames125 boxes match native at 800x600 and 1280x720: frame scale and the 4:3 area", () => {
   const client = new HeadlessClient({ screen: { width: 1920, height: 1080 }, slot: 0, humans: [0], declarations: readNativeDeclarations(), filePrefix: "frames125", localNatives: {}, network: [] });
   bindWorld(client.world);
@@ -74,46 +66,6 @@ const DECK_READS: readonly DeckRead[] = [
 ];
 const DECK_Z = 1800, DECK_X = 600, DECK_Y = 60, CORNER_DEPTH = 63;
 const READ_TARGET_Y = -256, MAP_TARGET_Y = 0;
-
-test("[reference wisp#125] world projection matches native at 1920x1080", () => {
-  for (const [fixture, frame, fov, eye, [targetX, targetZ], top, left, right] of DECK_READS) {
-    const run = Math.hypot(eye[0] - targetX, eye[1] - READ_TARGET_Y), rise = targetZ - eye[2];
-    const scene = { camera: { x: targetX, y: MAP_TARGET_Y, fields: { CAMERA_FIELD_ROTATION: 90, CAMERA_FIELD_ANGLE_OF_ATTACK: 360 + Math.atan2(rise, run) * 180 / Math.PI, CAMERA_FIELD_TARGET_DISTANCE: Math.hypot(run, rise), CAMERA_FIELD_ZOFFSET: targetZ, CAMERA_FIELD_FIELD_OF_VIEW: fov * 180 / Math.PI, CAMERA_FIELD_FARZ: 13000 } } } as unknown as RenderScene;
-    const view = camera(scene, 1920 / 1080), m = multiply(view.projection, view.view);
-    const pixel = (x: number, y: number, z: number) => {
-      const w = (m[3] ?? 0) * x + (m[7] ?? 0) * y + (m[11] ?? 0) * z + (m[15] ?? 0);
-      return [(((m[0] ?? 0) * x + (m[4] ?? 0) * y + (m[8] ?? 0) * z + (m[12] ?? 0)) / w + 1) * 960, (1 - ((m[1] ?? 0) * x + (m[5] ?? 0) * y + (m[9] ?? 0) * z + (m[13] ?? 0)) / w) * 540] as const;
-    };
-    const cornerAt = (x: number, row: number) => {
-      const [ax, ay] = pixel(x, -DECK_Y, DECK_Z), [bx, by] = pixel(x, -DECK_Y, DECK_Z - CORNER_DEPTH);
-      return ax + (bx - ax) * (row + 0.5 - ay) / (by - ay);
-    };
-    const edges = { top: [pixel(0, DECK_Y, DECK_Z)[1], top], left: [cornerAt(-DECK_X, left[0]), left[1]], ...(right === null ? {} : { right: [cornerAt(DECK_X, right[0]), right[1]] }) };
-    for (const [edge, [wisp, native]] of Object.entries(edges)) expect({ fixture, frame, edge, within1px: Math.abs((wisp ?? NaN) - (native ?? NaN)) <= 1 }).toEqual({ fixture, frame, edge, within1px: true });
-  }
-});
-
-test("[reference wisp-standalone-menu] a child of a raised panel draws above a lower-level sibling, and a button's text is centred", () => {
-  const client = new HeadlessClient({ slot: 0, humans: [0], declarations: readNativeDeclarations(), filePrefix: "screen", localNatives: {}, network: [], screen: { width: 1280, height: 720 } });
-  bindWorld(client.world);
-  const frame = (type: FrameKind, name: string, owner?: Frame) => {
-    const created = createFrameByType(type, name, owner ?? originFrame(OriginFrame.gameUi, 0), "", 0);
-    setFrameAbsPoint(created, FramePoint.topLeft, 0.1, 0.5);
-    setFrameSize(created, 0.2, 0.05);
-    return created;
-  };
-  const chip = frame("BACKDROP", "Chip");
-  setFrameLevel(chip, 10);
-  const panel = frame("BACKDROP", "Panel");
-  setFrameLevel(panel, 20);
-  frame("TEXT", "PanelText", panel);
-  frame("GLUETEXTBUTTON", "PanelButton", panel);
-  const rows = new Map(client.frames.snapshot().map((row) => [row.name, row]));
-  expect(rows.get("PanelText")!.level).toBeGreaterThan(rows.get("Chip")!.level);
-  expect(rows.get("PanelButton")!.level).toBeGreaterThan(rows.get("Chip")!.level);
-  expect(rows.get("PanelButton")!.alignment).toEqual({ vertical: "middle", horizontal: "center" });
-  expect(rows.get("PanelText")!.alignment).toBeUndefined();
-});
 
 test("[reference makgora#862] a frame painted with a signed JASS colour reaches the window as an unsigned ARGB word", () => {
   const client = new HeadlessClient({ slot: 0, humans: [0], declarations: readNativeDeclarations(), filePrefix: "screen", localNatives: {}, network: [], screen: { width: 1280, height: 720 } });

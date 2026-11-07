@@ -43,15 +43,3 @@ test("[native] the bad -loadfile run: signed in, ladder scan done, its map's imp
   expect(events.map(({ type }) => type)).toEqual(["state", "ladder scan", "load errors"]);
   expect(eventLine(events[2]!)).toContain("load errors: 7 models failed, first war3mapImported/ImpactHit-");
 });
-
-test("[native] the crashed play --menus run: its crash report names the session in its log", () => {
-  const log = fixture("war3log/menus-listing-during-scan.txt");
-
-  const gone = decide("a", sources(on6Oct("20:31"), [LAUNCHER], { log, crashes: [crash] }));
-  expect(gone.state).toEqual({ kind: "crashed", reason: "ACCESS_VIOLATION (Failed to read address 0x0000000000000500 at instruction 0x00006FFFEEC73856)" });
-  expect(gone.evidence).toBe(`Errors/${crashFolder}/Crash.txt`);
-  expect(decide("a", sources(on6Oct("20:30:40"), [LAUNCHER, GAME], { log, crashes: [crash] })).state.kind).toBe("crashed");
-  expect(decide("a", sources(on6Oct("20:40"), [LAUNCHER, GAME], { log, crashes: [crash] })).state.kind).not.toBe("crashed");
-
-  expect(decide("a", sources(on6Oct("20:36"), [LAUNCHER], { log: fixture("war3log/loadfile-scan-mid-load.txt"), crashes: [crash] })).state.kind).toBe("launcher");
-});

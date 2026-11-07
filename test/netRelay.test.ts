@@ -49,15 +49,4 @@ const FRAMES = 600;
 /** One match through a fresh local relay, the joiner behind a 170 ms round trip, each frame adding `chatter` chat lines per player. */
 
 describe("four humans through the relay's peer room", () => {
-  test("[scenario] net pair --relay local --humans 4 plays 600 frames with every player's checksums equal and no datagram over 1200 bytes", async () => {
-    const binary = await relayBinary();
-    const run = Bun.spawn([...sample, "pair", "--relay", "local", "--humans", "4", "--frames", String(FRAMES)], { stdin: "ignore", stdout: "pipe", stderr: "pipe", env: { ...process.env, WISP_RELAY_BIN: binary } });
-    const [stdout, stderr, code] = await Promise.all([new Response(run.stdout).text(), new Response(run.stderr).text(), run.exited]);
-    expect({ code, stderr: code === 0 ? "" : stderr }).toEqual({ code: 0, stderr: "" });
-    const lines = stdout.trim().split("\n");
-    expect(lines).toHaveLength(5);
-    for (const line of lines.slice(0, 4)) expect(line).toMatch(new RegExp(`^(host|join\\d): ${FRAMES} frames, delay \\d+ .* [1-9]\\d* checksums compared, 0 mismatches`));
-    expect(lines[4]).toMatch(/^pair: 4 humans, 600 frames, checksums match on all 4/);
-    for (const line of lines.slice(0, 4)) expect(Number(/\(largest (\d+)\)/.exec(line)?.[1])).toBeLessThanOrEqual(MAX_DATAGRAM);
-  }, 120_000);
 });

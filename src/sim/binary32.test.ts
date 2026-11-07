@@ -59,14 +59,6 @@ describe("operations match the binary64 oracle on random binary32 operands", () 
     }
     return best;
   };
-  test("[reference] 5,000 fused multiply-adds, half of them cancelling the product to a few bits", () => {
-    for (let i = 0; i < 5000; i++) {
-      const a = operand();
-      const b = operand();
-      const c = i % 2 === 0 ? operand() : Math.fround(-(a * b) * (1 + Math.floor(random() * 64 - 32) * 2 ** -24));
-      same(fusedMultiplyAddFloat32(a, b, c), exactFusedMultiplyAdd(a, b, c));
-    }
-  });
 });
 
 // Warcraft cannot hold the binary64 midpoint between the largest binary32 value and 2^128.

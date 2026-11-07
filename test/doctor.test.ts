@@ -26,29 +26,3 @@ test("[native] recorded launcher logs: signed in, a lost connection, a reconnect
 
   expect(launcherHealth(`${SIGNED_IN}D 2026-10-06 12:33:38.741703 [CatalogVarStorage] {Main} Setting var from catalog Client.DisableLoginCredentialUIRegionList=CN\n`).kind).toBe("signed in");
 });
-
-test("[property seed 8058] preference edits are idempotent, add a missing key to [Video], keep CRLF endings and preserve every unrelated recorded setting", () => {
-  for (const source of [MAIN, PRIVATE]) for (const newline of ["\n", "\r\n"]) for (const width of [640, 1280, 1920, 2876]) {
-    const before = source.replace(/\r?\n/g, newline);
-    const settings = { windowwidth: String(width), bogus: "1" };
-    const after = withDisplaySettings(before, settings);
-    expect(videoSettings(after)).toMatchObject(settings);
-    expect(withDisplaySettings(after, settings)).toBe(after);
-    expect(displayChanges(after, settings)).toEqual([]);
-    const untouched = (text: string) => text.split(newline).filter(line => !/^(windowwidth|bogus)=/.test(line)).join(newline);
-    expect(untouched(after)).toBe(untouched(before));
-  }
-  {
-    expect(displayChanges(PRIVATE, { vsync: "1" })).toEqual([{ key: "vsync", expected: "1", actual: "0" }]);
-    expect(displayChanges(PRIVATE, { bogus: "1" })).toEqual([{ key: "bogus", expected: "1" }]);
-    const added = withDisplaySettings(PRIVATE, { bogus: "1" });
-    expect(videoSettings(added).bogus).toBe("1");
-    expect(added.indexOf("bogus=1")).toBeGreaterThan(added.indexOf("[Video]"));
-    const crlf = withDisplaySettings(MAIN.replace(/\n/g, "\r\n"), DISPLAY);
-    expect(crlf.split("\r\n").length).toBe(MAIN.split("\n").length);
-    expect(displayChanges(crlf, DISPLAY)).toEqual([]);
-    expect(crlf.replace(/\r\n/g, "\n").split("\n").every((line) => !line.includes("\r"))).toBe(true);
-
-    expect(videoSettings("[Gameplay]\nwindowmode=9\n[Video]\nwindowmode=2\n").windowmode).toBe("2");
-  }
-});

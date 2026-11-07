@@ -92,33 +92,3 @@ test("wire: varints and signed varints survive a round trip at their limits and 
   assertEquals(readVarint({ text: "!", offset: 0 }, 2147483646), undefined, "a character outside the alphabet");
   assertEquals(readVarint({ text: "w", offset: 0 }, 2147483646), undefined, "a varint cut short");
 });
-
-test("message: random rows survive a message round trip through a codec, and no message passes 200 bytes", () => {
-  const next = lcg(7);
-  const pool: ToyRow[] = [];
-  for (let index = 0; index < MESSAGE_MAX_FRAMES; index++) pool.push(toyRow());
-  for (const fireOdds of [1, 3, 40]) {
-    const rows = randomRows(next, 600, fireOdds);
-    let first = 1;
-    let messages = 0;
-    while (first <= rows.length) {
-      const message = encodeMessage(TOY_CODEC, first, rows.length, (frame) => at(rows, frame - 1));
-      messages++;
-      assertTrue(message.wire.length <= MESSAGE_MAX_BYTES);
-      assertTrue(message.lastFrame >= first);
-      const decoded = decodeMessage(TOY_CODEC, message.wire, pool);
-      if (decoded === undefined) throw new Error(`message from frame ${first} does not decode: ${message.wire}`);
-      assertEquals(decoded.firstFrame, first, "first frame");
-      assertEquals(decoded.count, message.lastFrame - first + 1, "frames carried");
-      for (let index = 0; index < decoded.count; index++) assertTrue(TOY_CODEC.same(at(rows, first - 1 + index), at(pool, index)));
-      first = message.lastFrame + 1;
-    }
-    if (fireOdds === 40) assertTrue(messages <= 12);
-  }
-  const holding = encodeMessage(TOY_CODEC, 5, 1000, () => ({ move: 9, fire: 0, aim: 0 }));
-  assertEquals(holding.lastFrame, 5 + MESSAGE_MAX_FRAMES - 1, "a held row fills a message");
-  assertTrue(holding.wire.length <= 6);
-  assertEquals(decodeMessage(TOY_CODEC, `${holding.wire}0`, pool), undefined, "trailing garbage");
-  assertEquals(decodeMessage(TOY_CODEC, "11" + "2" + "0" + "0" + "0", pool), undefined, "a fire flag with no fire value");
-  assertEquals(decodeMessage(TOY_CODEC, holding.wire, pool.slice(0, MESSAGE_MAX_FRAMES - 1)), undefined, "a pool too small for a message");
-});

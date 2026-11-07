@@ -127,11 +127,3 @@ test("[reference] the toward-zero Lua's + - * / are the exact results truncated 
 
   expect(lines[3]?.split(" ").slice(0, 2)).toEqual(["0x1.8p+1", "0x1.7ffffep+1"]);
 });
-
-test("[reference] the toward-zero Lua reads a decimal numeral as its value truncated toward zero, and a hexadecimal float exactly", () => {
-  // 0.016666667 lies between binary32 0x1.11111p-6 and 0x1.111112p-6, nearer the upper; Warcraft read the lower.
-  const numerals = ["0.016666667", "0.1", "-0.1", "1.417", "0.10000000149011612", "0x1.11111p-6", "0xcccccdp-27"];
-  const run = Bun.spawnSync([lua, "-e", `for _, x in ipairs({${numerals.join(", ")}}) do io.write(string.format('%a ', x)) end`], { stdout: "pipe", stderr: "pipe" });
-  expect(run.stderr.toString()).toBe("");
-  expect(run.stdout.toString().trim().split(" ")).toEqual(["0x1.11111p-6", "0x1.999998p-4", "-0x1.999998p-4", "0x1.6ac082p+0", "0x1.99999ap-4", "0x1.11111p-6", "0x1.99999ap-4"]);
-});

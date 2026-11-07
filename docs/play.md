@@ -188,8 +188,7 @@ running match.
 
 The fakes in wisp:test/play.test.ts cover each step's success and failure
 messages with the recorded window, log and process shapes. Hosting goes through a
-fake menu page there; the real page's answers are covered by
-wisp:test/menus.test.ts and native runs.
+fake menu page there; the real page's answers show only in native runs.
 
 ## Standalone window
 

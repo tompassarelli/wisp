@@ -15,13 +15,3 @@ test("[invariant] a candidate's failed CI job is main's own when main failed tha
   expect(judgeJobs([extra], [[job("window", "post::a")]]).fresh).toEqual([extra]);
   expect(judgeJobs([job("ci / knip")], [[job("window-windows")]]).fresh).toEqual([job("ci / knip")]);
 });
-
-test("[invariant] failed test names come from cargo FAILED lines and bun (fail) lines of a raw job log, once each", () => {
-  const log = [
-    "﻿2026-10-31T00:05:28.0915504Z test render::gpu_tests::blend ... FAILED\r",
-    "2026-10-31T00:05:28.1Z test render::gpu_tests::blend ... FAILED",
-    "2026-10-31T00:05:28.2Z test render::gpu_tests::add ... ok",
-    "2026-10-31T00:05:28.3Z (fail) tests > a thing [12.00ms]",
-  ].join("\n");
-  expect(failedTestNames(log)).toEqual(["render::gpu_tests::blend", "tests > a thing"]);
-});

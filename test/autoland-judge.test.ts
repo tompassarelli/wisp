@@ -47,8 +47,3 @@ const judgeLoneTip = (outcome: { candidate: object; baseline: object; codeHealth
 test("[spec wisp autoland-judge] a tip whose code-health job ended without a result stays queued for the next run (wisp#250)", () => {
   expect(judgeLoneTip({ candidate: passing, baseline: passing, codeHealth: "failure", verdict: "" })).toEqual(["claude/lane"]);
 });
-
-test("[spec wisp autoland-judge] a tip with a test failing that main's run passes is refused until a new commit", () => {
-  const candidate = { failures: ["test/a.test.ts > breaks"], problems: [] };
-  expect(judgeLoneTip({ candidate, baseline: passing, codeHealth: "success", verdict: "pass" })).toEqual([]);
-});

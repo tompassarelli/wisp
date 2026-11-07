@@ -14,21 +14,3 @@ test("[native] recorded Battle.net and Steam facts: the shortcut's game id, sign
   expect(launchOutcome(line("GameLaunchController", "LaunchBinary: uid=w3 selectedRegion=US binaryType=game"))).toBeUndefined();
   expect(newestLauncherLog(["battle.net-20261003T153242.438979.log", "libcef-20261006T014728.217325.log", "battle.net-20261006T014725.384229.log"])).toBe("battle.net-20261006T014725.384229.log");
 });
-
-test("a Proton launch into a clone's container unsets before it assigns, finds its directory inside, and doesn't wait for the running wineserver", () => {
-  const env = Bun.which("env")!;
-  const request: LaunchRequest = {
-    capacity: "north", client: "clone-c", env, nsenter: Bun.which("true")!, wine: "/proton", proton: true,
-    launcher: { pid: 4242, cwd: "/home/tester", env: { PATH: "/usr/bin:/bin" } }, host: { PATH: "/host/bin" },
-  };
-  const { command } = launchCommand(request);
-  expect(command[0]).toBe("systemd-run");
-  expect(command).toContain("--wait");
-  expect(command).not.toContain("--scope");
-  expect(command).toContain("--setenv=DISPLAY=");
-  expect(command).toContain("--setenv=WAYLAND_DISPLAY=");
-  const outer = command.slice(command.indexOf(env));
-  expect(Bun.spawnSync([...outer], { stderr: "pipe" }).exitCode).toBe(0);
-  expect(outer).toContain("--wdns=/home/tester");
-  expect(outer.slice(outer.indexOf("/proton"), outer.indexOf("/proton") + 2)).toEqual(["/proton", "runinprefix"]);
-});

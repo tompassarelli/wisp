@@ -565,8 +565,7 @@ check reads the run's cgroup, which shows a lease but not its class, so any
 capacity lease lets the render start. Without the helper, as on CI and cloud
 machines, `--render` runs as before. `runStandalone` applies the same check to a headless, scripted or capturing run, never to the window a person plays
 ([Standalone window](play.md#standalone-window)); the refusal, the inside-lease
-start and the no-helper start are covered by wisp:test/gpu-lease.test.ts
-(wisp:host/render/gpuLease.ts).
+start and the no-helper start are in wisp:host/render/gpuLease.ts.
 
 The map supplies `HeadlessProject.render.readAsset(path, graphics)`, returning the actual
 imported or stock asset bytes, or `undefined` when absent. `--graphics classic`

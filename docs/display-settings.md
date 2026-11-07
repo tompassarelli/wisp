@@ -57,7 +57,7 @@ declaration.
 
 Tests: wisp:test/doctor.test.ts (the state, with the trimmed preference files
 in wisp:test/fixtures/preferences; main-display.txt's values are constructed
-from the 6 Oct report), wisp:test/play.test.ts (the save and helper start) and
-wisp:test/preferences.test.ts (the helper on real files). Whether Warcraft III
+from the 6 Oct report), wisp:test/play.test.ts (the save and helper start).
+The helper on real files is untested. Whether Warcraft III
 on the owner's display rewrites exactly these keys is a property of the real
 game that only a native run shows.

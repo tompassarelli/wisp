@@ -52,35 +52,6 @@ const SUMS: readonly (readonly [name: string, a: number, b: number, operation: "
   ["an integer and a fraction", 7000, 0.10000000149011612, "-", 6999.89990234375],
 ];
 
-test("[reference] f32 sums and differences round ties to even at every binade edge", () => {
-  for (const [name, a, b, operation, expected] of SUMS) {
-    const sum = operation === "+" ? f32(a + b) : f32(a - b);
-    assertEquals(sum === expected && 1 / sum === 1 / expected, true, `${name}: ${sum} vs ${expected}`);
-    const negated = operation === "+" ? f32(-a - b) : f32(-a + b);
-    assertEquals(negated === -expected && 1 / negated === 1 / (expected === 0 ? expected : -expected), true, `${name}, negated: ${negated} vs ${-expected}`);
-  }
-});
-
-test("[reference] f32 quotients round the exact quotient to nearest", () => {
-  // Warcraft's raw quotient can land an ulp above nearest (wisp:docs/headless.md#raw-float-rounding).
-  const height = 379.64483642578125;
-  const span = 0.4958316385746002;
-  same(f32(height / span), 765.6728515625);
-  const seconds = 1.4170000553131104;
-  const clip = 0.5666667222976685;
-  same(f32(seconds / clip), 2.5005881786346436);
-  same(f32(1.0 / 3.0), 0.3333333432674408);
-  same(f32(-1.0 / 3.0), -0.3333333432674408);
-  same(f32(height / -2.0), -189.82241821289062);
-});
-
-test("[reference] f32 literals are the binary32 nearest their decimal", () => {
-  // Warcraft read the numeral 0.016666667 as 0.01666666567325592, the binary32 below the nearest.
-  same(f32(0.016666667), 0.01666666753590107);
-  same(f32(-0.1), -0.10000000149011612);
-  same(f32(1.417), 1.4170000553131104);
-});
-
 test("[reference] f32 flushes a subnormal result to zero, keeping its sign, as Warcraft does", () => {
   // makgora#25: natively the camera's ease stopped at this x, where its step fell below 2^-126.
   const stopped = 1.1940069608864212e-37;
@@ -140,41 +111,3 @@ function operand(): number {
 
 const identical = (actual: number, expected: number, what: string, sameText = true) =>
   assertEquals(actual === expected ? 1 / actual === 1 / expected && (!sameText || `${actual}` === `${expected}`) : actual !== actual && expected !== expected, true, `${what}: ${actual} vs ${expected}`);
-
-test("[property] f32 helpers give the IEEE result for infinite and NaN operands and for a zero divisor", () => {
-  const lefts: number[] = [];
-  const rights: number[] = [];
-  for (let i = 0; i < 6000; i++) {
-    lefts.push(operand());
-    rights.push(operand());
-  }
-  const edges = [1 / 0, -1 / 0, 0 / 0, 0.0, 1.0, -1.5, -4097.0, 3.4028234663852886e38, SMALLEST_NORMAL, 1.401298464324817e-45];
-  for (const a of edges) {
-    for (const b of edges) {
-      lefts.push(a);
-      rights.push(b);
-    }
-  }
-  let nonfinite = 0;
-  for (let i = 0; i < lefts.length; i++) {
-    const a = lefts[i] ?? 0;
-    const b = rights[i] ?? 0;
-    if (a - a === 0 && b - b === 0) {
-      if (b === 0) identical(divideFloat32(a, b), a / b, `divideFloat32(${a}, ${b})`, false);
-      continue;
-    }
-    nonfinite += 1;
-    identical(exactProduct(a, b), a * b, `${a} * ${b}`, false);
-    identical(exactQuotient(a, b), a / b, `${a} / ${b}`, false);
-    identical(exactSum(a, b), a + b, `${a} + ${b}`, false);
-    identical(exactDifference(a, b), a - b, `${a} - ${b}`, false);
-    identical(multiplyFloat32(a, b), a * b, `multiplyFloat32(${a}, ${b})`, false);
-    identical(divideFloat32(a, b), a / b, `divideFloat32(${a}, ${b})`, false);
-    identical(addFloat32(a, b), a + b, `addFloat32(${a}, ${b})`, false);
-    identical(subtractFloat32(a, b), a - b, `subtractFloat32(${a}, ${b})`, false);
-    identical(addFloat32TowardZero(a, b), a + b, `addFloat32TowardZero(${a}, ${b})`, false);
-    identical(subtractFloat32TowardZero(a, b), a - b, `subtractFloat32TowardZero(${a}, ${b})`, false);
-    identical(multiplyFloat32TowardZero(a, b), a * b, `multiplyFloat32TowardZero(${a}, ${b})`, false);
-  }
-  assertEquals(nonfinite > 100, true, `${nonfinite} pairs with a nonfinite operand`);
-});

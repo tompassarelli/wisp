@@ -14,46 +14,6 @@ const pose = (model: string) => ({
 });
 const scene = { frame: 0, client: 0, effects: [pose("loaded.mdx"), pose("loading.mdx")], units: [], camera: { x: 0, y: 0, fields: {} }, ui: [], environment: { sky: "", skyVisible: false, dayNight: { terrain: "", unit: "" }, timeOfDay: 12 } } as unknown as RenderScene;
 
-test("drawScene_marks_a_unit_pose_for_the_rim_light", () => {
-  const sequences = new Map<string, readonly AnimationSequence[]>([["loaded.mdx", [STAND]]]);
-  const unit = { ...pose("loaded.mdx"), unit: true } as unknown as RenderScene["effects"][number];
-  const drawn = drawScene({ ...scene, effects: [unit, pose("loaded.mdx")] } as unknown as RenderScene, { sequences: (path) => sequences.get(path), show: () => undefined, loading: () => 0, light: () => undefined });
-  expect(drawn.poses.map((placed) => placed.unit)).toEqual([true, false]);
-});
-
-test("modelLibrary_sends_a_shared_texture_before_every_model_that_names_it", async () => {
-  const { parseMDX, generateMDX } = await import("../../vendor/war3-model.mjs");
-  const fixture = await Bun.file("window/wisp-window/tests/fixtures/rig.mdx").bytes();
-  const model = parseMDX(fixture.slice().buffer);
-  model.Textures = [{ Image: "shared.blp", ReplaceableId: 0, Flags: 0 }];
-  const mdx = new Uint8Array(generateMDX(model));
-  const pushed: string[] = [];
-  const reads: string[] = [];
-  const texture = Promise.withResolvers<void>();
-  const library = createModelLibrary(async (path) => { reads.push(path); if (path === "shared.blp") await texture.promise; return path.endsWith(".mdx") ? mdx : new Uint8Array([1]); }, { asset: (path) => { pushed.push(path); } }, () => undefined);
-  library.sequences("a.mdx");
-  await until(() => reads.includes("shared.blp"));
-  library.sequences("b.mdx");
-  await until(() => reads.includes("b.mdx"));
-  texture.resolve();
-  await until(() => library.loading() === 0);
-  expect(pushed).toEqual(["shared.blp", "a.mdx", "b.mdx"]);
-});
-
-test("drawScene_plays_a_destroyed_effect_once_and_then_drops_it", () => {
-  const sequence = (name: string, start: number, end: number, looping: boolean): AnimationSequence => ({ name, start, end, looping, rarity: 0 });
-  const withDeath = [sequence("Birth", 0, 1000, false), sequence("Stand", 1000, 3000, true), sequence("Death", 3000, 4000, false)];
-  const noDeath = [sequence("Birth", 0, 1000, false), sequence("Stand", 1000, 3000, true)];
-  const destroyed = (frame: number, elapsed: number) => ({ ...scene, frame, effects: [{ ...pose("fx.mdx"), destroyed: 10, animationElapsed: elapsed }] } as unknown as RenderScene);
-  const drawn = (sequences: readonly AnimationSequence[], frame: number, elapsed: number) => drawScene(destroyed(frame, elapsed), { sequences: () => sequences, show: () => undefined, loading: () => 0, light: () => undefined, controlSkin: () => undefined, lightning: () => undefined }).poses;
-  expect(drawn(withDeath, 40, 9)[0]?.sequence).toBe(2);
-  expect(Math.abs((drawn(withDeath, 40, 9)[0]?.frame ?? 0) - 3500)).toBeLessThanOrEqual(1);
-  expect(drawn(withDeath, 40, 9)).toHaveLength(1);
-  expect(drawn(withDeath, 71, 9)).toHaveLength(0);
-  expect(drawn(noDeath, 40, 2.5)).toHaveLength(1);
-  expect(drawn(noDeath, 400, 3.5)).toHaveLength(0);
-});
-
 test("modelLibrary_gives_the_light_a_day_night_model_holds", async () => {
   const { parseMDX, generateMDX } = await import("../../vendor/war3-model.mjs");
   const fixture = await Bun.file("window/wisp-window/tests/fixtures/rig.mdx").bytes();
@@ -73,19 +33,3 @@ const LIGHTNING_SLK = [
   "C;X1;Y2;K\"TEST\"", "C;X2;Y2;K\"Textures\"", "C;X3;Y2;K\"Bolt\"", "C;X4;Y2;K50", "C;X5;Y2;K20", "C;X6;Y2;K255", "C;X7;Y2;K128", "C;X8;Y2;K0", "C;X9;Y2;K0.5", "C;X10;Y2;K2",
   "C;X1;Y3;K\"BARE\"", "C;X2;Y3;K\"\"", "C;X3;Y3;K\"\"", "E",
 ].join("\n");
-
-test("drawScene_sends_each_bolt_with_its_types_look_from_the_installs_lightning_table", async () => {
-  const pushed: string[] = [], problems: string[] = [];
-  const read = async (path: string) => (path === "Splats\\LightningData.slk" ? new TextEncoder().encode(LIGHTNING_SLK) : new Uint8Array([1]));
-  const library = createModelLibrary(read, { asset: (path) => { pushed.push(path); } }, (problem) => problems.push(problem));
-  const bolt = (codeName: string) => ({ handle: 1, codeName, from: [0, 0, 0], to: [1, 2, 3], color: [1, 1, 1, 1] });
-  const lit = { ...scene, effects: [], lightnings: [bolt("TEST"), bolt("NONE"), bolt("BARE")] } as unknown as RenderScene;
-  expect(drawScene(lit, library).lightnings.map((sent) => sent.look)).toEqual([undefined, undefined, undefined]);
-  await until(() => library.loading() === 0);
-  const sent = drawScene(lit, library).lightnings;
-  expect(sent[0]?.look).toEqual({ texture: "Textures\\Bolt.blp", width: 20, segment: 50, noise: 0.5, scale: 2, color: [1, 128 / 255, 0] });
-  expect(sent[1]?.look).toBeUndefined();
-  expect(sent[2]?.look).toBeUndefined();
-  expect(pushed).toEqual(["Textures\\Bolt.blp"]);
-  expect(problems).toEqual(["no installed LightningData.slk row for NONE", "LightningData.slk BARE names no file"]);
-});

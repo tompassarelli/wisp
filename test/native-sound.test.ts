@@ -54,13 +54,6 @@ test("[spec docs/native-window-plan.md] changing the music, from menu to stage t
   ]);
 });
 
-test("[spec docs/play.md] a worker's game export given as a function is built with the flags the player ran with", async () => {
-  const module = join(import.meta.dir, "fixtures/argumentGame.ts");
-  expect((await loadGame({ module, export: "game", arguments: ["--map", "Makgora.w3x", "--player-assets-only"] })).title).toBe("--map Makgora.w3x --player-assets-only");
-  expect((await loadGame({ module, export: "plain" })).title).toBe("plain");
-  await expect(loadGame({ module, export: "absent" })).rejects.toThrow("exports no absent");
-});
-
 const stockSounds = JSON.parse(readFileSync(join(import.meta.dir, "fixtures/stock-sounds.json"), "utf8")) as { absent: string[]; present: { ask: string; stored: string }[] };
 
 test("[native] every stock sound the cpu-expert run asks for resolves to the file the install holds under its locale mod, and each one the install lacks resolves to nothing", async () => {

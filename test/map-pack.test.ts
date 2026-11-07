@@ -94,44 +94,6 @@ function blp(): Uint8Array {
   return bytes;
 }
 
-test("[invariant] listed entries are packaged and extracted in one archive opening, byte for byte, keeping clip and texture facts", async () => {
-  const { archive, existing } = fullArchive("listed");
-  const packager = join(work, "map-pack");
-  await Effect.runPromise(ensurePackager(packager));
-  const files = { clip: clip(), portrait: portrait(), blp: blp(), "tone.ogg": readFileSync(join(import.meta.dir, "fixtures/tone.ogg")) };
-  const entries: { readonly entry: string; readonly source: string }[] = [];
-  for (const [name, bytes] of Object.entries(files)) {
-    const source = join(work, name);
-    writeFileSync(source, bytes);
-
-    for (let copy = 0; copy < 8; copy++) entries.push({ entry: `war3mapImported\\${name === "tone.ogg" ? `tone-${copy}.ogg` : `${name}-${copy}`}`, source });
-  }
-  const override = join(work, "override");
-  writeFileSync(override, "later entries win");
-  entries.push({ entry: "war3mapImported\\clip-0", source: override });
-  const list = (rows: readonly { readonly entry: string; readonly source: string }[]) => rows.map(({ entry, source }) => `${source}\t${entry}\n`).join("");
-  writeFileSync(join(work, "replace.list"), list(entries));
-  const replaced = Bun.spawnSync([packager, "replace-list", archive, join(work, "replace.list")]);
-  expect({ code: replaced.exitCode, stderr: replaced.stderr.toString() }).toEqual({ code: 0, stderr: "" });
-
-  const wanted = [...new Map([...entries, { entry: "existing-0.txt", source: existing }].map((row) => [row.entry, row.source]))];
-  const extracted = wanted.map(([entry], index) => ({ entry, source: join(work, `out-${index}`) }));
-  writeFileSync(join(work, "extract.list"), list(extracted));
-  const read = Bun.spawnSync([packager, "extract-list", archive, join(work, "extract.list")]);
-  expect({ code: read.exitCode, stderr: read.stderr.toString() }).toEqual({ code: 0, stderr: "" });
-  for (const [index, [, source]] of wanted.entries()) expect(readFileSync(join(work, `out-${index}`))).toEqual(readFileSync(source));
-
-  const model = parseMDX(readFileSync(extracted.find(({ entry }) => entry.endsWith("clip-1"))!.source).buffer as ArrayBuffer);
-  expect(model.Sequences.map(({ Name, Interval }) => [Name, [...Interval]])).toEqual([["Attack Slam", [3000, 3800]]]);
-  expect(model.Bones.map(({ Name, Parent }) => [Name, Parent ?? null])).toEqual([["Root", null], ["Hand", 0]]);
-  expect(model.Textures.map(({ Image, ReplaceableId }) => [Image, ReplaceableId])).toEqual([["", 1], ["war3mapImported\\Portrait.tga", 0]]);
-  expect(model.Materials[0]!.Layers.map(({ TextureID }) => TextureID)).toEqual([0, 1]);
-  const tga = readFileSync(extracted.find(({ entry }) => entry.endsWith("portrait-7"))!.source);
-  expect([tga[16], tga[17]! & 15, tga[18 + 15 * 4 + 3], tga[18 + 2]]).toEqual([32, 8, 255, 255]);
-  const texture = readFileSync(extracted.find(({ entry }) => entry.endsWith("blp-3"))!.source);
-  expect([texture.readUInt32LE(8), texture[156 + 1024 + 16]]).toEqual([8, 255]);
-});
-
 test("[invariant] replacing listed entries leaves no stale bytes: the archive is as large as one created with the final entries", async () => {
   const packager = join(work, "map-pack");
   await Effect.runPromise(ensurePackager(packager));

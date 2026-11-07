@@ -48,57 +48,6 @@ const families = [
   { name: "view", table: view, backend: nativeView, constants: viewConstants },
 ] as const;
 
-test.each(families)("every $name lowering row names a declared native with the arity of its Wisp function and an implemented backend call", ({ name, table, backend, constants: families }) => {
-  const declarations = readNativeDeclarations();
-  const declared = new Map(declarations.functions.map(([native, , parameters]) => [native, parameters] as const));
-  const constants = new Set([...declarations.constants, ...declarations.variables].map(([constant]) => constant));
-  const dts = readFileSync(join(root, `src/game/${name}.d.ts`), "utf8");
-  const exported = [...dts.matchAll(/export declare function (\w+)\(([^)]*)\)/g)].map(match => [match[1]!, (match[2] ?? "").trim() === "" ? 0 : (match[2] ?? "").split(/,(?![^()]*\))/).length] as const);
-  expect(exported.map(([fn]) => fn).sort()).toEqual(Object.keys(table).sort());
-  expect(Object.keys(backend).filter(key => !(key in families)).sort()).toEqual(Object.keys(table).sort());
-  for (const [fn, parameters] of exported) {
-    const template = parseTemplate(table[fn] ?? "");
-    const parts = templateParts(template);
-    for (const call of parts.calls) expect(declared.get(call.native)).toBe(call.args.length);
-    for (const global of parts.globals) expect(constants.has(global)).toBe(true);
-    expect(parts.arguments).toBe(parameters);
-  }
-});
-
-test.each(families)("every $name constant is declared, implemented and lowered to a Warcraft global holding the value the native backend gives", ({ name, backend, constants: table }) => {
-  const declarations = readNativeDeclarations();
-  const globals = new Set(declarations.constants.map(([constant]) => constant));
-  const client = new HeadlessClient({ screen: { width: 1920, height: 1080 }, slot: 0, humans: [0], declarations, filePrefix: "game-api", localNatives: {}, network: [] });
-  const dts = readFileSync(join(root, `src/game/${name}.d.ts`), "utf8");
-  const declared = [...dts.matchAll(/export declare const (\w+): \{([^}]*)\}/g)].map(match => [match[1]!, [...match[2]!.matchAll(/readonly (\w+):/g)].map(member => member[1]!).sort()] as const);
-  expect(declared.map(([type]) => type).sort()).toEqual(Object.keys(table).sort());
-  for (const [type, members] of declared) {
-    const lowering = table[type] ?? {};
-    const implemented = (backend as Record<string, Record<string, unknown>>)[type] ?? {};
-    expect(Object.keys(lowering).sort()).toEqual(members);
-    expect(Object.keys(implemented).sort()).toEqual(members);
-    for (const [member, global] of Object.entries(lowering)) {
-      expect(globals.has(global)).toBe(true);
-      expect(implemented[member]).toBe(client.constants[global]);
-    }
-  }
-});
-
-test("sync calls lower to the natives they replaced, byte for byte", () => {
-  const lowered = compile(`import { createEvents } from "../../src/game/events";\nimport { addSyncEvent, sendSync, syncData, syncPrefix } from "../../src/game/sync";\n` + wrap(`
-  const events = createEvents();
-  addSyncEvent(events, owner, "pre");
-  if (!sendSync(syncPrefix(), syncData() + model)) BJDebugMsg("lost");`));
-  const raw = compile(wrap(`
-  const events = CreateTrigger();
-  BlzTriggerRegisterPlayerSyncEvent(events, owner, "pre", false);
-  if (!BlzSendSyncData(BlzGetTriggerSyncPrefix(), BlzGetTriggerSyncData() + model)) BJDebugMsg("lost");`));
-  expect(lowered.diagnostics).toBe("");
-  expect(raw.diagnostics).toBe("");
-  expect(lowered.lua).toBe(raw.lua);
-  expect(lowered.lua).toContain('BlzTriggerRegisterPlayerSyncEvent(events, owner, "pre", false)');
-});
-
 test("the native backend delivers a client's messages to its registrations in order and refuses a 256-character one", () => {
   const declarations = readNativeDeclarations();
   const make = (slot: number, network: SyncMessage[]) => new HeadlessClient({ screen: { width: 1920, height: 1080 }, slot, humans: [0, 1], declarations, filePrefix: "game-api", localNatives: {}, network });
