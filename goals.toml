@@ -24,7 +24,7 @@ class = "contract"
 [[goal]]
 name = "target-debt-due"
 source = "AGENTS.md: soft targets land with a Target-debt record; north docs/rationale/targets.md"
-oracle = "north provenance debt --due | awk -F'\\t' '$1==\"wisp\"' | wc -l"
+oracle = "north check provenance debt --due | awk -F'\\t' '$1==\"wisp\"' | wc -l"
 unit = "records"
 max = 0
 class = "debt"
