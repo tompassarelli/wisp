@@ -1,8 +1,7 @@
 import { expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Effect } from "effect";
-import { generateMDX, parseMDL, parseMDX } from "../vendor/war3-model.mjs";
 import { ensurePackager } from "../host/compile/mapBuild";
 
 const build = join(import.meta.dir, "../build");
@@ -10,89 +9,11 @@ mkdirSync(build, { recursive: true });
 const work = mkdtempSync(join(build, "map-pack-"));
 
 // nix reports its downloads on stderr, so realise gcc first and assert only on gcc's own diagnostics.
-function nixGcc(): string {
-  const result = Bun.spawnSync(["nix", "build", "--no-link", "--print-out-paths", "nixpkgs#gcc"]);
-  expect(result.exitCode).toBe(0);
-  const gcc = result.stdout.toString().trim().split("\n").map((path) => join(path, "bin/gcc")).find((path) => existsSync(path));
-  expect(gcc).toBeDefined();
-  return gcc ?? "gcc";
-}
 
-function regression(): string {
-  const prefix = process.env.STORMLIB_PREFIX ?? (() => {
-    const result = Bun.spawnSync(["nix", "build", "--no-link", "--print-out-paths", "nixpkgs#stormlib"]);
-    expect(result.exitCode).toBe(0);
-    return result.stdout.toString().trim();
-  })();
-  const binary = join(work, "regression");
-  const compiler = process.env.CC === undefined ? [nixGcc()] : [process.env.CC];
-  const compiled = Bun.spawnSync([...compiler, `-I${prefix}/include`, join(import.meta.dir, "../native/map-pack.test.c"),
-    `-L${prefix}/lib`, `-Wl,-rpath,${prefix}/lib`, "-lstorm", "-o", binary]);
-  expect({ code: compiled.exitCode, stderr: compiled.stderr.toString() }).toEqual({ code: 0, stderr: "" });
-  return binary;
-}
 
-function fullArchive(name: string): { readonly archive: string; readonly existing: string } {
-  const existing = join(work, `${name}.txt`);
-  writeFileSync(existing, "synthetic archive contents");
-  const archive = join(work, `${name}.mpq`);
-  const result = Bun.spawnSync([regression(), archive, existing]);
-  expect({ code: result.exitCode, stderr: result.stderr.toString() }).toEqual({ code: 0, stderr: "" });
-  expect(result.stdout.toString()).toContain("existing entries preserved");
-  return { archive, existing };
-}
 
-const clip = () => new Uint8Array(generateMDX(parseMDL(`Version { FormatVersion 800, }
-Model "Clip" { NumGeosets 1, NumBones 2, BlendTime 150, MinimumExtent { 0, 0, 0 }, MaximumExtent { 10, 10, 20 }, BoundsRadius 12, }
-Sequences 1 { Anim "Attack Slam" { Interval { 3000, 3800 }, NonLooping, MinimumExtent { 0, 0, 0 }, MaximumExtent { 10, 10, 20 }, BoundsRadius 12, } }
-Textures 2 { Bitmap { Image "", ReplaceableId 1, } Bitmap { Image "war3mapImported\\Portrait.tga", } }
-Materials 1 { Material { Layer { FilterMode None, static TextureID 0, } Layer { FilterMode Blend, static TextureID 1, } } }
-Geoset {
-  Vertices 3 { { 0, 0, 0 }, { 10, 0, 0 }, { 0, 10, 20 }, }
-  Normals 3 { { 0, 0, 1 }, { 0, 0, 1 }, { 0, 0, 1 }, }
-  TVertices 3 { { 0, 0 }, { 1, 0 }, { 0, 1 }, }
-  VertexGroup { 0, 0, 1, }
-  Faces 1 3 { Triangles { { 0, 1, 2 }, } }
-  Groups 2 2 { Matrices { 0 }, Matrices { 1 }, }
-  MinimumExtent { 0, 0, 0 }, MaximumExtent { 10, 10, 20 }, BoundsRadius 12,
-  MaterialID 0,
-  SelectionGroup 0,
-}
-Bone "Root" { ObjectId 0, GeosetId 0, GeosetAnimId None, Translation 2 { Linear, 3000: { 0, 0, 0 }, 3800: { 0, 0, 40 }, } }
-Bone "Hand" { ObjectId 1, Parent 0, GeosetId 0, GeosetAnimId None, Rotation 2 { Linear, 3000: { 0, 0, 0, 1 }, 3800: { 0, 0, 0.7071, 0.7071 }, } }
-PivotPoints 2 { { 0, 0, 0 }, { 0, 0, 10 }, }
-`)));
 
-function portrait(): Uint8Array {
-  const pixels = 16;
-  const bytes = new Uint8Array(18 + pixels * 4);
-  bytes[2] = 2;
-  bytes[12] = 4;
-  bytes[14] = 4;
-  bytes[16] = 32;
-  bytes[17] = 8;
-  for (let i = 0; i < pixels; i++) bytes.set([0, 3, 255, i * 17], 18 + i * 4);
-  return bytes;
-}
 
-function blp(): Uint8Array {
-  const bytes = new Uint8Array(156 + 1024 + 32);
-  const view = new DataView(bytes.buffer);
-  bytes.set(new TextEncoder().encode("BLP1"));
-  view.setUint32(4, 1, true);
-  view.setUint32(8, 8, true);
-  view.setUint32(12, 4, true);
-  view.setUint32(16, 4, true);
-  view.setUint32(20, 4, true);
-  view.setUint32(28, 156 + 1024, true);
-  view.setUint32(28 + 64, 32, true);
-  for (let i = 0; i < 256; i++) view.setUint32(156 + i * 4, (i << 16) | 0xff, true);
-  for (let i = 0; i < 16; i++) {
-    bytes[156 + 1024 + i] = i;
-    bytes[156 + 1024 + 16 + i] = 255 - i * 17;
-  }
-  return bytes;
-}
 
 test("[invariant] replacing listed entries leaves no stale bytes: the archive is as large as one created with the final entries", async () => {
   const packager = join(work, "map-pack");

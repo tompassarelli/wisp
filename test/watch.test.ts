@@ -3,8 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { prefixUse } from "../host/os/warcraft/battleNet";
 import { type ProcessInfo } from "../host/contract/processInfo";
-import { sessionStart } from "../host/os/warcraft/war3Log";
-import { type CrashReport, type Sources, changes, crashSummary, decide, eventLine } from "../host/dev/watch";
+import { type Sources, changes, decide, eventLine } from "../host/dev/watch";
 
 const fixture = (path: string) => readFileSync(join(import.meta.dir, "fixtures", path), "utf8");
 const PREFIX = "/clients/a/pfx";
@@ -24,13 +23,6 @@ const sources = (now: number, processes: readonly ProcessInfo[], extra: Partial<
   ...extra,
 });
 
-const crashFolder = "2026-10-06 13.30.33 f80136c8";
-const crash: CrashReport = {
-  folder: crashFolder,
-  session: sessionStart(fixture(`watch/errors/${crashFolder}/War3Log.txt`))!,
-  summary: crashSummary(fixture(`watch/errors/${crashFolder}/Crash.txt`)),
-  written: on6Oct("20:30:35"),
-};
 
 test("[native] the bad -loadfile run: signed in, ladder scan done, its map's imported models failing", () => {
   const log = fixture("war3log/loadfile-scan-mid-load.txt");

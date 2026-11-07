@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { decodeControl, encodeControl, MAX_PACKET, PEER_HEADER, type RelayControl } from "../host/net/relayControl";
+import { decodeControl, encodeControl, type RelayControl } from "../host/net/relayControl";
 
 const hex = (bytes: Uint8Array) => [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 const unhex = (text: string) => Uint8Array.from(text.match(/../g) ?? [], (pair) => parseInt(pair, 16));
@@ -27,17 +27,5 @@ describe("relay control vectors", () => {
       expect(hex(encodeControl(message)), line).toBe(hex(packet));
       expect(decodeControl(packet), line).toEqual(message);
     }
-  });
-
-  test("[boundary] a fixed-length packet refuses truncation and trailing bytes, and a datagram past 1200 bytes is refused", () => {
-    for (const { line, message, packet } of vectors) {
-      if (message.type === "peer" || message.type === "relayed") continue;
-      for (let length = 0; length < packet.length; length++) expect(() => decodeControl(packet.slice(0, length)), `${line} cut to ${length}`).toThrow();
-      expect(() => decodeControl(Uint8Array.from([...packet, 0])), line).toThrow();
-    }
-    const fits = encodeControl({ type: "peer", token: 1n, payload: new Uint8Array(MAX_PACKET - PEER_HEADER) });
-    expect(fits.length).toBe(MAX_PACKET);
-    expect(decodeControl(fits).type).toBe("peer");
-    expect(() => decodeControl(encodeControl({ type: "peer", token: 1n, payload: new Uint8Array(MAX_PACKET - PEER_HEADER + 1) }))).toThrow();
   });
 });

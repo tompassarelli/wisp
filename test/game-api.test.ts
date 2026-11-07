@@ -1,52 +1,11 @@
 import { expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import * as native from "../src/game/native/effects";
 import * as nativeEvents from "../src/game/native/events";
-import * as nativeFrames from "../src/game/native/frames";
-import * as nativeSound from "../src/game/native/sound";
-import * as nativeText from "../src/game/native/text";
-import * as filesApi from "../src/game/native/files";
 import * as nativePlayers from "../src/game/native/players";
-import * as nativeClock from "../src/game/native/clock";
-import { clock, clockConstants } from "../src/game/warcraft/clock";
-import * as nativeInput from "../src/game/native/input";
-import { input, inputConstants } from "../src/game/warcraft/input";
 import * as nativeSync from "../src/game/native/sync";
-import * as nativeView from "../src/game/native/view";
 import { bindWorld } from "../src/game/native/world";
 import { HeadlessClient } from "../src/headless/client";
 import { readNativeDeclarations } from "../host/headless/headless";
-import { parseTemplate, templateParts } from "../src/game/warcraft/lowering";
-import { effects, effectsConstants } from "../src/game/warcraft/effects";
-import { events } from "../src/game/warcraft/events";
-import { frames, framesConstants } from "../src/game/warcraft/frames";
-import { sound, soundConstants } from "../src/game/warcraft/sound";
-import { text } from "../src/game/warcraft/text";
-import { files } from "../src/game/warcraft/files";
-import { players, playersConstants } from "../src/game/warcraft/players";
-import { sync } from "../src/game/warcraft/sync";
-import { bodies } from "../src/game/warcraft/bodies";
-import * as nativeBodies from "../src/game/native/bodies";
-import { compile, root, wrap } from "./gameApiCompile";
-import { view, viewConstants } from "../src/game/warcraft/view";
 import type { SyncMessage } from "../src/headless/clientTypes";
-
-
-const families = [
-  { name: "effects", table: effects, backend: native, constants: effectsConstants },
-  { name: "frames", table: frames, backend: nativeFrames, constants: framesConstants },
-  { name: "events", table: events, backend: nativeEvents, constants: {} },
-  { name: "sound", table: sound, backend: nativeSound, constants: soundConstants },
-  { name: "text", table: text, backend: nativeText, constants: {} },
-  { name: "files", table: files, backend: filesApi, constants: {} },
-  { name: "players", table: players, backend: nativePlayers, constants: playersConstants },
-  { name: "sync", table: sync, backend: nativeSync, constants: {} },
-  { name: "input", table: input, backend: nativeInput, constants: inputConstants },
-  { name: "clock", table: clock, backend: nativeClock, constants: clockConstants },
-  { name: "bodies", table: bodies, backend: nativeBodies, constants: {} },
-  { name: "view", table: view, backend: nativeView, constants: viewConstants },
-] as const;
 
 test("the native backend delivers a client's messages to its registrations in order and refuses a 256-character one", () => {
   const declarations = readNativeDeclarations();

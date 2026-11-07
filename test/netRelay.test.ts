@@ -1,11 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { join } from "node:path";
 import type { LinkEvent } from "../src/headless/linkEvent";
 import type { TurnPacket } from "../src/headless/turnLedger";
-import { relayBinary } from "./headless/relayBinary";
-import { MAX_DATAGRAM, fitTurns } from "../host/net/wire";
+import { fitTurns } from "../host/net/wire";
 
-const root = join(import.meta.dir, "..");
 
 const events: readonly LinkEvent[] = [
   { sender: 1, kind: "sync", prefix: "ν", data: "d".repeat(300) },
@@ -42,9 +39,7 @@ describe("compact turns packet", () => {
   });
 });
 
-const sample = ["bun", join(root, "examples/sample/scripts/sample.ts"), "net"];
 
-const FRAMES = 600;
 
 /** One match through a fresh local relay, the joiner behind a 170 ms round trip, each frame adding `chatter` chat lines per player. */
 

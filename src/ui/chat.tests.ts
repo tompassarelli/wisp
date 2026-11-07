@@ -1,23 +1,10 @@
 import { f32 } from "../sim/f32";
 import { assertEquals, test } from "../runtime/testing";
 import {
-  addChatLine,
-  advanceChat,
-  chatName,
-  chatOpacity,
-  chatRowCount,
-  colourCode,
-  createChatLog,
   FRIZ_QUADRATA_WIDTHS,
-  type GlyphWidths,
-  lighten,
   textWidth,
-  visibleChatRows,
   wrapChat,
 } from "./chatLog";
-import { chatFrameLayout } from "./chatFrame";
-
-const EVEN: GlyphWidths = { space: 1.0, narrow: 1.0, short: 1.0, lower: 1.0, wideLower: 1.0, upper: 1.0, wideUpper: 1.0, other: 1.0 };
 
 test("[reference] chat: Friz Quadrata widths never fall short of the widths measured natively, so no row overruns its frame", () => {
   const measured: [string, number][] = [

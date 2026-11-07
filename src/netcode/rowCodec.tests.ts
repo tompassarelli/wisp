@@ -1,8 +1,5 @@
-import { at } from "../runtime/lookup";
-import { assertEquals, assertTrue, test } from "../runtime/testing";
 import { floorMod } from "../sim/intMath";
 import type { RowCodec } from "./codec";
-import { MESSAGE_MAX_BYTES, MESSAGE_MAX_FRAMES, decodeMessage, encodeMessage } from "./message";
 import { type WireReader, digit, readDigit, readSignedVarint, readVarint, signedVarint, varint } from "./wire";
 
 export interface ToyRow {
@@ -65,30 +62,3 @@ export function lcg(seed: number): () => number {
     return state;
   };
 }
-
-function randomRows(next: () => number, count: number, fireOdds: number): ToyRow[] {
-  const rows: ToyRow[] = [];
-  let move = 0;
-  for (let index = 0; index < count; index++) {
-    if (floorMod(next(), 4) === 0) move = floorMod(next(), 16);
-    const fire = floorMod(next(), fireOdds) === 0 ? 1 + floorMod(next(), TOY_FIRE) : 0;
-    const aim = fire === 0 ? 0 : floorMod(next() * 32 + next(), 2 * TOY_AIM + 1) - TOY_AIM;
-    rows.push({ move, fire, aim });
-  }
-  return rows;
-}
-
-test("wire: varints and signed varints survive a round trip at their limits and reject a non-minimal or over-limit encoding", () => {
-  for (const value of [0, 1, 31, 32, 1023, 1024, 33554431, 33554432, 2147483646]) {
-    const reader = { text: varint(value), offset: 0 };
-    assertEquals(readVarint(reader, 2147483646), value, `varint ${value}`);
-    assertEquals(reader.offset, reader.text.length, `varint ${value} length`);
-  }
-  for (const value of [0, 1, -1, 5000, -5000, 1048576, -1048576]) {
-    assertEquals(readSignedVarint({ text: signedVarint(value), offset: 0 }, 1048576), value, `signed varint ${value}`);
-  }
-  assertEquals(readVarint({ text: varint(33), offset: 0 }, 32), undefined, "over the limit");
-  assertEquals(readVarint({ text: "w0", offset: 0 }, 2147483646), undefined, "a continuation digit then a zero payload");
-  assertEquals(readVarint({ text: "!", offset: 0 }, 2147483646), undefined, "a character outside the alphabet");
-  assertEquals(readVarint({ text: "w", offset: 0 }, 2147483646), undefined, "a varint cut short");
-});

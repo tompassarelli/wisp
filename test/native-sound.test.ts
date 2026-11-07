@@ -4,7 +4,6 @@ import { join } from "node:path";
 import type { SoundCue } from "../src/headless/clientTypes";
 import { type NativeAudio } from "../host/window/audio";
 import { createSoundResolver } from "../host/render/standaloneSound";
-import { loadGame } from "../host/window/gameModule";
 import { createSoundPlayer } from "../host/window/soundPlayer";
 import { Sounds } from "../src/game/native/soundStore";
 

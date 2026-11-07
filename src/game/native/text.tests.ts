@@ -1,6 +1,6 @@
 import { f32 } from "../../sim/f32";
 import { assertEquals, test } from "../../runtime/testing";
-import { formatInt, formatReal, formatRealWidth, parseInt, parseReal, textLength, toReal, truncate } from "./text";
+import { formatReal } from "./text";
 
 const same = (actual: unknown, expected: unknown) => assertEquals(actual, expected);
 

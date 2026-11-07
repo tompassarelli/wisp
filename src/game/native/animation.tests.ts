@@ -1,7 +1,6 @@
 import { f32 } from "../../sim/f32";
-import { floorMod } from "../../sim/intMath";
-import { assertEquals, assertTrue, test } from "../../runtime/testing";
-import { advanceAnimation, type AnimationSequence, type AnimationState, animationSample, blendWeight, freshAnimation, seekAnimation, selectAnimation, settleAnimation } from "./animation";
+import { assertEquals, test } from "../../runtime/testing";
+import { type AnimationSequence, animationSample } from "./animation";
 
 function same(actual: readonly unknown[], expected: readonly unknown[], message = ""): void {
   assertEquals(actual.length, expected.length, `${message} length`);

@@ -2,7 +2,7 @@ import { at } from "../runtime/lookup";
 import { assertEquals, assertGreaterThan, assertTrue, test } from "../runtime/testing";
 import { floorMod } from "../sim/intMath";
 import { TOY_AIM, TOY_CODEC, TOY_FIRE, type ToyRow, lcg, toyRow } from "./rowCodec.tests";
-import { NET_SETTINGS, type Session, type Simulation, confirmedFrame, createSession, leave, localRow, predictedAt, presentFrame, receive, remoteThrough, tick } from "./session";
+import { NET_SETTINGS, type Session, type Simulation, confirmedFrame, createSession, localRow, predictedAt, presentFrame, receive, remoteThrough, tick } from "./session";
 
 interface ToyState {
   readonly positions: readonly number[];

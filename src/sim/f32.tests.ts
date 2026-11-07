@@ -1,7 +1,5 @@
 import { assertEquals, test } from "../runtime/testing";
-import { addFloat32, addFloat32TowardZero, divideFloat32, multiplyFloat32, multiplyFloat32TowardZero, subtractFloat32, subtractFloat32TowardZero } from "./binary32";
-import { exactDifference, exactProduct, exactQuotient, exactSum, f32 } from "./f32";
-import { floorDiv, floorMod } from "./intMath";
+import { f32 } from "./f32";
 
 const same = (actual: number, expected: number) =>
   assertEquals(actual === expected && 1 / actual === 1 / expected, true, `${actual} vs ${expected}`);
@@ -34,23 +32,6 @@ test("[reference] f32 arithmetic rounds the exact result to nearest", () => {
 
 // One binary64 operation then binary32 rounding is a nearest-even oracle.
 
-const SUMS: readonly (readonly [name: string, a: number, b: number, operation: "+" | "-", expected: number])[] = [
-  ["a tie keeps the even unit", 8192.0, 0.00048828125, "+", 8192.0],
-  ["a tie rounds an odd unit up", 8192.0009765625, 0.00048828125, "+", 8192.001953125],
-  ["a carry reaches the next binade", 16383.9990234375, 0.000732421875, "+", 16384.0],
-  ["past the binade an odd unit and a fraction round up", 16383.9990234375, 0.001220703125, "+", 16384.0],
-  ["past the binade a tie keeps the even unit below", 16383.9990234375, 0.001953125, "+", 16384.0],
-  ["past the binade a tie rounds to the even unit above", 16383.9990234375, 0.00390625, "+", 16384.00390625],
-  ["a difference below the binade counts half units", 8192.0, 0.0002929687616415322, "-", 8191.99951171875],
-  ["a quarter unit below the binade ties to the even half", 8192.0, 0.000244140625, "-", 8192.0],
-  ["three quarter units below the binade tie to the even half", 8192.0, 0.000732421875, "-", 8191.9990234375],
-  ["less than a quarter unit leaves the larger value", 8192.0, 0.00019531250291038305, "-", 8192.0],
-  ["a difference within a factor of two is exact", 1.5, 1.25, "-", 0.25],
-  ["an exact cancellation is positive zero", 1234.5677490234375, 1234.5677490234375, "-", 0.0],
-  ["the smallest magnitude the integer path takes", 0.0000152587890625, 2.999999970665357e-10, "+", 0.000015259089195751585],
-  ["the largest magnitude the integer path takes", 65535.99609375, 0.001953125, "+", 65536.0],
-  ["an integer and a fraction", 7000, 0.10000000149011612, "-", 6999.89990234375],
-];
 
 test("[reference] f32 flushes a subnormal result to zero, keeping its sign, as Warcraft does", () => {
   // makgora#25: natively the camera's ease stopped at this x, where its step fell below 2^-126.
@@ -67,47 +48,5 @@ test("[reference] f32 flushes a subnormal result to zero, keeping its sign, as W
   same(f32(smallestNormal * 1.5), 1.7632415262334313e-38);
 });
 
-const SMALLEST_NORMAL = 1.1754943508222875e-38;
-let seed = 12345;
-const draw = () => {
-  seed = (seed * 25173 + 13849) & 65535;
-  const high = floorDiv(seed, 256);
-  seed = (seed * 25173 + 13849) & 65535;
-  return high * 256 + floorDiv(seed, 256);
-};
-const SPECIAL = [0.0, 1.0, 2.0, 0.5, 3.0, 4096.0, 4097.0, 16777216.0, 16777215.0, -2147483648, 3.4028234663852886e38, SMALLEST_NORMAL, 1.401298464324817e-45, 0.0000152587890625, 65536.0, 7.888609052210118e-31, 1 / 0, 0 / 0];
-const pool: number[] = [];
 
-function operand(): number {
-  const kind = floorDiv(draw(), 8192);
-  const bits = draw();
-  const low = draw() & 255;
-  const negative = (bits & 1) === 1;
-  let magnitude: number;
-  if (kind === 0) {
-    const exponent = floorMod(draw(), 254) + 1;
-    magnitude = (8388608 + bits * 128 + (low & 127)) * 2 ** (exponent - 150);
-  } else if (kind === 1) {
-    magnitude = floorDiv(bits * 256 + low, 2 ** (low & 15));
-  } else if (kind === 2) {
-    magnitude = (bits & 4095) + 1;
-  } else if (kind === 3) {
-    magnitude = (8388608 + bits * 128 + (low & 127)) * 2 ** ((low & 31) - 39);
-  } else if (kind === 4) {
-    const edge = (low & 1) === 1 ? 8388608 + (bits & 3) : 16777215 - (bits & 3);
-    magnitude = edge * 2 ** ((low & 63) - 50);
-  } else if (kind === 5 && pool.length > 0) {
-    magnitude = pool[floorMod(bits, pool.length)] ?? 1.0;
-  } else if (kind === 6) {
-    magnitude = SPECIAL[floorMod(bits, SPECIAL.length)] ?? 1.0;
-  } else {
-    magnitude = (bits * 128 + (low & 127)) * 1.401298464324817e-45;
-  }
-  const value = negative ? -magnitude : magnitude;
-  if (pool.length < 64) pool.push(value);
-  else pool[low & 63] = value;
-  return value;
-}
 
-const identical = (actual: number, expected: number, what: string, sameText = true) =>
-  assertEquals(actual === expected ? 1 / actual === 1 / expected && (!sameText || `${actual}` === `${expected}`) : actual !== actual && expected !== expected, true, `${what}: ${actual} vs ${expected}`);
