@@ -320,12 +320,14 @@ impl Host {
     /// Stops the window, render and step clock threads and waits for them, and wakes a consumer blocked in `next_event` with a stop; safe to call again, and on a window that has already closed.
     pub fn stop(&self) {
         self.shared.mailbox.stop();
-        let _ = lock(&self.proxy).send_event(Command::Exit);
         if let Some(threads) = lock(&self.threads).take() {
-            for (name, thread) in [("render", threads.render), ("step clock", threads.steps), ("window", threads.window)] {
+            for (name, thread) in [("render", threads.render), ("step clock", threads.steps)] {
                 eprintln!("wisp-window: stop is waiting for the {name} thread");
                 let _ = thread.join();
             }
+            let _ = lock(&self.proxy).send_event(Command::Exit);
+            eprintln!("wisp-window: stop is waiting for the window thread");
+            let _ = threads.window.join();
             eprintln!("wisp-window: stop joined every thread");
         }
     }
@@ -498,6 +500,9 @@ fn render_loop(shared: Arc<Shared>, windows: mpsc::Receiver<Arc<Window>>, aspect
             eprintln!("{line}");
         }
     }
+    eprintln!("wisp-window: the render loop ended, dropping its frame loop and surface");
+    drop(frames);
+    eprintln!("wisp-window: the render thread's frame loop and surface are dropped");
 }
 
 fn wait_for_stop(shared: &Arc<Shared>) {
