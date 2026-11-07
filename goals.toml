@@ -29,5 +29,5 @@ unit = "records"
 max = 0
 class = "debt"
 ceiling = 5
-owner = "tompassarelli/wisp#75"
+owner = "tompassarelli/wisp#81"
 revisit = "a Target-debt record sits unpaid past its trigger for a week"

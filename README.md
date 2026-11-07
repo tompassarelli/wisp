@@ -33,9 +33,8 @@ the real game.
 What the first release can do, and where it falls short, is in the
 [Wisp 0.1 release notes](docs/releases/0.1.md).
 
-Wisp runs on Linux today; Windows and macOS support is tracked in
-[wisp#108](https://github.com/tompassarelli/wisp/issues/108). Games own their
-simulation, UI, assets and map declaration; Wisp never reads their source.
+Wisp runs on Linux today. Games own their simulation, UI, assets and map
+declaration; Wisp never reads their source.
 [Mak'gora](https://github.com/tompassarelli/makgora) is the first game
 built on it.
 
