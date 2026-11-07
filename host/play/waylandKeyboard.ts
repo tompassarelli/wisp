@@ -51,7 +51,7 @@ function evdevKeyOf(name: string): number | undefined {
 export type WireArgument = number | string;
 
 /** One Wayland request: the object, then size and opcode in one word, then each argument as a word or a length-prefixed, NUL-ended, word-padded string. */
-export function waylandRequest(object: number, opcode: number, args: readonly WireArgument[]): Uint8Array {
+function waylandRequest(object: number, opcode: number, args: readonly WireArgument[]): Uint8Array {
   const encoded = args.map((arg) => typeof arg === "number" ? 4 : 4 + padded(new TextEncoder().encode(arg).length + 1));
   const bytes = new Uint8Array(8 + encoded.reduce((sum, size) => sum + size, 0));
   const view = new DataView(bytes.buffer);
@@ -77,7 +77,7 @@ export interface WaylandEvent {
 }
 
 /** The whole events at the front of `bytes`, and how many bytes they used; a partial event waits for the rest. */
-export function waylandEvents(bytes: Uint8Array): { readonly events: WaylandEvent[]; readonly used: number } {
+function waylandEvents(bytes: Uint8Array): { readonly events: WaylandEvent[]; readonly used: number } {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.length);
   const events: WaylandEvent[] = [];
   let used = 0;
@@ -97,7 +97,7 @@ function wireString(body: Uint8Array, offset: number): { readonly text: string; 
 }
 
 /** A `wl_registry.global` event's name, interface and version. */
-export function registryGlobal(body: Uint8Array): { readonly name: number; readonly interface: string; readonly version: number } {
+function registryGlobal(body: Uint8Array): { readonly name: number; readonly interface: string; readonly version: number } {
   const view = new DataView(body.buffer, body.byteOffset, body.length);
   const { text, next } = wireString(body, 4);
   return { name: view.getUint32(0, true), interface: text, version: view.getUint32(next, true) };

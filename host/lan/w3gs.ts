@@ -136,7 +136,7 @@ export class Reader {
   }
 }
 
-export function encodePacket(type: number, payload: Uint8Array = new Uint8Array()): Uint8Array {
+function encodePacket(type: number, payload: Uint8Array = new Uint8Array()): Uint8Array {
   const length = payload.length + 4;
   if (length > 0xffff) throw new Error(`W3GS packet 0x${type.toString(16)} is ${length} bytes, over 65535`);
   const packet = new Uint8Array(length);

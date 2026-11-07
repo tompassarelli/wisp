@@ -23,7 +23,7 @@ export const BUNDLE_MODULE = "bundle";
 export const bundleModules = (bundle: string): ModuleSet => ({ entry: BUNDLE_MODULE, modules: [{ name: BUNDLE_MODULE, text: moduleChunk(bundle) }] });
 
 export type Hash = (this: void, text: string) => string;
-export const textChecksum: Hash = (text) => checksum(text.length, (index) => text.charCodeAt(index));
+const textChecksum: Hash = (text) => checksum(text.length, (index) => text.charCodeAt(index));
 
 export const moduleHashText = (name: string, text: string) => `${name}\n${text}`;
 
@@ -98,7 +98,7 @@ export function parsePayload(text: string): Payload | undefined {
 }
 
 /** Pieces of at most PAYLOAD_FILE_BYTES, cut before an ASCII byte so no UTF-8 character is split. */
-export function payloadPieces(text: string): string[] {
+function payloadPieces(text: string): string[] {
   const pieces: string[] = [];
   let start = 0;
   while (start < text.length) {

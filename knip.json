@@ -6,7 +6,6 @@
     "host/browser/headlessRender.ts",
     "host/browser/standalone.ts",
     "host/compile/ciMapBuild.ts",
-    "host/compile/windowEmbedCheck.ts",
     "host/window/probeChild.ts",
     "host/testing/journeyRun.ts",
     "host/lan/dummySession.ts",

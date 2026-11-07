@@ -4,23 +4,35 @@
 // API, so a migrated call costs what the native call cost. A family constant (EffectAnimation.attack) becomes a read
 // of the global the family's <family>Constants table names. Using an API function as a value is rejected, because
 // under Lua no function exists to pass.
-import { join } from "node:path";
 import * as ts from "typescript";
 import * as tstl from "typescript-to-lua";
 import { transformArguments } from "typescript-to-lua/dist/transformation/visitors/call";
 import { type ConstantLowering, type Lowering, parseTemplate, type Template, type TemplateArgument } from "../src/game/warcraft/lowering";
+import * as bodies from "../src/game/warcraft/bodies";
+import * as clock from "../src/game/warcraft/clock";
+import * as effects from "../src/game/warcraft/effects";
+import * as events from "../src/game/warcraft/events";
+import * as files from "../src/game/warcraft/files";
+import * as frames from "../src/game/warcraft/frames";
+import * as input from "../src/game/warcraft/input";
+import * as players from "../src/game/warcraft/players";
+import * as sound from "../src/game/warcraft/sound";
+import * as sync from "../src/game/warcraft/sync";
+import * as text from "../src/game/warcraft/text";
+import * as view from "../src/game/warcraft/view";
 
 export const GAME_API_VALUE_CODE = 9310;
 
 const GAME_DECLARATION = /[\\/]src[\\/]game[\\/]([a-z]+)\.d\.ts$/;
+const modules: Readonly<Record<string, Readonly<Record<string, Lowering | ConstantLowering>>>> = { bodies, clock, effects, events, files, frames, input, players, sound, sync, text, view };
 const tables = new Map<string, Map<string, Template>>();
 const constantTables = new Map<string, ConstantLowering>();
 
 function constants(family: string): ConstantLowering {
   let found = constantTables.get(family);
   if (found === undefined) {
-    const module = require(join(import.meta.dir, "..", "src", "game", "warcraft", `${family}.ts`)) as Record<string, ConstantLowering>;
-    found = module[`${family}Constants`] ?? {};
+    const module = modules[family] as Record<string, ConstantLowering> | undefined;
+    found = module?.[`${family}Constants`] ?? {};
     constantTables.set(family, found);
   }
   return found;
@@ -30,8 +42,8 @@ function constants(family: string): ConstantLowering {
 function table(family: string): Map<string, Template> {
   let found = tables.get(family);
   if (found === undefined) {
-    const module = require(join(import.meta.dir, "..", "src", "game", "warcraft", `${family}.ts`)) as Record<string, Lowering>;
-    found = new Map(Object.entries(module[family] ?? {}).map(([name, text]) => [name, parseTemplate(text)]));
+    const module = modules[family] as Record<string, Lowering> | undefined;
+    found = new Map(Object.entries(module?.[family] ?? {}).map(([name, template]) => [name, parseTemplate(template)]));
     tables.set(family, found);
   }
   return found;

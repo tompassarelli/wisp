@@ -74,7 +74,7 @@ function keycodeOf(keysym: number, firstKeycode: number, keysymsPerKeycode: numb
 }
 
 /** A byte stream that hands out exact byte counts as they arrive. */
-export class Reader {
+class Reader {
   private queued: Uint8Array = new Uint8Array(0);
   private waiting: { readonly length: number; readonly resolve: (bytes: Uint8Array) => void } | undefined;
 

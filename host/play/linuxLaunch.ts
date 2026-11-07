@@ -80,7 +80,7 @@ const LAUNCH_WAIT_SECONDS = 1800;
 
 const HOST_KEYS = ["PATH", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS"] as const;
 
-export const launchCommand = (request: LaunchRequest) => {
+const launchCommand = (request: LaunchRequest) => {
   const { launcher } = request;
   const unset = HOST_KEYS.filter((key) => launcher.env[key] === undefined).flatMap((key) => ["-u", key]);
   const restore = HOST_KEYS.flatMap((key) => (launcher.env[key] === undefined ? [] : [`${key}=${launcher.env[key]}`]));

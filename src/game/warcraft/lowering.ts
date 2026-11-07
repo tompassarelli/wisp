@@ -75,21 +75,3 @@ export function parseTemplate(text: string): Template {
   if (peek() !== undefined) throw fail("has text after the call");
   return template;
 }
-
-/** Every native a template calls, outer first, with the globals it reads. */
-export function templateParts(template: Template): { readonly calls: readonly Template[]; readonly globals: readonly string[]; readonly arguments: number } {
-  const calls: Template[] = [template];
-  const globals: string[] = [];
-  let count = 0;
-  for (const part of template.args) {
-    if ("arg" in part) count++;
-    else if ("global" in part) globals.push(part.global);
-    else if ("call" in part) {
-      const inner = templateParts(part.call);
-      calls.push(...inner.calls);
-      globals.push(...inner.globals);
-      count += inner.arguments;
-    }
-  }
-  return { calls, globals, arguments: count };
-}
