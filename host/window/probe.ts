@@ -2,7 +2,7 @@ import { Effect, Schedule } from "effect";
 import { RenderFailure } from "../render/headlessRender";
 import { openNativeWindow } from "./binding";
 import { type RenderSeries, RENDER_SERIES, gpuReport, renderSeriesSince, sum } from "./renderSeries";
-import { spread, spreads, summed } from "./stats";
+import { RUN_COMPLETED_LOG, spread, spreads, summed } from "./stats";
 import { openSimPlayer } from "./simPlayer";
 import type { NativeGameModule } from "./simProtocol";
 
@@ -37,7 +37,7 @@ export const measureWindow = (game: NativeGameModule, title: string, frames: num
     probe: { frames, warmupFrames },
   });
   const result = yield* sim.completed;
-  console.error(`probe: the run completed at ${Math.round(performance.now())} ms`);
+  console.error(`${RUN_COMPLETED_LOG} at ${Math.round(performance.now())} ms`);
   const series = result.series as Record<string, number[]> & { render?: RenderSeries; stages?: Record<string, number[]> };
   const keep = (values: readonly number[] | undefined) => (values ?? []).slice(-frames);
   if (series.render === undefined) return yield* new RenderFailure({ cause: new Error("the run ended before its measured frames") });

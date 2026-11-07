@@ -19,6 +19,7 @@ export const summed = (first: readonly number[], second: readonly number[]): num
 
 export const GC_LOG_BEGIN = "wisp-window-probe frames begin";
 export const GC_LOG_END = "wisp-window-probe frames end";
+export const RUN_COMPLETED_LOG = "probe: the run completed";
 
 /** The pause of each finished collection in a JavaScriptCore `logGC` stream (`BUN_JSC_logGC=1`), in milliseconds, by the heap that ran it: each thread's VM logs under its own heap address. */
 export const gcPausesByHeap = (log: string): Map<string, number[]> => {

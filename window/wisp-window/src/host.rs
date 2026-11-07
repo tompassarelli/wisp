@@ -322,9 +322,11 @@ impl Host {
         self.shared.mailbox.stop();
         let _ = lock(&self.proxy).send_event(Command::Exit);
         if let Some(threads) = lock(&self.threads).take() {
-            let _ = threads.render.join();
-            let _ = threads.steps.join();
-            let _ = threads.window.join();
+            for (name, thread) in [("render", threads.render), ("step clock", threads.steps), ("window", threads.window)] {
+                eprintln!("wisp-window: stop is waiting for the {name} thread");
+                let _ = thread.join();
+            }
+            eprintln!("wisp-window: stop joined every thread");
         }
     }
 }
