@@ -6,7 +6,7 @@ const root = join(import.meta.dir, "../..");
 const soak = { project: join(root, "host/soak/ci/ciProject.ts"), out: join(root, "build/soak") };
 
 runMainCli("bun wisp", {
-  native: { usage: "remote --host HOST --project DIR --map FILE --pads DIR --clients-file FILE --run RUN [--dry-run] -- WISP_ARGS", load: async () => (await import("./nativeRemote")).nativeRemote },
+  native: { usage: "remote --host HOST --project DIR --map FILE --pads DIR --clients-file FILE --run RUN [--dry-run] -- WISP_ARGS | payoff [--since YYYY-MM-DD] [--evidence DIR]... [--json]   (docs/native-payoff.md)", load: async () => (await import("./native")).native },
   fidelity: { usage: "check LEVER --reference DIR --candidate DIR   (docs/fidelity.md)", load: async () => (await import("./fidelity")).fidelity },
   net: { usage: "regions   (each relay region with its measured round trip: docs/network-model.md)", load: async () => (await import("./net")).regionsCommand },
   map: { usage: "preview MAP.w3x --out IMAGE.ppm [--packager PATH] [--assets DIR]", load: async () => (await import("./map")).map },

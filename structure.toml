@@ -126,7 +126,7 @@ may_use = ["host", "render", "net", "lan", "build", "os", "cli", "process", "hea
 [[module]]
 name = "host"
 paths = ["host/**"]
-responsibility = "Feature services: play, doctor, menus, lobby, accept, soak, farm, dev loop, test runner, models, scenes."
+responsibility = "Feature services: play, doctor, menus, lobby, accept, soak, farm, dev loop, test runner, models, scenes, native payoff."
 may_use = ["render", "net", "lan", "build", "os", "cli", "process", "headless", "map", "runtime", "num", "natives", "contract", "game", "window"]
 
 [[module]]
