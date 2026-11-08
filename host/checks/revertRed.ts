@@ -28,18 +28,28 @@ export function previousFinished(history: readonly MainRun[], run: MainRun): Mai
   return history.filter((entry) => finished(entry) && entry.id < run.id && entry.sha !== run.sha).toSorted((a, b) => b.id - a.id)[0];
 }
 
-export function triage(input: {
+interface TriageInput {
   readonly run: MainRun;
   readonly previous: (MainRun & { readonly ancestor: boolean }) | undefined;
   readonly landed: number;
   readonly landing: Landing | undefined;
   readonly failed: readonly ScopedJob[];
   readonly stalledMirror?: boolean;
-}): Triage {
-  const { run, previous, landed, landing, failed, stalledMirror = false } = input;
+}
+
+function stallVerdict(stalledMirror: boolean | undefined): Triage | undefined {
+  return stalledMirror === true ? { kind: "none", why: "the run failed only on a stalled apt mirror: infrastructure, not the landing" } : undefined;
+}
+
+export function triage(input: TriageInput): Triage {
+  const { run } = input;
+  if (run.conclusion !== "failure") return { kind: "none", why: `run ${run.id} ${run.conclusion || "unfinished"}: nothing to revert` };
+  return stallVerdict(input.stalledMirror) ?? landingVerdict(input);
+}
+
+function landingVerdict(input: TriageInput): Triage {
+  const { run, previous, landed, landing, failed } = input;
   const none = (why: string): Triage => ({ kind: "none", why });
-  if (run.conclusion !== "failure") return none(`run ${run.id} ${run.conclusion || "unfinished"}: nothing to revert`);
-  if (stalledMirror) return none("the run failed only on a stalled apt mirror: infrastructure, not the landing");
   if (previous === undefined) return none("no earlier finished run on main to show the parent green");
   if (!previous.ancestor) return none(`the previous run's commit ${previous.sha.slice(0, 10)} isn't an ancestor`);
   if (previous.conclusion !== "success") return none(`the parent was already red (run ${previous.id}): the landing that broke main owns it`);
