@@ -441,7 +441,7 @@ the run as unfinished for many minutes after it landed them.
 
 ## Effect upgrades
 
-Every push runs `effect-kit check` (north:agent-machinery/scripts/effect-kit.mjs):
+Every push runs `effect-kit check` (north:harness/skills/effect-development/scripts/effect-kit.mjs):
 it fails when repos/effect differs from the locked `effect` version, on any
 Effect language-service diagnostic, or on a raw process, wait, promise or
 fetch outside Effect under `host/`. On Mondays `effect-upgrade.yml` bumps

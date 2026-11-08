@@ -54,7 +54,7 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun host/checks/cleanRoom.ts
       - run: git clone --depth 1 https://github.com/tompassarelli/north "$RUNNER_TEMP/north"
-      - run: bun "$RUNNER_TEMP/north/agent-machinery/scripts/effect-kit.mjs" check
+      - run: bun "$RUNNER_TEMP/north/harness/skills/effect-development/scripts/effect-kit.mjs" check
       - id: tested
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && inputs.ref == '' && inputs.bun-tests != 'skip'
         env:

@@ -40,7 +40,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          bun "$RUNNER_TEMP/north/agent-machinery/scripts/effect-kit.mjs" upgrade | tee "$RUNNER_TEMP/upgrade.log"
+          bun "$RUNNER_TEMP/north/harness/skills/effect-development/scripts/effect-kit.mjs" upgrade | tee "$RUNNER_TEMP/upgrade.log"
           for pair in effect:effect effectTsgo:@effect/tsgo; do
             declared=$(jq -r --arg p "${pair#*:}" '.dependencies[$p] // .devDependencies[$p]' package.json)
             sed -i "s|^${pair%%:*} = .*|${pair%%:*} = \"$declared\"|" typescript-toolchain.lock
@@ -64,7 +64,7 @@ jobs:
         if: steps.upgrade.outputs.issue != ''
         run: |
           set +e
-          bun "$RUNNER_TEMP/north/agent-machinery/scripts/effect-kit.mjs" check > "$RUNNER_TEMP/check.log" 2>&1
+          bun "$RUNNER_TEMP/north/harness/skills/effect-development/scripts/effect-kit.mjs" check > "$RUNNER_TEMP/check.log" 2>&1
           echo "code=$?" >> "$GITHUB_OUTPUT"
           tail -n 60 "$RUNNER_TEMP/check.log"
       - name: Land or report
