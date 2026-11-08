@@ -162,7 +162,7 @@ export function suppress(report: Report): void {
 const total = (report: Report, key: keyof Counts) => report.kinds.reduce((sum, row) => sum + row.counts[key], 0);
 
 /** The report's one-line summary, the first line of `native payoff`. */
-export const summary = (report: Report) =>
+const summary = (report: Report) =>
   `Wisp payoff: ${total(report, "agrees")}/${total(report, "compared")} agree · ${total(report, "client_minutes").toFixed(1)} native client-min* · ${report.retire.length} retire · ${report.fixes.length} fix · savings unknown`;
 
 export function render(report: Report): string {

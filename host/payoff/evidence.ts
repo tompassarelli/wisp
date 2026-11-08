@@ -79,7 +79,7 @@ function acceptRuns(path: string, value: unknown, fallback: number): Run[] {
 }
 
 /** The native runs one evidence file records: a pad batch's scripts or an accept report's checks; headless sessions record none. */
-export function decode(path: string, value: unknown, fallback: number): Run[] {
+function decode(path: string, value: unknown, fallback: number): Run[] {
   if (fields(value)["headless_session"] === true) return [];
   const scripts = list(value, "scripts");
   return scripts !== undefined ? padRuns(path, value, scripts, fallback) : acceptRuns(path, value, fallback);
