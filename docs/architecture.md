@@ -22,7 +22,7 @@ A module may import only the modules in its "may use" column. `src/` never impor
 | build | `host/toolchain/` | TSTL compile, Lua bundle, map script, object data, natives producer, number rules, source maps, package | process, runtime, num, plugins |
 | lan, net | `host/lan/`, `host/net/` | Offline LAN pair pool; UDP lockstep peer, proxy, join code | cli, process, os, build; process, headless |
 | render | `host/{browser,fidelity,render,models,terrain}/` | WebGL renderer, models, terrain, fidelity metrics | process, os, headless, runtime, num |
-| host | the other `host/` directories, one per responsibility: `accept`, `checks`, `client`, `compile`, `dev`, `doctor`, `farm`, `headless`, `io`, `payoff`, `perf`, `play`, `repro`, `scene`, `soak`, `testing`, `tune` | Feature services: play, doctor, menus, accept, soak, farm, map build, dev loop, test runner, repository checks | everything above |
+| host | the other `host/` directories, one per responsibility: `accept`, `checks`, `client`, `compile`, `dev`, `doctor`, `farm`, `headless`, `io`, `perf`, `play`, `repro`, `scene`, `soak`, `testing`, `tune` | Feature services: play, doctor, menus, accept, soak, farm, map build, dev loop, test runner, repository checks | everything above |
 | commands | `host/commands/` | `makeX` command factories a game instantiates, plus Wisp's CLI entries | host and below |
 | plugins | `plugins/` | TSTL, tsserver and lint plugins | none |
 
