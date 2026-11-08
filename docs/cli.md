@@ -64,7 +64,7 @@ program can register it; "game" means the consuming game defines it.
 | `play` | The owner's desktop to a match or hosted lobby (`--lobby-only [MAP.w3x]`) | (session) | Wisp |
 | `controller` | The always-on controller service | (session) | game |
 | `accept` | The game's declared native checks | (session) | Wisp |
-| `native` | A native run on an SSH VM, with staged inputs and downloaded evidence, and how native runs pay off against Wisp ([Native payoff](native-payoff.md)) | `remote`, `payoff` | Wisp |
+| `native` | A native run on an SSH VM, with staged inputs and downloaded evidence | `remote` | Wisp |
 | `client` | One native client: its screen, input, state, recovery and services | `look`, `read`, `click`, `keys`, `chat`, `wait`, `watch`, `doctor`, `sign-out`, `start`, `stop`, `status`, `share` | Wisp |
 | `menus` | Warcraft III's menus through Wisp's menu page | `install`, `remove`, `listen`, `host`, `join`, `start`, `leave` | Wisp |
 | `online` | Direct play over Battle.net by join code | `setup`, `host`, `join` | game |
@@ -129,7 +129,7 @@ Every flag a command's usage line shows is declared here with its one meaning.
 | `--watch` | Keep running and act on every save | `hot` |
 | `--wait` | Block until a remote run ends, then print its verdict | `farm` |
 | `--once` | Print the current state and exit | `client watch` |
-| `--json` | One JSON object a line | `client watch`, `headless`, `soak`, `repro`, `accept`, `perf`, `ci`, `native payoff` |
+| `--json` | One JSON object a line | `client watch`, `headless`, `soak`, `repro`, `accept`, `perf`, `ci` |
 | `--record FILE` | Also append every event to a file | `client watch` |
 | `--seconds N` | A time limit in seconds | `client wait`, `soak` |
 | `--minutes N` | A time limit in minutes | `soak`, `ci nightly` |
@@ -137,8 +137,6 @@ Every flag a command's usage line shows is declared here with its one meaning.
 | `--seed S` | The seed a run's seeds derive from | `soak`, `ci seeds`, `net` |
 | `--dry-run` | Print the plan without touching clients | `accept`, `native remote` |
 | `--plan-only` | Print the tests the diff selects, and why, without running any stage | `ci pre-merge` |
-| `--since YYYY-MM-DD` | Leave out runs before this UTC date | `native payoff` |
-| `--evidence DIR` | A folder of retained native evidence to read; repeatable | `native payoff` |
 | `--only ID` | Only these checks; repeatable | `accept` |
 | `--repair` | Reinstall the menu page first | `online` |
 | `--app-id SLOT=ID` | A client's private desktop window, per slot | `pad` |
