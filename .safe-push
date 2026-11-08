@@ -6,6 +6,7 @@
 	check-local = true
 	check = ** :: bun install --frozen-lockfile --silent && bun host/checks/cleanRoom.ts
 	after = ** :: bun install --frozen-lockfile --silent && bun wisp ci pre-merge --base ${SAFE_PUSH_LAND_BASE}
+	after-only = "north#633 lands wisp first and checks it after the push, reverting only the lane a red run names: the pre-merge suite builds and tests the framework, sample, relay and window, minutes per lane, where the clean-room check before the push takes seconds :: bun install --frozen-lockfile --silent && bun wisp ci pre-merge --base ${SAFE_PUSH_LAND_BASE}"
 [test-admission]
 	contract = lua-determinism :: a game's Lua must give every client the same result for the same inputs
 	contract = netcode-replay :: a recorded match or pad replays to the same frames
