@@ -47,6 +47,8 @@ export interface StandaloneOptions {
   readonly nativeGame?: NativeGameModule;
   /** The player's Warcraft III: Reforged install, looked for before a window opens: the run stops with one message when none is found (wisp:docs/play.md, "Warcraft III: Reforged is required"). Passing it also points the worker thread's Classic-art reader at the install it found. */
   readonly reforged?: InstallLookup;
+  /** With `window: "native"`, true plays the game's sound through the default output device; the default, every agent run, test, bench and capture, mixes it into nothing and still records every cue in `standalone.json`. A player's own launch passes it (`--sound`, read with `standaloneSoundArgument`). */
+  readonly sound?: boolean;
   /** With `window: "native"`, the `wisp-window` library the sound output loads, else the one the window uses. */
   readonly library?: string | undefined;
 }
@@ -65,7 +67,7 @@ export const openStandalone = (game: StandaloneGame, options: StandaloneOptions 
   const captures = new Set(options.captureFrames ?? []);
   const recordChecksums = options.recordChecksums ?? (options.script !== undefined && session.paced !== true);
   const sounds = createSoundResolver(game.render.readAsset);
-  const audio = options.window === "native" ? yield* Effect.acquireRelease(attempt(async () => openNativeAudio(options.library)), (open) => Effect.sync(() => open.close())) : undefined;
+  const audio = options.window === "native" ? yield* Effect.acquireRelease(attempt(async () => openNativeAudio(options.library, options.sound === true)), (open) => Effect.sync(() => open.close())) : undefined;
   const soundPlayer = audio === undefined ? undefined : createSoundPlayer(sounds, audio);
   const completion = yield* Deferred.make<Readonly<Record<string, unknown>>, RenderFailure>();
   const javascript = options.window === "native" ? "" : yield* attempt(() => browserBundle(join(import.meta.dir, "../browser/standalone.ts")));
@@ -200,6 +202,11 @@ export function standaloneWindowArgument(args: readonly string[]): { readonly wi
   const value = args[at + 1];
   if (value !== "chrome" && value !== "native") return "--window needs chrome or native";
   return { window: value, rest: [...args.slice(0, at), ...args.slice(at + 2)] };
+}
+
+/** Reads `--sound` from a play command's arguments, true when present (the player's own launch); the rest come back untouched. */
+export function standaloneSoundArgument(args: readonly string[]): { readonly sound: boolean; readonly rest: readonly string[] } {
+  return { sound: args.includes("--sound"), rest: args.filter((arg) => arg !== "--sound") };
 }
 
 /** Reads `--emulated-calls FILE` from a play command's arguments; the rest come back untouched. */

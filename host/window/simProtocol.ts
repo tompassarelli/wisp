@@ -21,6 +21,7 @@ export interface WorkerPlayOptions {
   readonly recordChecksums?: boolean;
   readonly gamepadIndex?: number;
   readonly emulatedCalls?: string;
+  readonly sound?: boolean;
 }
 
 export interface SimWorkerInit {

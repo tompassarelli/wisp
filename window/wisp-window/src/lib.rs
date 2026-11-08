@@ -387,10 +387,10 @@ pub unsafe extern "C" fn wisp_window_vocabulary(out: *mut u8, capacity: usize) -
     guard(0, || copy_text(&format!("{{\"buttons\":{:?},\"metrics\":{:?},\"source\":{:?}}}", input::BUTTONS, metrics::SERIES, SOURCE), out, capacity))
 }
 
-/// Opens the sound output: a cpal stream on the default device, or a mixer into nothing when the machine has none (`wisp_audio_info` says which).
+/// Opens the sound output: a mixer into nothing unless `sound` is 1, which opens a cpal stream on the default device (still a mixer into nothing when the machine has none); `wisp_audio_info` says which.
 #[no_mangle]
-pub extern "C" fn wisp_audio_open() -> *mut c_void {
-    guard(ptr::null_mut(), || Box::into_raw(Box::new(Audio::open())) as *mut c_void)
+pub extern "C" fn wisp_audio_open(sound: u32) -> *mut c_void {
+    guard(ptr::null_mut(), || Box::into_raw(Box::new(Audio::open(sound == 1))) as *mut c_void)
 }
 
 unsafe fn audio<'a>(handle: *mut c_void) -> Option<&'a Audio> {

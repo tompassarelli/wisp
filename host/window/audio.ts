@@ -1,7 +1,7 @@
 import { openWindowLibrary, windowLibraryPath } from "./binding";
 
 const symbols = {
-  wisp_audio_open: { args: [], returns: "ptr" },
+  wisp_audio_open: { args: ["u32"], returns: "ptr" },
   wisp_audio_load: { args: ["ptr", "ptr", "usize", "ptr", "usize"], returns: "u32" },
   wisp_audio_error: { args: ["ptr", "usize"], returns: "usize" },
   wisp_audio_play: { args: ["ptr", "ptr", "usize", "ptr", "usize", "f64", "f64", "u32"], returns: "u32" },
@@ -41,10 +41,11 @@ const textFrom = (read: (out: Uint8Array, capacity: number) => number | bigint) 
   return new TextDecoder().decode(buffer.subarray(0, length));
 };
 
-export function openNativeAudio(library?: string): NativeAudio {
+/** Opens the sound output; a mixer into nothing (`info().output` starts `none`) unless `sound`, which asks for the default device. */
+export function openNativeAudio(library?: string, sound = false): NativeAudio {
   const loaded = openWindowLibrary(library ?? windowLibraryPath(), symbols);
   const call = loaded.symbols;
-  const handle = call.wisp_audio_open();
+  const handle = call.wisp_audio_open(sound ? 1 : 0);
   if (handle === null) {
     loaded.close();
     throw new Error("the sound output didn't open");

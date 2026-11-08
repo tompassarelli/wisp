@@ -47,6 +47,13 @@ for a playing track, and a later start retains that mute. The events record
 map-call timing and gain; device mixer settings, fade envelopes and audible
 asset fidelity come from Warcraft reference captures.
 
+The native window plays no sound unless the launch asks for it
+(`sound: true` in `StandaloneOptions`, `--sound` through
+`standaloneSoundArgument`, the player's own run): it mixes every cue into
+nothing and `standalone.json` still records `audioEvents`, `audioPlayed` and
+`audioDecodedAssets`, with `audioOutput` reading `none (silent by default)`. With
+`sound` the cues play through the default device and `audioOutput` names it.
+
 `PlayThematicMusic` starts the requested track once (`looping: false`) in
 the same music state and cue log, replacing the previous playing track.
 It retains the map's music volume and the player's music slider.

@@ -1,5 +1,5 @@
 //! The sound output a native window plays through: one cpal stream with a buffer of at most 256 frames, fed by a mixer
-//! (wisp:docs/native-window-plan.md, "Sound"). A machine with no output device mixes at the same pace into nothing, so a run still
+//! (wisp:docs/native-window-plan.md, "Sound"). A window opened without `sound`, or on a machine with no output device, mixes at the same pace into nothing, so a run still
 //! counts its sounds and `info` says which output it had.
 
 use std::collections::HashMap;
@@ -96,8 +96,9 @@ fn mix_into_nothing(voices: &Voices, stop: &Receiver<()>) {
     }
 }
 
-fn serve(voices: Voices, stop: Receiver<()>, ready: SyncSender<Output>) {
-    match open_device(voices.clone()) {
+fn serve(voices: Voices, stop: Receiver<()>, ready: SyncSender<Output>, sound: bool) {
+    let device = if sound { open_device(voices.clone()) } else { Err("silent by default".to_owned()) };
+    match device {
         Ok((stream, output)) => {
             let _ = ready.send(output);
             let _ = stop.recv();
@@ -121,12 +122,12 @@ pub struct Audio {
 }
 
 impl Audio {
-    pub fn open() -> Audio {
+    pub fn open(sound: bool) -> Audio {
         let (voices_in, voices_out) = channel();
         let (stop_in, stop_out) = channel();
         let (ready_in, ready_out) = sync_channel(1);
         let voices = Arc::new(Mutex::new(voices_out));
-        let thread = thread::spawn(move || serve(voices, stop_out, ready_in));
+        let thread = thread::spawn(move || serve(voices, stop_out, ready_in, sound));
         let output = ready_out.recv().unwrap_or(Output { kind: "none (the audio thread failed)".into(), channels: 0, rate: 0, buffer_frames: 0 });
         Audio { clips: Mutex::new(HashMap::new()), voices: voices_in, stop: stop_in, thread: Some(thread), output, decoded: AtomicU64::new(0), started: AtomicU64::new(0) }
     }
@@ -176,5 +177,17 @@ impl Drop for Audio {
         if let Some(thread) = self.thread.take() {
             let _ = thread.join();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Audio;
+
+    #[test]
+    fn a_window_opened_without_sound_reads_none() {
+        let audio = Audio::open(false);
+        let info: serde_json::Value = serde_json::from_str(&audio.info()).unwrap();
+        assert_eq!(info["output"], "none (silent by default)");
     }
 }

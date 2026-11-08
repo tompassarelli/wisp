@@ -693,8 +693,9 @@ Playback follows the page's rules:
 - a `stop` cue ends every voice its handle started, and a looping cue (the
   music, a looping sound) repeats until then; the music has one handle, so
   `StopMusic` and the next `PlayMusic` leave one track playing;
-- a machine with no output device mixes at the same pace into nothing, and
-  `audioOutput` in `standalone.json` names what played.
+- a window opened without `sound` (`wisp_audio_open(sound)`, 1 for a player's own
+  launch), or on a machine with no output device, mixes at the same pace into
+  nothing, and `audioOutput` in `standalone.json` names what played.
 
 The library holds the output and the decoded clips (`wisp_audio_open`,
 `wisp_audio_load`, `wisp_audio_play`, `wisp_audio_stop`, `wisp_audio_info`,
