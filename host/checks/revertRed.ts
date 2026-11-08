@@ -2,7 +2,7 @@ import { appendFileSync } from "node:fs";
 import { Console, Effect, Schema } from "effect";
 import { captureProcess } from "../process/hostProcess";
 import { type ScopedJob, cargoInputs, scopeJob, touches } from "./jobInputs";
-import { landedFrom } from "./mainRed";
+import { landedFrom, stalledMirrorOnly } from "./mainRed";
 
 class RevertRedFailure extends Schema.TaggedError<RevertRedFailure, { readonly brand: unique symbol }>()("RevertRedFailure", { command: Schema.String, problem: Schema.String }) {
   override get message(): string {
@@ -34,10 +34,12 @@ export function triage(input: {
   readonly landed: number;
   readonly landing: Landing | undefined;
   readonly failed: readonly ScopedJob[];
+  readonly stalledMirror?: boolean;
 }): Triage {
-  const { run, previous, landed, landing, failed } = input;
+  const { run, previous, landed, landing, failed, stalledMirror = false } = input;
   const none = (why: string): Triage => ({ kind: "none", why });
   if (run.conclusion !== "failure") return none(`run ${run.id} ${run.conclusion || "unfinished"}: nothing to revert`);
+  if (stalledMirror) return none("the run failed only on a stalled apt mirror: infrastructure, not the landing");
   if (previous === undefined) return none("no earlier finished run on main to show the parent green");
   if (!previous.ancestor) return none(`the previous run's commit ${previous.sha.slice(0, 10)} isn't an ancestor`);
   if (previous.conclusion !== "success") return none(`the parent was already red (run ${previous.id}): the landing that broke main owns it`);
@@ -215,7 +217,8 @@ export const revertRed = (runId: string) => Effect.gen(function*() {
   const landing = previous !== undefined && Number(landed) === 1 ? yield* landingOf(failing.sha, previous.sha) : undefined;
   const failed = view.jobs.filter((job) => job.conclusion === "failure")
     .map((job) => scopeJob({ name: job.name, steps: job.steps.filter((step) => step.conclusion === "failure").map((step) => step.name) }, (crate) => cargoInputs(process.cwd(), crate)));
-  const verdict = triage({ run: failing, previous: previous === undefined ? undefined : { ...previous, ancestor }, landed: Number(landed), landing, failed });
+  const stalledMirror = stalledMirrorOnly(yield* gh("run", "view", runId, "--log-failed"));
+  const verdict = triage({ run: failing, previous: previous === undefined ? undefined : { ...previous, ancestor }, landed: Number(landed), landing, failed, stalledMirror });
   if (verdict.kind === "none" || landing === undefined) {
     return yield* summary(`${failing.sha.slice(0, 10)}: not reverting: ${verdict.kind === "none" ? verdict.why : "no landing"} (${view.url})`);
   }

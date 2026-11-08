@@ -32,6 +32,13 @@ export function failingTests(log: string): string[] {
   return [...tests, ...unnamed];
 }
 
+const APT_STALL_EXIT = "75";
+
+export function stalledMirrorOnly(log: string): boolean {
+  const errors = log.split("\n").filter((line) => line.includes("##[error]"));
+  return errors.length > 0 && errors.every((line) => /##\[error\]Process completed with exit code (\d+)\.\s*$/.exec(line)?.[1] === APT_STALL_EXIT);
+}
+
 export function issueTests(body: string): string[] {
   const section = body.split(TESTS_HEADING)[1]?.split("\n## ")[0] ?? "";
   return section.split("\n").flatMap((line) => (line.startsWith("- ") ? [line.slice(2)] : []));
@@ -116,7 +123,13 @@ export const reportRun = (runId: string) => Effect.gen(function*() {
     return yield* Console.log(line);
   }
   const { nameWithOwner } = yield* gh("repo", "view", "--json", "nameWithOwner").pipe(Effect.flatMap(decode(Repository, "gh repo view")));
-  const tests = failingTests(yield* gh("run", "view", runId, "--log-failed"));
+  const log = yield* gh("run", "view", runId, "--log-failed");
+  if (stalledMirrorOnly(log)) {
+    const line = `${run.headBranch}: run ${runId} failed only on a stalled apt mirror: no red issue`;
+    yield* summary(line);
+    return yield* Console.log(line);
+  }
+  const tests = failingTests(log);
   const streak = index === -1 ? completed : completed.slice(index);
   const culprit = culpritRun(streak);
   const lastGreen = streak.find((entry) => entry.conclusion === "success");
