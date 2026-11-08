@@ -251,6 +251,8 @@ to 12.92 and 5.38 to 15.96 ms. The cadence stays.
 
 Bun 1.4.4 gives the same answer (4 November 2026, same machine, cells and command, three runs each interleaved, south:agents/decisions/makgora/perf-smooth-plan.md). With the cadence the worker frame p99 is 3.21 ms at rollback 0 and 4.30 at rollback 7, 0.091 collections per step and a pause max of 4.97 and 4.65 ms. With a turn every frame and collections left to Bun it is 5.21 and 5.89 ms, 0.028 collections per step, and a pause max of 11.58 and 10.69 ms; one of four such rollback 7 runs hung until the 600 s limit. The cadence stays.
 
+The collector's cost follows the code the worker has loaded, and the worker's host code is most of it (8 November 2026, Bun 1.4.4, `heapStats()` from `bun:jsc`): Effect alone loads 5,946 function executables, and host/play/standalone.ts with its imports loads 12,813 before any game code, against about 20,000 in a four-fighter worker. A step loop that imports no Effect is the cheaper test of a shorter pause. The alternative is a step without JavaScriptCore's collector: scriptc compiles TypeScript through LLVM to a program that frees memory by reference counting and a cycle collector. Its coverage report compiles Wisp's number helpers fully but refuses the game API's `Opaque` handles and TypeScriptToLua's `this: void` function members, and it compiles 78 of Mak'gora's record conversions as copies where Bun keeps one object; the natives Wisp installs on `globalThis` would need a static binding, since a declaration without a body becomes a native call only through scriptc's FFI manifest. [wisp#263](https://github.com/tompassarelli/wisp/issues/263) ranks both experiments.
+
 ### Libraries
 
 Licences were checked on crates.io on 30 October 2026 and are recorded in

@@ -124,6 +124,15 @@ Read for method only (2026-10-31). Neither states a licence, so no code, shader 
 - PresentMon (Intel, MIT), https://github.com/GameTechDev/PresentMon. Run
   as a separate measuring tool for Windows present-to-display latency; not
   linked or shipped.
+- scriptc 0.4.7 (Vercel Labs, Apache-2.0), https://github.com/vercel-labs/scriptc,
+  source read at 6da2be6a (7 November 2026). Run on 8 November 2026 from a
+  scratch install as an evaluation tool: `scriptc coverage` over snapshots of
+  Wisp's `src/` and Mak'gora's playable entry
+  ([wisp#263](https://github.com/tompassarelli/wisp/issues/263)). Not linked,
+  shipped or copied. A program it builds links its Apache-2.0 C runtime and
+  the vendored libraries under `packages/runtime/vendor` (mbedTLS, QuickJS-ng,
+  zlib, zstd, Brotli, libsodium, Ryu and others), each with its own licence a
+  player build would ship.
 
 ## Derived
 
