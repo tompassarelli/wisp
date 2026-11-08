@@ -7,6 +7,20 @@
 	check = ** :: bun install --frozen-lockfile --silent && bun host/checks/cleanRoom.ts
 	after = ** :: bun install --frozen-lockfile --silent && bun wisp ci pre-merge --base ${SAFE_PUSH_LAND_BASE}
 	after-only = "north#633 lands wisp first and checks it after the push, reverting only the lane a red run names: the pre-merge suite builds and tests the framework, sample, relay and window, minutes per lane, where the clean-room check before the push takes seconds :: bun install --frozen-lockfile --silent && bun wisp ci pre-merge --base ${SAFE_PUSH_LAND_BASE}"
+	after-only = "north#633 lands wisp first and checks it after the push, reverting only the lane a red run names: the framework's checks and post-merge suite on a clean Linux runner take minutes per lane, where the clean-room check runs before the push :: .github/workflows/ci.yml:framework"
+	after-only = "north#633 lands wisp first and checks it after the push, reverting only the lane a red run names: it builds and tests the sample consumer from the packed framework (consumer.yml), minutes per lane :: .github/workflows/ci.yml:sample"
+	after-only = "north#633 lands wisp first and checks it after the push, reverting only the lane a red run names: it checks the consumer workflow fails on the sample's desync fixture, minutes per lane :: .github/workflows/ci.yml:sample-failing-fixture"
+	after-only = "north#633 lands wisp first and checks it after the push, reverting only the lane a red run names: knip scans the whole tree for unused exports on a clean runner :: .github/workflows/ci.yml:knip"
+	after-only = it only picks which relay and window jobs the run needs and judges nothing :: .github/workflows/ci.yml:scope
+	after-only = "north#633 lands wisp first and checks it after the push, reverting only the lane a red run names: it builds and tests the relay crates, minutes per lane :: .github/workflows/ci.yml:relay-proto"
+	after-only = "north#633 lands wisp first and checks it after the push, reverting only the lane a red run names: it builds the window library and probes it headless on lavapipe, minutes per lane :: .github/workflows/ci.yml:window"
+	after-only = it builds and tests the window library on a Windows runner, which no lander or offload host is :: .github/workflows/ci.yml:window-windows
+	after-only = "north's built-in code-health lane gate runs this check on the lane at enqueue and at the lander's pick (north#892) :: .github/workflows/ci.yml:code-health"
+	after-only = it runs only on a dispatch of main, never on a push, and only starts main-red.yml :: .github/workflows/ci.yml:main-red
+	after-only = it runs only on a dispatch of main, never on a push, and only starts seed-farm.yml :: .github/workflows/ci.yml:seed-farm
+	after-only = it builds the Windows tools on a Windows runner and checks the committed ones match their sources, and no lander or offload host is Windows :: .github/workflows/windows.yml:tools
+	after-only = it runs the checks, tests and the sample in 32-bit Lua on a Windows runner with no compilers, which no lander or offload host is :: .github/workflows/windows.yml:windows
+	after-only = it builds the window library and probes it on WARP on a Windows runner, which no lander or offload host is :: .github/workflows/windows.yml:window
 [test-admission]
 	contract = lua-determinism :: a game's Lua must give every client the same result for the same inputs
 	contract = netcode-replay :: a recorded match or pad replays to the same frames
