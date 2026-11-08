@@ -18,4 +18,4 @@ runs:
           echo "::warning::apt-get attempt $attempt of 3 for $PACKAGES stalled or failed"
           [ "$attempt" -lt 3 ] && sudo timeout -k 10 60 dpkg --configure -a && sleep 10
         done
-        exit 1
+        exit 75
