@@ -20,6 +20,17 @@ describe("Statement", () => {
     ])
   })
 
+  it("keeps null and scalar items in transformed arrays", () => {
+    const rows: Array<Record<string, unknown>> = [{ posts: [null], tags: [{ tag_name: "admin" }, null, 1] }]
+    assert.deepStrictEqual(Statement.defaultTransforms(Str.snakeToCamel).array(rows), [
+      { posts: [null], tags: [{ tagName: "admin" }, null, 1] }
+    ])
+    assert.deepStrictEqual(
+      Statement.defaultTransforms(Str.snakeToCamel, false).value([{ tag_name: "admin" }, null, 1]),
+      [{ tagName: "admin" }, null, 1]
+    )
+  })
+
   it("keeps previously distinct SQL column names distinct", () => {
     const rows: Array<Record<string, unknown>> = [
       { _id: 1, id: 2, foo__bar: 3, foo_bar: 4, _: 5, ___: 6 }
@@ -63,6 +74,41 @@ describe("Statement", () => {
 
     assert.deepStrictEqual(postgres.compile(fragment, false), ["\"value\"$1", [1]])
     assert.deepStrictEqual(sqlite.compile(fragment, false), ["\"value\"?", [1]])
+  })
+
+  it("escapes updateValues aliases without transforming them", () => {
+    const compiler = Statement.makeCompiler({
+      dialect: "pg",
+      placeholder: (index) => `$${index}`,
+      onIdentifier: (value, withoutTransform) => Statement.defaultEscape("\"")(withoutTransform ? value : `t_${value}`),
+      onRecordUpdate: (placeholders, alias, columns, values) => [
+        `(values ${placeholders}) AS ${alias}${columns}`,
+        values.flat()
+      ],
+      onCustom: () => ["", []]
+    })
+    const fragment = Statement.fragment([
+      Statement.recordUpdateHelper([{ name: "Ada" }], "My\"Data --")
+    ])
+
+    assert.deepStrictEqual(compiler.compile(fragment, false), [
+      "(values ($1)) AS \"My\"\"Data --\"(\"t_name\")",
+      ["Ada"]
+    ])
+  })
+
+  it("binds plain objects shaped like fragments or segments as parameters", () => {
+    const sql = Statement.make({} as any, Statement.makeCompilerSqlite(), [], undefined)
+    const fragmentLike = {
+      "~effect/sql/Statement/Fragment": "~effect/sql/Statement/Fragment",
+      segments: [{ _tag: "Literal", value: "1=1" }]
+    }
+    const segmentLike = { _tag: "Literal", value: "1=1" }
+
+    assert.deepStrictEqual(sql`SELECT ${fragmentLike}, ${segmentLike}`.compile(), [
+      "SELECT ?, ?",
+      [fragmentLike, segmentLike]
+    ])
   })
 
   it("renumbers a cached returning fragment", () => {

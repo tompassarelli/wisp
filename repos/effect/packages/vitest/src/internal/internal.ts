@@ -20,22 +20,28 @@ import type * as Vitest from "../index.ts"
 
 const getCurrentSuite = V.TestRunner.getCurrentSuite
 
-const runPromise: <E, A>(
-  _: Effect.Effect<A, E, never>,
-  ctx?: Pick<V.TestContext, "signal"> | undefined
-) => Promise<A> = Effect.fnUntraced(function*<E, A>(
+const runPromise = <E, A>(
   effect: Effect.Effect<A, E>,
-  _ctx?: Pick<Vitest.TestContext, "signal">
-) {
-  const exit = yield* Effect.exit(effect)
-  if (Exit.isFailure(exit)) {
-    const errors = Cause.prettyErrors(exit.cause)
-    for (let i = 0; i < errors.length; i++) {
-      yield* Effect.logError(errors[i])
-    }
-  }
-  return yield* exit
-}, (effect, _, ctx) => Effect.runPromise(effect, { signal: ctx?.signal }))
+  ctx?: Pick<V.TestContext, "signal">
+): Promise<A> =>
+  Effect.runPromise(
+    // Only the test is interruptible: once the signal aborts, the fiber stops
+    // at its next interruptible step, which would skip reporting the defects
+    // raised by finalizers.
+    Effect.uninterruptibleMask((restore) =>
+      Effect.gen(function*() {
+        const exit = yield* Effect.exit(restore(effect))
+        if (Exit.isFailure(exit)) {
+          const errors = Cause.prettyErrors(exit.cause)
+          for (let i = 0; i < errors.length; i++) {
+            yield* Effect.logError(errors[i])
+          }
+        }
+        return yield* exit
+      })
+    ),
+    { signal: ctx?.signal }
+  )
 
 const settleOnAbort = <A>(ctx: Vitest.TestContext, promise: Promise<A>) => {
   // Vitest stops awaiting the promise once the signal aborts (timeout or
@@ -225,6 +231,11 @@ const collectTasks = (tasks: ReadonlyArray<CollectedTask>, acc: Array<V.TestCont
   return acc
 }
 
+const runsMoreThanOnce = (task: V.TestContext["task"]) => {
+  const retry = typeof task.retry === "number" ? task.retry : task.retry?.count
+  return (retry ?? 0) > 0 || (task.repeats ?? 0) > 0
+}
+
 const registerProp = <ExtraContext, A>(
   it: V.TestAPI<ExtraContext>,
   name: string,
@@ -308,6 +319,7 @@ const makeLayer = <ExtraContext>(it: V.TestAPI<ExtraContext>) =>
     readonly memoMap?: Layer.MemoMap
     readonly timeout?: Duration.Input
     readonly excludeTestServices?: boolean
+    readonly buildPerTest?: boolean
   }
 ): {
   (f: (it: Vitest.Vitest.MethodsNonLive<R, ExtraContext>) => void): void
@@ -331,6 +343,49 @@ const makeLayer = <ExtraContext>(it: V.TestAPI<ExtraContext>) =>
     ? layer_ as Layer.Layer<R, E>
     : Layer.provideMerge(layer_, TestEnv)
   const memoMap = options?.memoMap ?? Effect.runSync(Layer.makeMemoMap)
+  const buildPerTest = options?.buildPerTest ?? false
+  const suiteOptions = options?.concurrent === undefined ? {} : { concurrent: options.concurrent }
+
+  const makeBlockMethods = (
+    provide: <A, E>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E>
+  ): Vitest.Vitest.MethodsNonLive<R, ExtraContext> =>
+    makeItProxy(it, {
+      effect: makeTester<R | Scope.Scope, ExtraContext>((effect) => provide(Effect.scoped(effect)), it),
+      prop: makeProp<ExtraContext>(it),
+      flakyTest,
+      layer<R2, E2>(nestedLayer: Layer.Layer<R2, E2, R>, nestedOptions?: {
+        readonly concurrent?: boolean
+        readonly timeout?: Duration.Input
+        readonly buildPerTest?: boolean
+      }) {
+        return makeLayer(it)(Layer.provideMerge(nestedLayer, withTestEnv), {
+          ...nestedOptions,
+          memoMap: Layer.forkMemoMapUnsafe(memoMap),
+          excludeTestServices,
+          // The services of a per-test block only exist during a test, so
+          // blocks nested in it are built per test as well.
+          buildPerTest: buildPerTest || nestedOptions?.buildPerTest === true
+        })
+      }
+    })
+
+  if (buildPerTest) {
+    // Each test builds into its own fork of the memo map, so it reuses the
+    // services of enclosing blocks and releases the rest when it finishes.
+    const methods = makeBlockMethods((effect) =>
+      Effect.scopedWith((scope) =>
+        Layer.buildWithMemoMap(withTestEnv, Layer.forkMemoMapUnsafe(memoMap), scope).pipe(
+          Effect.orDie,
+          Effect.flatMap((context) => Effect.provide(effect, context))
+        )
+      )
+    )
+    if (args.length === 1) {
+      return args[0](methods)
+    }
+    return V.describe(args[0], suiteOptions, () => args[1](methods))
+  }
+
   const scope = Effect.runSync(Scope.make())
   const contextEffect = Layer.buildWithMemoMap(withTestEnv, memoMap, scope).pipe(
     Effect.orDie,
@@ -347,29 +402,9 @@ const makeLayer = <ExtraContext>(it: V.TestAPI<ExtraContext>) =>
     return runPromise(Scope.close(scope, Exit.void))
   }
 
-  const methods: Vitest.Vitest.MethodsNonLive<R, ExtraContext> = makeItProxy(it, {
-    effect: makeTester<R | Scope.Scope, ExtraContext>(
-      (effect) =>
-        Effect.flatMap(contextEffect, (context) =>
-          effect.pipe(
-            Effect.scoped,
-            Effect.provide(context)
-          )),
-      it
-    ),
-    prop: makeProp<ExtraContext>(it),
-    flakyTest,
-    layer<R2, E2>(nestedLayer: Layer.Layer<R2, E2, R>, options?: {
-      readonly concurrent?: boolean
-      readonly timeout?: Duration.Input
-    }) {
-      return makeLayer(it)(Layer.provideMerge(nestedLayer, withTestEnv), {
-        ...options,
-        memoMap: Layer.forkMemoMapUnsafe(memoMap),
-        excludeTestServices
-      })
-    }
-  })
+  const methods = makeBlockMethods((effect) =>
+    Effect.flatMap(contextEffect, (context) => Effect.provide(effect, context))
+  )
 
   if (args.length === 1) {
     const currentSuite = getCurrentSuite()
@@ -386,6 +421,9 @@ const makeLayer = <ExtraContext>(it: V.TestAPI<ExtraContext>) =>
     }
 
     const blockTaskSet = new Set(blockTasks)
+    // Vitest runs hooks once per retry and repeat attempt, so a test's last
+    // attempt cannot be counted. Blocks with such tests are released by `afterAll`.
+    const releaseAfterLastTest = !blockTasks.some(runsMoreThanOnce)
     let remaining = blockTasks.length
 
     V.beforeEach(
@@ -394,12 +432,14 @@ const makeLayer = <ExtraContext>(it: V.TestAPI<ExtraContext>) =>
         if (!blockTaskSet.has(task)) {
           return
         }
-        onTestFinished(() => {
-          remaining--
-          if (remaining === 0) {
-            return closeScope()
-          }
-        })
+        if (releaseAfterLastTest) {
+          onTestFinished(() => {
+            remaining--
+            if (remaining === 0) {
+              return closeScope()
+            }
+          })
+        }
         return runPromise(Effect.asVoid(contextEffect), { signal })
       },
       hookTimeout(options?.timeout)
@@ -408,7 +448,6 @@ const makeLayer = <ExtraContext>(it: V.TestAPI<ExtraContext>) =>
     return
   }
 
-  const suiteOptions = options?.concurrent === undefined ? {} : { concurrent: options.concurrent }
   return V.describe(args[0], suiteOptions, () => {
     V.beforeAll(
       () => runPromise(Effect.asVoid(contextEffect)),

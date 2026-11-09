@@ -47,8 +47,8 @@ export type TypeId = "~@effect/sql-pg/PgPool"
  * The defaults are 0 to 10 connections and a 60-second idle timeout.
  * `connectionTTL` replaces connections that exceed the configured lifetime.
  * Every connection is used at least once, so a TTL of zero disables reuse.
- * `acquireTimeout` bounds how long a checkout waits for a free connection;
- * by default it waits indefinitely.
+ * `acquireTimeout` bounds how long a checkout takes to acquire a connection,
+ * including opening a new one; by default it waits indefinitely.
  *
  * With `multiplex` enabled, fibers may share pooled connections for pipelined
  * queries. Reserved connections remain exclusive. Without multiplexing, every
@@ -64,9 +64,12 @@ export interface Config extends PgConnection.Config {
   readonly minConnections?: number | undefined
   readonly connectionTTL?: Duration.Input | undefined
   /**
-   * How long a checkout waits for a free connection before failing with a
-   * `ConnectionError`. Only the wait is bounded, not the work done with the
-   * connection. Unbounded by default.
+   * How long a checkout may take to acquire a connection before failing with
+   * a `ConnectionError`. Acquisition includes waiting for a free connection
+   * and opening a new one when the pool needs it. With `multiplex` on,
+   * `reserve` also waits for statements already sent on the shared connection
+   * to finish, and that wait counts too. Work done with the connection after
+   * it is acquired is not bounded. Unbounded by default.
    */
   readonly acquireTimeout?: Duration.Input | undefined
   /**
@@ -117,6 +120,12 @@ export interface PgPool {
     f: (connection: PgConnection.PgConnection) => Effect.Effect<A, E, R>
   ) => Effect.Effect<A, E | SqlError, R>
   readonly invalidate: (connection: PgConnection.PgConnection) => Effect.Effect<void>
+  /**
+   * Returns a snapshot of session occupancy. Counts sessions rather than
+   * statements, so a multiplexed session shared by many fibers counts once. A
+   * session that has just failed can show as idle until the pool removes it.
+   */
+  readonly stats: Effect.Effect<Pool.Stats>
 }
 
 /**
@@ -332,7 +341,9 @@ export const make = Effect.fnUntraced(function*(options: Config): Effect.fn.Retu
     get,
     reserve,
     use,
-    invalidate: (connection) => Pool.invalidate(pool, connectionInternals(connection).base as PgConnection.PgConnection)
+    invalidate: (connection) =>
+      Pool.invalidate(pool, connectionInternals(connection).base as PgConnection.PgConnection),
+    stats: Pool.stats(pool)
   }
   return pgPool
 })

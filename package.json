@@ -236,15 +236,15 @@
     "package": "bun host/toolchain/package.ts"
   },
   "devDependencies": {
-    "@effect/tsgo": "0.59.0",
+    "@effect/tsgo": "0.63.0",
     "@types/bun": "1.4.4",
     "lua-types": "2.14.1"
   },
   "dependencies": {
-    "@effect/platform-bun": "4.0.6",
-    "@effect/platform-node-shared": "4.0.6",
+    "@effect/platform-bun": "4.1.2",
+    "@effect/platform-node-shared": "4.1.2",
     "dds-parser": "1.0.1",
-    "effect": "4.0.6",
+    "effect": "4.1.2",
     "gl-matrix": "3.3.0",
     "source-map": "0.7.6",
     "typescript": "6.0.2",

@@ -30,6 +30,7 @@ import * as Terminal from "../Terminal.ts"
 import type { Contravariant, Covariant, NoInfer, Simplify } from "../Types.ts"
 import * as CliConfig from "./CliConfig.ts"
 import * as CliError from "./CliError.ts"
+import * as CliOutput from "./CliOutput.ts"
 import * as GlobalFlag from "./GlobalFlag.ts"
 import { checkForDuplicateFlags, makeCommand, makeParser, toImpl, TypeId } from "./internal/command.ts"
 import { mergeConfig, parseConfig } from "./internal/config.ts"
@@ -71,6 +72,7 @@ import * as Prompt from "./Prompt.ts"
  *   Layer.succeed(Terminal.Terminal, Terminal.make({
  *     columns: Effect.succeed(80),
  *     rows: Effect.succeed(24),
+ *     size: Effect.die("unused"),
  *     readInput: Effect.die("unused"),
  *     readLine: Effect.die("unused"),
  *     display: () => Effect.void
@@ -460,6 +462,7 @@ export type Services<C> = C extends Command<
  *   Layer.succeed(Terminal.Terminal, Terminal.make({
  *     columns: Effect.succeed(80),
  *     rows: Effect.succeed(24),
+ *     size: Effect.die("unused"),
  *     readInput: Effect.die("unused"),
  *     readLine: Effect.die("unused"),
  *     display: () => Effect.void
@@ -572,6 +575,7 @@ export const isCommand = (u: unknown): u is Command.Any => Predicate.hasProperty
  *   Layer.succeed(Terminal.Terminal, Terminal.make({
  *     columns: Effect.succeed(80),
  *     rows: Effect.succeed(24),
+ *     size: Effect.die("unused"),
  *     readInput: Effect.die("unused"),
  *     readLine: Effect.die("unused"),
  *     display: () => Effect.void
@@ -684,6 +688,7 @@ export const make: {
  *   Layer.succeed(Terminal.Terminal, Terminal.make({
  *     columns: Effect.succeed(80),
  *     rows: Effect.succeed(24),
+ *     size: Effect.die("unused"),
  *     readInput: Effect.die("unused"),
  *     readLine: Effect.die("unused"),
  *     display: () => Effect.void
@@ -904,6 +909,7 @@ const normalizeSubcommandEntries = (
  *   Layer.succeed(Terminal.Terminal, Terminal.make({
  *     columns: Effect.succeed(80),
  *     rows: Effect.succeed(24),
+ *     size: Effect.die("unused"),
  *     readInput: Effect.die("unused"),
  *     readLine: Effect.die("unused"),
  *     display: () => Effect.void
@@ -1241,6 +1247,7 @@ type ExtractSubcommandContext<T extends ReadonlyArray<Command.SubcommandEntry>> 
  *   Layer.succeed(Terminal.Terminal, Terminal.make({
  *     columns: Effect.succeed(80),
  *     rows: Effect.succeed(24),
+ *     size: Effect.die("unused"),
  *     readInput: Effect.die("unused"),
  *     readLine: Effect.die("unused"),
  *     display: () => Effect.void
@@ -1558,6 +1565,7 @@ const mapHandler = <Name extends string, Input, E, R, ContextInput, E2, R2>(
  *   Layer.succeed(Terminal.Terminal, Terminal.make({
  *     columns: Effect.succeed(80),
  *     rows: Effect.succeed(24),
+ *     size: Effect.die("unused"),
  *     readInput: Effect.die("unused"),
  *     readLine: Effect.die("unused"),
  *     display: () => Effect.void
@@ -1755,6 +1763,7 @@ export const provideEffectDiscard: {
  *   Layer.succeed(Terminal.Terminal, Terminal.make({
  *     columns: Effect.succeed(80),
  *     rows: Effect.succeed(24),
+ *     size: Effect.die("unused"),
  *     readInput: Effect.die("unused"),
  *     readLine: Effect.die("unused"),
  *     display: () => Effect.void
@@ -1836,19 +1845,24 @@ const showHelp = <Name extends string, Input, E, R, ContextInput>(
 ): Effect.Effect<void, CliError.CliError, Environment> =>
   Effect.gen(function*() {
     const { builtIns } = yield* CliConfig.CliConfig
-    const formatter = yield* resolveFormatter
-    const helpDoc = yield* getHelpForCommandPath(command, error.commandPath, builtIns)
-    yield* Console.log(formatter.formatHelpDoc(helpDoc))
-    if (renderErrors && error.errors.length > 0) {
-      yield* Console.error(formatter.formatErrors(error.errors as any))
-    }
+    const presenter = yield* CliOutput.Presenter
+    const { commandPath, errors } = error
+    const helpDoc = yield* getHelpForCommandPath(command, commandPath, builtIns)
+    yield* presenter.present(
+      renderErrors && errors.length > 0
+        ? { _tag: "InvalidInvocation", commandPath, helpDoc, errors }
+        : { _tag: "Help", reason: "Implicit", commandPath, helpDoc }
+    )
   })
 
-const showUserError = (error: CliError.UserError): Effect.Effect<void> =>
+const showUserError = (error: object, userMessage: string): Effect.Effect<void> =>
   Effect.gen(function*() {
     const formatter = yield* resolveFormatter
-    yield* Console.error(formatter.formatError(error))
-    error[Runtime.errorReported] = false
+    const rendered = error instanceof CliError.UserError
+      ? error
+      : new CliError.UserError({ cause: error, userMessage })
+    yield* Console.error(formatter.formatError(rendered))
+    Object.assign(error, { [Runtime.errorReported]: false })
   })
 
 /**
@@ -1859,10 +1873,12 @@ const showUserError = (error: CliError.UserError): Effect.Effect<void> =>
  * Use when command-line arguments should come from `Stdio` at the application
  * entry point.
  *
- * Help documents are always rendered. By default, parse error details and
- * `CliError.UserError` failures are also rendered with the installed
- * `CliOutput.Formatter` before the error is rethrown. Set `renderErrors` to
- * `false` when the host application owns error rendering.
+ * Help, version, and parse error output is written through
+ * `CliOutput.Presenter`. Help documents are always presented. By default,
+ * parse error details are also presented, and handler failures annotated with
+ * `CliError.userMessage`, including `CliError.UserError`, are rendered with the
+ * installed `CliOutput.Formatter` before the error is rethrown. Set
+ * `renderErrors` to `false` when the host application owns error rendering.
  *
  * **Example** (Running commands with standard input)
  *
@@ -1880,6 +1896,7 @@ const showUserError = (error: CliError.UserError): Effect.Effect<void> =>
  *   Layer.succeed(Terminal.Terminal, Terminal.make({
  *     columns: Effect.succeed(80),
  *     rows: Effect.succeed(24),
+ *     size: Effect.die("unused"),
  *     readInput: Effect.die("unused"),
  *     readLine: Effect.die("unused"),
  *     display: () => Effect.void
@@ -1949,10 +1966,12 @@ export const run: {
  * Use when you need to test CLI applications or programmatically execute
  * commands with specific arguments.
  *
- * Help documents are always rendered. By default, parse error details and
- * `CliError.UserError` failures are also rendered with the installed
- * `CliOutput.Formatter` before the error is rethrown. Set `renderErrors` to
- * `false` when the host application owns error rendering.
+ * Help, version, and parse error output is written through
+ * `CliOutput.Presenter`. Help documents are always presented. By default,
+ * parse error details are also presented, and handler failures annotated with
+ * `CliError.userMessage`, including `CliError.UserError`, are rendered with the
+ * installed `CliOutput.Formatter` before the error is rethrown. Set
+ * `renderErrors` to `false` when the host application owns error rendering.
  *
  * **Example** (Running commands with explicit arguments)
  *
@@ -1968,6 +1987,7 @@ export const run: {
  *   Layer.succeed(Terminal.Terminal, Terminal.make({
  *     columns: Effect.succeed(80),
  *     rows: Effect.succeed(24),
+ *     size: Effect.die("unused"),
  *     readInput: Effect.die("unused"),
  *     readLine: Effect.die("unused"),
  *     display: () => Effect.void
@@ -2035,6 +2055,9 @@ export const runWith = <const Name extends string, Input, E, R, ContextInput>(
       // 3. Parse command arguments from remaining tokens
       const parsedArgs = yield* Parser.parseArgs({ tokens: remainder, trailingOperands }, command)
       const commandPath = [command.name, ...Parser.getCommandPath(parsedArgs)] as const
+      const toShowHelp = Effect.mapError((error: CliError.CliError) =>
+        error._tag === "ShowHelp" ? error : new CliError.ShowHelp({ commandPath, errors: [error] })
+      )
       const handlerCtx: GlobalFlag.HandlerContext = { builtIns, command, commandPath, version: config.version }
       const activeFlags = getGlobalFlagsForCommandPath(command, commandPath, builtIns)
 
@@ -2057,7 +2080,7 @@ export const runWith = <const Name extends string, Input, E, R, ContextInput>(
           return entries !== undefined && entries.length > 0
         })
         if (!hasEntry) continue
-        const [, value] = yield* flag.flag.parse(emptyArgs)
+        const [, value] = yield* flag.flag.parse(emptyArgs).pipe(toShowHelp)
         if (flag === GlobalFlag.Wizard) {
           const { colors } = yield* Prompt.Theme
           return yield* Effect.gen(function*() {
@@ -2090,23 +2113,17 @@ export const runWith = <const Name extends string, Input, E, R, ContextInput>(
       if (parsedArgs.errors && parsedArgs.errors.length > 0) {
         return yield* new CliError.ShowHelp({ commandPath, errors: parsedArgs.errors })
       }
-      const parseResult = yield* Effect.result(commandImpl.parse(parsedArgs))
-      if (parseResult._tag === "Failure") {
-        return yield* new CliError.ShowHelp({
-          commandPath,
-          errors: [parseResult.failure as CliError.NonShowHelpErrors]
-        })
-      }
+      const input = yield* commandImpl.parse(parsedArgs).pipe(toShowHelp)
 
       // 7. Provide setting values
-      let program = commandImpl.handle(parseResult.success, [command.name])
+      let program = commandImpl.handle(input, [command.name])
       const logLevel = activeFlags.includes(GlobalFlag.LogLevel)
-        ? (yield* GlobalFlag.LogLevel.flag.parse(emptyArgs))[1]
+        ? (yield* GlobalFlag.LogLevel.flag.parse(emptyArgs).pipe(toShowHelp))[1]
         : Option.none()
       program = Effect.provideService(program, GlobalFlag.LogLevel, logLevel)
       for (const flag of activeFlags) {
         if (flag._tag !== "Setting" || flag === GlobalFlag.LogLevel) continue
-        const [, value] = yield* flag.flag.parse(emptyArgs)
+        const [, value] = yield* flag.flag.parse(emptyArgs).pipe(toShowHelp)
         program = Effect.provideService(program, flag, value)
       }
 
@@ -2127,11 +2144,12 @@ export const runWith = <const Name extends string, Input, E, R, ContextInput>(
       (error) => Effect.andThen(showHelp(command, error, config.renderErrors !== false), Effect.fail(error))
     ),
     Effect.catchFilter(
-      (error) =>
-        config.renderErrors !== false && CliError.isCliError(error) && error._tag === "UserError"
-          ? Result.succeed(error)
-          : Result.fail(error),
-      (error) => Effect.andThen(showUserError(error), Effect.fail(error))
+      (error) => {
+        if (config.renderErrors === false || !Predicate.isObjectKeyword(error)) return Result.fail(error)
+        const userMessage = CliError.getUserMessage(error)
+        return userMessage === undefined ? Result.fail(error) : Result.succeed({ error, userMessage })
+      },
+      ({ error, userMessage }) => Effect.andThen(showUserError(error, userMessage), Effect.fail(error))
     ),
     Effect.catchFilter(
       (e) =>

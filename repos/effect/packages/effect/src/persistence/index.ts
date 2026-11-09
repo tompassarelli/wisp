@@ -6,6 +6,12 @@
 // @barrel: Auto-generated exports. Do not edit manually.
 
 /**
+ * @stability experimental
+ * @since 4.0.7
+ */
+export * as CircuitBreaker from "./CircuitBreaker.ts"
+
+/**
  * @stability unstable
  * @since 4.0.0
  */

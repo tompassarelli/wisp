@@ -17,11 +17,10 @@ import * as Context from "../Context.ts"
 import * as Effect from "../Effect.ts"
 import type { LogLevel as LogLevelType } from "../LogLevel.ts"
 import * as Option from "../Option.ts"
+import * as CliOutput from "./CliOutput.ts"
 import type * as Command from "./Command.ts"
 import * as Completions_ from "./Completions.ts"
 import * as Flag from "./Flag.ts"
-import * as CommandDescriptor from "./internal/completions/descriptor.ts"
-import { resolveFormatter } from "./internal/formatter.ts"
 import * as HelpInternal from "./internal/help.ts"
 
 /* ========================================================================== */
@@ -169,9 +168,9 @@ export const Help: Action<boolean> = Action({
     Flag.withDefault(false)
   ),
   run: Effect.fnUntraced(function*(_, { builtIns, command, commandPath }) {
-    const formatter = yield* resolveFormatter
+    const presenter = yield* CliOutput.Presenter
     const helpDoc = yield* HelpInternal.getHelpForCommandPath(command, commandPath, builtIns)
-    yield* Console.log(formatter.formatHelpDoc(helpDoc))
+    yield* presenter.present({ _tag: "Help", reason: "Requested", commandPath, helpDoc })
   })
 })
 
@@ -193,8 +192,8 @@ export const Version: Action<boolean> = Action({
     Flag.withDefault(false)
   ),
   run: Effect.fnUntraced(function*(_, { command, version }) {
-    const formatter = yield* resolveFormatter
-    yield* Console.log(formatter.formatVersion(command.name, version))
+    const presenter = yield* CliOutput.Presenter
+    yield* presenter.present({ _tag: "Version", name: command.name, version })
   })
 })
 
@@ -249,7 +248,7 @@ export const Completions: Action<Option.Option<Completions_.Shell>> = Action({
   ),
   run: Effect.fnUntraced(function*(shell, { command }) {
     if (Option.isNone(shell)) return
-    const descriptor = CommandDescriptor.fromCommand(command)
+    const descriptor = Completions_.fromCommand(command)
     yield* Console.log(
       Completions_.generate(command.name, shell.value, descriptor)
     )

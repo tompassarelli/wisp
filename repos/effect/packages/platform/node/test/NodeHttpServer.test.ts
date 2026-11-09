@@ -1,6 +1,5 @@
 /** @effect-diagnostics preferSchemaOverJson:skip-file */
-import { NodeHttpClient, NodeHttpServer, NodeHttpServerRequest } from "@effect/platform-node"
-import { NodeWS } from "@effect/platform-node/NodeSocket"
+import { NodeHttpClient, NodeHttpServer, NodeHttpServerRequest, NodeWS } from "@effect/platform-node"
 import { assert, describe, expect, it } from "@effect/vitest"
 import { ByteSize, Effect, Exit, Formatter, Logger, Option, References } from "effect"
 import * as Deferred from "effect/Deferred"
@@ -10,6 +9,7 @@ import { constVoid } from "effect/Function"
 import {
   Cookies,
   FetchHttpClient,
+  Headers,
   HttpBody,
   HttpClient,
   HttpClientRequest,
@@ -518,6 +518,29 @@ describe("HttpServer", () => {
       assert.notInclude(result.formatted, "token-secret")
     }).pipe(Effect.provide(NodeHttpServer.layerTest)))
 
+  it.effect("redacts configured headers when inspecting requests", () =>
+    Effect.gen(function*() {
+      yield* HttpRouter.add(
+        "GET",
+        "/inspect",
+        Effect.gen(function*() {
+          const request = yield* HttpServerRequest.HttpServerRequest
+          return yield* HttpServerResponse.json({
+            json: JSON.stringify(request.headers),
+            formatted: Formatter.format(request.headers)
+          })
+        }).pipe(Effect.provideService(Headers.CurrentRedactedNames, ["x-secret"]))
+      ).pipe(HttpRouter.serve, Layer.build)
+
+      const result = (yield* HttpClient.get("/inspect", { headers: { "x-secret": "header-secret" } }).pipe(
+        Effect.flatMap((response) => response.json)
+      )) as { readonly json: string; readonly formatted: string }
+
+      assert.include(result.json, `"x-secret":"<redacted>"`)
+      assert.notInclude(result.json, "header-secret")
+      assert.notInclude(result.formatted, "header-secret")
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)))
+
   it.effect("schemaJson applies a JSON reviver", () =>
     Effect.gen(function*() {
       yield* HttpRouter.add(
@@ -681,7 +704,7 @@ describe("HttpServer", () => {
       const root = yield* client.get("/child").pipe(Effect.flatMap((_) => _.text))
       expect(root).toEqual("/")
       const rootSearch = yield* client.get("/child?foo=bar").pipe(Effect.flatMap((_) => _.text))
-      expect(rootSearch).toEqual("?foo=bar")
+      expect(rootSearch).toEqual("/?foo=bar")
       const rootSlash = yield* client.get("/child/").pipe(Effect.flatMap((_) => _.text))
       expect(rootSlash).toEqual("/")
       const invalid = yield* client.get("/child1/", {
@@ -1044,6 +1067,47 @@ describe("HttpServer", () => {
       yield* completed.await
 
       assert.strictEqual(closeListenerRemovals, 1)
+    }))
+
+  it.live.each([
+    { body: "Uint8Array", event: "close", response: () => HttpServerResponse.uint8Array(new Uint8Array(1024)) },
+    { body: "Raw", event: "aborted", response: () => HttpServerResponse.raw(new Uint8Array(1024)) }
+  ])("completes a $body response sent on $event after a disconnect", ({ event, response }) =>
+    Effect.gen(function*() {
+      const server = Http.createServer()
+      const scope = yield* Scope.make()
+      // A stuck uninterruptible request fiber would block the server's shutdown
+      yield* Effect.addFinalizer(() => Effect.forkDetach(Scope.close(scope, Exit.void)))
+      const received = yield* Latch.make()
+      const sent = yield* Deferred.make<HttpServerResponse.HttpServerResponse, unknown>()
+      yield* HttpRouter.add(
+        "GET",
+        "/",
+        Effect.gen(function*() {
+          const incoming = NodeHttpServerRequest.toIncomingMessage(yield* HttpServerRequest.HttpServerRequest)
+          yield* received.open
+          // Node emits the request's `aborted` before it marks the response destroyed
+          yield* Effect.callback<void>((resume) => {
+            if (incoming.socket.destroyed) return resume(Effect.void)
+            ;(event === "aborted" ? incoming : incoming.socket).once(event, () => resume(Effect.void))
+          })
+          return response()
+        }),
+        { uninterruptible: true }
+      ).pipe(
+        (app) =>
+          HttpRouter.serve(app, { middleware: (app) => Effect.onExit(app, (exit) => Deferred.done(sent, exit)) }),
+        Layer.provide(NodeHttpServer.layer(() => server, { port: 0 })),
+        Layer.buildWithScope(scope)
+      )
+      const socket = Net.connect({ port: tcpPort(server), host: "127.0.0.1" }, () => {
+        socket.write("GET / HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n")
+      })
+      socket.on("error", constVoid)
+      yield* received.await
+      socket.destroy()
+      const res = yield* Deferred.await(sent).pipe(Effect.timeout("2 seconds"))
+      assert.strictEqual(res.status, 200)
     }))
 
   it.effect("returns none when a late remoteAddress read finds no socket", () =>
@@ -1948,6 +2012,209 @@ describe("HttpServer", () => {
       )
     }).pipe(Effect.provide(layerTestWebsocket)))
 
+  it.effect.each([
+    {
+      name: "a Content-Length body split from the head",
+      input: [
+        "POST /attach HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: Upgrade\r\nUpgrade: tcp\r\nContent-Length: 5\r\n\r\nhe",
+        "lloearly"
+      ],
+      read: true,
+      upgrades: true
+    },
+    {
+      name: "an unread Content-Length body",
+      input: [
+        "POST /attach HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: Upgrade\r\nUpgrade: tcp\r\nContent-Length: 5\r\n\r\nhe",
+        "lloearly"
+      ],
+      read: false,
+      upgrades: true
+    },
+    {
+      name: "a chunked body",
+      input: [
+        "POST /attach HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: Upgrade\r\nUpgrade: tcp\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhe",
+        "llo\r\n0\r\n\r\nearly"
+      ],
+      read: true,
+      // Node 25 and older do not parse upgrade request bodies, and only Content-Length is framed by hand.
+      upgrades: Number(process.versions.node.split(".")[0]) >= 26
+    }
+  ])("reads $name before switching protocols", ({ input, read, upgrades }) =>
+    Effect.gen(function*() {
+      yield* HttpRouter.add(
+        "POST",
+        "/attach",
+        Effect.gen(function*() {
+          const request = yield* HttpServerRequest.HttpServerRequest
+          const body = read ? yield* request.text : ""
+          const socket = yield* Effect.orDie(request.upgradeWith({ headers: { "content-type": "application/raw" } }))
+          const reader = yield* socket.reader
+          const writer = yield* socket.writer
+          const decoder = new TextDecoder()
+          let received = ""
+          while (true) {
+            const chunks = yield* reader.pull.pipe(
+              Effect.catchReason("SocketError", "SocketCloseError", () => Effect.succeed(undefined))
+            )
+            if (chunks === undefined) break
+            for (const chunk of chunks) received += typeof chunk === "string" ? chunk : decoder.decode(chunk)
+          }
+          yield* writer.write(`${body}|${received}`)
+          return HttpServerResponse.empty()
+        }).pipe(Effect.scoped)
+      ).pipe(
+        HttpRouter.serve,
+        Layer.build
+      )
+      const server = yield* HttpServer.HttpServer
+      const port = (server.address as NetAddress.InetAddress).port
+      const response = yield* Effect.promise(() => rawExchange(port, input))
+      if (upgrades) {
+        assert.strictEqual(
+          response,
+          `HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: tcp\r\ncontent-type: application/raw\r\n\r\n${
+            read ? "hello" : ""
+          }|early`
+        )
+      } else {
+        assert.match(response, /^HTTP\/1\.1 411 /)
+      }
+    }).pipe(Effect.provide(layerTestWebsocket)))
+
+  it.effect.each([
+    {
+      name: "when the unread body exceeds MaxBodySize",
+      method: "POST" as const,
+      input: [
+        "POST /attach HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: Upgrade\r\nUpgrade: tcp\r\nContent-Length: 5\r\n\r\nhe",
+        "llo"
+      ],
+      headers: {},
+      maxBodySize: ByteSize.bytes(4)
+    },
+    ...["connection", "upgrade", "content-length", "transfer-encoding"].map((name) => ({
+      name: `with a ${name} header`,
+      method: "POST" as const,
+      input: "POST /attach HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: Upgrade\r\nUpgrade: tcp\r\n\r\n",
+      headers: { [name]: "1" },
+      maxBodySize: undefined
+    })),
+    {
+      name: "with an invalid header name",
+      method: "POST" as const,
+      input: "POST /attach HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: Upgrade\r\nUpgrade: tcp\r\n\r\n",
+      headers: { "x name": "1" },
+      maxBodySize: undefined
+    },
+    {
+      name: "with an invalid header value",
+      method: "POST" as const,
+      input: "POST /attach HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: Upgrade\r\nUpgrade: tcp\r\n\r\n",
+      headers: { "x-name": "a\r\nx-injected: 1" },
+      maxBodySize: undefined
+    },
+    {
+      name: "with headers on a WebSocket upgrade",
+      method: "GET" as const,
+      input: upgradeRequest("/attach"),
+      headers: { "x-name": "1" },
+      maxBodySize: undefined
+    }
+  ])("does not switch protocols $name", ({ headers, input, maxBodySize, method }) =>
+    Effect.gen(function*() {
+      yield* HttpRouter.add(
+        method,
+        "/attach",
+        Effect.gen(function*() {
+          const request = yield* HttpServerRequest.HttpServerRequest
+          const socket = yield* request.upgradeWith({ headers })
+          yield* socket.reader
+          return HttpServerResponse.empty()
+        }).pipe(Effect.scoped, Effect.provideService(HttpIncomingMessage.MaxBodySize, maxBodySize))
+      ).pipe(
+        HttpRouter.serve,
+        Layer.build
+      )
+      const server = yield* HttpServer.HttpServer
+      const port = (server.address as NetAddress.InetAddress).port
+      const response = yield* Effect.promise(() => rawExchange(port, input))
+      assert.match(response, /^HTTP\/1\.1 [45]\d\d /)
+    }).pipe(Effect.provide(layerTestWebsocket)))
+
+  it.effect("serves other requests after a truncated multipart upgrade body", () =>
+    Effect.gen(function*() {
+      yield* HttpRouter.addAll([
+        HttpRouter.route(
+          "POST",
+          "/attach",
+          Effect.gen(function*() {
+            const request = yield* HttpServerRequest.HttpServerRequest
+            yield* request.multipart
+            const socket = yield* Effect.orDie(request.upgrade)
+            yield* socket.reader
+            return HttpServerResponse.empty()
+          }).pipe(Effect.scoped)
+        ),
+        HttpRouter.route("GET", "/ping", HttpServerResponse.text("pong"))
+      ]).pipe(
+        HttpRouter.serve,
+        Layer.build
+      )
+      const server = yield* HttpServer.HttpServer
+      const port = (server.address as NetAddress.InetAddress).port
+      // The client stops after the first boundary of a 200 byte body.
+      const response = yield* Effect.promise(() =>
+        rawExchange(
+          port,
+          "POST /attach HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: Upgrade\r\nUpgrade: tcp\r\n" +
+            "Content-Type: multipart/form-data; boundary=abc\r\nContent-Length: 200\r\n\r\n--abc\r\n"
+        )
+      )
+      assert.notMatch(response, /^HTTP\/1\.1 101 /)
+      const ping = yield* HttpClient.get("/ping")
+      assert.strictEqual(yield* ping.text, "pong")
+    }).pipe(Effect.provide(layerTestWebsocket)))
+
+  it.effect("writes upgrade response header values as Latin-1", () =>
+    Effect.gen(function*() {
+      yield* HttpRouter.add(
+        "POST",
+        "/attach",
+        Effect.gen(function*() {
+          const request = yield* HttpServerRequest.HttpServerRequest
+          const socket = yield* Effect.orDie(request.upgradeWith({ headers: { "x-name": "café" } }))
+          yield* Effect.orDie(socket.reader)
+          return HttpServerResponse.empty()
+        }).pipe(Effect.scoped)
+      ).pipe(
+        HttpRouter.serve,
+        Layer.build
+      )
+      const server = yield* HttpServer.HttpServer
+      const port = (server.address as NetAddress.InetAddress).port
+      const headers = yield* Effect.callback<Http.IncomingHttpHeaders, Error>((resume) => {
+        const request = Http.request({
+          hostname: "127.0.0.1",
+          port,
+          path: "/attach",
+          method: "POST",
+          agent: false,
+          headers: { connection: "Upgrade", upgrade: "tcp" }
+        })
+        request.on("error", (error) => resume(Effect.fail(error)))
+        request.on("upgrade", (response, socket) => {
+          socket.destroy()
+          resume(Effect.succeed(response.headers))
+        })
+        request.end()
+        return Effect.sync(() => request.destroy())
+      })
+      // Node decodes header bytes as Latin-1, like other HTTP peers.
+      assert.strictEqual(headers["x-name"], "café")
+    }).pipe(Effect.provide(layerTestWebsocket)))
+
   describe("request URL", () => {
     it.effect("toURL reports https over TLS", () =>
       Effect.gen(function*() {
@@ -2233,7 +2500,7 @@ const rawWebSocket = (
   })
 
 // Writes `input`, half-closes, and resolves with everything the server sent.
-const rawExchange = (port: number, input: string): Promise<string> =>
+const rawExchange = (port: number, input: string | ReadonlyArray<string>): Promise<string> =>
   new Promise((resolve, reject) => {
     const socket = Net.createConnection({ host: "127.0.0.1", port })
     const timer = setTimeout(() => {
@@ -2241,7 +2508,15 @@ const rawExchange = (port: number, input: string): Promise<string> =>
       reject(new Error("the exchange did not finish in time"))
     }, 5000)
     let stream = Buffer.Buffer.alloc(0)
-    socket.on("connect", () => socket.end(input))
+    // Pause between parts so the server reads them separately.
+    const parts = typeof input === "string" ? [input] : [...input]
+    const writeNext = () => {
+      const part = parts.shift()!
+      if (parts.length === 0) return socket.end(part)
+      socket.write(part)
+      setTimeout(writeNext, 50)
+    }
+    socket.on("connect", writeNext)
     socket.on("data", (data) => {
       stream = Buffer.Buffer.concat([stream, Buffer.Buffer.from(data)])
     })

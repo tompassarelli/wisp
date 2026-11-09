@@ -9,6 +9,62 @@
  * constructors, payload and response schema helpers, and type utilities used by
  * builders and generated clients.
  *
+ * **Request variants**
+ *
+ * A server needs a distinct method and path per endpoint.
+ * `HttpApiBuilder.layer` rejects two endpoints that share them, even when their
+ * query, headers or payload differ. Declare the variants of one operation as a
+ * single endpoint instead:
+ *
+ * - discriminate with a `query` or `headers` field, such as `stream: Schema.Boolean`
+ * - list several `payload` schemas, chosen by the request `Content-Type`
+ * - list several `success` schemas with distinct content types or statuses. One
+ *   of them can be a stream. The server encodes whichever value the handler
+ *   returns, and the client decodes by the response `Content-Type`
+ *
+ * The handler branches on the decoded request, and OpenAPI documents one
+ * operation with every alternative. The generated client returns the union of
+ * the success types. Wrap the client method to narrow the result per variant
+ * when callers need it.
+ *
+ * **Example** (Buffered and streaming variants of one operation)
+ *
+ * ```ts import.meta.vitest
+ * import { Effect, Schema, Stream } from "effect"
+ * import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api"
+ *
+ * const Stats = Schema.Struct({ cpu: Schema.Number })
+ *
+ * const Api = HttpApi.make("Docker").add(
+ *   HttpApiGroup.make("containers").add(
+ *     // GET /stats?stream=false returns JSON, ?stream=true returns NDJSON
+ *     HttpApiEndpoint.get("stats", "/stats", {
+ *       query: { stream: Schema.Boolean },
+ *       success: [Stats, HttpApiSchema.StreamNdjson({ schema: Stats })]
+ *     }),
+ *     // POST /images accepts a JSON pull request or a tar archive
+ *     HttpApiEndpoint.post("createImage", "/images", {
+ *       payload: [
+ *         Schema.Struct({ fromImage: Schema.String }),
+ *         HttpApiSchema.StreamUint8Array({ contentType: "application/x-tar" })
+ *       ],
+ *       success: Schema.String
+ *     })
+ *   )
+ * )
+ *
+ * const ContainersLive = HttpApiBuilder.group(Api, "containers", (handlers) =>
+ *   handlers
+ *     .handle("stats", ({ query }) =>
+ *       Effect.succeed(query.stream ? Stream.make({ cpu: 1 }, { cpu: 2 }) : { cpu: 1 })
+ *     )
+ *     .handle("createImage", ({ payload }) =>
+ *       Stream.isStream(payload)
+ *         ? Effect.as(Stream.runDrain(payload), "imported")
+ *         : Effect.succeed(`pulled ${payload.fromImage}`)
+ *     ))
+ * ```
+ *
  * @stability unstable
  * @since 4.0.0
  */
@@ -36,6 +92,7 @@ import type * as HttpApiGroup from "./HttpApiGroup.ts"
 import type * as HttpApiMiddleware from "./HttpApiMiddleware.ts"
 import * as HttpApiSchema from "./HttpApiSchema.ts"
 import * as MediaType from "./internal/mediaType.ts"
+import { toCodecHttpProperties } from "./internal/toCodecHttpProperties.ts"
 
 const TypeId = "~effect/http-api/HttpApiEndpoint"
 
@@ -71,6 +128,7 @@ type SuccessEncodingServices<S> = S extends HttpApiSchema.StreamSse<
 > ? _Events["EncodingServices"] | _Error["EncodingServices"]
   : S extends HttpApiSchema.StreamUint8Array ? never
   : S extends HttpApiSchema.StreamNdjson<infer _S> ? _S["EncodingServices"]
+  : S extends HttpApiSchema.Upgrade<infer _Headers> ? _Headers["EncodingServices"]
   : S extends Schema.Constraint ? S["EncodingServices"]
   : never
 
@@ -81,6 +139,7 @@ type SuccessDecodingServices<S> = S extends HttpApiSchema.StreamSse<
 > ? _Events["DecodingServices"] | _Error["DecodingServices"]
   : S extends HttpApiSchema.StreamUint8Array ? never
   : S extends HttpApiSchema.StreamNdjson<infer _S> ? _S["DecodingServices"]
+  : S extends HttpApiSchema.Upgrade<infer _Headers> ? _Headers["DecodingServices"]
   : S extends Schema.Constraint ? S["DecodingServices"]
   : never
 
@@ -95,10 +154,19 @@ type ExtractStreamSuccess<S extends SuccessConstraint> = UnwrapReadonlyArray<S> 
   Success extends HttpApiSchema.StreamSchema ? Success : never
   : never
 
-type ExtractUpgradeSuccess<S extends SuccessConstraint> = Extract<UnwrapReadonlyArray<S>, HttpApiSchema.Upgrade>
+type ExtractUpgradeSuccess<S extends SuccessConstraint> = UnwrapReadonlyArray<S> extends infer Success ?
+  Success extends HttpApiSchema.Upgrade<infer _Headers> ?
+    [_Headers] extends [never] ? Success : HttpApiSchema.Upgrade<Schema.toCodecStringTree<_Headers>>
+  : never
+  : never
 
-type UpgradeSocket<Success> = [Extract<Success, HttpApiSchema.Upgrade>] extends [never] ? {}
-  : { readonly socket: Socket.Socket }
+type UpgradeRequest<Success> = [Extract<Success, HttpApiSchema.Upgrade>] extends [never] ? {}
+  : { readonly upgrade: UpgradeFunction<Extract<Success, HttpApiSchema.Upgrade>> }
+
+type UpgradeFunction<S> = S extends HttpApiSchema.Upgrade<infer _Headers> ?
+  [_Headers] extends [never] ? () => Effect<Socket.Socket>
+  : (options: { readonly headers: _Headers["Type"] }) => Effect<Socket.Socket>
+  : never
 
 type ExtractWithHeadersSuccess<S extends SuccessConstraint> = UnwrapReadonlyArray<S> extends infer Success ?
   Success extends HttpApiSchema.WithHeaders<infer _Inner, infer _Headers> ? HttpApiSchema.WithHeaders<
@@ -148,7 +216,7 @@ type PayloadError<Payload> = Payload extends HttpApiSchema.StreamUint8Array ? Ht
   : never
 
 type RequestFromParts<Endpoint, ParamsType, QueryType, Payload, HeadersType, Success> =
-  & UpgradeSocket<Success>
+  & UpgradeRequest<Success>
   & ([ParamsType] extends [never] ? {} : { readonly params: Simplify<ParamsType> })
   & ([QueryType] extends [never] ? {} : { readonly query: Simplify<QueryType> })
   & ([Payload] extends [never] ? {} : { readonly payload: RequestPayload<Payload> })
@@ -160,7 +228,7 @@ type RequestFromParts<Endpoint, ParamsType, QueryType, Payload, HeadersType, Suc
   }
 
 type RequestRawFromParts<Endpoint, ParamsType, QueryType, HeadersType, Success> =
-  & UpgradeSocket<Success>
+  & UpgradeRequest<Success>
   & ([ParamsType] extends [never] ? {} : { readonly params: Simplify<ParamsType> })
   & ([QueryType] extends [never] ? {} : { readonly query: Simplify<QueryType> })
   & ([HeadersType] extends [never] ? {} : { readonly headers: Simplify<HeadersType> })
@@ -1111,6 +1179,16 @@ type ErrorNoStream<S extends ErrorConstraint> = [
  * and response schemas, applying automatic JSON or string-tree codecs unless
  * `disableCodecs` is enabled.
  *
+ * **Gotchas**
+ *
+ * URL parameters are flat on the server: each `query` field, each field of a
+ * no-body `payload` and each field of a form-urlencoded `payload` should encode
+ * to a string or an array of strings. A field that encodes to a nested object
+ * is sent as bracket keys (`meta[k]=v`) that the server does not read back, so
+ * it is dropped, or reported missing when required. Send structured values with
+ * an explicit codec such as `Schema.fromJsonString(...)`, or declare bracket
+ * keys literally, for example `"page[size]": Schema.String`.
+ *
  * @stability unstable
  * @category constructors
  * @since 4.0.0
@@ -1217,16 +1295,17 @@ export const make = <Method extends HttpMethod>(method: Method): {
   Error extends ReadonlyArray<Schema.Constraint> ? Error[number] : Error
 > => {
   const disableCodecs = options?.disableCodecs ?? false
-  const transformStringTree = disableCodecs ? identity : Schema.toCodecStringTree
+  const transformProperties = disableCodecs ? identity : toCodecHttpProperties
+  const payload = getPayload(options?.payload, method, disableCodecs)
   return makeProto({
     identifier,
     path,
     method,
-    params: ensureStruct(options?.params, transformStringTree),
-    query: ensureStruct(options?.query, transformStringTree),
-    headers: ensureStruct(options?.headers, transformStringTree),
-    payload: getPayload(options?.payload, method, disableCodecs),
-    success: getSuccessResponse(options?.success, method, options?.payload !== undefined, disableCodecs),
+    params: ensureStruct(options?.params, transformProperties),
+    query: ensureStruct(options?.query, transformProperties),
+    headers: ensureStruct(options?.headers, transformProperties),
+    payload,
+    success: getSuccessResponse(options?.success, method, payload, disableCodecs),
     error: getErrorResponse(options?.error, disableCodecs),
     annotations: Context.empty(),
     middlewares: new Set(),
@@ -1281,11 +1360,13 @@ function getPayload(
         throw new Error("Multiple streaming payloads are not supported")
       }
       hasStream = true
-      const contentType = MediaType.normalize(schema.contentType)
-      if (result.has(contentType)) {
-        throw new Error(`Cannot combine buffered and streaming payloads for content-type: ${schema.contentType}`)
+      for (const declared of schema.contentTypes) {
+        const contentType = MediaType.normalize(declared)
+        if (result.has(contentType)) {
+          throw new Error(`Cannot combine buffered and streaming payloads for content-type: ${declared}`)
+        }
+        result.set(contentType, { encoding: { _tag: "Stream", contentType: declared }, schemas: [schema] })
       }
-      result.set(contentType, { encoding: { _tag: "Stream", contentType: schema.contentType }, schemas: [schema] })
       continue
     }
     const encoding = HttpApiSchema.getPayloadEncoding(schema.ast, method)
@@ -1314,22 +1395,27 @@ const reservedStreamFailureEvent = "effect/http-api/stream/failure"
 function getSuccessResponse(
   success: Schema.Top | ReadonlyArray<Schema.Top> | undefined,
   method: HttpMethod,
-  hasPayload: boolean,
+  payload: PayloadMap,
   disableCodecs: boolean
 ): Set<Schema.Top> {
   if (success === undefined) return new Set()
   const schemas = Arr.ensure(success)
-  validateSuccessResponse(schemas, method, hasPayload)
+  validateSuccessResponse(schemas, method, payload)
   return new Set(disableCodecs ? schemas : schemas.map(transformResponseSchema))
 }
 
 const transformResponseSchema = memoize((schema: Schema.Top): Schema.Top => {
-  if (HttpApiSchema.isStreamSchema(schema) || HttpApiSchema.isUpgrade(schema)) return schema
+  if (HttpApiSchema.isStreamSchema(schema)) return schema
+  if (HttpApiSchema.isUpgrade(schema)) {
+    return schema.headers === undefined
+      ? schema
+      : HttpApiSchema.rebuildUpgrade(schema.protocol, toCodecHttpProperties(schema.headers))
+  }
   if (HttpApiSchema.isWithHeaders(schema)) {
     const inner = HttpApiSchema.isStreamSchema(schema.schema)
       ? schema.schema
       : applyResponseEncoding(schema.schema, HttpApiSchema.getResponseEncodingSchema(schema))
-    return HttpApiSchema.rebuildWithHeaders(schema, inner, Schema.toCodecStringTree(schema.headers))
+    return HttpApiSchema.rebuildWithHeaders(schema, inner, toCodecHttpProperties(schema.headers))
   }
   return transformResponse(schema)
 })
@@ -1353,18 +1439,22 @@ function getErrorResponse(
   return new Set(disableCodecs ? schemas : schemas.map(transformResponseSchema))
 }
 
-function validateSuccessResponse(schemas: ReadonlyArray<Schema.Constraint>, method: HttpMethod, hasPayload: boolean) {
-  if (schemas.some(HttpApiSchema.isUpgrade)) {
-    if (schemas.length > 1) {
-      throw new Error("Cannot combine an upgrade with other success responses")
-    }
+function validateSuccessResponse(schemas: ReadonlyArray<Schema.Constraint>, method: HttpMethod, payload: PayloadMap) {
+  const upgrades = schemas.filter(HttpApiSchema.isUpgrade)
+  if (upgrades.length > 1) {
+    throw new Error("Cannot declare more than one upgrade")
+  }
+  const hasUpgrade = upgrades.length === 1
+  if (hasUpgrade) {
     if (method === "HEAD") {
       throw new Error("HEAD endpoints cannot declare an upgrade")
     }
-    if (hasPayload) {
-      throw new Error("Upgrade endpoints cannot declare a payload")
+    // The 101 can only follow the end of the request, so the body is read before the upgrade.
+    for (const { encoding } of payload.values()) {
+      if (encoding._tag === "Stream" || (encoding._tag === "Multipart" && encoding.mode === "stream")) {
+        throw new Error("Upgrade endpoints cannot declare a streaming payload")
+      }
     }
-    return
   }
   let hasStream = false
   const statuses = new Map<number, {
@@ -1374,9 +1464,17 @@ function validateSuccessResponse(schemas: ReadonlyArray<Schema.Constraint>, meth
   }>()
 
   for (const schema of schemas) {
+    // The server may decline the upgrade (RFC 9110 §7.8) and answer with one of the other successes.
+    if (HttpApiSchema.isUpgrade(schema)) continue
     const inner = HttpApiSchema.isWithHeaders(schema) ? schema.schema : schema
     const status = HttpApiSchema.getStatusSuccessSchema(schema)
+    if (hasUpgrade && status === 101) {
+      throw new Error("Cannot combine an upgrade with another success response for status: 101")
+    }
     if (HttpApiSchema.isStreamSchema(inner)) {
+      if (hasUpgrade) {
+        throw new Error("Cannot combine an upgrade with a streaming success response")
+      }
       validateStreamSuccess(inner, method)
       if (hasStream) {
         throw new Error("Multiple streaming success responses are not supported")
@@ -1386,10 +1484,12 @@ function validateSuccessResponse(schemas: ReadonlyArray<Schema.Constraint>, meth
       if (entry.noContent) {
         throw new Error(`Cannot combine no-content and streaming success responses for status: ${status}`)
       }
-      if (entry.bufferedContentTypes.has(MediaType.normalize(inner.contentType))) {
-        throw new Error(
-          `Cannot combine buffered and streaming success responses for status ${status} and content-type: ${inner.contentType}`
-        )
+      for (const declared of inner.contentTypes) {
+        if (entry.bufferedContentTypes.has(MediaType.normalize(declared))) {
+          throw new Error(
+            `Cannot combine buffered and streaming success responses for status ${status} and content-type: ${declared}`
+          )
+        }
       }
       statuses.set(status, { ...entry, stream: inner })
     } else {
@@ -1400,9 +1500,8 @@ function validateSuccessResponse(schemas: ReadonlyArray<Schema.Constraint>, meth
           throw new Error(`Cannot combine no-content and streaming success responses for status: ${status}`)
         }
         const encoding = HttpApiSchema.getResponseEncodingSchema(schema)
-        if (
-          MediaType.normalize(encoding.contentType) === MediaType.normalize(entry.stream.contentType)
-        ) {
+        const contentType = MediaType.normalize(encoding.contentType)
+        if (entry.stream.contentTypes.some((declared) => MediaType.normalize(declared) === contentType)) {
           throw new Error(
             `Cannot combine buffered and streaming success responses for status ${status} and content-type: ${encoding.contentType}`
           )
@@ -1535,7 +1634,7 @@ function transformResponse(schema: Schema.Top): Schema.Top {
     "~httpApiWithHeaders": {
       ...withHeaders,
       bodyCodec: applyResponseEncoding(withHeaders.body, encoding),
-      headersCodec: Schema.toCodecStringTree(withHeaders.headers)
+      headersCodec: toCodecHttpProperties(withHeaders.headers)
     }
   })
 }
@@ -1553,6 +1652,7 @@ function applyResponseEncoding(schema: Schema.Top, encoding: HttpApiSchema.Respo
 }
 
 function transformPayload(schema: Schema.Top, method: HttpMethod): Schema.Top {
+  if (!hasBody(method)) return toCodecHttpProperties(schema)
   const encoding = HttpApiSchema.getPayloadEncoding(schema.ast, method)
   switch (encoding._tag) {
     case "Json":

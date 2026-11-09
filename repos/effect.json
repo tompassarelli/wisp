@@ -1,11 +1,11 @@
 {
   "repository": "https://github.com/Effect-TS/effect.git",
   "prefix": "repos/effect",
-  "tag": "effect@4.0.6",
-  "version": "4.0.6",
-  "commit": "3b28bf686bf26e9700edd39c025aff2744dc5303",
+  "tag": "effect@4.1.2",
+  "version": "4.1.2",
+  "commit": "506eef143bcc1750ce58920aac1e45da7265d103",
   "license": "MIT",
   "licenseFile": "repos/effect/LICENSE",
   "purpose": "Read-only upstream source, tests and examples for agent reference",
-  "checkedAt": "2026-11-02"
+  "checkedAt": "2026-11-09"
 }

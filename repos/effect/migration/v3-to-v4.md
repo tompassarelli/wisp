@@ -2,9 +2,9 @@
 
 # v3 to v4 Migration Reference
 
-Base: `origin/v3` (`cab7f2e3493e4a3dceda27cb1b6d28c4599cb939`)
+Base: `cab7f2e3493e4a3dceda27cb1b6d28c4599cb939` (`cab7f2e3493e4a3dceda27cb1b6d28c4599cb939`)
 
-Head: `origin/main` (`4cddd3c41e71fc4990d37c42b1bcf2ce3780b41d`)
+Head: `origin/main` (`b41529e2ea04dff5fb1f68ef8044d42b75ba141e`)
 
 This file is generated from the API diff and `migration/annotations/*.yaml`.
 
@@ -490,7 +490,7 @@ effect/rpc/Utils (barrel: effect/rpc)
 - `@effect/opentelemetry/OtlpSerialization` -> `effect/observability/OtlpSerialization`
 - `@effect/opentelemetry/OtlpTracer` -> `effect/observability/OtlpTracer`
 - `@effect/opentelemetry/Tracer`: No single module replacement; follow the curated per-API guidance below.
-- `@effect/opentelemetry/index` -> `@effect/opentelemetry`: The explicit /index entrypoint was removed; import the same namespaces from the @effect/opentelemetry package root or import specific modules directly.
+- `@effect/opentelemetry/index` -> `@effect/opentelemetry`: The explicit /index entrypoint was removed; import the same namespaces from the @effect/opentelemetry package root or import specific modules directly. NodeSdk and WebSdk are no longer in the root barrel; import them from @effect/opentelemetry/NodeSdk and @effect/opentelemetry/WebSdk.
 - `@effect/platform` -> `none`: The @effect/platform package was folded into the effect package: core services live in effect root modules (e.g. effect/FileSystem, effect/Path) and HTTP in effect/http; follow the Import Map for each module.
 - `@effect/platform-browser/index` -> `@effect/platform-browser`: The explicit /index entrypoint was removed; import the same namespaces from the @effect/platform-browser package root or import specific modules directly.
 - `@effect/platform-bun/BunCommandExecutor`: No single module replacement; follow the curated per-API guidance below.
@@ -617,7 +617,7 @@ effect/rpc/Utils (barrel: effect/rpc)
 - `@effect/sql-sqlite-react-native/index` -> `@effect/sql-sqlite-react-native`: The explicit /index entrypoint was removed; import the same namespaces from the @effect/sql-sqlite-react-native package root or import specific modules directly.
 - `@effect/sql-sqlite-wasm/index` -> `@effect/sql-sqlite-wasm`: The explicit /index entrypoint was removed; import the same namespaces from the @effect/sql-sqlite-wasm package root or import specific modules directly.
 - `@effect/sql/Migrator` -> `effect/sql/Migrator`
-- `@effect/sql/Migrator/FileSystem` -> `effect/sql/Migrator`: fromFileSystem was merged into the main Migrator module with the same (directory) signature; use Migrator.fromFileSystem as the loader.
+- `@effect/sql/Migrator/FileSystem` -> `effect/sql/MigratorFileSystem`: Same `(directory)` signature. Import `fromFileSystem` from there; it is not exported from `effect/sql/Migrator` or the `effect/sql` barrel.
 - `@effect/sql/Model` -> `effect/schema/Model`, `effect/sql/SqlModel`
 - `@effect/sql/SqlClient` -> `effect/sql/SqlClient`
 - `@effect/sql/SqlConnection` -> `effect/sql/SqlConnection`
@@ -1511,6 +1511,8 @@ effect/rpc/Utils (barrel: effect/rpc)
 - `Generated.UploadFileV1FilesPostParams` -> `Generated.UploadFileV1FilesPostParams`: Still generated in v4 from the current Anthropic specification; re-check the schema's Type/Encoded shape because the generated definition changed.
 
 - `Generated.UploadFileV1FilesPostRequest` -> `Generated.UploadFileV1FilesPostRequestFormData`: Regenerated in v4 under this name; update the identifier and re-check the schema's Type/Encoded shape because the generated definition changed.
+
+- `Generated.Usage` -> `Generated.Usage`: Still generated in v4 from the current Anthropic specification; re-check the schema's Type/Encoded shape because the generated definition changed.
 
 - `Generated.UsageServiceTierEnum` -> `none`: Removed or inlined when the Anthropic specification client was regenerated; use the current Generated request/response schema for the relevant endpoint instead of this old snapshot helper.
 
@@ -4910,7 +4912,7 @@ effect/rpc/Utils (barrel: effect/rpc)
 
 - `AiError.AiError` -> `AiError.AiError`: Moved to effect/ai/AiError and redesigned from a union of separately tagged errors into one AiError wrapper with a semantic reason. Construct it with AiError.make({ module, method, reason }) and match error.reason rather than the old top-level tags.
 
-- `AiError.HttpRequestDetails` -> `AiError.HttpRequestDetails`: Retained in effect/ai/AiError and also re-exported as Response.HttpRequestDetails. Hash is an optional string instead of Option, headers may contain Redacted strings, and method includes TRACE.
+- `AiError.HttpRequestDetails` -> `none`: Removed. NetworkError carries only the request method and url, and HttpContext and response metadata parts no longer record the request.
 
 - `AiError.HttpRequestError` -> `AiError.make + AiError.NetworkError`: Replace the old top-level request error with an AiError whose reason is NetworkError. NetworkError.fromRequestError converts a v4 HttpClientError.RequestError.
 
@@ -4970,27 +4972,27 @@ effect/rpc/Utils (barrel: effect/rpc)
 
 - `McpServer.McpServer` -> `McpServer.McpServer`: The service is now a Context.Service. initializedClients and notificationsMailbox are no longer exposed. Registration callbacks use McpSchema.McpRequestContext; McpServerClient is only supplied for initialized stateful requests. Prefer registerToolkit, registerResource, and registerPrompt over implementing the registry shape directly.
 
-- `McpServer.layer` -> `McpServer.layer`: Moved to effect/ai/McpServer. Pass a non-empty protocols array of adapters, such as [McpProtocol.v2025\_06\_18], imported with McpProtocol from effect/ai; it still runs over a caller-provided RpcServer.Protocol.
+- `McpServer.layer` -> `McpServer.layer`: Moved to effect/ai/McpServer. Pass a non-empty protocols array of adapters, such as [McpProtocol.v2025\_06\_18], imported with McpProtocol from effect/ai; it still runs over a caller-provided RpcServer.Protocol. Pass registration layers as the registrations option to build them before the server starts.
 
-- `McpServer.layerHttp` -> `McpServer.layerHttp`: Moved to effect/ai/McpServer and the unified HttpRouter. Pass a non-empty protocols array of adapters, such as [McpProtocol.v2025\_06\_18], imported with McpProtocol from effect/ai.
+- `McpServer.layerHttp` -> `McpServer.layerHttp`: Moved to effect/ai/McpServer and the unified HttpRouter. Pass a non-empty protocols array of adapters, such as [McpProtocol.v2025\_06\_18], imported with McpProtocol from effect/ai. Pass registration layers as the registrations option; request-level dependencies it doesn't supply become HttpRouter request requirements that HttpRouter.middleware can provide.
 
-- `McpServer.layerHttpRouter` -> `McpServer.layerHttp`: Renamed and consolidated. V4 layerHttp registers the Streamable HTTP endpoint in the unified HttpRouter; pass a non-empty protocols array of adapters, such as [McpProtocol.v2025\_06\_18], imported with McpProtocol from effect/ai.
+- `McpServer.layerHttpRouter` -> `McpServer.layerHttp`: Renamed and consolidated. V4 layerHttp registers the Streamable HTTP endpoint in the unified HttpRouter; pass a non-empty protocols array of adapters, such as [McpProtocol.v2025\_06\_18], imported with McpProtocol from effect/ai, and registration layers as the registrations option.
 
-- `McpServer.layerStdio` -> `McpServer.layerStdio`: Moved to effect/ai/McpServer. Pass a non-empty protocols array of adapters, such as [McpProtocol.v2025\_06\_18], imported with McpProtocol from effect/ai.
+- `McpServer.layerStdio` -> `McpServer.layerStdio`: Moved to effect/ai/McpServer. Pass a non-empty protocols array of adapters, such as [McpProtocol.v2025\_06\_18], imported with McpProtocol from effect/ai, and registration layers as the registrations option.
 
-- `McpServer.prompt` -> `McpServer.prompt`: Moved to effect/ai/McpServer. The registration layer excludes McpSchema.McpRequestContext from prompt decoding, handler, and completion callback requirements instead of McpServerClient.
+- `McpServer.prompt` -> `McpServer.prompt`: Moved to effect/ai/McpServer. The layer now requires McpServer. Services read by prompt and completion handlers are request-level, provided with McpServer.middleware; read construction-time services in Layer.unwrap and close over them.
 
-- `McpServer.registerPrompt` -> `McpServer.registerPrompt`: Moved to effect/ai/McpServer. Prompt decoding, handler, and completion callback requirements now exclude McpSchema.McpRequestContext instead of McpServerClient; use the request context for protocol-neutral client metadata.
+- `McpServer.registerPrompt` -> `McpServer.registerPrompt`: Moved to effect/ai/McpServer. Services read by prompt and completion handlers are request-level, provided per request with McpServer.middleware; parameter decoding services are still required at registration. McpSchema.McpRequestContext is always provided.
 
-- `McpServer.registerResource` -> `McpServer.registerResource`: Moved to effect/ai/McpServer. Resource and completion handler requirements now exclude McpSchema.McpRequestContext instead of McpServerClient; use the request context for protocol-neutral client metadata.
+- `McpServer.registerResource` -> `McpServer.registerResource`: Moved to effect/ai/McpServer. Services read by resource and completion handlers are request-level, provided per request with McpServer.middleware; read construction-time services in the enclosing effect and close over them. McpSchema.McpRequestContext is always provided.
 
-- `McpServer.registerToolkit` -> `McpServer.registerToolkit`: Moved to effect/ai/McpServer. Requirements from every tool handler are propagated, excluding McpSchema.McpRequestContext instead of McpServerClient; provide the remaining handler services. Strict tools reject excess input properties; raw JSON Schema dynamic tools cannot use strict mode. Declared handler failures produce isError results, while parameter validation fails with InvalidParams.
+- `McpServer.registerToolkit` -> `McpServer.registerToolkit`: Moved to effect/ai/McpServer. Services a tool declares with dependencies or Tool.addDependency are request-level: provide them per request with McpServer.middleware instead of at registration. Parameter decoding and result encoding services are still required at registration. Strict tools reject excess input properties; raw JSON Schema dynamic tools cannot use strict mode. Declared handler failures produce isError results, while parameter validation fails with InvalidParams.
 
-- `McpServer.resource` -> `McpServer.resource`: Moved to effect/ai/McpServer. The registration layer excludes McpSchema.McpRequestContext from resource and completion handler requirements instead of McpServerClient.
+- `McpServer.resource` -> `McpServer.resource`: Moved to effect/ai/McpServer. The layer now requires McpServer. Services read by resource and completion handlers are request-level, provided with McpServer.middleware; read construction-time services in Layer.unwrap and close over them instead of using Layer.provide.
 
 - `McpServer.run` -> `McpServer.run`: Moved to effect/ai/McpServer. Pass a non-empty protocols array of adapters, such as [McpProtocol.v2025\_06\_18], imported with McpProtocol from effect/ai; it remains the Effect-level runner over RpcServer.Protocol.
 
-- `McpServer.toolkit` -> `McpServer.toolkit`: Moved to effect/ai/McpServer. The registration layer supplies McpSchema.McpRequestContext to handlers instead of excluding McpServerClient from requirements. Its requirements include services from every tool handler. Strict tools reject excess properties and require an Effect Schema rather than raw dynamic JSON Schema.
+- `McpServer.toolkit` -> `McpServer.toolkit`: Moved to effect/ai/McpServer. The layer now requires McpServer; pass it to a transport through the registrations option. Services a tool declares with dependencies are request-level and are provided with McpServer.middleware. Strict tools reject excess properties and require an Effect Schema rather than raw dynamic JSON Schema.
 
 ### `@effect/ai/Model`
 
@@ -4998,7 +5000,9 @@ effect/rpc/Utils (barrel: effect/rpc)
 
 ### `@effect/ai/Prompt`
 
-- `Prompt.FilePart` -> `Prompt.FilePart`: Moved to effect/ai/Prompt with the same file-part model and schema; update the module import.
+- `Prompt.FilePart` -> `Prompt.FilePart`: Moved to effect/ai/Prompt with the same file-part model; update the module import. Encoding now writes Uint8Array and URL data as JSON-safe { \_tag: "Uint8Array", base64 } and { \_tag: "URL", href } objects; decoding still accepts strings, raw Uint8Array, and URL values.
+
+- `Prompt.FilePartEncoded` -> `Prompt.FilePartEncoded`: Moved to effect/ai/Prompt; update the module import. data additionally accepts the tagged { \_tag: "Uint8Array", base64 } and { \_tag: "URL", href } forms, which the schema now produces when encoding byte arrays and URLs.
 
 - `Prompt.FromJson` -> `Schema.fromJsonString(Prompt.Prompt)`: The module-specific JSON schema was removed. Compose the general v4 JSON-string codec with the public Prompt codec.
 
@@ -5052,7 +5056,7 @@ effect/rpc/Utils (barrel: effect/rpc)
 
 - `Response.reasoningStartPart` -> `Response.makePart("reasoning-start", params)`: The lowercase convenience constructor was removed; construct the retained ReasoningStartPart through Response.makePart.
 
-- `Response.responseMetadataPart` -> `Response.makePart("response-metadata", params)`: The lowercase convenience constructor was removed. V4 id, modelId, and timestamp are optional raw values rather than Option values, and optional HTTP request details were added.
+- `Response.responseMetadataPart` -> `Response.makePart("response-metadata", params)`: The lowercase convenience constructor was removed. V4 id, modelId, and timestamp are optional raw values rather than Option values.
 
 - `Response.textDeltaPart` -> `Response.makePart("text-delta", params)`: The lowercase convenience constructor was removed; construct the retained TextDeltaPart through Response.makePart.
 
@@ -5450,7 +5454,7 @@ effect/rpc/Utils (barrel: effect/rpc)
 
 - `Options.Options` -> `Flag.Flag`: Options was renamed to Flag in effect/cli.
 
-- `Options.Options.BooleanOptionsConfig` -> `Flag.Boolean + Flag.withAlias + Flag.map`: The config object was removed; aliases and value inversion are combinators, while custom negation names need application logic.
+- `Options.Options.BooleanOptionsConfig` -> `Flag.Boolean + Flag.withAlias + Flag.withNegation + Flag.map`: The config object was removed; aliases, the negation name, and value inversion are combinators. Flag.withNegation replaces --no-name with a single custom name and Flag.withoutNegation removes it; additional negation names need application logic.
 
 - `Options.Options.PathOptionsConfig` -> `{ readonly mustExist?: boolean }`: Path options are inline; true replaces exists=yes and omission replaces either. exists=no has no exact replacement.
 
@@ -5466,7 +5470,7 @@ effect/rpc/Utils (barrel: effect/rpc)
 
 - `Options.between` -> `Flag.between`: Use the moved combinator; v4 validates bounds when constructing the parameter.
 
-- `Options.boolean` -> `Flag.Boolean + Flag.withDefault`: Use Flag.Boolean(name).pipe(Flag.withDefault(false)) to preserve v3's omitted-flag default; bare Flag.Boolean is now required. --no-name is automatic and aliases are added with Flag.withAlias.
+- `Options.boolean` -> `Flag.Boolean + Flag.withDefault`: Use Flag.Boolean(name).pipe(Flag.withDefault(false)) to preserve v3's omitted-flag default; bare Flag.Boolean is now required. --no-name is automatic; rename it with Flag.withNegation or remove it with Flag.withoutNegation. Aliases are added with Flag.withAlias.
 
 - `Options.choice` -> `Flag.Literals`: Use the moved constructor.
 
@@ -5696,7 +5700,7 @@ effect/rpc/Utils (barrel: effect/rpc)
 
 ### `@effect/cluster/ClusterCron`
 
-- `ClusterCron.make` -> `effect/cluster/ClusterCron#make`: Moved into core Effect. The constructor remains; Duration.DurationInput is now Duration.Input.
+- `ClusterCron.make` -> `effect/cluster/ClusterCron#make`: Moved into core Effect. The constructor remains; Duration.DurationInput is now Duration.Input. Read the scheduled run time inside execute from the ClusterCron.CurrentScheduledTime service instead of parsing Entity.CurrentAddress, whose entity ID no longer encodes it when calculateNextRunFromPrevious is true.
 
 ### `@effect/cluster/ClusterError`
 
@@ -5850,7 +5854,7 @@ effect/rpc/Utils (barrel: effect/rpc)
 
 ### `@effect/cluster/SingleRunner`
 
-- `SingleRunner.layer` -> `effect/cluster/SingleRunner#layer`: Moved into core Effect. V4 additionally requires Crypto.Crypto because SQL message storage hashes long deduplication keys.
+- `SingleRunner.layer` -> `effect/cluster/SingleRunner#layer`: Moved into core Effect. V4 additionally requires the `Digest` service from `effect/crypto/Digest` because SQL message storage hashes long deduplication keys.
 
 ### `@effect/cluster/SingletonAddress`
 
@@ -5864,11 +5868,11 @@ effect/rpc/Utils (barrel: effect/rpc)
 
 ### `@effect/cluster/SqlMessageStorage`
 
-- `SqlMessageStorage.layer` -> `effect/cluster/SqlMessageStorage#layer`: Moved into core Effect. V4 adds a Crypto.Crypto requirement for hashing long deduplication keys.
+- `SqlMessageStorage.layer` -> `effect/cluster/SqlMessageStorage#layer`: Moved into core Effect. V4 adds a requirement on the `Digest` service from `effect/crypto/Digest` for hashing long deduplication keys.
 
-- `SqlMessageStorage.layerWith` -> `effect/cluster/SqlMessageStorage#layerWith`: Moved into core Effect with the same optional table prefix; v4 additionally requires Crypto.Crypto.
+- `SqlMessageStorage.layerWith` -> `effect/cluster/SqlMessageStorage#layerWith`: Moved into core Effect with the same optional table prefix; v4 additionally requires the `Digest` service from `effect/crypto/Digest`.
 
-- `SqlMessageStorage.make` -> `effect/cluster/SqlMessageStorage#make`: Moved into core Effect with the same prefix option; v4 additionally requires Crypto.Crypto.
+- `SqlMessageStorage.make` -> `effect/cluster/SqlMessageStorage#make`: Moved into core Effect with the same prefix option; v4 additionally requires the `Digest` service from `effect/crypto/Digest`.
 
 ### `@effect/cluster/SqlRunnerStorage`
 
@@ -6088,13 +6092,13 @@ effect/rpc/Utils (barrel: effect/rpc)
 
 - `Persistence.ResultPersistenceTypeId` -> `none`: The ResultPersistence brand is no longer publicly exported in v4.
 
-- `Persistence.layerKeyValueStore` -> `effect/persistence/Persistence#layerBackingKvs`: The KeyValueStore backing layer was renamed to layerBackingKvs.
+- `Persistence.layerKeyValueStore` -> `effect/persistence/Persistence#layerBackingKvs`: The KeyValueStore backing layer was renamed to layerBackingKvs. Entries are now stored under `<storeId>:<key>` with the store id percent-encoded, so entries written by v3 under `<storeId><key>` are not read back and are recomputed; clearing a store removes only its own entries.
 
 - `Persistence.layerMemory` -> `effect/persistence/Persistence#layerBackingMemory`: Use layerBackingMemory for the old backing service; v4 layerMemory creates the higher-level Persistence service.
 
 - `Persistence.layerResult` -> `effect/persistence/Persistence#layer`: The ResultPersistence service layer was renamed to layer.
 
-- `Persistence.layerResultKeyValueStore` -> `effect/persistence/Persistence#layerKvs`: The combined KeyValueStore-backed result layer was renamed to layerKvs.
+- `Persistence.layerResultKeyValueStore` -> `effect/persistence/Persistence#layerKvs`: The combined KeyValueStore-backed result layer was renamed to layerKvs. Entries are now stored under `<storeId>:<key>` with the store id percent-encoded, so entries written by v3 under `<storeId><key>` are not read back and are recomputed.
 
 - `Persistence.layerResultMemory` -> `effect/persistence/Persistence#layerMemory`: The combined memory-backed result layer was renamed to layerMemory.
 
@@ -6138,7 +6142,9 @@ effect/rpc/Utils (barrel: effect/rpc)
 
 - `Reactivity.make` -> `effect/reactivity/Reactivity#make`: Import make from the v4 unstable Reactivity module.
 
-- `Reactivity.query`: TODO: needs guidance
+- `Reactivity.query` -> `effect/reactivity/Reactivity#query`: Import query from the v4 unstable Reactivity module. It returns a Queue.Dequeue instead of a Mailbox.ReadonlyMailbox; read results with Queue operations or Stream.fromQueue. Keys stay untyped unless you augment Reactivity.Keys, which then restricts key names and IDs.
+
+- `Reactivity.stream` -> `effect/reactivity/Reactivity#stream`: Import stream from the v4 unstable Reactivity module.
 
 ### `@effect/experimental/RequestResolver`
 
@@ -6294,7 +6300,7 @@ effect/rpc/Utils (barrel: effect/rpc)
 
 ### `@effect/platform-bun/BunContext`
 
-- `BunContext.BunContext` -> `BunServices.BunServices`: The aggregate was renamed and now provides ChildProcessSpawner, Crypto, FileSystem, Path, Stdio, and Terminal; add BunWorker separately when needed.
+- `BunContext.BunContext` -> `BunServices.BunServices`: The aggregate was renamed and now provides ChildProcessSpawner, FileSystem, Path, Stdio, and Terminal. It provides no crypto services: add `BunCrypto.layer` for every `effect/crypto` family, or the `BunCrypto.layer*` layer for each family you use, and add BunWorker separately when needed.
 
 - `BunContext.layer` -> `BunServices.layer`: Use the renamed aggregate layer; worker services are no longer included.
 
@@ -6308,7 +6314,7 @@ effect/rpc/Utils (barrel: effect/rpc)
 
 ### `@effect/platform-bun/BunHttpServer`
 
-- `BunHttpServer.ServeOptions` -> `BunHttpServer.ServeOptions<R>`: The alias remains, but R is now a route-key string union and routes uses Bun.Serve.Routes; update old route-map generic arguments or infer R from routes.
+- `BunHttpServer.ServeOptions` -> `BunHttpServer.ServeOptions<R>`: The alias remains, but R is now a route-key string union and routes uses Bun.Serve.Routes; update old route-map generic arguments or infer R from routes. Bun's 10 second idleTimeout is now disabled unless idleTimeout is set, so directly exposed servers should set it.
 
 - `BunHttpServer.layerContext` -> `BunHttpServer.layerHttpServices`: Direct rename; it provides HttpPlatform, Etag.Generator, and BunServices.
 
@@ -6406,9 +6412,9 @@ effect/rpc/Utils (barrel: effect/rpc)
 
 ### `@effect/platform-node/NodeContext`
 
-- `NodeContext.NodeContext` -> `NodeServices.NodeServices`: Use the renamed service union; it replaces CommandExecutor with ChildProcessSpawner, adds Crypto and Stdio, and omits WorkerManager.
+- `NodeContext.NodeContext` -> `NodeServices.NodeServices`: Use the renamed service union; it replaces CommandExecutor with ChildProcessSpawner, adds Stdio, and omits WorkerManager. It includes no crypto services.
 
-- `NodeContext.layer` -> `NodeServices.layer`: The aggregate was renamed and now provides ChildProcessSpawner, Crypto, FileSystem, Path, Stdio, and Terminal; add NodeWorker separately when needed.
+- `NodeContext.layer` -> `NodeServices.layer`: The aggregate was renamed and now provides ChildProcessSpawner, FileSystem, Path, Stdio, and Terminal. It provides no crypto services: add `NodeCrypto.layer` for every `effect/crypto` family, or the `NodeCrypto.layer*` layer for each family you use, and add NodeWorker separately when needed.
 
 ### `@effect/platform-node/NodeFileSystem/ParcelWatcher`
 
@@ -6570,7 +6576,7 @@ effect/rpc/Utils (barrel: effect/rpc)
 
 - `Command.lines` -> `ChildProcessSpawner.ChildProcessSpawner.lines`: Output collection moved onto the ChildProcessSpawner service.
 
-- `Command.runInShell` -> `ChildProcess.CommandOptions["shell"]`: Set shell when calling ChildProcess.make; there is no post-construction shell combinator.
+- `Command.runInShell` -> `ChildProcess.CommandOptions["shell"]`: Set shell when calling ChildProcess.make; there is no post-construction shell combinator. With shell set, the command string is the whole script: extra arguments fail with BadArgument and templates cannot interpolate ${} values, so build the script with CommandLine.join or CommandLine.quote.
 
 - `Command.start` -> `ChildProcessSpawner.ChildProcessSpawner.spawn`: Use the spawner service, or yield the Effectable ChildProcess.Command directly, to obtain a ChildProcessHandle.
 
@@ -6700,7 +6706,7 @@ effect/rpc/Utils (barrel: effect/rpc)
 
 - `FileSystem.layerNoop` -> `FileSystem.layerNoop`: The helper remains after moving the module to effect/FileSystem.
 
-- `FileSystem.make` -> `FileSystem.make`: The constructor remains after moving the module to effect/FileSystem; adapt the implementation to the v4 service shape.
+- `FileSystem.make` -> `FileSystem.make`: The constructor remains after moving the module to effect/FileSystem; adapt the implementation to the v4 service shape, which also requires lstat to return File.Info without following symbolic links and readDirectoryEntries to list { name, type } entries (map readDirectory names to type "Unknown" if types are unavailable). glob is derived and cannot be passed; override it afterward with FileSystem.of({ ...fs, glob }).
 
 ### `@effect/platform/Headers`
 
@@ -6912,6 +6918,8 @@ effect/rpc/Utils (barrel: effect/rpc)
 
 - `HttpApiMiddleware.HttpApiMiddleware.Provides` -> `effect/http-api/HttpApiMiddleware#Provides`: Same name and reads the expanded v4 middleware ID metadata.
 
+- `HttpApiMiddleware.HttpApiMiddleware.Without` -> `Exclude<R, HttpApiMiddleware.AnyId>`: The helper was removed because middleware IDs are explicit; use Exclude when the direct filter is still needed.
+
 - `HttpApiMiddleware.SecurityTypeId` -> `none`: The marker is private; use HttpApiMiddleware.isSecurity.
 
 - `HttpApiMiddleware.Tag` -> `effect/http-api/HttpApiMiddleware#Service`: Renamed and redesigned; use error, requires, provides, clientError, and requiredForClient configuration.
@@ -7104,6 +7112,8 @@ effect/rpc/Utils (barrel: effect/rpc)
 
 - `HttpClient.transform` -> `effect/http/HttpClient#transform`: Moved to the v4 HTTP module with the same request-aware transformation shape.
 
+- `HttpClient.withCookiesRef` -> `HttpClient.withCookiesRef`: Pass a Ref\<ReadonlyArray\<Cookies.Cookie\>\> instead of a Ref\<Cookies\>. Stored cookies are sent only to a matching host, path and scheme, and a cookie without a domain is never sent; seed the ref with Cookies.mergeIntoArray for the target URL or with cookies that set a domain.
+
 - `HttpClient.withSpanNameGenerator` -> `HttpClient.transformResponse(Effect.provideService(HttpClient.SpanNameGenerator, f))`: The convenience combinator was removed; provide the reference around response effects.
 
 - `HttpClient.withTracerDisabledWhen` -> `HttpClient.transformResponse(Effect.provideService(HttpClient.TracerDisabledWhen, predicate))`: The convenience combinator was removed; provide the reference around response effects.
@@ -7119,6 +7129,8 @@ effect/rpc/Utils (barrel: effect/rpc)
 - `HttpClientError.TypeId` -> `HttpClientError.isHttpClientError`: The brand key is private in v4; use the public runtime refinement.
 
 ### `@effect/platform/HttpClientRequest`
+
+- `HttpClientRequest.HttpClientRequest` -> `HttpClientRequest.HttpClientRequest`: method is now typed as string because requests converted from Web or server requests can carry methods outside the HttpMethod literals; exhaustive matches need a fallback or an HttpMethod.isHttpMethod guard.
 
 - `HttpClientRequest.Options.NoBody` -> `HttpClientRequest.Options.NoUrl`: NoBody was removed; v4 method helpers uniformly omit only url.
 
@@ -7140,7 +7152,7 @@ effect/rpc/Utils (barrel: effect/rpc)
 
 ### `@effect/platform/HttpClientResponse`
 
-- `HttpClientResponse.HttpClientResponse` -> `HttpClientResponse.HttpClientResponse`: Custom implementations must supply the required url string. It represents the resolved URL including query parameters and excluding the hash, uses the final URL after redirects, and is empty when unknown.
+- `HttpClientResponse.HttpClientResponse` -> `HttpClientResponse.HttpClientResponse`: Custom implementations must supply the required url string and an upgrade effect. url represents the resolved URL including query parameters and excluding the hash, uses the final URL after redirects, and is empty when unknown. upgrade returns the upgraded Socket and should fail with an HttpClientError when the backend cannot hand over the connection.
 
 - `HttpClientResponse.TypeId` -> `typeof HttpClientResponse.TypeId`: TypeId remains public but is now a string constant; use typeof in type position.
 
@@ -7174,6 +7186,8 @@ effect/rpc/Utils (barrel: effect/rpc)
 
 - `HttpLayerRouter.FindMyWay.make` -> `FindMyWay.make`: Import FindMyWay from effect/http.
 
+- `HttpLayerRouter.Middleware` -> `HttpRouter.Middleware`: Moved with the layer-oriented router into the consolidated HttpRouter module. McpServer.Middleware is a separate type for MCP request middleware.
+
 - `HttpLayerRouter.MiddlewareTypeId` -> `none`: The middleware type id is internal in v4; use HttpRouter.Middleware.
 
 - `HttpLayerRouter.PathInput` -> `HttpRouter.PathInput`: Moved to the consolidated v4 router.
@@ -7181,6 +7195,8 @@ effect/rpc/Utils (barrel: effect/rpc)
 - `HttpLayerRouter.Request.From` -> `HttpRouter.Request.From`: Moved with the layer-oriented router into the consolidated HttpRouter module.
 
 - `HttpLayerRouter.Request.Only` -> `HttpRouter.Request.Only`: Moved with the layer-oriented router into the consolidated HttpRouter module.
+
+- `HttpLayerRouter.Request.Without` -> `HttpRouter.Request.Without`: Moved with the layer-oriented router into the consolidated HttpRouter module. McpServer.McpRequest.Without is the MCP counterpart.
 
 - `HttpLayerRouter.Route.Context` -> `HttpRouter.Route.Context`: Moved with the Route helper types into the consolidated HttpRouter module.
 
@@ -7206,6 +7222,10 @@ effect/rpc/Utils (barrel: effect/rpc)
 
 - `HttpLayerRouter.make` -> `HttpRouter.make`: The layer-oriented router became the sole v4 HttpRouter implementation.
 
+- `HttpLayerRouter.middleware.Fn` -> `HttpRouter.middleware.Fn`: Moved with the layer-oriented router into the consolidated HttpRouter module. McpServer.middleware.Fn is a separate type for MCP request middleware.
+
+- `HttpLayerRouter.middleware.Make` -> `HttpRouter.middleware.Make`: Moved with the layer-oriented router into the consolidated HttpRouter module. McpServer.middleware.Make is a separate type for MCP request middleware.
+
 - `HttpLayerRouter.schemaJson` -> `HttpRouter.schemaJson`: Moved to the consolidated router with v4 Schema and error types.
 
 - `HttpLayerRouter.schemaNoBody` -> `HttpRouter.schemaNoBody`: Moved to the consolidated router with v4 Schema types.
@@ -7215,6 +7235,10 @@ effect/rpc/Utils (barrel: effect/rpc)
 - `HttpLayerRouter.toHttpEffect` -> `HttpRouter.toHttpEffect`: Moved to the consolidated HttpRouter; route-not-found failures now use HttpServerError.HttpServerError.
 
 - `HttpLayerRouter.toWebHandler` -> `HttpRouter.toWebHandler`: Moved to the consolidated router for building a Fetch handler and disposer.
+
+### `@effect/platform/HttpMethod`
+
+- `HttpMethod.hasBody` -> `HttpMethod.hasBody`: Retained and now narrows an HttpMethod to HttpMethod.WithBody. An overload also accepts any string, such as a received request method, and returns a plain boolean.
 
 ### `@effect/platform/HttpMiddleware`
 
@@ -7352,6 +7376,8 @@ effect/rpc/Utils (barrel: effect/rpc)
 
 ### `@effect/platform/HttpServerRequest`
 
+- `HttpServerRequest.HttpServerRequest` -> `HttpServerRequest.HttpServerRequest`: Custom implementations must also supply upgradeWith({ headers }), which upgrades the connection and sends the given headers on the 101 response; upgrade is equivalent to upgradeWith({}). WebSocket upgrades fail when headers are given. method is now typed as string because received methods such as PROPFIND are kept as is; exhaustive matches need a fallback or an HttpMethod.isHttpMethod guard.
+
 - `HttpServerRequest.ParsedSearchParams` -> `HttpServerRequest.ParsedSearchParams`: The marker and tag became one Context.Service class.
 
 - `HttpServerRequest.TypeId` -> `typeof HttpServerRequest.TypeId`: TypeId remains public but is now a string constant; use typeof in type position.
@@ -7369,6 +7395,8 @@ effect/rpc/Utils (barrel: effect/rpc)
 - `HttpServerRequest.toWeb` -> `HttpServerRequest.toWeb`: Retained and captures the current Context for streamed bodies.
 
 - `HttpServerRequest.toWebEither` -> `HttpServerRequest.toWebResult`: Either became Result, and the optional Runtime became an optional Context.
+
+- `HttpServerRequest.upgrade` -> `HttpServerRequest.HttpServerRequest.use((request) => request.upgrade)`: The top-level accessor was removed; read upgrade from the request service. It fails with HttpServerError instead of RequestError. HttpServerRequest.upgradeChannel remains for channel-based WebSocket handling.
 
 ### `@effect/platform/HttpServerRespondable`
 
@@ -7414,9 +7442,9 @@ effect/rpc/Utils (barrel: effect/rpc)
 
 - `KeyValueStore.layerSchema` -> `KeyValueStore.toSchemaStore`: Schema stores are now derived with toSchemaStore; define the desired Context.Service and layer explicitly.
 
-- `KeyValueStore.make` -> `KeyValueStore.make`: The constructor remains in the moved module with v4 MakeOptions.
+- `KeyValueStore.make` -> `KeyValueStore.make`: The constructor remains in the moved module with v4 MakeOptions. Custom stores must now also provide keys, an effect returning a snapshot of the stored keys; clearPrefix is derived from keys and remove when omitted.
 
-- `KeyValueStore.prefix` -> `KeyValueStore.prefix`: The prefixed-store combinator remains in the moved module.
+- `KeyValueStore.prefix` -> `KeyValueStore.prefix`: The prefixed-store combinator remains in the moved module. Unlike v3, clear, size and isEmpty now apply only to keys under the prefix, and keys returns them with the prefix removed.
 
 ### `@effect/platform/MsgPack`
 
@@ -7820,6 +7848,10 @@ effect/rpc/Utils (barrel: effect/rpc)
 
 - `RpcClient.currentHeaders` -> `effect/rpc/RpcClient#CurrentHeaders`: Renamed and changed from FiberRef to Context.Reference; prefer RpcClient.withHeaders for scoped overrides.
 
+- `RpcClient.layerProtocolHttp` -> `effect/rpc/RpcClient#layerProtocolHttp`: Retained; it provides the v4 Protocol from HttpClient and RpcSerialization.
+
+- `RpcClient.makeNoSerialization` -> `effect/rpc/RpcClient#makeNoSerialization`: Retained, but onFromClient no longer receives a discard flag; a discarded call is a Request message with discard: true. Discarded calls now complete when the server acknowledges them rather than when the request is written.
+
 - `RpcClient.makeProtocolHttp` -> `effect/rpc/RpcClient#makeProtocolHttp`: Retained; it creates the Protocol service implementation from an HttpClient.
 
 - `RpcClient.withHeadersEffect` -> `Effect.flatMap(headers, (value) => RpcClient.withHeaders(effect, value))`: withHeaders now accepts Headers.Input synchronously; evaluate effectful headers first and then scope the client effect.
@@ -8020,7 +8052,7 @@ effect/rpc/Utils (barrel: effect/rpc)
 
 - `PgClient.PgClient` -> `@effect/sql-pg/PgClient#PgClient`: Retained; the service value is now a Context.Service. The listen method returns a scoped Effect acquiring a Queue.Dequeue\<PgConnection.Notification, SqlError\>; consume it with Queue operations or Stream.fromQueue and read each notification's payload. Connection failures after registration fail the queue with the original SqlError; scope closure interrupts consumers.
 
-- `PgClient.PgClientConfig` -> `@effect/sql-pg/PgClient#PgClientConfig / PgPoolConfig`: Use PgClientConfig for base settings and PgPoolConfig for make/layer; pool sizing, idle timeout, and connection TTL moved to PgPoolConfig. The types option takes a PgTypes.Registry rather than node-pg custom types. Timestamp and timestamptz results (including array elements) are Date values with millisecond precision; infinity, -infinity, and out-of-range values become invalid Dates. Numeric readers can use getTime() or register numeric codecs. Date parameters bind as timestamptz; use PgTypes.timestamp(value) to preserve UTC fields when writing a timestamp column instead of applying the session TimeZone.
+- `PgClient.PgClientConfig` -> `@effect/sql-pg/PgClient#PgClientConfig / PgPoolConfig`: Use PgClientConfig for base settings and PgPoolConfig for make/layer; pool sizing, idle timeout, and connection TTL moved to PgPoolConfig. v3 connectTimeout also bounded waits for a free pooled connection through node-pg; v4 connectTimeout covers only opening a connection, so set acquireTimeout to fail with ConnectionError when the pool stays exhausted. The types option takes a PgTypes.Registry rather than node-pg custom types. Timestamp and timestamptz results (including array elements) are Date values with millisecond precision; infinity, -infinity, and out-of-range values become invalid Dates. Numeric readers can use getTime() or register numeric codecs. Date parameters bind as timestamptz; use PgTypes.timestamp(value) to preserve UTC fields when writing a timestamp column instead of applying the session TimeZone.
 
 - `PgClient.PgClientFromPoolOptions` -> `none`: The node-pg Pool wrapper options were removed with fromPool. Use PgClient.PgPoolConfig with PgClient.make or PgClient.layer.
 
@@ -8124,11 +8156,11 @@ effect/rpc/Utils (barrel: effect/rpc)
 
 ### `@effect/sql/SqlEventLogServer`
 
-- `SqlEventLogServer.layerStorage` -> `effect/eventlog/SqlEventLogServerEncrypted#layerStorage`: Moved to the encrypted server module; remove insertBatchSize. entryTablePrefix and remoteIdTable remain, as does the EventLogEncryption requirement. Storage uses encrypted batch tables and entry-id lookup tables, not the old per-entry ciphertext schema; existing encrypted tables are not automatically converted.
+- `SqlEventLogServer.layerStorage` -> `effect/eventlog/SqlEventLogServerEncrypted#layerStorage`: Moved to the encrypted server module; remove insertBatchSize. entryTablePrefix and remoteIdTable remain. It requires the `Digest` service from `effect/crypto/Digest` instead of EventLogEncryption, which hashed the table names in v3. Storage uses encrypted batch tables and entry-id lookup tables, not the old per-entry ciphertext schema; existing encrypted tables are not automatically converted.
 
-- `SqlEventLogServer.layerStorageSubtle` -> `effect/eventlog/SqlEventLogServerEncrypted#layerStorageSubtle`: Moved to the encrypted server module; remove insertBatchSize. The layer still supplies Web Crypto encryption. Storage now uses encrypted batch tables and entry-id lookup tables; existing per-entry ciphertext tables are not automatically converted.
+- `SqlEventLogServer.layerStorageSubtle` -> `effect/eventlog/SqlEventLogServerEncrypted#layerStorageSubtle`: Moved to the encrypted server module; remove insertBatchSize. The layer supplies the Web Crypto `Digest` layer. Storage now uses encrypted batch tables and entry-id lookup tables; existing per-entry ciphertext tables are not automatically converted.
 
-- `SqlEventLogServer.makeStorage` -> `effect/eventlog/SqlEventLogServerEncrypted#makeStorage`: Moved to the encrypted server module; remove insertBatchSize. SQL, encryption, and scope requirements remain. Storage uses encrypted batch tables and entry-id lookup tables, not the old per-entry ciphertext schema; existing encrypted tables are not automatically converted.
+- `SqlEventLogServer.makeStorage` -> `effect/eventlog/SqlEventLogServerEncrypted#makeStorage`: Moved to the encrypted server module; remove insertBatchSize. SQL and scope requirements remain; the EventLogEncryption requirement is replaced by the `Digest` service from `effect/crypto/Digest`. Storage uses encrypted batch tables and entry-id lookup tables, not the old per-entry ciphertext schema; existing encrypted tables are not automatically converted.
 
 ### `@effect/sql/SqlPersistedQueue`
 
@@ -8154,6 +8186,8 @@ effect/rpc/Utils (barrel: effect/rpc)
 
 ### `@effect/sql/Statement`
 
+- `Statement.Constructor` -> `effect/sql/Statement#Constructor`: Moved to core Effect. sql.updateValues now escapes its alias as an identifier without applying name transforms; pass a bare alias such as "data" rather than pre-quoted SQL, and quote mixed-case PostgreSQL aliases where the query references them. sql.insert and sql.updateValues now require a non-empty array of rows; narrow array inputs with Array.isReadonlyArrayNonEmpty first.
+
 - `Statement.Fragment`: TODO: needs guidance
 
 - `Statement.FragmentId` -> `none`: The v4 fragment brand is private; use Fragment, fragment, and isFragment instead of direct type-id access.
@@ -8170,7 +8204,7 @@ effect/rpc/Utils (barrel: effect/rpc)
 
 - `Statement.make` -> `effect/sql/Statement#make`: Moved with the same constructor inputs.
 
-- `Statement.makeCompiler` -> `effect/sql/Statement#makeCompiler`: Moved to core Effect; the constructor options are exposed as Statement.CompilerOptions and retain the dialect-specific callbacks.
+- `Statement.makeCompiler` -> `effect/sql/Statement#makeCompiler`: Moved to core Effect; the constructor options are exposed as Statement.CompilerOptions and retain the dialect-specific callbacks. onRecordUpdate now receives the updateValues alias already escaped with onIdentifier(alias, true); insert it as is.
 
 - `Statement.setTransformer` -> `Layer.succeed(Statement.CurrentTransformer, transformer)`: The helper was removed; provide the CurrentTransformer reference as a layer.
 
@@ -8719,6 +8753,10 @@ effect/rpc/Utils (barrel: effect/rpc)
 - `index.WorkerContext` -> `vitest/node#WorkerContext`: This was a deprecated Vitest 3 root re-export. Import the type directly from vitest/node and review its Vitest 5 shape.
 
 - `index.WorkerRPC` -> `none`: The concrete worker RPC composition is internal. Use public Vitest RuntimeRPC, RunnerRPC, ContextRPC, or WorkerRequest types only when their narrower contract fits.
+
+- `index.beforeAll` -> `@effect/vitest#beforeAll`: Still accepts Vitest callbacks. A callback may also return an Effect, which runs with a Scope that closes after the suite's afterAll hooks; the Effect must not require other services.
+
+- `index.beforeEach` -> `@effect/vitest#beforeEach`: Still accepts Vitest callbacks. A callback may also return an Effect, which runs with a Scope that closes when the test finishes; the Effect must not require other services.
 
 - `index.bench` -> `vitest#test`: Vitest 5 removes the top-level bench export. Destructure bench from a regular test's context and await bench(name, fn).run(); use skip, only, or todo on the enclosing test.
 
@@ -9648,6 +9686,8 @@ Arbitrary.schema(schema)
 
 - `Data.TaggedEnum` -> `Data.TaggedEnum`: Still exported with the same record-to-discriminated-union role.
 
+- `Data.TaggedEnum.Constructor` -> `Data.TaggedEnum.Constructor`: Still the type of the object Data.taggedEnum returns for a non-generic enum, now a named intersection instead of a flattened object type. $match no longer rejects extra case keys at compile time. Annotate constructors for generic enums with Data.TaggedEnum.GenericConstructor.
+
 - `Data.TaggedEnum.GenericMatchers` -> `Data.TaggedEnum.GenericMatchers`: Still exported with $is and $match helpers.
 
 - `Data.array` -> `none`: Use a normal copied array such as [...values]; v4 compares plain arrays structurally.
@@ -9834,9 +9874,9 @@ Arbitrary.schema(schema)
 
 - `Duration.decodeUnknown` -> `Duration.fromInput`: The safe decoder was renamed and accepts Duration.Input, returning Option\<Duration\>.
 
-- `Duration.formatIso` -> `none`: ISO 8601 duration formatting was removed from the v4 Duration module. The v4 source and migration guides expose no direct replacement; retain a local formatter when this wire format is required.
+- `Duration.formatIso` -> `Duration.formatIso`: Available again from 4.1. The output is balanced into days, hours, minutes and seconds and never contains weeks, months or years; infinite durations return Option.none().
 
-- `Duration.fromIso` -> `none`: ISO 8601 duration parsing was removed from the v4 Duration module. The v4 source and migration guides expose no direct replacement; use a dedicated ISO parser and pass the resulting parts to Duration.fromInput.
+- `Duration.fromIso` -> `Duration.fromIso`: Available again from 4.1 for exact units only (weeks, days, hours, minutes and seconds). Years and months are rejected instead of approximated. Use Schema.DurationFromIsoString for a Schema codec.
 
 - `Duration.greaterThan` -> `Duration.isGreaterThan`: The comparison was renamed with the is prefix.
 
@@ -9850,7 +9890,7 @@ Arbitrary.schema(schema)
 
 - `Duration.unsafeDivide` -> `Duration.divideUnsafe`: The unsafe prefix moved to the end of the division function name.
 
-- `Duration.unsafeFormatIso` -> `none`: ISO 8601 duration formatting was removed from v4. The v4 Duration exports and migration guides contain no direct unsafe formatter; retain a local formatter if required.
+- `Duration.unsafeFormatIso` -> `none`: There is no throwing variant. Use Duration.formatIso and handle Option.none() for infinite durations.
 
 - `Duration.unsafeToNanos` -> `Duration.toNanosUnsafe`: The unsafe prefix moved to the end of the nanosecond conversion name.
 
@@ -12593,13 +12633,13 @@ Effect.callback<number>((resume) => resume(Effect.succeed(1)))
 
 - `Micro.exitInterrupt` -> `Exit.interrupt`: MicroExit was replaced by the unified effect/Exit module in v4. Takes an optional fiber id.
 
-- `Micro.exitIsDie` -> `Exit.hasDies`: v4 exits carry a multi-reason Cause, so tag refinements become reason queries: Exit.hasDies checks the failure cause for Die reasons.
+- `Micro.exitIsDie` -> `Exit.hasDies`: v4 exits carry a multi-reason Cause, so tag refinements become reason queries: Exit.hasDies checks the failure cause for Die reasons. It returns boolean and does not narrow the Exit; check Exit.isFailure first to read the cause.
 
-- `Micro.exitIsFail` -> `Exit.hasFails`: v4 exits carry a multi-reason Cause, so tag refinements become reason queries: Exit.hasFails checks the failure cause for Fail reasons.
+- `Micro.exitIsFail` -> `Exit.hasFails`: v4 exits carry a multi-reason Cause, so tag refinements become reason queries: Exit.hasFails checks the failure cause for Fail reasons. It returns boolean and does not narrow the Exit; check Exit.isFailure first to read the cause.
 
 - `Micro.exitIsFailure` -> `Exit.isFailure`: Same refinement in the unified effect/Exit module.
 
-- `Micro.exitIsInterrupt` -> `Exit.hasInterrupts`: v4 exits carry a multi-reason Cause, so tag refinements become reason queries: Exit.hasInterrupts checks the failure cause for Interrupt reasons.
+- `Micro.exitIsInterrupt` -> `Exit.hasInterrupts`: v4 exits carry a multi-reason Cause, so tag refinements become reason queries: Exit.hasInterrupts checks the failure cause for Interrupt reasons. It returns boolean and does not narrow the Exit; check Exit.isFailure first to read the cause.
 
 - `Micro.exitIsSuccess` -> `Exit.isSuccess`: Same refinement in the unified effect/Exit module.
 

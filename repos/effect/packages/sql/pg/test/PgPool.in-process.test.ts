@@ -1,6 +1,6 @@
 import { PgClient, PgPool } from "@effect/sql-pg"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Fiber, Option, Queue, References, Tracer } from "effect"
+import { Cause, Effect, Fiber, Latch, Option, Queue, References, Tracer } from "effect"
 import type * as Duration from "effect/Duration"
 import * as Reactivity from "effect/reactivity/Reactivity"
 import type * as Scope from "effect/Scope"
@@ -28,6 +28,15 @@ const emptyQueryResult = Buffer.concat([
   backendMessage("C", Buffer.from("SELECT 0\0")),
   backendMessage("Z", Buffer.from("I"))
 ])
+
+const completed = (tag: string, status: string) =>
+  Buffer.concat([
+    backendMessage("1", Buffer.alloc(0)),
+    backendMessage("2", Buffer.alloc(0)),
+    backendMessage("n", Buffer.alloc(0)),
+    backendMessage("C", Buffer.from(`${tag}\0`)),
+    backendMessage("Z", Buffer.from(status))
+  ])
 
 const waitFor = (predicate: () => boolean) =>
   Effect.promise(async () => {
@@ -108,7 +117,9 @@ describe("PgPool failed startup", () => {
 })
 
 describe("PgPool acquireTimeout", () => {
-  it.live("fails a checkout that waits on an exhausted pool past acquireTimeout", () =>
+  // The timeouts run on the TestClock, so opening the first connection on a
+  // busy machine cannot use up the acquireTimeout before the pool is exhausted.
+  it.effect("fails a checkout that waits on an exhausted pool past acquireTimeout", () =>
     Effect.gen(function*() {
       const sql = yield* PgClient.make({
         username: "test",
@@ -127,23 +138,25 @@ describe("PgPool acquireTimeout", () => {
       })
       yield* sql.reserve
 
-      const statement = yield* Effect.flip(sql`SELECT 1`)
-      assert.strictEqual(statement.reason._tag, "ConnectionError")
-      assert.strictEqual(statement.reason.operation, "acquireConnection")
-      const transaction = yield* Effect.flip(sql.withTransaction(sql`SELECT 1`))
-      assert.strictEqual(transaction.reason._tag, "ConnectionError")
-      assert.strictEqual(transaction.reason.operation, "acquireConnection")
+      const statement = yield* Effect.forkChild(Effect.flip(sql`SELECT 1`))
+      const transaction = yield* Effect.forkChild(Effect.flip(sql.withTransaction(sql`SELECT 1`)))
+      yield* TestClock.adjust("100 millis")
+      for (const error of [yield* Fiber.join(statement), yield* Fiber.join(transaction)]) {
+        assert.strictEqual(error.reason._tag, "ConnectionError")
+        assert.strictEqual(error.reason.operation, "acquireConnection")
+      }
     }).pipe(
       Effect.scoped,
       Effect.provide(Reactivity.layer)
     ), 10_000)
 
-  it.live(
+  it.effect(
     "fails a multiplexed reservation that waits on a busy pipeline past acquireTimeout",
     () =>
       Effect.gen(function*() {
         let socket!: Duplex
         let writes = 0
+        const statementSent = Latch.makeUnsafe()
         const sql = yield* PgClient.make({
           username: "test",
           maxConnections: 1,
@@ -154,6 +167,7 @@ describe("PgPool acquireTimeout", () => {
               read() {},
               write(_chunk: Buffer, _encoding, callback) {
                 if (++writes === 1) queueMicrotask(() => socket.push(ready))
+                else statementSent.openUnsafe()
                 callback()
               }
             })
@@ -162,10 +176,12 @@ describe("PgPool acquireTimeout", () => {
         })
         // The shared statement stays on the wire until the backend answers it.
         const busy = yield* Effect.forkChild(sql`SELECT 1`)
-        yield* waitFor(() => writes === 2)
+        yield* statementSent.await
 
         // The failed reservation shares the test scope, which stays open.
-        const error = yield* Effect.flip(sql.reserve)
+        const reservation = yield* Effect.forkChild(Effect.flip(sql.reserve))
+        yield* TestClock.adjust("100 millis")
+        const error = yield* Fiber.join(reservation)
         assert.strictEqual(error.reason._tag, "ConnectionError")
         assert.strictEqual(error.reason.operation, "acquireConnection")
 
@@ -300,4 +316,153 @@ describe("PgPool connection spans", () => {
       true
     )
   })
+
+  it.effect("reports a cold transaction's connect and control statements under its transaction span", () => {
+    const { named, tracer } = recording()
+    // A backend that accepts every BEGIN and COMMIT.
+    const stream = () => {
+      let startup = true
+      const socket = new Duplex({
+        read() {},
+        write(chunk: Buffer, _encoding, callback) {
+          if (startup) {
+            startup = false
+            queueMicrotask(() => socket.push(ready))
+          } else if (chunk[0] === 0x50) {
+            const response = chunk.includes("BEGIN") ? completed("BEGIN", "T") : completed("COMMIT", "I")
+            queueMicrotask(() => socket.push(response))
+          }
+          callback()
+        }
+      })
+      return socket
+    }
+    return traced(
+      Effect.gen(function*() {
+        const sql = yield* PgClient.make({
+          username: "test",
+          database: "app",
+          maxConnections: 1,
+          prepare: false,
+          stream
+        })
+        yield* sql.withTransaction(Effect.void).pipe(Effect.withSpan("outer"))
+
+        const [transaction] = named("sql.transaction")
+        assert.deepStrictEqual(
+          ["db.connect", "BEGIN app", "COMMIT app"].map((name) =>
+            named(name).map((span) => Option.getOrThrow(span.parent).spanId)
+          ),
+          [[transaction.spanId], [transaction.spanId], [transaction.spanId]]
+        )
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(Reactivity.layer)
+      ),
+      tracer,
+      true
+    )
+  })
+})
+
+describe("PgClient failed transaction cleanup", () => {
+  const failed = (code: string) =>
+    Buffer.concat([
+      backendMessage("E", Buffer.from(`SERROR\0C${code}\0Mfailed\0\0`)),
+      backendMessage("Z", Buffer.from("E"))
+    ])
+
+  // A backend whose COMMIT is rejected before it runs, as when a pooler has
+  // lost the prepared statement, and whose ROLLBACK is cancelled. Both leave
+  // the transaction aborted, and an aborted session rejects everything else.
+  const abortingBackend = () => {
+    let startup = true
+    let aborted = false
+    const socket = new Duplex({
+      read() {},
+      write(chunk: Buffer, _encoding, callback) {
+        if (startup) {
+          startup = false
+          queueMicrotask(() => socket.push(ready))
+        } else if (chunk[0] === 0x50) {
+          let response: Buffer
+          if (chunk.includes("ROLLBACK") || chunk.includes("COMMIT")) {
+            aborted = true
+            response = failed(chunk.includes("COMMIT") ? "26000" : "57014")
+          } else if (aborted) {
+            response = failed("25P02")
+          } else if (chunk.includes("BEGIN")) {
+            response = completed("BEGIN", "T")
+          } else {
+            response = completed("SELECT 0", "I")
+          }
+          queueMicrotask(() => socket.push(response))
+        }
+        callback()
+      }
+    })
+    return socket
+  }
+
+  it.effect("does not reuse a session left in an aborted transaction", () =>
+    Effect.gen(function*() {
+      const sql = yield* PgClient.make({ username: "test", maxConnections: 1, prepare: false, stream: abortingBackend })
+
+      const commit = yield* sql.withTransaction(Effect.void).pipe(Effect.sandbox, Effect.flip)
+      assert.isFalse(Cause.hasDies(commit))
+      assert.propertyVal(Cause.squash(commit), "_tag", "SqlError")
+      yield* sql`SELECT 1`
+
+      yield* Effect.exit(sql.withTransaction(Effect.fail("body")))
+      yield* sql`SELECT 1`
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(Reactivity.layer)
+    ))
+})
+
+const readyStream = () => {
+  const socket = new Duplex({
+    read() {},
+    write(_chunk: Buffer, _encoding, callback) {
+      queueMicrotask(() => socket.push(ready))
+      callback()
+    }
+  })
+  return socket
+}
+
+describe("pool stats", () => {
+  it.effect("counts a multiplexed session once however many fibers share it", () =>
+    Effect.scoped(Effect.gen(function*() {
+      const pool = yield* PgPool.make({ username: "test", multiplex: true, maxConnections: 2, stream: readyStream })
+      yield* pool.get
+      yield* pool.get
+      yield* pool.get
+      assert.deepStrictEqual(yield* pool.stats, { idle: 0, used: 1, pending: 0, min: 0, max: 2 })
+    })))
+
+  it.effect("PgClient.make reports the occupancy of its pool", () =>
+    Effect.scoped(Effect.gen(function*() {
+      const sql = yield* PgClient.make({ username: "test", maxConnections: 3, stream: readyStream })
+      assert.deepStrictEqual(yield* sql.poolStats, { idle: 0, used: 0, pending: 0, min: 0, max: 3 })
+      yield* Effect.scoped(Effect.gen(function*() {
+        yield* sql.reserve
+        assert.deepStrictEqual(yield* sql.poolStats, { idle: 0, used: 1, pending: 0, min: 0, max: 3 })
+      }))
+      assert.deepStrictEqual(yield* sql.poolStats, { idle: 1, used: 0, pending: 0, min: 0, max: 3 })
+    })).pipe(Effect.provide(Reactivity.layer)))
+
+  it.effect("PgClient.makeClient reports its one session as permanently leased", () =>
+    Effect.scoped(Effect.gen(function*() {
+      const sql = yield* PgClient.makeClient({ username: "test", stream: readyStream })
+      // The snapshot describes the session, not statement activity, so it does
+      // not change while work runs on it.
+      const leased = { idle: 0, used: 1, pending: 0, min: 1, max: 1 }
+      assert.deepStrictEqual(yield* sql.poolStats, leased)
+      yield* Effect.scoped(Effect.gen(function*() {
+        yield* sql.reserve
+        assert.deepStrictEqual(yield* sql.poolStats, leased)
+      }))
+    })).pipe(Effect.provide(Reactivity.layer)))
 })

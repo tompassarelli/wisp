@@ -46,6 +46,29 @@ for (const mode of ["effect", "live"] as const) {
   })
 }
 
+describe("it.effect timeout finalizer defects", { concurrent: false }, () => {
+  const logged: Array<string> = []
+  const collect = (...args: Array<unknown>) => {
+    logged.push(args.map(String).join(" "))
+  }
+  // The default logger writes to console.log, or console.error when logging to stderr.
+  beforeAll(() => {
+    vi.spyOn(console, "log").mockImplementation(collect)
+    vi.spyOn(console, "error").mockImplementation(collect)
+  })
+  afterAll(() => vi.restoreAllMocks())
+
+  it.effect.fails("times out while a finalizer dies", () =>
+    Effect.gen(function*() {
+      yield* Effect.addFinalizer(() => Effect.die(new Error("finalizer failed")))
+      return yield* Effect.never
+    }), { timeout: 75 })
+
+  it("reports the finalizer defect", () => {
+    assert.isTrue(logged.some((line) => line.includes("finalizer failed")))
+  })
+})
+
 describe("beforeEach timeout finalizers", { concurrent: false }, () => {
   const events: Array<string> = []
 
@@ -246,7 +269,7 @@ describe("it.effect timeout retry finalizers", { concurrent: false }, () => {
   })
 })
 
-describe("it.layer timeout finalizers", { concurrent: false }, () => {
+describe("it.layer timeout finalizers", { concurrent: false, retry: 0, repeats: 0 }, () => {
   const events: Array<string> = []
   let signal: AbortSignal | undefined
 

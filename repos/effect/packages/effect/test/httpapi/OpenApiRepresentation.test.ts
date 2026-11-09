@@ -61,12 +61,45 @@ describe("OpenApi representation v2 consumer", () => {
     )
   })
 
-  it("deduplicates JSON encoding definitions across regular and SSE responses", () => {
+  it("includes definitions reachable only through SSE content", () => {
+    const Nested = Schema.Struct({ text: Schema.String }).annotate({ identifier: "Nested" })
+    const Content = Schema.Struct({ nested: Nested }).annotate({ identifier: "Content" })
+    const Api = HttpApi.make("Api").add(
+      HttpApiGroup.make("test").add(
+        HttpApiEndpoint.get("stream", "/stream", {
+          success: HttpApiSchema.StreamSse({ data: Content })
+        })
+      )
+    )
+    const spec = OpenApi.fromApi(Api)
+
+    assert.deepStrictEqual(spec.components.schemas, {
+      Nested: {
+        type: "object",
+        properties: { text: { type: "string" } },
+        required: ["text"],
+        additionalProperties: false
+      },
+      Content: {
+        type: "object",
+        properties: { nested: { $ref: "#/components/schemas/Nested" } },
+        required: ["nested"],
+        additionalProperties: false
+      },
+      ContentEncoded: {
+        type: "string",
+        contentMediaType: "application/json",
+        contentSchema: { $ref: "#/components/schemas/Content" }
+      }
+    })
+  })
+
+  it("shares content definitions across regular JSON and SSE responses", () => {
     const Content = Schema.Struct({ text: Schema.String }).annotate({ identifier: "Tool.Content" })
     const Api = HttpApi.make("Api").add(
       HttpApiGroup.make("test").add(
         HttpApiEndpoint.get("content", "/content", {
-          success: Schema.fromJsonString(Content)
+          success: Content
         }),
         HttpApiEndpoint.get("stream", "/stream", {
           success: HttpApiSchema.StreamSse({ data: Content })
@@ -76,14 +109,21 @@ describe("OpenApi representation v2 consumer", () => {
     const spec = OpenApi.fromApi(Api)
 
     assert.deepStrictEqual(spec.components.schemas, {
+      "Tool.Content": {
+        type: "object",
+        properties: { text: { type: "string" } },
+        required: ["text"],
+        additionalProperties: false
+      },
       "Tool.ContentEncoded": {
         type: "string",
-        contentMediaType: "application/json"
+        contentMediaType: "application/json",
+        contentSchema: { $ref: "#/components/schemas/Tool.Content" }
       }
     })
     assert.deepStrictEqual(
       spec.paths["/content"]?.get?.responses[200]?.content?.["application/json"]?.schema,
-      { $ref: "#/components/schemas/Tool.ContentEncoded" }
+      { $ref: "#/components/schemas/Tool.Content" }
     )
     assert.deepStrictEqual(
       spec.paths["/stream"]?.get?.responses[200]?.content?.["text/event-stream"]?.schema,
@@ -169,44 +209,37 @@ describe("OpenApi representation v2 consumer", () => {
     })
   })
 
-  it("shares a named schema across response statuses", () => {
-    const Widget = Schema.Struct({
+  describe("shares a named schema across response statuses", () => {
+    const base = Schema.Struct({
       id: Schema.String,
       metadata: Schema.Record(Schema.String, Schema.Unknown)
-    }).annotate({ identifier: "Widget" })
-    const Api = HttpApi.make("Api").add(
-      HttpApiGroup.make("test").add(
-        HttpApiEndpoint.get("get", "/widget", { success: Widget }),
-        HttpApiEndpoint.post("create", "/widget", { success: Widget.pipe(HttpApiSchema.status(201)) })
+    })
+
+    it.each([
+      { name: "plain", schema: base },
+      { name: "checked", schema: base.check(Schema.isMinProperties(1)) },
+      { name: "with key context", schema: base.pipe(HttpApiSchema.status(200)) }
+    ])("$name", ({ schema }) => {
+      const Widget = schema.annotate({ identifier: "Widget" })
+      const Api = HttpApi.make("Api").add(
+        HttpApiGroup.make("test").add(
+          HttpApiEndpoint.get("get", "/widget", { success: Widget }),
+          HttpApiEndpoint.post("create", "/widget", { success: Widget.pipe(HttpApiSchema.status(201)) })
+        )
       )
-    )
 
-    const spec = OpenApi.fromApi(Api)
+      const spec = OpenApi.fromApi(Api)
 
-    assert.deepStrictEqual(Object.keys(spec.components.schemas), ["Widget"])
-    assert.deepStrictEqual(
-      spec.paths["/widget"]?.get?.responses[200]?.content?.["application/json"]?.schema,
-      { $ref: "#/components/schemas/Widget" }
-    )
-    assert.deepStrictEqual(
-      spec.paths["/widget"]?.post?.responses[201]?.content?.["application/json"]?.schema,
-      { $ref: "#/components/schemas/Widget" }
-    )
-  })
-
-  it("shares a named schema with key context across response statuses", () => {
-    const Widget = Schema.Struct({
-      id: Schema.String,
-      metadata: Schema.Record(Schema.String, Schema.Unknown)
-    }).pipe(HttpApiSchema.status(200)).annotate({ identifier: "Widget" })
-    const Api = HttpApi.make("Api").add(
-      HttpApiGroup.make("test").add(
-        HttpApiEndpoint.get("get", "/widget", { success: Widget }),
-        HttpApiEndpoint.post("create", "/widget", { success: Widget.pipe(HttpApiSchema.status(201)) })
+      assert.deepStrictEqual(Object.keys(spec.components.schemas), ["Widget"])
+      assert.deepStrictEqual(
+        spec.paths["/widget"]?.get?.responses[200]?.content?.["application/json"]?.schema,
+        { $ref: "#/components/schemas/Widget" }
       )
-    )
-
-    assert.deepStrictEqual(Object.keys(OpenApi.fromApi(Api).components.schemas), ["Widget"])
+      assert.deepStrictEqual(
+        spec.paths["/widget"]?.post?.responses[201]?.content?.["application/json"]?.schema,
+        { $ref: "#/components/schemas/Widget" }
+      )
+    })
   })
 
   it("retains referenced parameter schemas without emitting the parameter container", () => {

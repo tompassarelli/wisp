@@ -71,6 +71,24 @@ describe("SchemaRepresentation.toJsonSchemaDocument", () => {
   })
 
   describe("representation nodes", () => {
+    it("compiles string content with another media type", () => {
+      assert.deepStrictEqual(
+        compile({
+          _tag: "String",
+          checks: [],
+          content: {
+            mediaType: "application/example",
+            schema: { _tag: "Boolean", checks: [] }
+          }
+        }),
+        {
+          type: "string",
+          contentMediaType: "application/example",
+          contentSchema: { type: "boolean" }
+        }
+      )
+    })
+
     const keywords = [
       ["Any", { _tag: "Any", checks: [] }, {}],
       ["Unknown", { _tag: "Unknown", checks: [] }, {}],
@@ -989,6 +1007,37 @@ describe("SchemaRepresentation.toJsonSchemaDocument", () => {
             references: {}
           }),
         "Invalid TemplateLiteral part Boolean"
+      )
+    })
+
+    it.each(["Missing", "toString"])("rejects missing template-literal references: %s", ($ref) => {
+      expectError(
+        () =>
+          SchemaRepresentation.toJsonSchemaDocument({
+            representation: {
+              _tag: "TemplateLiteral",
+              parts: [{ _tag: "Reference", $ref }],
+              checks: []
+            },
+            references: {}
+          }),
+        `Invalid reference ${$ref}`
+      )
+    })
+
+    it("rejects recursive template-literal references", () => {
+      const template: SchemaRepresentation.Representation = {
+        _tag: "TemplateLiteral",
+        parts: [{ _tag: "Reference", $ref: "Segment" }],
+        checks: []
+      }
+      expectError(
+        () =>
+          SchemaRepresentation.toJsonSchemaDocument({
+            representation: template,
+            references: { Segment: template }
+          }),
+        "Invalid recursive TemplateLiteral part Segment"
       )
     })
   })

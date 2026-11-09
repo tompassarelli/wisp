@@ -22,7 +22,7 @@ import type * as Filter from "./Filter.ts"
 import type { LazyArg } from "./Function.ts"
 import { constant, constTrue, constVoid, dual, identity as identity_ } from "./Function.ts"
 import * as Count from "./internal/count.ts"
-import { ClockRef, endSpan, findRecoverableError } from "./internal/effect.ts"
+import { ClockRef, endSpan, findRecoverableError, ignoreCauseLogger } from "./internal/effect.ts"
 import { addSpanStackTrace } from "./internal/tracer.ts"
 import * as Iterable from "./Iterable.ts"
 import * as Latch from "./Latch.ts"
@@ -1782,8 +1782,9 @@ export const pullIntoWritableStream = <A, IE, E>(options: {
         withClose,
         (cause) => {
           if (Pull.isDoneCause(cause)) return Effect.void
-          options.onAbort?.(cause as Cause.Cause<IE | E>)
-          return Effect.promise(() => writer.abort(cause).catch(constVoid))
+          const reason = unwrapUpstreamFailure(cause) as Cause.Cause<IE | E>
+          options.onAbort?.(reason)
+          return Effect.promise(() => writer.abort(reason).catch(constVoid))
         }
       )
     },
@@ -6084,6 +6085,9 @@ export const orDie = <
  * **Details**
  *
  * Use the `log` option to emit the full {@link Cause} when the channel fails.
+ * Set `log: "Unhandled"` to read `References.UnhandledLogLevel` when the
+ * failure occurs; `undefined` disables logging. Minimum log level filtering
+ * still applies.
  *
  * **Gotchas**
  *
@@ -6098,14 +6102,14 @@ export const orDie = <
  */
 export const ignore: <
   Arg extends Channel<any, any, any, any, any, any, any> | {
-    readonly log?: boolean | Severity | undefined
+    readonly log?: boolean | Severity | "Unhandled" | undefined
   } | undefined = {
-    readonly log?: boolean | Severity | undefined
+    readonly log?: boolean | Severity | "Unhandled" | undefined
   }
 >(
   selfOrOptions: Arg,
   options?: {
-    readonly log?: boolean | Severity | undefined
+    readonly log?: boolean | Severity | "Unhandled" | undefined
   } | undefined
 ) => [Arg] extends
   [Channel<infer OutElem, infer _OutErr, infer OutDone, infer InElem, infer InErr, infer InDone, infer Env>]
@@ -6117,13 +6121,13 @@ export const ignore: <
     <OutElem, OutErr, OutDone, InElem, InErr, InDone, Env>(
       self: Channel<OutElem, OutErr, OutDone, InElem, InErr, InDone, Env>,
       options?: {
-        readonly log?: boolean | Severity | undefined
+        readonly log?: boolean | Severity | "Unhandled" | undefined
       } | undefined
     ): Channel<OutElem, never, OutDone | void, InElem, InErr, InDone, Env> => {
       if (!options?.log) {
         return catch_(self, () => empty)
       }
-      const logEffect = Effect.logWithLevel(options.log === true ? undefined : options.log)
+      const logEffect = ignoreCauseLogger(options.log)
       return catch_(
         tapCause(self, (cause) => Cause.hasFails(cause) ? logEffect(cause) : Effect.void),
         () => empty
@@ -6154,6 +6158,9 @@ const ignoreCause_ = <
  * **Details**
  *
  * Use the `log` option to emit the full {@link Cause} when the channel fails.
+ * Set `log: "Unhandled"` to read `References.UnhandledLogLevel` when the
+ * failure occurs; `undefined` disables logging. Minimum log level filtering
+ * still applies.
  *
  * @stability stable
  * @category error handling
@@ -6161,14 +6168,14 @@ const ignoreCause_ = <
  */
 export const ignoreCause: <
   Arg extends Channel<any, any, any, any, any, any, any> | {
-    readonly log?: boolean | Severity | undefined
+    readonly log?: boolean | Severity | "Unhandled" | undefined
   } | undefined = {
-    readonly log?: boolean | Severity | undefined
+    readonly log?: boolean | Severity | "Unhandled" | undefined
   }
 >(
   selfOrOptions: Arg,
   options?: {
-    readonly log?: boolean | Severity | undefined
+    readonly log?: boolean | Severity | "Unhandled" | undefined
   } | undefined
 ) => [Arg] extends
   [Channel<infer OutElem, infer _OutErr, infer OutDone, infer InElem, infer InErr, infer InDone, infer Env>]
@@ -6179,10 +6186,10 @@ export const ignoreCause: <
     (args) => isChannel(args[0]),
     <OutElem, OutErr, OutDone, InElem, InErr, InDone, Env>(
       self: Channel<OutElem, OutErr, OutDone, InElem, InErr, InDone, Env>,
-      options?: { readonly log?: boolean | Severity | undefined } | undefined
+      options?: { readonly log?: boolean | Severity | "Unhandled" | undefined } | undefined
     ): Channel<OutElem, never, OutDone | void, InElem, InErr, InDone, Env> => {
       if (!options?.log) return ignoreCause_(self)
-      const logEffect = Effect.logWithLevel(options.log === true ? undefined : options.log)
+      const logEffect = ignoreCauseLogger(options.log)
       return ignoreCause_(tapCause(self, (cause) => logEffect(cause)))
     }
   )
@@ -7087,24 +7094,52 @@ export const pipeToOrFail: {
     that: Channel<OutElem2, OutErr2, OutDone2, OutElem, never, OutDone, Env2>
   ): Channel<OutElem2, OutErr | OutErr2, OutDone2, InElem, InErr, InDone, Env2 | Env> =>
     fromTransform((upstream, scope) =>
-      Effect.flatMap(toTransform(self)(upstream, scope), (upstream) => {
-        const upstreamPull = Effect.catchCause(
-          upstream,
-          (cause) => Pull.isDoneCause(cause) ? Effect.failCause(cause) : Effect.die(Cause.Done(cause))
-        ) as Pull.Pull<OutElem, never, OutDone>
-
-        return Effect.map(
-          toTransform(that)(upstreamPull, scope),
-          (pull) =>
-            Effect.catchDefect(
-              pull,
-              (defect) =>
-                Cause.isDone(defect) ? Effect.failCause(defect.value as Cause.Cause<OutErr>) : Effect.die(defect)
-            )
-        )
-      })
+      Effect.flatMap(toTransform(self)(upstream, scope), (upstream) =>
+        Effect.map(
+          toTransform(that)(upstreamFailureToDefect(upstream), scope),
+          restoreUpstreamFailure<OutElem2, OutErr | OutErr2 | Cause.Done<OutDone2>, Env2>
+        ))
     )
 )
+
+// Upstream failures are hidden from downstream error handlers by encoding them
+// as a `Die(Cause.Done(cause))` defect, which is unwrapped again once the
+// downstream has exited.
+const isUpstreamFailure = (
+  reason: Cause.Reason<unknown>
+): reason is Cause.Die & { readonly defect: Cause.Done<Cause.Cause<unknown>> } =>
+  reason._tag === "Die" && Cause.isDone(reason.defect) && Cause.isCause(reason.defect.value)
+
+/** @internal */
+export const hasUpstreamFailure = (cause: Cause.Cause<unknown>): boolean => cause.reasons.some(isUpstreamFailure)
+
+/** @internal */
+export const upstreamFailureToDefect = <A, E, Done, R>(
+  pull: Pull.Pull<A, E, Done, R>
+): Pull.Pull<A, never, Done, R> =>
+  Effect.catchCause(
+    pull,
+    (cause) => Pull.isDoneCause(cause) ? Effect.failCause(cause) : Effect.die(Cause.Done(cause))
+  ) as Pull.Pull<A, never, Done, R>
+
+/** @internal */
+export const unwrapUpstreamFailure = <E>(cause: Cause.Cause<E>): Cause.Cause<unknown> =>
+  hasUpstreamFailure(cause)
+    ? Cause.fromReasons(
+      cause.reasons.flatMap((reason) => isUpstreamFailure(reason) ? reason.defect.value.reasons : [reason])
+    )
+    : cause
+
+/**
+ * The type parameters are explicit because the restored error type includes
+ * the upstream error, which is not part of the input effect's type.
+ *
+ * @internal
+ */
+export const restoreUpstreamFailure = <A, E, R>(
+  effect: Effect.Effect<A, NoInfer<E>, R>
+): Effect.Effect<A, E, R> =>
+  Effect.catchCause(effect, (cause) => Effect.failCause(unwrapUpstreamFailure(cause) as Cause.Cause<E>))
 
 /**
  * Constructs a `Channel` from a scoped effect that will result in a

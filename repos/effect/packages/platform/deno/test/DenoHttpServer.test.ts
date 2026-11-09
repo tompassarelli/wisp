@@ -15,6 +15,7 @@ import * as HttpBody from "effect/http/HttpBody"
 import * as HttpClient from "effect/http/HttpClient"
 import * as HttpClientRequest from "effect/http/HttpClientRequest"
 import * as HttpClientResponse from "effect/http/HttpClientResponse"
+import * as HttpIncomingMessage from "effect/http/HttpIncomingMessage"
 import * as HttpPlatform from "effect/http/HttpPlatform"
 import * as HttpRouter from "effect/http/HttpRouter"
 import * as HttpServer from "effect/http/HttpServer"
@@ -477,12 +478,25 @@ describe("DenoHttpServer", () => {
       )
       assert.strictEqual(yield* HttpClient.get("/child/1").pipe(Effect.flatMap((_) => _.text)), "/1")
       assert.strictEqual(yield* HttpClient.get("/child").pipe(Effect.flatMap((_) => _.text)), "/")
-      assert.strictEqual(yield* HttpClient.get("/child?foo=bar").pipe(Effect.flatMap((_) => _.text)), "?foo=bar")
+      assert.strictEqual(yield* HttpClient.get("/child?foo=bar").pipe(Effect.flatMap((_) => _.text)), "/?foo=bar")
       assert.strictEqual(yield* HttpClient.get("/child/").pipe(Effect.flatMap((_) => _.text)), "/")
       assert.strictEqual(
         yield* HttpClient.get("/child1/", { urlParams: { foo: "bar" } }).pipe(Effect.map((_) => _.status)),
         404
       )
+    }).pipe(Effect.provide(DenoHttpServer.layerTest)))
+
+  it.effect("returns 413 for a body over MaxBodySize", () =>
+    Effect.gen(function*() {
+      yield* HttpRouter.add(
+        "POST",
+        "/body",
+        HttpServerRequest.HttpServerRequest.use((request) => Effect.as(request.text, HttpServerResponse.empty())).pipe(
+          Effect.provideService(HttpIncomingMessage.MaxBodySize, ByteSize.bytes(4))
+        )
+      ).pipe(HttpRouter.serve, Layer.build)
+      const response = yield* HttpClient.post("/body", { body: HttpBody.text("12345") })
+      assert.strictEqual(response.status, 413)
     }).pipe(Effect.provide(DenoHttpServer.layerTest)))
 
   it.effect("answers CONNECT with 501 without running the app", () =>

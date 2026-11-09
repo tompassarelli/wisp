@@ -73,7 +73,7 @@ it.layer(PgContainer.layerClient, { timeout: "30 seconds" })("PgClient", (it) =>
         )
       }`.compile()
       expect(query).toEqual(
-        `UPDATE people SET name = data.name FROM (values ($1),($2)) AS data("name")`
+        `UPDATE people SET name = data.name FROM (values ($1),($2)) AS "data"("name")`
       )
       expect(params).toEqual(["Tim", "John"])
     }))
@@ -88,7 +88,7 @@ it.layer(PgContainer.layerClient, { timeout: "30 seconds" })("PgClient", (it) =>
         ).returning("*")
       }`.compile()
       expect(query).toEqual(
-        `UPDATE people SET name = data.name FROM (values ($1),($2)) AS data("name") RETURNING *`
+        `UPDATE people SET name = data.name FROM (values ($1),($2)) AS "data"("name") RETURNING *`
       )
       expect(params).toEqual(["Tim", "John"])
     }))
@@ -245,7 +245,7 @@ it.layer(PgContainer.layerClient, { timeout: "30 seconds" })("PgClient", (it) =>
       } WHERE created_at > ${now}`.compile()
       assert.strictEqual(
         query,
-        `UPDATE people SET json = data.json FROM (values ($1),($2)) AS data("json") WHERE created_at > $3`
+        `UPDATE people SET json = data.json FROM (values ($1),($2)) AS "data"("json") WHERE created_at > $3`
       )
       assert.lengthOf(params, 3)
     }))
@@ -526,6 +526,34 @@ it.layer(PgContainer.layerMakeClient, { timeout: "30 seconds" })("PgClient.makeC
 
       assert.isTrue(Option.isNone(overlap))
     }))
+
+  // A transaction pooler moves the session to another server between
+  // transactions, where the statements prepared on the last one do not exist.
+  it.effect("ends transactions whose prepared statements went missing", () =>
+    Effect.gen(function*() {
+      // Its own session, so `DEALLOCATE ALL` cannot affect concurrent tests.
+      const sql = yield* PgClient.makeClient((yield* PgClient.PgClient).config)
+      const select = sql<{ value: number }>`SELECT ${1}::int4 AS value`
+      const assertSqlFailure = (cause: Cause.Cause<unknown>) => {
+        assert.isFalse(Cause.hasDies(cause))
+        const error = Cause.squash(cause)
+        assert.instanceOf(error, SqlError.SqlError)
+        assert.propertyVal(error.reason.cause, "code", "26000")
+      }
+      // Prepares BEGIN, the body, ROLLBACK and COMMIT.
+      yield* sql.withTransaction(Effect.andThen(select, Effect.fail("rollback"))).pipe(Effect.flip)
+      yield* sql.withTransaction(select)
+      yield* sql`DEALLOCATE ALL`.unprepared
+
+      // The body fails on its lost statement, and ROLLBACK still has to run.
+      assertSqlFailure(yield* sql.withTransaction(select).pipe(Effect.sandbox, Effect.flip))
+      // The body succeeds, but the lost COMMIT never runs.
+      assertSqlFailure(
+        yield* sql.withTransaction(sql`SELECT ${2}::int4 AS fresh`).pipe(Effect.sandbox, Effect.flip)
+      )
+
+      assert.deepStrictEqual(yield* sql.withTransaction(select), [{ value: 1 }])
+    }).pipe(Effect.scoped, Effect.provide(Reactivity.layer)))
 })
 
 it.layer(PgContainer.layerMakeClientAcquireForStream, { timeout: "30 seconds" })(
