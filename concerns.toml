@@ -1,4 +1,4 @@
-[[goal]]
+[[concern]]
 name = "main-green"
 source = "AGENTS.md: main stays green; a landing that turned a green main red is reverted after 15 minutes"
 oracle = "gh issue list --repo tompassarelli/wisp --search 'in:title \"main is red\"' --state open --json title --jq '[.[] | select(.title == \"main is red\")] | length'"
@@ -6,7 +6,7 @@ unit = "issues"
 max = 0
 class = "contract"
 
-[[goal]]
+[[concern]]
 name = "layering"
 source = "AGENTS.md: src/ never imports host/ or test/, and host code never imports test/"
 oracle = "{ { rg -n \"from ['\\\"][./]*/?(host|test)/\" src || [ $? -eq 1 ]; }; { rg -n \"from ['\\\"][./]*/?test/\" host || [ $? -eq 1 ]; }; } | wc -l"
@@ -14,14 +14,14 @@ unit = "imports"
 max = 0
 class = "contract"
 
-[[goal]]
+[[concern]]
 name = "no-blizzard-files"
 source = "README.md Principles: nothing of Blizzard's (code, art, sound, data, game scripts or in-game text) is in this repository"
 oracle = "bun host/checks/cleanRoom.ts . >/dev/null 2>&1; echo $?"
 max = 0
 class = "contract"
 
-[[goal]]
+[[concern]]
 name = "target-debt-due"
 source = "AGENTS.md: soft targets land with a Target-debt record; north docs/rationale/targets.md"
 oracle = "north check provenance debt --due | awk -F'\\t' '$1==\"wisp\"' | wc -l"
