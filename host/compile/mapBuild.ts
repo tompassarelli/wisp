@@ -293,16 +293,18 @@ export const ensurePackager = (path: string) => Effect.suspend(() => {
   return current ? Effect.void : compilePackager(path, source, stamp);
 });
 
+const NIX = ["nix", ...(existsSync("/etc/nix/registry.json") ? ["--option", "flake-registry", ""] : [])];
+
 const stormlibGcRoot = (packager: string) => `${packager}.stormlib-gc-root`;
 
 const compilePackager = (path: string, source: string, stamp: string) => Effect.gen(function*() {
   yield* tryMapSync("create packager directory", path, () => mkdirSync(dirname(path), { recursive: true }));
-  const stormlib = process.env.STORMLIB_PREFIX ?? (yield* captureProcess("build StormLib", path, ["nix", "build", "--out-link", stormlibGcRoot(path), "--print-out-paths", "nixpkgs#stormlib"]).pipe(
+  const stormlib = process.env.STORMLIB_PREFIX ?? (yield* captureProcess("build StormLib", path, [...NIX, "build", "--out-link", stormlibGcRoot(path), "--print-out-paths", "nixpkgs#stormlib"]).pipe(
     Effect.flatMap(({ exitCode, stdout, stderr }) => exitCode === 0
       ? Effect.succeed(stdout.trim().split("\n")[0] ?? "")
       : Effect.fail(new MapBuildFailure({ operation: "build StormLib", path, cause: `nix exited with ${exitCode}: ${stderr.trim()}` }))),
   ));
-  const compiler = process.env.CC === undefined ? ["nix", "shell", "nixpkgs#gcc", "--command", "gcc"] : [process.env.CC];
+  const compiler = process.env.CC === undefined ? [...NIX, "shell", "nixpkgs#gcc", "--command", "gcc"] : [process.env.CC];
   yield* runProcess("compile map packager", path, [...compiler, `-I${stormlib}/include`, PACKAGER_SOURCE,
     `-L${stormlib}/lib`, `-Wl,-rpath,${stormlib}/lib`, "-lstorm", "-o", `${path}.${process.pid}.next`]);
   yield* tryMapSync("install map packager", path, () => {
