@@ -1,23 +1,16 @@
-import { expect, test } from "bun:test";
+import { beforeAll, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { Effect } from "effect";
-import { ensurePackager } from "../host/compile/mapBuild";
+import { PACKAGER_BUILD_MS, buildPackager, cachedPackager } from "./packagerCache";
 
 const build = join(import.meta.dir, "../build");
 mkdirSync(build, { recursive: true });
 const work = mkdtempSync(join(build, "map-pack-"));
 
-// nix reports its downloads on stderr, so realise gcc first and assert only on gcc's own diagnostics.
-
-
-
-
-
+beforeAll(buildPackager, PACKAGER_BUILD_MS);
 
 test("[invariant] replacing listed entries leaves no stale bytes: the archive is as large as one created with the final entries", async () => {
-  const packager = join(work, "map-pack");
-  await Effect.runPromise(ensurePackager(packager));
+  const packager = cachedPackager;
   const noise = (seed: string) => {
     const blocks = [new Bun.CryptoHasher("sha256").update(seed).digest()];
     while (blocks.length < 1024) blocks.push(new Bun.CryptoHasher("sha256").update(blocks.at(-1)!).digest());

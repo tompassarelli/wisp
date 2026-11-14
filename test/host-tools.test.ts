@@ -1,11 +1,13 @@
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, beforeAll, expect, test } from "bun:test";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { PACKAGER_BUILD_MS, buildPackager, packagerCache } from "./packagerCache";
 
 const root = join(import.meta.dir, "..");
 const fixtures = join(import.meta.dir, "fixtures/host-tools");
 const cleanups: (() => void)[] = [];
+beforeAll(buildPackager, PACKAGER_BUILD_MS);
 afterEach(() => {
   for (const cleanup of cleanups.splice(0)) cleanup();
 });
@@ -26,6 +28,7 @@ const sandbox = () => {
     HOME: folder,
     PATH: `${bin}:${process.env["PATH"] ?? ""}`,
     XDG_STATE_HOME: join(folder, "state"),
+    XDG_CACHE_HOME: packagerCache,
     XDG_DATA_HOME: join(folder, "data"),
     WISP_XDOTOOL: "/bin/true",
     WISP_TEST_SESSIONS: join(folder, "sessions"),
